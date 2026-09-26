@@ -64,8 +64,18 @@ def emit_function(mut state: CompilerState, function_index: Integer, mut output:
 	qbe_output_line(output, "@start")
 	roots := state.scalar_mir.root_plans[mir_index]
 	uses_roots := roots.instructions.size() > 0
+	mut lazy_roots := false
+	if enum_stack_type != 0
+		if roots.capacity > 0
+			lazy_roots = true
+		end
+	end
 	if uses_roots
 		qbe_output_line(output, "\t%temporary_roots =l loadl $trbn_gc_temp_count")
+		if lazy_roots
+			qbe_output_line(output, "\t%root_reserved =l alloc4 4")
+			qbe_output_line(output, "\tstorew 0, %root_reserved")
+		end
 	end
 	if result_type != "Void"
 		qbe_output_line(output, "\t%return_value =l alloc8 8")
@@ -94,8 +104,10 @@ def emit_function(mut state: CompilerState, function_index: Integer, mut output:
 		end
 	end
 	if uses_roots && roots.capacity > 0
-		qbe_output_line(output, "\t%root_capacity =l add %temporary_roots, " + integer_string(roots.capacity))
-		qbe_output_line(output, "\tcall $trbn_gc_temp_reserve(l %root_capacity)")
+		if !lazy_roots
+			qbe_output_line(output, "\t%root_capacity =l add %temporary_roots, " + integer_string(roots.capacity))
+			qbe_output_line(output, "\tcall $trbn_gc_temp_reserve(l %root_capacity)")
+		end
 	end
 	index = 0
 	while index < body.count[0]
