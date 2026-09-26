@@ -1,5 +1,5 @@
 import { CompilerState, compiler_new, terminal_token, has_diagnostic } from state
-import { ReplStore, ReplEnvironment, repl_type } from repl_model
+import { ReplStore, ReplEnvironment, repl_type, repl_set_type } from repl_model
 import { repl_binding_value } from repl_values
 import { repl_default } from repl_defaults
 import { repl_witness_type_name } from repl_project
@@ -9,7 +9,8 @@ import { parse_module } from parser
 import { parse_declaration_statement, parse_simple_statement, parse_transfer_syntax } from body_syntax
 import { enum_uppercase } from enum_types
 import { skip_newlines, token_is } from syntax_tokens
-import { load_string, load_integer, store_integer, sparse_integer_at, integer_storage } from storage
+import { load_string, load_integer, store_integer, sparse_integer_at, sparse_string_at, integer_storage } from storage
+import { array_element_type } from type_resolution
 
 # These typed declarations describe persistent cells. Their default expressions
 # are checked, but are never evaluated to recreate a retained value.
@@ -19,12 +20,12 @@ def repl_binding_witnesses(state: CompilerState, store: ReplStore, environment: 
 	while index < environment.count[0]
 		id := repl_binding_value(store, environment, index)
 		type_name := repl_type(store, id)
-		if !globals || type_name != "Hash"
+		if !globals || (type_name != "Hash" && type_name != "Array")
 			if environment.mutable[index] == 1
 				source += "mut "
 			end
 			source += environment.names[index]
-			if type_name != "Hash"
+			if type_name != "Hash" && type_name != "Array"
 				source += ": " + repl_witness_type_name(state, type_name)
 			end
 			source += " := " + repl_default(state, type_name) + "\n"
@@ -32,6 +33,35 @@ def repl_binding_witnesses(state: CompilerState, store: ReplStore, environment: 
 		index += 1
 	end
 	return source
+end
+
+# A fresh Array remains untyped in the retained witness. The next checked
+# submission may resolve it through an entire conditional or loop statement.
+def repl_refine_pending_arrays(state: CompilerState, mut store: ReplStore, environment: ReplEnvironment)
+	if state.submissions.size() == 0
+		return
+	end
+	mut binding := 0
+	while binding < environment.count[0]
+		id := repl_binding_value(store, environment, binding)
+		if repl_type(store, id) == "Array"
+			mut origin := 0
+			mut found := false
+			while origin < state.submissions[0].start && !found
+				if token_is(state, origin, "mut") && load_string(state.source_tokens.token_texts, origin + 1) == environment.names[binding]
+					resolved := sparse_string_at(state.callables.checked[0].local_types, origin)
+					if resolved != ""
+						if array_element_type(resolved) != ""
+							repl_set_type(store, id, resolved)
+						end
+						found = true
+					end
+				end
+				origin += 1
+			end
+		end
+		binding += 1
+	end
 end
 
 def repl_loaded_bindings(inputs: Array<String>): String
@@ -48,7 +78,9 @@ def repl_loaded_bindings(inputs: Array<String>): String
 			end
 			# Inference for a fresh empty collection belongs to its authored
 			# body. Do not invent an untyped file-global initializer for it.
-			untyped_empty := token_is(probe, name + 1, ":=") && ((token_is(probe, name + 2, "{") && token_is(probe, name + 3, "}")) || (token_is(probe, name + 2, "[") && token_is(probe, name + 3, "]")))
+			mut literal_end := [name + 3]
+			skip_newlines(probe, literal_end)
+			untyped_empty := token_is(probe, name + 1, ":=") && ((token_is(probe, name + 2, "{") && token_is(probe, literal_end[0], "}")) || (token_is(probe, name + 2, "[") && token_is(probe, literal_end[0], "]")))
 			if !untyped_empty
 				source += input + "\n"
 			end

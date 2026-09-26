@@ -26,6 +26,21 @@ with tempfile.TemporaryDirectory(prefix='native-repl-flow-') as temporary:
         for message in errors:
             assert message in result.stderr, (message, result.stderr)
 
+    run('mut values := []\n:type values\nvalues.empty?()\nvalues.size()\n'
+        'if true\nvalues.push(1)\nelse\nvalues.push(2.5)\nend\nvalues',
+        '[] : Array<Any> [mut]\nArray<Any>\ntrue : Boolean\n0 : Integer\n'
+        '[1] : Array<Float> [mut]\n')
+    run('mut values := []\nvalues.unshift(3)\nvalues\nmut fields := {}\n'
+        'fields["count"] = 1\nfields',
+        '[] : Array<Any> [mut]\n[3] : Array<Integer> [mut]\n'
+        '{} : Hash [mut]\n1 : Integer\n'
+        '{"count": 1} : Hash<String, Integer> [mut]\n')
+    run('mut values := [\n]\n:reload\nvalues.push(1)\nvalues',
+        '[] : Array<Any> [mut]\nreloaded\n[1] : Array<Integer> [mut]\n')
+    run('mut values := []\nvalues.push(1)\nvalues.push("wrong")',
+        '[] : Array<Any> [mut]\n',
+        ('expected Integer, found String',))
+
     run('mut value: String? := nil\nvalue = "kept"\n:type value\nvalue.size()\n'
         'value = nil\n:type value\nvalue == nil',
         'nil : String? [mut]\n"kept" : String? [mut]\nString\n4 : Integer\n'
