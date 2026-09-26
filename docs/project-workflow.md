@@ -26,13 +26,14 @@ setting does not grant access. Use All for triage and historical lookup.
 
 | View | Shows |
 | --- | --- |
-| Initiatives | Initiative board grouped by Initiative state |
+| Initiatives | Open and recently closed initiatives, grouped by Initiative state |
 | Tasks | Open work and issues closed in the last seven days, grouped by Status |
 | Decisions | Items whose Attention is Needs decision |
 | All | Every item as a table |
 
-The Tasks filter is `-type:Initiative -closed:<@today-7d`. It hides older closed
-work without removing it from All or requiring a sprint assignment. The rolling
+The Tasks filter is `-type:Initiative -closed:<@today-7d`; Initiatives uses
+`type:Initiative -closed:<@today-7d`. Both hide work closed more than seven days
+ago without removing it from All or requiring a sprint assignment. The rolling
 window advances automatically. An issue without a closed date stays visible.
 
 | Field | Values and meaning |
