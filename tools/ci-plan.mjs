@@ -31,6 +31,7 @@ export const toolingTests = new Set([
   ...quickToolingTests,
   'tools/ci-run-suites-test.mjs',
   'tools/recovery-workspace-test.mjs',
+  'tools/complete_compiler_units_test.py',
   'tools/bootstrap-seed-manifest-test.sh',
   'tools/bootstrap-seed-arguments-test.sh',
   'tools/measure-command-test.py',
