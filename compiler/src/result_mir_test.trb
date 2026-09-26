@@ -169,3 +169,151 @@ describe("MIR standard Result") do
 		end
 	end
 end
+
+describe("MIR borrowed mixed enum") do
+	test("returns payload and payloadless variants through safe direct arguments") do
+		source := "enum Command\nAdd(amount: Integer)\nReset\nend\ndef command(index: Integer): Command\nif index == 0\nreturn Command::Reset\nend\nreturn Command::Add(index)\nend\ndef step(next: Command): Integer\ncase next\nwhen Command::Add(amount)\nreturn amount\nwhen Command::Reset\nreturn 0\nend\nend\ndef main()\nputs(step(command(0)))\nputs(step(command(7)))\nend\n"
+		mut state := compiler_new(source.size() * 3 + 16)
+		expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state) && check(state)).to_be_true()
+		mut command_id :=- 1
+		state.scalar_mir.signatures.each.with_index do |signature, index|
+			if signature.name == "command"
+				command_id = index
+			end
+		end
+		expect(command_id >= 0).to_be_true()
+		expect(state.scalar_mir.enum_stack_functions[command_id]).to_equal(1)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		qbe := control_test_output(emit_qbe(state))
+		expect(qbe.include?("%enum_slot")).to_be_true()
+		expect(qbe.include?("=l copy $trbn_static_enum")).to_be_false()
+		qbe_binary := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe_binary != nil
+			mut forced := ""
+			mut ordinary := false
+			qbe.split("\n").each do |line|
+				if line.start_with?("function ")
+					ordinary = line.include?("$trbnf")
+				end
+				if line == "}"
+					ordinary = false
+				end
+				forced += line + "\n"
+				if ordinary && line.include?("call $trbnf")
+					forced += "\tcall $trbn_gc_collect(w 0)\n"
+				end
+			end
+			case logical_run_qbe(qbe_binary, forced)
+			when Result::Ok(actual)
+				expect(actual).to_equal("0\n7\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+		state.scalar_mir.enum_stack_functions[command_id] = 0
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR enum stack plan differs")
+	end
+
+	test("preserves scalar Float payload bits across borrowed calls") do
+		source := "enum Token\nFloatValue(value: Float)\nEmpty\nend\ndef make(present: Boolean): Token\nif present\nreturn Token::FloatValue(3.5)\nend\nreturn Token::Empty\nend\ndef read(token: Token): Integer\ncase token\nwhen Token::FloatValue(value)\nreturn value.to_i()\nwhen Token::Empty\nreturn 0\nend\nend\ndef main()\nputs(read(make(true)))\nputs(read(make(false)))\nend\n"
+		mut state := compiler_new(source.size() * 3 + 16)
+		expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state) && check(state)).to_be_true()
+		mut make_id :=- 1
+		state.scalar_mir.signatures.each.with_index do |signature, index|
+			if signature.name == "make"
+				make_id = index
+			end
+		end
+		expect(make_id >= 0).to_be_true()
+		expect(state.scalar_mir.enum_stack_functions[make_id]).to_equal(1)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		qbe_binary := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe_binary != nil
+			case logical_run_qbe(qbe_binary, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("3\n0\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
+	test("keeps escaped, indirect, recursive and managed enum values boxed") do
+		base := "enum Command\nAdd(amount: Integer)\nReset\nend\ndef command(index: Integer): Command\nif index == 0\nreturn Command::Reset\nend\nreturn Command::Add(index)\nend\n"
+		sources := [
+			base + "def save(): Array<Command>\nreturn [command(1)]\nend\ndef main()\nputs(save().size())\nend\n",
+			base + "def consume(value: Command): Integer\ncase value\nwhen Command::Add(amount)\nreturn amount\nwhen Command::Reset\nreturn 0\nend\nend\ndef main()\ncallback := command\nputs(consume(callback(1)))\nend\n",
+			base + "def forward(value: Command): Command\nreturn value\nend\ndef main()\ncase forward(command(1))\nwhen Command::Add(amount)\nputs(amount)\nwhen Command::Reset\nputs(0)\nend\nend\n",
+			base + "def consume(value: Command): Integer\nif true\nitems := [value]\nreturn items.size()\nend\nreturn 0\nend\ndef main()\nputs(consume(command(1)))\nend\n",
+			"enum Command\nAdd(amount: Integer)\nReset\nend\ndef command(index: Integer): Command\nif index > 0\nreturn command(index - 1)\nend\nreturn Command::Add(0)\nend\ndef main()\ncase command(2)\nwhen Command::Add(amount)\nputs(amount)\nwhen Command::Reset\nputs(0)\nend\nend\n",
+			"enum Message\nText(value: String)\nReset\nend\ndef command(index: Integer): Message\nif index == 0\nreturn Message::Reset\nend\nreturn Message::Text(\"payload\")\nend\ndef consume(value: Message): String\ncase value\nwhen Message::Text(text)\nputs(\"safe\" + \"point\")\nreturn text\nwhen Message::Reset\nreturn \"none\"\nend\nend\ndef main()\nputs(consume(command(1)))\nend\n",
+			"enum Command\nPair(left: Integer, right: Integer)\nReset\nend\ndef command(index: Integer): Command\nif index == 0\nreturn Command::Reset\nend\nreturn Command::Pair(index, index + 1)\nend\ndef main()\ncase command(1)\nwhen Command::Pair(left, right)\nputs(left + right)\nwhen Command::Reset\nputs(0)\nend\nend\n",
+		]
+		mut index := 0
+		sources.each do |source|
+			mut state := compiler_new(source.size() * 3 + 16)
+			valid := lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state) && check(state)
+			if !valid
+				puts(index)
+			end
+			expect(valid).to_be_true()
+			if valid
+				mut command_id :=- 1
+				state.scalar_mir.signatures.each.with_index do |signature, candidate|
+					if signature.name == "command"
+						command_id = candidate
+					end
+				end
+				expect(command_id >= 0).to_be_true()
+				expect(state.scalar_mir.enum_stack_functions[command_id]).to_equal(0)
+				expect(verify_mir(state.scalar_mir, true)).to_equal("")
+				if index == 5
+					# The managed payload remains reachable from the boxed enum at
+					# the caller's real safe point before the direct call.
+					mut consume_id :=- 1
+					state.scalar_mir.signatures.each.with_index do |signature, candidate|
+						if signature.name == "consume"
+							consume_id = candidate
+						end
+					end
+					expect(consume_id >= 0).to_be_true()
+					qbe_binary := Process.environment("TYPE_RB_NATIVE_QBE")
+					if qbe_binary != nil
+						mut forced := ""
+						mut ordinary := false
+						control_test_output(emit_qbe(state)).split("\n").each do |line|
+							if line.start_with?("function ")
+								ordinary = line.include?("$trbnf")
+							end
+							if line == "}"
+								ordinary = false
+							end
+							if ordinary && line.include?("call $trbnf" + consume_id.to_s() + "(")
+								forced += "\tcall $trbn_gc_collect(w 0)\n"
+							end
+							forced += line + "\n"
+						end
+						case logical_run_qbe(qbe_binary, forced)
+						when Result::Ok(actual)
+							expect(actual).to_equal("safepoint\npayload\n")
+						when Result::Err(error)
+							puts(error)
+							expect(false).to_be_true()
+						end
+					end
+				end
+				state.scalar_mir.enum_stack_functions[command_id] = 1
+				expect(verify_mir(state.scalar_mir, true)).to_equal("MIR enum stack plan differs")
+			end
+			index += 1
+		end
+		# Fieldful enum equality is rejected by the checker, so a borrowed
+		# caller slot cannot become observable through this source operation.
+		identity_source := base + "def main()\nputs(command(1) == command(1))\nend\n"
+		mut identity := compiler_new(identity_source.size() * 3 + 16)
+		expect(lex(identity, identity_source) && parse_module(identity, 0, identity.module_graph.entry_module[0]) && resolve(identity)).to_be_true()
+		expect(check(identity)).to_be_false()
+	end
+end
