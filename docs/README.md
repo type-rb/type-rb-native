@@ -14,6 +14,7 @@ Start with the [repository overview](../README.md), [architecture](architecture.
 - [Bootstrap seed updates](bootstrap-seed-updates.md)
 - [Hash behavior and representation](native-hash.md)
 - [Array and Range iteration](native-range.md)
+- [Project workflow](project-workflow.md)
 - [Development and validation plan](experiment-plan.md)
 - [Validation by changed surface](ci-validation.md)
 - [Runtime memory stability](runtime-memory-stability.md)

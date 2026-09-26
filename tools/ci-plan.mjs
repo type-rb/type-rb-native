@@ -15,7 +15,7 @@ const staticDocumentationTools = new Set([
   '.github/workflows/capability-map-pages.yml',
 ]);
 const documentation = path => staticDocumentationTools.has(path) || path.endsWith('.md') ||
-  ['.agents/', 'docs/', 'results/'].some(prefix => path.startsWith(prefix));
+  ['.agents/', '.github/ISSUE_TEMPLATE/', 'docs/', 'results/'].some(prefix => path.startsWith(prefix));
 // These exact files are exercised by the unconditional planning job. They do
 // not build or execute the compiler. Execution workflows/controllers are not
 // included: changing those still needs the authorities they orchestrate.

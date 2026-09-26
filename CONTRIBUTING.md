@@ -8,9 +8,11 @@ Report implemented coverage and validation separately from the eventual goals.
 
 ## Proposing work
 
-Use an existing milestone issue or open one for material feature or architecture
-work. Record durable architectural decisions under `docs/decisions/`; keep scoped
-implementation work and its acceptance conditions in the issue.
+Plan work on the project board described in the
+[project workflow](docs/project-workflow.md): an Initiative states a measurable
+outcome and its Tasks are the reviewable changes, with milestone issues as their
+parents. Record durable architectural decisions under `docs/decisions/`; keep
+scoped implementation work and its acceptance conditions in the issue.
 
 Record the behavior or ownership change, relevant reference revision, validation
 and remaining gaps. Performance or backend experiments also record the hypothesis,
