@@ -40,17 +40,24 @@ def emit_mir_enum_instruction(state: CompilerState, types: Array<Integer>, instr
 	mut variant := instruction.payload
 	if instruction.kind == 37
 		row := native_module.enum_variants[variant]
-		if row.field_count == 0
+		stack_slot := context.enum_stack_type[0] == mir_operand_type(types, instruction.result)
+		if row.field_count == 0 && !stack_slot
 			qbe_output_line(output, "\t" + result + " =l copy $trbn_static_enum" + integer_string(variant))
 			return emitted_value(result, type_name)
 		end
-		if context.enum_stack_type[0] == mir_operand_type(types, instruction.result)
+		if stack_slot
 			qbe_output_line(output, "\t" + result + " =l copy %enum_slot" + integer_string(instruction.result))
 		else
 			qbe_output_line(output, "\t" + result + " =l call $trbn_gc_alloc(l $trbn_desc_enum" + integer_string(variant) + ", l " + integer_string(8 + row.field_count * 8) + ", l 0)")
 		end
 		tag := emit_address(context, output, result, 8)
 		qbe_output_line(output, "\tstorel " + integer_string(variant) + ", " + tag)
+		if row.field_count == 0
+			# The selected return copies a full 24-byte caller slot. Never read
+			# payload bytes from the ordinary 16-byte static singleton.
+			payload := emit_address(context, output, result, 16)
+			qbe_output_line(output, "\tstorel 0, " + payload)
+		end
 		mut field := 0
 		while field < row.field_count
 			item := native_module.enum_fields[row.field_start + field]
