@@ -159,8 +159,13 @@ test('complete compiler units run independently for code and CLI and fail closed
   assert(units.includes('d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320'));
   assert(units.includes('TYPE_RB_NATIVE_QBE: ${{ runner.temp }}/qbe-1.3/qbe'));
   assert(units.includes('"$RUNNER_TEMP/trb" test --config compiler/trbconfig.jsonc'));
+  assert(units.includes('--compile'));
+  assert(units.includes('--outfile "$RUNNER_TEMP/compiler-units"'));
+  assert(units.includes('python3 tools/complete_compiler_units.py'));
+  assert(units.includes('--scratch "$RUNNER_TEMP" --jobs 2'));
   assert(!units.includes('TYPE_RB_NATIVE_RECOVERY_'));
-  assert(units.includes('compiler-units.log') && units.includes('elapsed_seconds='));
+  assert(units.includes('compiler-units.log') && units.includes('compile_seconds=')
+    && units.includes('execution_seconds=') && units.includes('elapsed_seconds='));
   assert(units.includes('actions/upload-artifact@v6'));
   for (const path of ['compiler/src/mir.trb', 'compiler/src/mir_test.trb', 'compiler/cli/main.trb', 'trbn']) {
     for (const draft of [false, true]) {

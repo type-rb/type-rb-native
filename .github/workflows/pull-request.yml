@@ -164,11 +164,20 @@ jobs:
         run: |
           set +e
           started=$(date +%s)
-          "$RUNNER_TEMP/trb" test --config compiler/trbconfig.jsonc > "$RUNNER_TEMP/compiler-units.log" 2>&1
+          "$RUNNER_TEMP/trb" test --config compiler/trbconfig.jsonc --compile \
+            --outfile "$RUNNER_TEMP/compiler-units" > "$RUNNER_TEMP/compiler-units.log" 2>&1
           result=$?
+          compiled=$(date +%s)
+          if [ "$result" -eq 0 ]; then
+            python3 tools/complete_compiler_units.py \
+              --root "$GITHUB_WORKSPACE" --binary "$RUNNER_TEMP/compiler-units" \
+              --scratch "$RUNNER_TEMP" --jobs 2 >> "$RUNNER_TEMP/compiler-units.log" 2>&1
+            result=$?
+          fi
           finished=$(date +%s)
           cat "$RUNNER_TEMP/compiler-units.log"
-          printf 'elapsed_seconds=%s\nexit_status=%s\n' "$((finished - started))" "$result" | tee "$RUNNER_TEMP/compiler-units.status"
+          printf 'compile_seconds=%s\nexecution_seconds=%s\nelapsed_seconds=%s\nexit_status=%s\n' \
+            "$((compiled - started))" "$((finished - compiled))" "$((finished - started))" "$result" | tee "$RUNNER_TEMP/compiler-units.status"
           exit "$result"
       - name: Retain complete compiler unit output and elapsed time
         if: always()

@@ -124,8 +124,11 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    `trb test --config compiler/trbconfig.jsonc` suite on Darwin arm64 with the
    exact reference pin and QBE, without recovery, alongside quick. The runner
    matches the compiler tests' arm64_apple assembly and linker assumptions.
-   It retains the full log and
-   elapsed time as an artifact. Its success is required for every code or CLI
+   It compiles the full test executable once, then runs each test source with two
+   bounded workers and isolated temporary directories. Structured events must
+   report every source passing, with no missing or duplicate test identity.
+   It retains the full log and compile, execution and total times as an artifact.
+   Its success is required for every code or CLI
    PR, including drafts; planning rejects missing or malformed routing.
 2. **Independent tooling.** The former Native `Verify bootstrap seed tooling`
    commands run unchanged on macOS in the separate `CI tooling controls` workflow.
