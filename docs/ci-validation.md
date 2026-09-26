@@ -121,8 +121,10 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    output also selects Linux-only tooling steps for project/policy test edits;
    code and CLI plans must always require complete quick feedback.
    The independent `Complete compiler units` job runs the entire
-   `trb test --config compiler/trbconfig.jsonc` suite with the exact reference
-   pin and QBE, without recovery, alongside quick. It retains the full log and
+   `trb test --config compiler/trbconfig.jsonc` suite on Darwin arm64 with the
+   exact reference pin and QBE, without recovery, alongside quick. The runner
+   matches the compiler tests' arm64_apple assembly and linker assumptions.
+   It retains the full log and
    elapsed time as an artifact. Its success is required for every code or CLI
    PR, including drafts; planning rejects missing or malformed routing.
 2. **Independent tooling.** The former Native `Verify bootstrap seed tooling`

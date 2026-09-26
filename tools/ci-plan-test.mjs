@@ -153,6 +153,7 @@ test('complete compiler units run independently for code and CLI and fail closed
   const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
   const units = workflow.match(/^  compiler_units:\n([\s\S]*?)(?=^  documentation:)/m)?.[1];
   assert(units?.includes("if: needs.plan.outputs.compiler_units == 'true'"));
+  assert(units.includes('runs-on: macos-14'), 'QBE execution tests assemble arm64_apple code');
   assert(units.includes('ref: 977da4f4edbdd068eda484207ae2d220c861691f'));
   assert(units.includes('test "$(cat TYPE_RB_REVISION)" = "$(git -C .type-rb rev-parse HEAD)"'));
   assert(units.includes('d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320'));
