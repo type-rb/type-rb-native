@@ -86,6 +86,65 @@ describe("MIR standard Result") do
 			index += 1
 		end
 	end
+	test("uses caller-owned storage only for nonescaping direct-call Results") do
+		source := "import trb/std/result\ndef make(value: Integer): Result<Integer, String>\nif value == 0\nreturn Result<Integer, String>::Err(\"error \" + value.to_s())\nend\nreturn Result<Integer, String>::Ok(value)\nend\ndef read(value: Integer): Integer\ncase make(value)\nwhen Result::Ok(number)\nreturn number\nwhen Result::Err(error)\nputs(error)\nreturn 7\nend\nend\ndef main()\nputs(read(0))\nputs(read(9))\nend\n"
+		mut state := compiler_new(source.size() * 3 + 16)
+		expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state) && check(state)).to_be_true()
+		mut make_id :=- 1
+		state.scalar_mir.signatures.each.with_index do |signature, index|
+			if signature.name == "make"
+				make_id = index
+			end
+		end
+		expect(make_id >= 0).to_be_true()
+		expect(state.scalar_mir.enum_stack_functions[make_id]).to_equal(1)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		qbe := control_test_output(emit_qbe(state))
+		expect(qbe.include?("$trbnf" + make_id.to_s() + "(l %p0, l %enum_out)")).to_be_true()
+		expect(qbe.include?("%enum_slot")).to_be_true()
+		qbe_binary := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe_binary != nil
+			mut forced := ""
+			mut ordinary := false
+			qbe.split("\n").each do |line|
+				if line.start_with?("function ")
+					ordinary = line.include?("$trbnf")
+				end
+				if line == "}"
+					ordinary = false
+				end
+				if ordinary && (line.include?("call $trbn_gc_alloc(") || line.include?("call $trbnf") || line.include?("call $trbn_string_"))
+					forced += "\tcall $trbn_gc_collect(w 0)\n"
+				end
+				forced += line + "\n"
+			end
+			case logical_run_qbe(qbe_binary, forced)
+			when Result::Ok(actual)
+				expect(actual).to_equal("error 0\n7\n9\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+		state.scalar_mir.enum_stack_functions[make_id] = 0
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR enum stack plan differs")
+		negative_sources := ["import trb/std/result\ndef make(value: Integer): Result<Integer, String>\nreturn Result<Integer, String>::Ok(value)\nend\ndef save(): Array<Result<Integer, String>>\nreturn [make(1)]\nend\ndef main()\nputs(save().size())\nend\n",
+			"import trb/std/result\ndef make(value: Integer): Result<Integer, String>\nreturn Result<Integer, String>::Err(\"payload\")\nend\ndef read(): Integer\nitem := make(0)\nputs(\"safe\" + \"point\")\ncase item\nwhen Result::Ok(number)\nreturn number\nwhen Result::Err(error)\nputs(error)\nreturn 7\nend\nend\ndef main()\nputs(read())\nend\n",
+			"import trb/std/result\ndef make(value: Integer): Result<Integer, String>\nreturn Result<Integer, String>::Ok(value)\nend\ndef read(callback: (Integer) -> Result<Integer, String>): Integer\ncase callback(2)\nwhen Result::Ok(number)\nreturn number\nwhen Result::Err(_error)\nreturn 0\nend\nend\ndef main()\ncallback := make\nputs(read(callback))\nend\n",
+			"import trb/std/result\ndef make(value: Integer): Result<Integer, String>\nif value > 0\nreturn make(value - 1)\nend\nreturn Result<Integer, String>::Ok(0)\nend\ndef main()\ncase make(2)\nwhen Result::Ok(number)\nputs(number)\nwhen Result::Err(error)\nputs(error)\nend\nend\n"]
+		negative_sources.each do |negative_source|
+			mut escaped := compiler_new(negative_source.size() * 3 + 16)
+			expect(lex(escaped, negative_source) && parse_module(escaped, 0, escaped.module_graph.entry_module[0]) && resolve(escaped) && check(escaped)).to_be_true()
+			mut escaped_id :=- 1
+			escaped.scalar_mir.signatures.each.with_index do |signature, index|
+				if signature.name == "make"
+					escaped_id = index
+				end
+			end
+			expect(escaped_id >= 0).to_be_true()
+			expect(escaped.scalar_mir.enum_stack_functions[escaped_id]).to_equal(0)
+		end
+	end
 	test("rejects unhandled Results, invalid boundaries and invalid catch usage") do
 		sources := ["import trb/std/result\ndef read(value: Integer): Result<Integer, String>\nputs(value)\nif value == 0\nreturn Result<Integer, String>::Err(\"missing\")\nend\nreturn Result<Integer, String>::Ok(value)\nend\ndef probe()\nread(1)\nend\n\ndef main()\nprobe()\nend\n",
 			"import trb/std/result\ndef read(value: Integer): Result<Integer, String>\nputs(value)\nif value == 0\nreturn Result<Integer, String>::Err(\"missing\")\nend\nreturn Result<Integer, String>::Ok(value)\nend\ndef probe()\n_value := read(1)\nend\n\ndef main()\nprobe()\nend\n",
