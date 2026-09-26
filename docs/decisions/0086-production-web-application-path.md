@@ -130,12 +130,15 @@ These rules hold for every provider:
 - Ordinary builds never invoke the Go reference.
 - Builds from a schema lock stay offline.
 - Unsupported package behavior fails explicitly.
-- The configured mode selects the target. `mode: trb` builds Native
-  executables. Until the source modes are emitted, a project configured for
-  another mode becomes a Native executable only through an explicit selection,
-  such as a separate configuration passed with `--config`. Application source
-  stays unchanged across modes. M1 settles how the current acceptance of
-  `mode: go` configurations moves to this rule.
+- A project has one configuration, and its mode selects the target. `mode: trb`
+  builds Native executables; `go`, `ruby` and `typescript` select source
+  output. Native accepts all four modes. Until it emits a source mode, commands
+  that need that backend fail explicitly, and a project is never built for a
+  mode other than its configured one. The reference accepts `mode: trb` for
+  analysis, formatting, linting, editor support and TypeRB package installation,
+  and rejects commands that would build it. Package manifests that omit `modes`
+  support every mode, including `trb`. Application source stays unchanged
+  across modes.
 - No Native-only syntax or MIR package API is introduced.
 
 ### Milestones
