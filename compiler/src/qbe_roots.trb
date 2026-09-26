@@ -1,5 +1,5 @@
 import { integer_string } from literals
-import { QbeEmitContext, emit_temporary } from qbe_context
+import { QbeEmitContext, emit_label, emit_temporary } from qbe_context
 import { QbeOutput, qbe_output_line } from qbe_output
 
 # Verified root plans are sorted by instruction identity, independently of block
@@ -32,16 +32,33 @@ def qbe_root_common_prefix(previous: Array<Integer>, current: Array<Integer>): I
 	return index
 end
 
-# MIR supplies the exact live-before set. Publish changed slots and set the
-# count before each allocating operation, dropping dead temporaries. Never
-# retain a root-buffer address across a call; reserve can move it.
-def emit_mir_roots(roots: Array<Integer>, first_changed: Integer, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
+# MIR supplies the exact live-before set. For verified borrowed enum returns,
+# reserve the peak only when the first root is actually published; the scalar
+# variant can return without touching the root buffer.
+# Publish changed slots and set the count before each allocating operation,
+# dropping dead temporaries. Never retain a root-buffer address across a call;
+# reserve can move it.
+def emit_mir_roots(roots: Array<Integer>, first_changed: Integer, capacity: Integer, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
 	if roots.size() == 0
 		qbe_output_line(output, "\tstorel %temporary_roots, $trbn_gc_temp_count")
 		return
 	end
 	mut base := ""
 	if first_changed < roots.size()
+		if capacity > 0
+			ready := emit_temporary(context)
+			required := emit_temporary(context)
+			reserve := emit_label(context)
+			publish := emit_label(context)
+			qbe_output_line(output, "\t" + ready + " =w loadw %root_reserved")
+			qbe_output_line(output, "\tjnz " + ready + ", " + publish + ", " + reserve)
+			qbe_output_line(output, reserve)
+			qbe_output_line(output, "\t" + required + " =l add %temporary_roots, " + integer_string(capacity))
+			qbe_output_line(output, "\tcall $trbn_gc_temp_reserve(l " + required + ")")
+			qbe_output_line(output, "\tstorew 1, %root_reserved")
+			qbe_output_line(output, "\tjmp " + publish)
+			qbe_output_line(output, publish)
+		end
 		data := emit_temporary(context)
 		offset := emit_temporary(context)
 		base = emit_temporary(context)
