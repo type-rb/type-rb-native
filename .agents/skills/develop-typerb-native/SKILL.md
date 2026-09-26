@@ -26,6 +26,7 @@ All `docs/` and configuration paths below are relative to the repository root.
 | Changed surface | Read when needed |
 | --- | --- |
 | Feature selection or coverage claims | `docs/native-language-coverage.md`; preserve ordinary check/build/execution/REPL versus recovery distinctions. |
+| Work selected from the project board | `docs/project-workflow.md` for eligibility, claims, WIP, task closure and initiative completion. |
 | Compiler, MIR, runtime, driver, or target implementation | [Compiler constraints](references/compiler.md) and the decisions for the affected boundary. |
 | Ordinary compiler source, recovery, self-hosting, or seed handoff | [Bootstrap and recovery](references/bootstrap.md), including recovery-enabled suites for compiler-source changes. |
 | Source decomposition, names, or removal | `docs/repository-organization.md` and the affected consumer inventory; applicable recovery and cost checks still apply. |
@@ -98,6 +99,8 @@ decision; do not turn an optional recommendation into a mandatory approval.
 When the user has authorized continued development, pursue the active milestone
 through cohesive ownership changes within that authorization and budget. Avoid
 turning each helper move or size overrun into a separate acceptance milestone.
-Honor later limits such as one small task or stopping with an open PR. Use issue-closing keywords
-only when the reviewed PR actually completes the issue; even a negated closing
-keyword can close it on merge.
+Honor later limits such as one small task or stopping with an open PR. Use
+issue-closing keywords only when the reviewed PR completes the Task or Bug;
+never closing-link its parent initiative. Follow `docs/project-workflow.md` for
+closure and reopening after a revert. Even a negated closing keyword can close
+an issue on merge.

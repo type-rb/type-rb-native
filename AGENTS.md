@@ -68,10 +68,12 @@ outward-facing text before publication.
 ## Conditional project guidance
 
 - For work taken from the project board, follow `docs/project-workflow.md`:
-  implement only Ready tasks under Active initiatives, claim a task before
-  starting, reference it as `Task: #<n>` and close it only after `Main
-  validation` verifies the merge. Its authority table lists what needs a
-  maintainer decision. A direct request keeps its own scope and completion point.
+  implement only eligible Todo tasks under Active initiatives and claim before
+  starting. Use closing keywords only for tasks the PR completes, never their
+  parent initiative. Main failures take priority over feature merges; follow
+  the workflow's completion and reopening rules. Its authority table lists what
+  needs a maintainer decision. A direct request keeps its own scope and
+  completion point.
 - For language coverage, follow `docs/native-language-coverage.md`: pair basic
   syntax with MIR checks and verified compiler self-use. Extend the shared
   reference/Native case contract and regenerate the Capabilities detail view
