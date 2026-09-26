@@ -12,7 +12,8 @@ keeps it consumer-neutral (`AGENTS.md`).
 Native's goal is the complete TypeRB toolchain: the `trb` mode for Native
 executables, the `go`, `ruby` and `typescript` source modes, the everyday
 commands and the official packages. [Decision 0086](0086-production-web-application-path.md)
-sets the package path and the rule of one project configuration for every mode.
+sets the package path and the rule that each project has one configuration
+whose mode selects the target.
 
 The maintainer's direction is to invert the relationship once Native covers
 the language and tooling:
