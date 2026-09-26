@@ -193,6 +193,94 @@ def mir_live_exit(native_module: MirModule, function: MirFunction, blocks: Hash<
 	return live
 end
 
+# Each block transfers (live-out - definitions) union uses. Summarize its
+# instructions once; repeated fixed-point steps must not allocate one live set
+# per instruction. Parameters stay live here so edges can substitute them.
+record MirLiveTransfer
+	uses: Array<Integer>
+	definitions: Array<Integer>
+end
+
+def mir_live_transfer(native_module: MirModule, managed: Hash<String, Integer>, block: MirBlock): MirLiveTransfer
+	mut uses: Array<Integer> := []
+	mut definitions: Array<Integer> := []
+	mut cursor := block.instruction_start + block.instruction_count - 1
+	while cursor >= block.instruction_start
+		instruction := native_module.instructions[cursor]
+		uses = mir_live_before(native_module, managed, instruction, uses)
+		mir_live_operand(managed, definitions, instruction.result)
+		cursor -= 1
+	end
+	return MirLiveTransfer.new(uses: uses, definitions: definitions)
+end
+
+def mir_live_apply(transfer: MirLiveTransfer, after: Array<Integer>): Array<Integer>
+	mut live: Array<Integer> := []
+	mut definition := 0
+	after.each do |value|
+		while definition < transfer.definitions.size() && transfer.definitions[definition] < value
+			definition += 1
+		end
+		if definition == transfer.definitions.size() || transfer.definitions[definition] != value
+			live.push(value)
+		end
+	end
+	transfer.uses.each do |value|
+		mir_live_add(live, value)
+	end
+	return live
+end
+
+# All blocks participate, including unreachable regions. A changed live-in set
+# schedules only predecessors, with both branch edges retained by mir_live_exit.
+# Queue storage is bounded by the block count, independent of sparse value IDs.
+def mir_live_incoming(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>, managed: Hash<String, Integer>): Array<Array<Integer>>
+	mut incoming: Array<Array<Integer>> := []
+	mut predecessors: Array<Array<Integer>> := []
+	mut transfers: Array<MirLiveTransfer> := []
+	mut pending: Array<Integer> := []
+	mut queued: Array<Boolean> := []
+	mut index := 0
+	while index < function.block_count
+		incoming.push([])
+		predecessors.push([])
+		pending.push(index)
+		queued.push(true)
+		transfers.push(mir_live_transfer(native_module, managed, native_module.blocks[function.block_start + index]))
+		index += 1
+	end
+	index = 0
+	while index < function.block_count
+		block := native_module.blocks[function.block_start + index]
+		if block.terminator == 1 || block.terminator == 2
+			predecessors[blocks[integer_string(block.first_target)]].push(index)
+		end
+		if block.terminator == 2
+			predecessors[blocks[integer_string(block.second_target)]].push(index)
+		end
+		index += 1
+	end
+	mut depth := pending.size()
+	while depth > 0
+		depth -= 1
+		index = pending[depth]
+		queued[index] = false
+		block := native_module.blocks[function.block_start + index]
+		live := mir_live_apply(transfers[index], mir_live_exit(native_module, function, blocks, managed, block, incoming))
+		if !mir_live_equal(incoming[index], live)
+			incoming[index] = live
+			predecessors[index].each do |previous|
+				if !queued[previous]
+					queued[previous] = true
+					pending[depth] = previous
+					depth += 1
+				end
+			end
+		end
+	end
+	return incoming
+end
+
 # Called only after storage/types/uses are verified. Sparse IDs have no bearing
 # on allocation size. The least fixed point includes loop/backedge liveness.
 def mir_function_roots_with_values(native_module: MirModule, function: MirFunction, values: Array<MirValue>): MirRootPlan
@@ -211,32 +299,17 @@ def mir_function_roots_with_values(native_module: MirModule, function: MirFuncti
 		end
 	end
 	mut incoming: Array<Array<Integer>> := []
-	mut index := 0
-	while index < function.block_count
-		incoming.push([])
-		index += 1
-	end
-	mut changed := managed_count > 0
-	while changed
-		changed = false
-		index = function.block_count - 1
-		while index >= 0
-			block := native_module.blocks[function.block_start + index]
-			mut live := mir_live_exit(native_module, function, blocks, managed, block, incoming)
-			mut cursor := block.instruction_start + block.instruction_count - 1
-			while cursor >= block.instruction_start
-				live = mir_live_before(native_module, managed, native_module.instructions[cursor], live)
-				cursor -= 1
-			end
-			if !mir_live_equal(incoming[index], live)
-				incoming[index] = live
-				changed = true
-			end
-			index -= 1
+	if managed_count > 0
+		incoming = mir_live_incoming(native_module, function, blocks, managed)
+	else
+		mut index := 0
+		while index < function.block_count
+			incoming.push([])
+			index += 1
 		end
 	end
 	mut capacity := 0
-	index = 0
+	mut index := 0
 	while index < function.block_count
 		block := native_module.blocks[function.block_start + index]
 		mut live := mir_live_exit(native_module, function, blocks, managed, block, incoming)
