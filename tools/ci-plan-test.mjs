@@ -30,7 +30,7 @@ function results(plan) {
   return {
     plan: { result: 'success', outputs: Object.fromEntries(
       Object.entries(plan).map(([key, value]) => [key, String(value)])) },
-    ...Object.fromEntries(Object.entries({ quick: plan.quick,
+    ...Object.fromEntries(Object.entries({ quick: plan.quick, compiler_units: plan.compiler_units,
       documentation: plan.documentation, native: !plan.draft && plan.code && plan.complete, targets: !plan.draft && plan.code,
       memory: !plan.draft && plan.memory,
       tooling: plan.tooling, cli: !plan.draft && plan.cli,
@@ -48,7 +48,7 @@ test('compiler and routing changes require every correctness authority', () => {
     assert.equal(plan.memory, true);
     const needs = results(plan);
     assert.deepEqual(acceptance(needs), []);
-    for (const job of ['quick', 'native', 'targets', 'memory', 'cli', 'tooling']) {
+    for (const job of ['quick', 'compiler_units', 'native', 'targets', 'memory', 'cli', 'tooling']) {
       for (const result of ['failure', 'cancelled', 'skipped']) {
         assert(acceptance({ ...needs, [job]: { result } }).length > 0);
       }
@@ -119,7 +119,7 @@ test('amd64 migration still verifies binary format and records identities after 
 test('compatibility checks remain in quick and standalone validation', () => {
   const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
   const standalone = readFileSync(new URL('../.github/workflows/native-validation.yml', import.meta.url), 'utf8');
-  const quick = workflow.match(/^  quick:\n([\s\S]*?)(?=^  documentation:)/m)?.[1];
+  const quick = workflow.match(/^  quick:\n([\s\S]*?)(?=^  compiler_units:)/m)?.[1];
   assert(quick, 'quick stage must exist');
   const build = quick.indexOf('python3 tools/build-reference.py .type-rb');
   const formatting = quick.indexOf('Check formatting and core types');
@@ -144,14 +144,53 @@ test('compatibility checks remain in quick and standalone validation', () => {
     assert(workflow.includes(`  ${job}:\n    needs: plan\n`),
       `${job} should start alongside quick after planning`);
   }
-  assert(workflow.includes('needs: [plan, quick, documentation, native, targets, memory, tooling, cli]'),
+  assert(workflow.includes('  compiler_units:\n    name: Complete compiler units\n    needs: plan\n'));
+  assert(workflow.includes('needs: [plan, quick, compiler_units, documentation, native, targets, memory, tooling, cli]'),
     'acceptance must still require quick and all complete authorities');
+});
+
+test('complete compiler units run independently for code and CLI and fail closed', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
+  const units = workflow.match(/^  compiler_units:\n([\s\S]*?)(?=^  documentation:)/m)?.[1];
+  assert(units?.includes("if: needs.plan.outputs.compiler_units == 'true'"));
+  assert(units.includes('runs-on: macos-14'), 'QBE execution tests assemble arm64_apple code');
+  assert(units.includes('ref: 977da4f4edbdd068eda484207ae2d220c861691f'));
+  assert(units.includes('test "$(cat TYPE_RB_REVISION)" = "$(git -C .type-rb rev-parse HEAD)"'));
+  assert(units.includes('d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320'));
+  assert(units.includes('TYPE_RB_NATIVE_QBE: ${{ runner.temp }}/qbe-1.3/qbe'));
+  assert(units.includes('"$RUNNER_TEMP/trb" test --config compiler/trbconfig.jsonc'));
+  assert(!units.includes('TYPE_RB_NATIVE_RECOVERY_'));
+  assert(units.includes('compiler-units.log') && units.includes('elapsed_seconds='));
+  assert(units.includes('actions/upload-artifact@v6'));
+  for (const path of ['compiler/src/mir.trb', 'compiler/src/mir_test.trb', 'compiler/cli/main.trb', 'trbn']) {
+    for (const draft of [false, true]) {
+      const plan = classify([path], draft, 'tiered');
+      assert.equal(plan.compiler_units, true, path);
+      const needs = results(plan);
+      assert.deepEqual(acceptance(needs), []);
+      for (const result of ['failure', 'cancelled', 'skipped', 'pending', undefined]) {
+        const changed = { ...needs, compiler_units: result ? { result } : undefined };
+        assert.notDeepEqual(acceptance(changed), [], `${path}: ${result}`);
+      }
+      needs.plan.outputs.compiler_units = 'false';
+      needs.compiler_units.result = 'skipped';
+      assert.notDeepEqual(acceptance(needs), [], 'planning cannot omit complete units');
+    }
+  }
+  for (const path of ['README.md', 'tools/ci-plan.mjs', 'tools/recovery_stage_test.py']) {
+    const plan = classify([path], false, 'tiered');
+    assert.equal(plan.compiler_units, false, path);
+    const needs = results(plan);
+    assert.deepEqual(acceptance(needs), []);
+    needs.compiler_units.result = 'success';
+    assert.notDeepEqual(acceptance(needs), [], 'an unplanned unit job is inconsistent');
+  }
 });
 
 test('documentation-only PRs do not run compiler matrices', () => {
   const plan = classify(['README.md', 'docs/index.html', 'results/a.json',
     'tools/native-mir-array-loop-recovery/README.md', '.github/ISSUE_TEMPLATE/task.yml'], false);
-  assert.deepEqual(plan, { code: false, quick: false, documentation: true,
+  assert.deepEqual(plan, { code: false, quick: false, compiler_units: false, documentation: true,
     memory: false, draft: false, tooling: false, cli: false, complete: false });
   assert.deepEqual(acceptance(results(plan)), []);
 });
@@ -196,7 +235,7 @@ test('static documentation and evidence tools do not run compiler matrices', () 
     'tools/evidence_bundle.py', 'tools/evidence_bundle_test.py',
     '.github/workflows/documentation.yml']) {
     const plan = classify([tool, 'docs/capabilities/benchmarks/data.js'], false);
-    assert.deepEqual(plan, { code: false, quick: false, documentation: true,
+    assert.deepEqual(plan, { code: false, quick: false, compiler_units: false, documentation: true,
       memory: false, draft: false, tooling: false, cli: false, complete: false });
     assert.deepEqual(acceptance(results(plan)), []);
     assert.equal(classify([`${tool}.unknown`], false).code, true);
@@ -216,7 +255,7 @@ test('planning-only maintenance uses its unconditional tests, not compiler matri
   }
   for (const path of ['tools/ci-plan.mjs', 'tools/ci-plan-test.mjs']) {
     const plan = classify([path, 'docs/evidence-retention.md', 'results/historical/raw.tsv'], false);
-    assert.deepEqual(plan, { code: false, quick: false, documentation: true,
+    assert.deepEqual(plan, { code: false, quick: false, compiler_units: false, documentation: true,
       memory: false, draft: false, tooling: false, cli: false, complete: false });
     assert.deepEqual(acceptance(results(plan)), []);
     for (const failure of ['failure', 'cancelled', 'skipped', undefined]) {
@@ -248,7 +287,7 @@ test('draft feedback succeeds only for its selected authorities', () => {
   assert.deepEqual(acceptance(documentation), []);
   const code = results(classify(['compiler/src/compiler.trb'], true));
   assert.deepEqual(acceptance(code), []);
-  for (const job of ['quick', 'documentation', 'tooling']) {
+  for (const job of ['quick', 'compiler_units', 'documentation', 'tooling']) {
     if (code[job].result === 'success') {
       code[job].result = 'failure';
       assert.notDeepEqual(acceptance(code), [], `${job} failure must reject draft feedback`);
@@ -296,7 +335,7 @@ test('draft development defers expensive authorities without relaxing ready acce
   }
 });
 test('failed, cancelled, skipped, missing and pending required jobs reject acceptance', () => {
-  for (const job of ['quick', 'documentation', 'native', 'targets', 'memory', 'tooling', 'cli']) {
+  for (const job of ['quick', 'compiler_units', 'documentation', 'native', 'targets', 'memory', 'tooling', 'cli']) {
     for (const state of ['failure', 'cancelled', 'skipped', 'pending', undefined]) {
       const needs = results(classify(['compiler/gate4/src/compiler.trb', 'README.md'], false));
       needs[job] = state ? { result: state } : undefined;
@@ -340,7 +379,7 @@ test('CLI classifies real historical-to-documentation and current-project rename
     const args = [fileURLToPath(new URL('./ci-plan.mjs', import.meta.url)), base, head, 'false'];
     const output = execFileSync(process.execPath, args, { cwd: directory, encoding: 'utf8', env: plannerEnv() });
     assert.deepEqual(Object.fromEntries(output.trim().split('\n').map(row => row.split('='))),
-      { code: 'true', quick: 'true', documentation: 'true', memory: 'true',
+      { code: 'true', quick: 'true', compiler_units: 'true', documentation: 'true', memory: 'true',
         draft: 'false', tooling: 'true', cli: 'true', complete: 'true' });
     mkdirSync(join(directory, 'compiler/src'), { recursive: true });
     renameSync(join(directory, 'docs/example.md'), join(directory, 'compiler/src/current.trb'));
@@ -454,7 +493,7 @@ test('synthetic tooling tests have an executable authority without compiler rebu
   assert(!native.includes('Verify bootstrap seed tooling'));
   const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
   assert(!entry.includes('  performance:'), 'strict comparative measurement is retired');
-  assert(entry.includes('needs: [plan, quick, documentation, native, targets, memory, tooling, cli]'));
+  assert(entry.includes('needs: [plan, quick, compiler_units, documentation, native, targets, memory, tooling, cli]'));
 });
 
 test('daily measurement controllers use their dedicated tooling suite', () => {
@@ -500,7 +539,7 @@ test('mixed lightweight surfaces require the union and never skip a failed autho
   assert.equal(plan.tooling, true);
   assert.equal(plan.documentation, true);
   assert.deepEqual(acceptance(results(plan)), []);
-  for (const job of ['quick', 'cli', 'tooling', 'documentation']) {
+  for (const job of ['quick', 'compiler_units', 'cli', 'tooling', 'documentation']) {
     for (const result of ['failure', 'cancelled', 'skipped', undefined]) {
       const needs = results(plan);
       needs[job] = { result };
@@ -545,10 +584,10 @@ test('known compiler test modules retain correctness without unchanged-binary me
   assert.equal(compilerTestInputs.size, 11);
   for (const file of compilerTestInputs) {
     const plan = classify([file], false);
-    assert.deepEqual(plan, { code: true, quick: true, documentation: false,
+    assert.deepEqual(plan, { code: true, quick: true, compiler_units: true, documentation: false,
       memory: false, draft: false, tooling: true, cli: true, complete: true });
     assert.deepEqual(acceptance(results(plan)), []);
-    for (const job of ['quick', 'native', 'targets', 'tooling', 'cli']) {
+    for (const job of ['quick', 'compiler_units', 'native', 'targets', 'tooling', 'cli']) {
       for (const state of ['failure', 'cancelled', 'skipped', undefined]) {
         const needs = results(plan);
         needs[job] = { result: state };
@@ -568,7 +607,7 @@ test('known compiler test modules retain correctness without unchanged-binary me
 
 test('synthetic project and policy tests retain Linux without building the reference compiler', () => {
   const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
-  const quick = entry.match(/^  quick:\n([\s\S]*?)(?=^  documentation:)/m)?.[1];
+  const quick = entry.match(/^  quick:\n([\s\S]*?)(?=^  compiler_units:)/m)?.[1];
   assert(quick.includes("if: needs.plan.outputs.quick == 'true'"));
   assert(entry.includes('quick: ${{ steps.plan.outputs.quick }}'));
   const steps = quick.split('      - ').slice(1);
@@ -587,7 +626,7 @@ test('synthetic project and policy tests retain Linux without building the refer
   for (const file of quickToolingTests) {
     assert(toolingStep.includes(`sh ${file}`));
     const plan = classify([file], false);
-    assert.deepEqual(plan, { code: false, quick: true, documentation: false,
+    assert.deepEqual(plan, { code: false, quick: true, compiler_units: false, documentation: false,
       memory: false, draft: false, tooling: true, cli: false, complete: false });
     assert.deepEqual(acceptance(results(plan)), []);
     for (const job of ['quick', 'tooling']) {

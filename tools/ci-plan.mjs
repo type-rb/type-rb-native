@@ -159,6 +159,7 @@ export function classify(paths, draft, gate = 'complete') {
   const complete = cli && (gate === 'complete' || executable.some(path => !pullRequestLane(path)));
   return {
     code, quick: code || executable.some(path => cliInputs.has(path) || quickToolingTests.has(path)),
+    compiler_units: code || cli,
     documentation: routing || paths.some(documentation),
     memory, draft,
     tooling: code || executable.some(toolingInput),
@@ -169,16 +170,19 @@ export function classify(paths, draft, gate = 'complete') {
 export function acceptance(needs) {
   if (needs.plan?.result !== 'success') return ['CI planning did not succeed'];
   const plan = needs.plan.outputs;
-  if (!plan || ['code', 'documentation', 'memory', 'draft', 'tooling', 'cli', 'quick', 'complete']
+  if (!plan || ['code', 'documentation', 'memory', 'draft', 'tooling', 'cli', 'quick', 'compiler_units', 'complete']
     .some(key => !['true', 'false'].includes(plan[key]))) {
     return ['CI planning outputs are missing or malformed'];
   }
   if ((plan.code === 'true' || plan.cli === 'true') && plan.quick !== 'true') {
     return ['Code and CLI validation require quick feedback'];
   }
+  if ((plan.code === 'true' || plan.cli === 'true') && plan.compiler_units !== 'true') {
+    return ['Code and CLI validation require complete compiler units'];
+  }
   const draft = plan.draft === 'true';
   const required = {
-    quick: plan.quick, documentation: plan.documentation,
+    quick: plan.quick, compiler_units: plan.compiler_units, documentation: plan.documentation,
     native: draft || plan.complete === 'false' ? 'false' : plan.code, targets: draft ? 'false' : plan.code,
     memory: draft ? 'false' : plan.memory,
     tooling: plan.tooling, cli: draft ? 'false' : plan.cli,

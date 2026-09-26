@@ -28,7 +28,8 @@ reported as a performance-qualified result.
 
 `NATIVE_CI_GATE: tiered` in the PR workflow lets ordinary compiler, CLI and
 conformance edits merge after the pre-merge lanes: planning, quick (including
-the snapshot-v4 subset check), documentation, tooling, the CLI build on Darwin
+the snapshot-v4 subset check), complete non-recovery compiler units, documentation,
+tooling, the CLI build on Darwin
 and Linux arm64 (including the conformance source scan), the Ubuntu x64 target
 and memory. Native recovery, CLI cache invalidation and the arm64 regression
 then run in `Main validation`.
@@ -61,8 +62,8 @@ module. The selected module names are recorded in the main plan output.
 | Markdown, development metadata, static documentation, registered results and exact documentation generators | Planning and documentation |
 | The two exact planning files | Their unconditional planning tests and documentation |
 | Exact synthetic tool-test files listed in `toolingTests` | Planning and macOS tooling; project/policy shell tests also run Linux quick tooling |
-| Existing compiler unit-test modules listed in `compilerTestInputs` | Complete quick, Native, CLI, tooling and target correctness; no unchanged-binary worker-memory measurements |
-| Exact CLI adapter, launcher, build helper and CLI-test inputs listed in `cliInputs` | Planning, quick checks and Darwin/Linux CLI artifacts |
+| Existing compiler unit-test modules listed in `compilerTestInputs` | Complete compiler units, quick, Native, CLI, tooling and target correctness; no unchanged-binary worker-memory measurements |
+| Exact CLI adapter, launcher, build helper and CLI-test inputs listed in `cliInputs` | Planning, quick, complete compiler units and Darwin/Linux CLI artifacts |
 | Ordinary compiler, conformance, execution workflows and measurement policy | Full applicable correctness, tooling, CLI, target and memory authorities |
 | Other code or unknown files | Complete Native correctness, tooling and CLI/target checks; memory according to the conservative rules in the planner |
 | Mixed changes | The union of applicable authorities, with core changes restoring the core lane |
@@ -80,7 +81,7 @@ authority in addition to the macOS tooling checks. For changes limited to those
 tests, quick skips reference checkout/build, compatibility, formatting/types and
 TypeRB units; the Linux shell tests need none of those compiler inputs.
 
-The ten reviewed compiler unit-test modules are excluded from ordinary
+The eleven reviewed compiler unit-test modules are excluded from ordinary
 reference/Native compiler builds and CLI source staging. Changing only those
 modules cannot change the measured compiler or worker binary. Full correctness
 and target checks still execute; only worker-memory measurements are omitted. Conformance fixtures, new test paths, project configurations,
@@ -119,6 +120,13 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    recovery or comparative claim comes from quick feedback. The explicit `quick`
    output also selects Linux-only tooling steps for project/policy test edits;
    code and CLI plans must always require complete quick feedback.
+   The independent `Complete compiler units` job runs the entire
+   `trb test --config compiler/trbconfig.jsonc` suite on Darwin arm64 with the
+   exact reference pin and QBE, without recovery, alongside quick. The runner
+   matches the compiler tests' arm64_apple assembly and linker assumptions.
+   It retains the full log and
+   elapsed time as an artifact. Its success is required for every code or CLI
+   PR, including drafts; planning rejects missing or malformed routing.
 2. **Independent tooling.** The former Native `Verify bootstrap seed tooling`
    commands run unchanged on macOS in the separate `CI tooling controls` workflow.
    Its synthetic checks need no compiled candidate, so it can start after

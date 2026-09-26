@@ -161,7 +161,7 @@ def _expected_targets(seed_manifest: dict[str, Any]) -> list[dict[str, str]]:
 # source-era oracle; they must not follow a development pin update.
 REFERENCE_WORKFLOWS = {
     "native-validation.yml": ("direct", 1),
-    "pull-request.yml": ("direct", 1),
+    "pull-request.yml": ("direct", 2),
     "runtime-worker-memory.yml": ("environment", 1),
     "benchmarksgame-formal.yml": ("environment", 1),
     "benchmarksgame-build-formal.yml": ("environment", 1),
@@ -245,7 +245,7 @@ def validate_reference_checkouts(root: Path, revision: str) -> dict[str, str]:
             if name in ("benchmarksgame-formal.yml", "benchmarksgame-build-formal.yml",
                         "daily-performance.yml", "weekly-performance.yml"):
                 command += " --trimpath"
-            if _command_count(source, command) != 1:
+            if _command_count(source, command) != count:
                 raise ValidationError(f"reference checkout {name}: canonical versioned build differs")
     controller = root / "tools/linux-amd64-targets.sh"
     source = _without_comment_lines(_require_text(controller, [], "reference controller"))
