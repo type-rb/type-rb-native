@@ -97,6 +97,34 @@ Providers reuse the reference data boundaries and portable package source where
 possible. Declarations, rejections and execution are compared with the pinned
 reference.
 
+### Shared implementation with the reference
+
+The aim is one TypeRB implementation of the official packages, shared by the
+reference and Native, so that package behavior is maintained once.
+
+The reference already bundles portable TypeRB sources for the official packages:
+roughly 1,600 lines, including the `trb/web` core, `trb/http` and the web
+middleware. The remaining behavior is compiler-integrated Go: roughly 9,000
+lines of semantics plus per-backend code generation. The reference keeps these
+bundled packages behind a manifest boundary so that they can move to an external
+package source.
+
+- Native consumes the reference's portable package sources unchanged at the
+  pinned revision. It never keeps a fork.
+- When behavior can be expressed in portable TypeRB, moving it from compiler
+  integration into the shared package source is preferred over porting it into
+  Native. The reference benefits directly because it removes per-backend
+  duplication across Go, Ruby and TypeScript.
+- Native providers are written in portable TypeRB along the reference's
+  protocol boundaries: declarations, project declaration input, generated
+  source and the runtime adapter protocol. They can then move into the
+  reference if the reference adopts TypeRB-authored providers.
+- Shared conformance cases, meaning TypeRB programs with expected outcomes,
+  belong with the shared sources and run in both implementations.
+- Reference changes follow that repository's own workflow. They must be
+  justified by reference semantics and maintenance, without Native terminology,
+  and each upstream proposal needs a maintainer decision.
+
 These rules hold for every provider:
 
 - Ordinary builds never invoke the Go reference.
@@ -114,7 +142,7 @@ These rules hold for every provider:
 
 | Milestone | Scope | First measure |
 | --- | --- | --- |
-| M1 | Project configuration, explicit mode selection and local path packages | Frozen configuration and import matrix, including invalid options, mode selection and conflicting identities |
+| M1 | Project configuration, explicit mode selection, local path packages and the reference's bundled official package sources | Frozen configuration and import matrix, including invalid options, mode selection and conflicting identities |
 | M2 | `trbn test` and `trb/std/test` | Discovery, assertions, failure origins and exit status match the reference |
 | M3a | Bytes, JSON and time services | Service conformance cases |
 | M3b | Blocking sockets, deadlines and deterministic resource cleanup | Service cases; no leaked owned handles |
@@ -158,8 +186,9 @@ security-maintenance policies remain separate release gates.
   that cost against matched controls.
 - A dynamic database library adds a deployment prerequisite and a license to
   track (LGPL-2.1).
-- Providers may drift from the reference. Pinned differential cases limit the
-  drift. Shared protocol improvements go through the reference repository's own
+- Providers may drift from the reference until they are shared. Pinned
+  differential cases limit the drift, and shared sources remove it. Shared
+  protocol and source changes go through the reference repository's own
   workflow.
 - The tutorial is an integration target. It cannot qualify web alone.
 
