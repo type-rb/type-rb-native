@@ -15,8 +15,10 @@ limits keep the flow moving.
   task is a sub-issue of exactly one initiative. A bug waiting for triage and an
   emergency repair of `main` may exist without a parent.
 
-Open initiatives with the Initiative form and tasks with the Task form. They add
-the issue to the project and set its type.
+Open initiatives with the Initiative form and tasks with the Task form. They set
+the issue type and add it to the project when the author has project write
+permission. Otherwise, a project collaborator adds the issue during triage;
+the form's project setting does not grant access to the project.
 
 ## Views and fields
 
@@ -34,7 +36,7 @@ the issue to the project and set its type.
 | Attention | None, Blocked (link the blocker), Needs decision (state the question) |
 | Priority | P0 urgent, P1 next, P2 later |
 | Area, Family | Surface of the work; Family is a registry id from `tools/native-language-cases.json` |
-| Claim, Claim updated | Current owner as `<agent>:<run-id>` and the date it last confirmed the claim |
+| Claim, Claim updated | Current owner as `<agent>:<run-id>@<claim-sha>` and the date it last confirmed the claim |
 | Touches | Main files or modules the task changes, used to avoid conflicting work |
 | Metric, Target, Baseline, Current, Measured, Evidence | Initiative measurement; see below |
 
@@ -47,7 +49,8 @@ and Touches, and its initiative is Active.
 - Tasks may be planned under an Approved or Active initiative.
 - Implement only Ready tasks under an Active initiative. Take P0 before P1
   before P2, and older items first within a priority.
-- Keep at most five initiatives Active so that started work finishes.
+- Keep at most three initiatives Active so that started work finishes. Before
+  activation, record the Metric, Target and Baseline and prepare the first task.
 - An agent run holds at most one task In progress and one In review.
 - When `Main validation` fails, repairing or reverting `main` comes first and may
   skip the Ready and initiative rules. Record the repair as a task afterwards
@@ -55,23 +58,57 @@ and Touches, and its initiative is Active.
 
 ## Claiming a task
 
-Claims are serialized through a create-only branch, so two agents cannot own
-the same task:
+Claims are serialized through a create-only branch with a unique commit for
+each acquisition attempt. Run this from the repository, replacing the task
+number and owner with public identifiers:
 
 ```bash
-git push --force-with-lease=refs/heads/claim/task-<n>: origin origin/main:refs/heads/claim/task-<n>
+set -eu
+task=123
+claim_owner='codex:REPLACE_WITH_RUN_ID'
+claim_ref="refs/heads/claim/task-$task"
+git fetch origin main
+claim_base=$(git rev-parse origin/main)
+claim_tree=$(git rev-parse "$claim_base^{tree}")
+claim_nonce=$(python3 -c 'import uuid; print(uuid.uuid4())')
+claim_sha=$(git commit-tree "$claim_tree" -p "$claim_base" \
+  -m "Claim task $task by $claim_owner; nonce $claim_nonce")
+git push --force-with-lease="$claim_ref:" origin "$claim_sha:$claim_ref"
 ```
 
-The empty expected value makes the push fail when the branch already exists.
-A plain push is not a claim because it can fast-forward an existing branch. If
-the push fails, choose another task.
+The nonce must be fresh for every acquisition attempt, even in the same run.
+Pushing `origin/main` directly is unsafe: when the existing branch already
+points to that commit, Git returns success with `Everything up-to-date` even
+with the empty lease. The distinct claim commit makes an existing branch reject
+the create-only push. A plain push is not a claim either. If creation fails,
+do not start work or update the board. If the network result is uncertain,
+compare the remote ref with the saved `claim_sha` before retrying or proceeding.
 
-After a successful claim, set Claim to `<agent>:<run-id>` with an identifier
-unique to the run, set Claim updated to today and move Status to In progress.
-Refresh Claim updated each day the work continues. A claim that has not been
-updated for two days and has no open PR is stale: comment on the issue, delete
-the branch and claim the task again. Delete the claim branch and clear Claim
-when the task reaches Verified or Dropped, or when the owner stops working on it.
+The claim commit has the baseline tree and is only an ownership token. Create
+the implementation branch from main, not from the claim branch. Keep the token
+SHA for the lifetime of the claim and never add implementation commits to it.
+
+After a successful claim, set Claim to `<agent>:<run-id>@<claim-sha>`, set Claim
+updated to today and move Status to In progress. If a board update fails, retain
+the branch and reconcile the fields before working. Refresh Claim updated each
+day the work continues, and verify the remote ref still matches the saved token
+before resuming work or changing ownership fields.
+
+When the task reaches Verified or Dropped, or the owner stops working, update
+the status and clear Claim while still holding the branch. Then release only
+the saved token:
+
+```bash
+git push --force-with-lease="$claim_ref:$claim_sha" origin ":$claim_ref"
+```
+
+Never replace the saved SHA with a newly observed owner's SHA to force release.
+A claim that has not been updated for two days and has no open PR needs
+investigation: comment on the issue and set Attention to Needs decision. A date
+alone does not prove the owner stopped. Reclaim only after the maintainer
+confirms it is inactive, using the old token's conditional deletion before a
+fresh acquisition. A resumed former owner must stop if its token no longer
+matches. Claim branches are coordination records and are never merged.
 
 ## Delivering a task
 
