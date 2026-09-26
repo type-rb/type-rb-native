@@ -48,7 +48,11 @@ for the later source backends. Native-specific layout, ABI and root lowering
 belong after that shared semantic boundary. Basic syntax proceeds with MIR
 consolidation. Three-language backend parity, wider standard-library and
 official-package coverage follow their dependencies; completing one category
-list does not establish those capabilities.
+list does not establish those capabilities. Official web, ORM and jobs packages
+follow the gated milestones in
+[Decision 0086](decisions/0086-production-web-application-path.md); package
+slices may start before this milestone's performance assessment only through
+those gates.
 
 ## Completion conditions
 
