@@ -24,6 +24,7 @@ jobs:
     outputs:
       code: ${{ steps.plan.outputs.code }}
       quick: ${{ steps.plan.outputs.quick }}
+      compiler_units: ${{ steps.plan.outputs.compiler_units }}
       documentation: ${{ steps.plan.outputs.documentation }}
       memory: ${{ steps.plan.outputs.memory }}
       draft: ${{ steps.plan.outputs.draft }}
@@ -129,6 +130,57 @@ jobs:
           "$RUNNER_TEMP/trb" test --config compiler/trbconfig.jsonc \
             -t 'MIR|Array|Integer|Float|scalar|bounds|allocating|induction|Boolean|syntax|Hash'
 
+  compiler_units:
+    name: Complete compiler units
+    needs: plan
+    if: needs.plan.outputs.compiler_units == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          repository: type-rb/type-rb
+          ref: 977da4f4edbdd068eda484207ae2d220c861691f
+          path: .type-rb
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: .type-rb/go.mod
+          cache-dependency-path: .type-rb/go.sum
+      - name: Build the exact reference compiler
+        run: |
+          test "$(cat TYPE_RB_REVISION)" = "$(git -C .type-rb rev-parse HEAD)"
+          python3 tools/build-reference.py .type-rb "$RUNNER_TEMP/trb"
+      - name: Build pinned QBE 1.3
+        run: |
+          curl --fail --location --retry 3 https://c9x.me/compile/release/qbe-1.3.tar.xz -o "$RUNNER_TEMP/qbe-1.3.tar.xz"
+          echo "d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320  $RUNNER_TEMP/qbe-1.3.tar.xz" | sha256sum -c -
+          tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/qbe-1.3.tar.xz"
+          make -C "$RUNNER_TEMP/qbe-1.3"
+      - name: Run every compiler unit without recovery
+        env:
+          TYPE_RB_NATIVE_ROOT: ${{ github.workspace }}
+          TYPE_RB_NATIVE_QBE: ${{ runner.temp }}/qbe-1.3/qbe
+        run: |
+          set +e
+          started=$(date +%s)
+          "$RUNNER_TEMP/trb" test --config compiler/trbconfig.jsonc > "$RUNNER_TEMP/compiler-units.log" 2>&1
+          result=$?
+          finished=$(date +%s)
+          cat "$RUNNER_TEMP/compiler-units.log"
+          printf 'elapsed_seconds=%s\nexit_status=%s\n' "$((finished - started))" "$result" | tee "$RUNNER_TEMP/compiler-units.status"
+          exit "$result"
+      - name: Retain complete compiler unit output and elapsed time
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: compiler-units-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/compiler-units.log
+            ${{ runner.temp }}/compiler-units.status
+          if-no-files-found: warn
+          retention-days: 30
+
   documentation:
     needs: plan
     if: needs.plan.outputs.documentation == 'true'
@@ -173,7 +225,7 @@ jobs:
   acceptance:
     name: Native CI acceptance
     if: always()
-    needs: [plan, quick, documentation, native, targets, memory, tooling, cli]
+    needs: [plan, quick, compiler_units, documentation, native, targets, memory, tooling, cli]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
