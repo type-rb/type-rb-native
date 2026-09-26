@@ -12,7 +12,7 @@ Each count describes registered probes, not language coverage percentages.
 | Defaults and named arguments | basic | 0 / 13 | Method, function-value and payload-enum argument parity |  |
 | Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
 | Loop control and transfers | basic | 0 / 10 | Additional nested transfer and diagnostic-origin differential probes | WhileStatement, BreakStatement, NextStatement |
-| Case statements and expressions | basic | 0 / 5 | Exhaustiveness, repeated/unreachable branches and pattern-binding diagnostics | CaseStatement |
+| Case statements and expressions | basic | 0 / 15 | No-match case statement execution across reference backends and Native (#612) | CaseStatement |
 | Records and field bindings | basic | 0 / 39 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 0 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 1 / 44 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
