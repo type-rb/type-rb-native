@@ -134,8 +134,9 @@ These rules hold for every provider:
   executables. Until the source modes are emitted, a project configured for
   another mode becomes a Native executable only through an explicit selection,
   such as a separate configuration passed with `--config`. Application source
-  stays unchanged across modes. M1 settles how the current acceptance of
-  `mode: go` configurations moves to this rule.
+  stays unchanged across modes. `trbn` currently accepts only `mode: trb`, and
+  the reference rejects `trb`. Before M1 is activated, a decision settles how
+  one project configuration serves both implementations.
 - No Native-only syntax or MIR package API is introduced.
 
 ### Milestones
