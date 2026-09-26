@@ -1,14 +1,22 @@
 # Project scenarios
 
-`m1-manifest.json` is the frozen initial scenario set for M1 (project
-configuration, mode selection, local path packages and bundled official package
-sources) from [Decision 0086](../../docs/decisions/0086-production-web-application-path.md).
+Each `m<N>-manifest.json` freezes the initial scenario set for one milestone of
+[Decision 0086](../../docs/decisions/0086-production-web-application-path.md).
+Fixture directories are named by scenario ID. At most 20 scenarios are frozen
+per milestone before activation; broader conformance stays in that milestone's
+backlog.
 
-Each scenario names its public reference source, a fixture directory, the
-commands run in `cwd`, the dependencies it exercises, and its `expectation`.
-`reference` records the pinned reference outcomes and `nativeBaseline` records
-`trbn` before M1. Paths are normalized to `<fixture>`, and a failing step ends
-its sequence. Every scenario runs in a fresh copy of its fixture.
+Each scenario records:
 
-Nothing consumes these fixtures yet. M1's implementation adds the runner that
-replays them; broader conformance stays in the M1 backlog.
+- its public reference source;
+- a fixture directory, and the commands run in `cwd`;
+- the dependencies it exercises;
+- its `expectation`.
+
+`reference` records the outcomes from the pinned reference, and
+`nativeBaseline` records `trbn` before the milestone. Paths are normalized to
+`<fixture>`. A failing step ends its sequence, and every scenario runs in a
+fresh copy of its fixture.
+
+Nothing consumes these fixtures yet. The milestone implementation adds the
+runner that replays them.
