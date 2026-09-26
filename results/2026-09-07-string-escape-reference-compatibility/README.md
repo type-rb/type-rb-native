@@ -1,6 +1,24 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`0504b5a735328f0c665c70f3cad2876baf3839f6`. It incorporates
+[PR #826](https://github.com/type-rb/type-rb/pull/826) for open scalar `case`
+fallthrough across backends,
+[PR #827](https://github.com/type-rb/type-rb/pull/827) for Go predeclared-name
+collisions in lexical bindings,
+[PR #828](https://github.com/type-rb/type-rb/pull/828) for REPL coverage of raw
+enum Result retention,
+[PR #829](https://github.com/type-rb/type-rb/pull/829), which rejects
+unsupported Range element annotations during checking, and
+[PR #830](https://github.com/type-rb/type-rb/pull/830), which accepts `mode: trb`
+as a declared mode without a backend in the reference. The reference AST is
+unchanged. Exact cross-target, recovery and shared-language CI remain the
+integration authority. This development pin does not change a release or
+immutable seed. Earlier reference identities and evidence follow.
+
+# Previous string-escape reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `977da4f4edbdd068eda484207ae2d220c861691f`. It incorporates
 [PR #821](https://github.com/type-rb/type-rb/pull/821) for portable
 single-quoted String and Symbol execution,
