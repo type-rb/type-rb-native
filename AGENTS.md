@@ -46,6 +46,9 @@ outward-facing text before publication.
   of truth. Preserve exact semantics, origins, and deterministic diagnostics;
   reject unsupported input instead of introducing a native-only dialect,
   unchecked fallback, or `Any` escape hatch.
+- When reproducing the reference exposes an ambiguity, inconsistency or
+  improvement opportunity, propose a specification change instead of deviating.
+  Follow the development skill's specification proposal procedure.
 - Keep the reference repository consumer-neutral. Native snapshot compatibility mappings, backend
   plans, pins, bridge compatibility and retirement conditions belong here.
   Reference changes must be justified by reference semantics, without Native
