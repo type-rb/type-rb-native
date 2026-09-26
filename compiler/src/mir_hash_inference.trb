@@ -160,7 +160,7 @@ end
 # CFG argument/parameter pairs share a type. Source local names do not identify
 # values: distinct empty collections and replacement allocations stay independent.
 # The raw MIR verifier never calls this pass or repairs malformed input.
-def mir_finalize_hash_types(mut native_module: MirModule, mut locals: CheckedLocals): String
+def mir_finalize_hash_types(mut native_module: MirModule, mut locals: CheckedLocals, interactive_entry: Boolean): String
 	mut pending := locals.mir_hash_refinements.size() > 0
 	if locals.mir_array_refinements.size() > 0
 		pending = true
@@ -284,7 +284,13 @@ def mir_finalize_hash_types(mut native_module: MirModule, mut locals: CheckedLoc
 		pending_hash := mir_hash_kind(native_module, value.type_id) == 5
 		pending_array := mir_pending_array(native_module, value.type_id)
 		root := mir_hash_component(parents, value.id)
-		type_id := types[root]
+		mut type_id := types[root]
+		if pending_array && type_id == 0 && interactive_entry
+			# A fresh REPL binding may be completed by a later submission. The
+			# checked source stays pending; only this entry's MIR is provisional.
+			type_id = mir_semantic_type_id(native_module, "Array<Any>")
+			types[root] = type_id
+		end
 		mut numeric_widen := false
 		if pending_roots[root] && type_id != 0 && mir_collection_common(native_module, value.type_id, type_id) == type_id
 			numeric_widen = true
