@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Run a compiled compiler unit suite once per test file with bounded concurrency.
+"""Run every compiled compiler unit with bounded concurrency.
 
 The pinned TypeRB test executable honors TRB_TEST_FILE and emits structured
-events. One process per source file makes the partition exhaustive without a
-hand-maintained test-name list. Each process gets a separate temporary directory.
+events. Test files are discovered dynamically. The large, statically named
+frontend suite is split into disjoint name sets; other files run as one process.
+Each process gets a separate temporary directory.
 """
 
 import argparse
@@ -11,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -22,10 +24,32 @@ def test_files(root: Path) -> list[Path]:
     return sorted(path.resolve() for path in source.rglob("*_test.trb") if path.is_file())
 
 
-def run_file(binary: Path, path: Path, root: Path, scratch: Path, timeout: int) -> dict:
+def frontend_test_groups(path: Path) -> list[list[str]]:
+    """Split the one large static frontend suite, failing on unknown registrations."""
+    lines = path.read_text().splitlines()
+    describes = [line.strip() for line in lines if re.search(r"\bdescribe\s*\(", line)]
+    if describes != ['describe("Native TypeRB frontend") do']:
+        raise ValueError("frontend test suite shape changed; review the partition")
+    names = []
+    for line in lines:
+        if not re.search(r"\btest\s*\(", line):
+            continue
+        match = re.fullmatch(r'\s*test\("([^"\\]+)"\) do', line)
+        if not match:
+            raise ValueError(f"frontend test registration changed: {line.strip()}")
+        names.append("Native TypeRB frontend / " + match.group(1))
+    if len(names) < 4 or len(names) != len(set(names)):
+        raise ValueError("frontend tests are missing or have duplicate names")
+    return [names[index::4] for index in range(4)]
+
+
+def run_file(binary: Path, path: Path, root: Path, scratch: Path, timeout: int,
+             selected_names: list[str] | None = None) -> dict:
     with tempfile.TemporaryDirectory(prefix="compiler-units-", dir=scratch) as temporary:
         environment = os.environ.copy()
         environment.pop("TRB_TEST_NAMES", None)
+        if selected_names is not None:
+            environment["TRB_TEST_NAMES"] = json.dumps(selected_names)
         environment.update({
             "TRB_TEST_FILE": str(path),
             "TRB_TEST_REPORTER": "json",
@@ -81,6 +105,9 @@ def run_file(binary: Path, path: Path, root: Path, scratch: Path, timeout: int) 
     if (len(names) != len(set(names))
             or {event.get("name") for event in started} != set(names)):
         errors.append("test names are duplicated or incomplete")
+    if selected_names is not None and (len(names) != len(selected_names)
+                                       or set(names) != set(selected_names)):
+        errors.append("selected frontend test names are missing or unexpected")
     return {"file": path, "seconds": seconds, "output": process.stdout,
             "stderr": process.stderr, "names": names, "error": "; ".join(errors)}
 
@@ -102,23 +129,34 @@ def main() -> int:
         parser.error("compiler test files or compiled test executable are missing")
     if not arguments.scratch.is_dir():
         parser.error("scratch directory does not exist")
+    frontend = (root / "compiler" / "src" / "compiler_test.trb").resolve()
+    try:
+        groups = frontend_test_groups(frontend) if frontend in files else []
+    except ValueError as error:
+        parser.error(str(error))
+    # Start the expensive frontend partitions together. Every other source is
+    # still selected as a whole file, so new files and tests remain covered.
+    tasks = ([(frontend, group, f"part {index + 1}/{len(groups)}")
+              for index, group in enumerate(groups)]
+             + [(path, None, "whole file") for path in files if path != frontend])
 
     started = time.monotonic()
     results = []
     with ThreadPoolExecutor(max_workers=arguments.jobs) as executor:
         futures = {
-            executor.submit(run_file, binary, path, root, arguments.scratch, arguments.timeout_seconds): path
-            for path in files
+            executor.submit(run_file, binary, path, root, arguments.scratch,
+                            arguments.timeout_seconds, selected): (path, label)
+            for path, selected, label in tasks
         }
         for future in as_completed(futures):
-            path = futures[future]
+            path, label = futures[future]
             try:
                 result = future.result()
             except Exception as error:
                 result = {"file": path, "seconds": 0, "output": "",
                           "stderr": "", "names": [], "error": str(error)}
             results.append(result)
-            print(f"=== {path.relative_to(root)} ({result['seconds']:.2f}s) ===", flush=True)
+            print(f"=== {path.relative_to(root)} [{label}] ({result['seconds']:.2f}s) ===", flush=True)
             print(result["output"], end="" if str(result["output"]).endswith("\n") else "\n", flush=True)
             if result["stderr"]:
                 print(result["stderr"], file=sys.stderr, flush=True)
