@@ -61,7 +61,7 @@ distinguishes completed work from work closed as not planned.
 - Tasks may be planned under an Approved or Active initiative.
 - Implement only eligible tasks under an Active initiative. Take P0 before P1
   before P2, and older items first within a priority.
-- Keep at most three initiatives Active so that started work finishes. Before
+- Keep at most five initiatives Active so that started work finishes. Before
   activation, record the Metric, Target and Baseline and prepare the first task.
 - An agent run holds at most two tasks In progress: one being implemented and
   at most one waiting for PR review or CI. Waiting work still counts toward WIP.
@@ -196,7 +196,7 @@ completion from Evidence against Target, or explicitly accepts a different
 result with the reason recorded. Then set Initiative state to Done and close
 the issue as completed. To stop an initiative, record the maintainer's decision,
 set Done and close as not planned. Reopening requires an explicit lifecycle
-decision and must respect the three-Active limit; it does not resume work by itself.
+decision and must respect the five-Active limit; it does not resume work by itself.
 
 ## Weekly review
 
