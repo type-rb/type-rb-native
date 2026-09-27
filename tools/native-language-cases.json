@@ -457,13 +457,23 @@
         "builtin-lookup-immutable-payload",
         "builtin-lookup-mutable-payload",
         "builtin-lookup-mutable-from-readonly",
-        "builtin-lookup-shallow-slice"
+        "builtin-lookup-shallow-slice",
+        "binding-nested-shadow-capture",
+        "binding-nested-duplicate",
+        "binding-discard-read",
+        "binding-mutable-projection",
+        "binding-readonly-projection",
+        "binding-parameter-shadow",
+        "binding-parameter-duplicate",
+        "binding-loop-shadow",
+        "binding-collection-shadow",
+        "binding-collection-duplicate",
+        "binding-sibling-shadow"
       ],
       "pending": [
-        "Shadowing, duplicate declarations, unused/discard bindings and mutation through projections",
         "Contextual empty collection inference beyond constant literals; qualified namespace binding members (TypeRB #787)"
       ],
-      "note": "File/project and interactive lowercase variables preserve source identity, shared mutable storage, lexical shadowing, nullable proof invalidation and managed roots. Retained named functions and anonymous captures share cells; typed witnesses never rerun initializers. Authored order survives load/replay. Empty Array and Hash constants have reference-matching untyped boundaries; broader contextual inference, lowercase namespace-body declarations and forward initialization remain pending."
+      "note": "File/project and interactive lowercase variables preserve source identity, shared mutable storage, lexical shadowing, nullable proof invalidation and managed roots. Block declarations may shadow enclosing locals in conditional and collection bodies while duplicate declarations, parameter redeclarations and while-body shadowing are rejected. Retained named functions and anonymous captures share cells; typed witnesses never rerun initializers. Authored order survives load/replay. Mutable record projections accept indexed Array writes and growth; immutable projections reject writes. Empty Array and Hash constants have reference-matching untyped boundaries; broader contextual inference, lowercase namespace-body declarations and forward initialization remain pending."
     },
     {
       "id": "functions",
@@ -77419,6 +77429,527 @@
         "repl": {
           "code": 0,
           "stdout": "ok\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "binding-nested-shadow-capture",
+      "title": "Nested conditional shadow retains the outer captured binding",
+      "declarations": "def probe(): Integer\nmut value := 2\nsaved := fn(): Integer; return value; end\nif true\nvalue := 9\nputs(value)\nend\nvalue = 4\nreturn saved()\nend\n",
+      "body": "puts(probe())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "9\n4\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "9\n4\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "9\n4\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "9\n4\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "binding-nested-duplicate",
+      "title": "Reject a second declaration in the same conditional branch",
+      "declarations": "def probe()\nif true\nvalue := 1\nvalue := 2\nend\nend\n",
+      "body": "probe()\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3001]: value was already declared; use = to reassign\n  <case>/main.trb:3:1: note: first declaration\n<case>/main.trb:3:1: error[TRB3002]: local variable value is not used\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3001]: value was already declared; use = to reassign\n  <case>/main.trb:3:1: note: first declaration\n<case>/main.trb:3:1: error[TRB3002]: local variable value is not used\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4:1: error[TRB3001]: value was already declared; use = to reassign\n  (trb):3:1: note: first declaration\n(trb):3:1: error[TRB3002]: local variable value is not used\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4003]: duplicate local declaration value\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4003]: duplicate local declaration value\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4: error[TRBN4003]: duplicate local declaration value\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "binding-discard-read",
+      "title": "Named underscore binding can still be read",
+      "declarations": "def probe(_unused: Integer): Integer\nreturn _unused\nend\n",
+      "body": "puts(probe(3))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "binding-mutable-projection",
+      "title": "Mutate an Array through a mutable record parameter",
+      "declarations": "record Box\nvalues: Array<Integer>\nend\ndef mutate(mut box: Box)\nbox.values[0] = 7\nbox.values.push(9)\nend\n",
+      "body": "mut item := Box.new(values: [1])\nmutate(item)\nputs(item.values[0])\nputs(item.values[1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n9\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "Box(values: [1]) : Box [mut]\n7\n9\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n9\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "Box(values: [1]) : Box [mut]\n7\n9\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "binding-readonly-projection",
+      "title": "Reject an indexed write through an immutable record parameter",
+      "declarations": "record Box\nvalues: Array<Integer>\nend\ndef mutate(box: Box)\nbox.values[0] = 7\nend\n",
+      "body": "mutate(Box.new(values: [1]))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5:1: error[TRB3000]: box is immutable; declare it with mut to use assignment\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5:1: error[TRB3000]: box is immutable; declare it with mut to use assignment\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:1: error[TRB3000]: box is immutable; declare it with mut to use assignment\n(trb):4:1: error[TRB3000]: function mutate is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5: error[TRBN4004]: assignment target is immutable\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5: error[TRBN4004]: assignment target is immutable\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5: error[TRBN4004]: assignment target is immutable\n(trb):4: error[TRBN4003]: unresolved function mutate\n"
+        }
+      }
+    },
+    {
+      "id": "binding-parameter-shadow",
+      "title": "Conditional declaration shadows a function parameter",
+      "declarations": "def probe(value: Integer): Integer\nif true\nvalue := 7\nputs(value)\nend\nreturn value\nend\n",
+      "body": "puts(probe(3))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "7\n3\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "7\n3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "binding-parameter-duplicate",
+      "title": "Reject a declaration that repeats a function parameter",
+      "declarations": "def probe(value: Integer)\nvalue := 4\nputs(value)\nend\n",
+      "body": "probe(3)\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2:1: error[TRB3001]: value was already declared; use = to reassign\n  <case>/main.trb:1:11: note: first declaration\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2:1: error[TRB3001]: value was already declared; use = to reassign\n  <case>/main.trb:1:11: note: first declaration\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2:1: error[TRB3001]: value was already declared; use = to reassign\n  (trb):1:11: note: first declaration\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2: error[TRBN4003]: duplicate local declaration value\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2: error[TRBN4003]: duplicate local declaration value\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2: error[TRBN4003]: duplicate local declaration value\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "binding-loop-shadow",
+      "title": "Reject redeclaring an enclosing local in a while body",
+      "declarations": "def probe(): Integer\nmut counter := 0\nwhile counter < 2\ncounter = counter + 1\ncounter := 9\nputs(counter)\nend\nreturn counter\nend\n",
+      "body": "puts(probe())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5:1: error[TRB3001]: counter was already declared; use = to reassign\n  <case>/main.trb:2:1: note: first declaration\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5:1: error[TRB3001]: counter was already declared; use = to reassign\n  <case>/main.trb:2:1: note: first declaration\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:1: error[TRB3001]: counter was already declared; use = to reassign\n  (trb):2:1: note: first declaration\n(trb):1:6: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5: error[TRBN4003]: duplicate local declaration counter\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5: error[TRBN4003]: duplicate local declaration counter\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5: error[TRBN4003]: duplicate local declaration counter\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "binding-collection-shadow",
+      "title": "Nested conditional shadows a collection block parameter",
+      "declarations": "def probe()\n[1].each do |item|\nif true\nitem := item + 10\nputs(item)\nend\nputs(item)\nend\nend\n",
+      "body": "probe()\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "11\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "11\n1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "11\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "11\n1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "binding-collection-duplicate",
+      "title": "Reject redeclaring a collection block parameter",
+      "declarations": "def probe()\n[1].each do |item|\nitem := item + 10\nputs(item)\nend\nend\n",
+      "body": "probe()\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3001]: item was already declared; use = to reassign\n  <case>/main.trb:2:10: note: first declaration\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3001]: item was already declared; use = to reassign\n  <case>/main.trb:2:10: note: first declaration\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:1: error[TRB3001]: item was already declared; use = to reassign\n  (trb):2:10: note: first declaration\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4003]: duplicate local declaration item\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4003]: duplicate local declaration item\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4003]: duplicate local declaration item\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "binding-sibling-shadow",
+      "title": "Independent conditional branches shadow an enclosing binding",
+      "declarations": "def probe(flag: Boolean): Integer\nmut value := 3\nif flag\nvalue := 5\nputs(value)\nelse\nvalue := 7\nputs(value)\nend\nreturn value\nend\n",
+      "body": "puts(probe(true))\nputs(probe(false))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "5\n3\n7\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "5\n3\n7\n3\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "5\n3\n7\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "5\n3\n7\n3\n",
           "stderr": ""
         }
       }
