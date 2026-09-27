@@ -1720,7 +1720,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	end
 	position[0] = plan.syntax.body_start
 	nullable_loop_writes(state, locals, plan.syntax.body_start, plan.syntax.body_finish)
-	check_block(state, position, locals, result_type, origin)
+	check_block(state, position, locals, result_type, origin, saved)
 	if position[0] != plan.syntax.body_finish
 		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "invalid iteration body boundary")
 	end
@@ -1761,7 +1761,9 @@ def checked_while(mut state: CompilerState, mut position: Array<Integer>, mut lo
 	finish_statement(state, position)
 	mir_control_loop_branch(state, locals, condition, exit, line)
 	nullable_apply(locals, condition.truth)
-	check_block(state, position, locals, result_type, origin)
+	# A while body does not permit redeclaring an enclosing local. The
+	# reference applies the surrounding declaration scope through the loop.
+	check_block(state, position, locals, result_type, origin, locals.scope_start[0])
 	binding_scope_check(state, locals, count)
 	locals.count[0] = count
 	mir_control_loop_end(state, locals, load_integer(state.source_tokens.token_lines, position[0]))
@@ -1770,8 +1772,8 @@ def checked_while(mut state: CompilerState, mut position: Array<Integer>, mut lo
 	return finish_statement(state, position)
 end
 
-def check_block(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, loop_origin: Integer): Boolean
-	check_block_value(state, position, locals, result_type, loop_origin, false, "")
+def check_block(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, loop_origin: Integer, scope_start: Integer): Boolean
+	check_block_value(state, position, locals, result_type, loop_origin, false, "", scope_start)
 	return !has_diagnostic(state)
 end
 
@@ -1799,7 +1801,9 @@ def checked_discarded_empty_collection(state: CompilerState, position: Array<Int
 	return true
 end
 
-def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, loop_origin: Integer, wants_value: Boolean, expected: String): CheckedValue
+def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, loop_origin: Integer, wants_value: Boolean, expected: String, scope_start: Integer): CheckedValue
+	saved_scope := locals.scope_start[0]
+	locals.scope_start[0] = scope_start
 	saved_loop := locals.lexical_loop[0]
 	locals.lexical_loop[0] = loop_origin
 	saved_mir := locals.mir_state[0]
@@ -1909,6 +1913,7 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 		end
 	end
 	locals.lexical_loop[0] = saved_loop
+	locals.scope_start[0] = saved_scope
 	if diverged
 		locals.mir_state[0] = saved_mir
 		return checked_value("Never", 0, 9007199254740991, 0)
@@ -2039,7 +2044,7 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 			if locals.mir_state[1] >= 0 || locals.lambda_result.size() > 0
 				result_type = checked_return_type(state, locals)
 			end
-			value = check_block_value(state, position, locals, result_type, locals.lexical_loop[0], wants_value, "")
+			value = check_block_value(state, position, locals, result_type, locals.lexical_loop[0], wants_value, "", saved_count)
 		end
 		if reachable && value.type_name != "Never" && checked_readonly_reference_binding(state, locals, value)
 			immutable_reference = true
@@ -2404,7 +2409,7 @@ def check_statement_value(mut state: CompilerState, mut position: Array<Integer>
 	store_integer(locals.mir_values, locals.count[0] - 1, checked_mir_value(error) + 1)
 	position[0] = handler.body
 	boundary := checked_return_type(state, locals)
-	recovered := check_block_value(state, position, locals, boundary, locals.lexical_loop[0], true, operation.success_type)
+	recovered := check_block_value(state, position, locals, boundary, locals.lexical_loop[0], true, operation.success_type, saved_count)
 	binding_scope_check(state, locals, saved_count)
 	locals.count[0] = saved_count
 	if recovered.type_name != "Never"
@@ -2488,7 +2493,7 @@ def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, m
 		declare_default_functions(state)
 		mut inner := [syntax.body_start]
 		result_type := checked_return_type(state, locals)
-		completion := check_block_value(state, inner, locals, result_type, - 1, false, "")
+		completion := check_block_value(state, inner, locals, result_type, - 1, false, "", locals.capture_parents.size())
 		binding_scope_check(state, locals, locals.capture_parents.size())
 		if !has_diagnostic(state)
 			if inner[0] != syntax.body_finish
@@ -2624,7 +2629,7 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	nullable_loop_writes(state, locals, shape.body_start, shape.body_finish)
 	previous_block := locals.value_block[0]
 	locals.value_block[0] = true
-	mut yielded := check_block_value(state, position, locals, "Void", - 1, true, "")
+	mut yielded := check_block_value(state, position, locals, "Void", - 1, true, "", outer)
 	locals.value_block[0] = previous_block
 	if has_diagnostic(state)
 		return yielded
