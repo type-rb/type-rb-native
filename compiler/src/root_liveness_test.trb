@@ -1,17 +1,16 @@
 import { check } from compiler
 import { flow_test_module } from flow_mir_test
-import { integer_string } from literals
 import { logical_checked_source } from logical_test
 import { MirFunction, MirModule } from mir
 import { mir_flow_blocks } from mir_flow
 import { mir_test_block_with_cell, mir_test_instruction_with_cell } from mir_test
-import { mir_live_before, mir_live_equal, mir_live_exit, mir_live_incoming } from mir_roots
+import { mir_live_before, mir_live_equal, mir_live_exit, mir_live_incoming, mir_managed_add } from mir_roots
 import { mir_managed_type } from mir_types
 import { verify_mir } from mir_verifier
 import { describe, expect, test } from trb/std/test
 
 # Slow instruction-level oracle: no block summaries or predecessor scheduling.
-def root_test_incoming(native_module: MirModule, function: MirFunction, managed: Hash<String, Integer>): Array<Array<Integer>>
+def root_test_incoming(native_module: MirModule, function: MirFunction, managed: Array<Integer>): Array<Array<Integer>>
 	blocks := mir_flow_blocks(native_module, function)
 	mut incoming: Array<Array<Integer>> := []
 	mut index := 0
@@ -41,7 +40,7 @@ def root_test_incoming(native_module: MirModule, function: MirFunction, managed:
 	return incoming
 end
 
-def root_test_compare(native_module: MirModule, function: MirFunction, managed: Hash<String, Integer>)
+def root_test_compare(native_module: MirModule, function: MirFunction, managed: Array<Integer>)
 	expected := root_test_incoming(native_module, function, managed)
 	actual := mir_live_incoming(native_module, function, mir_flow_blocks(native_module, function), managed)
 	expect(actual.size()).to_equal(expected.size())
@@ -57,10 +56,10 @@ def root_test_source(source: String)
 	expect(check(state)).to_be_true()
 	expect(verify_mir(state.scalar_mir, true)).to_equal("")
 	state.scalar_mir.functions.each do |function|
-		mut managed: Hash<String, Integer> := {}
+		mut managed: Array<Integer> := []
 		state.scalar_mir.values.each do |value|
 			if value.function_id == function.id && mir_managed_type(state.scalar_mir, value.type_id)
-				managed[integer_string(value.id)] = 1
+				mir_managed_add(managed, value.id)
 			end
 		end
 		root_test_compare(state.scalar_mir, function, managed)
@@ -115,12 +114,12 @@ describe("MIR root liveness worklist") do
 				# Isolated dataflow inputs use sparse managed identities. Each
 				# block uses a different external value and kills a local result.
 				mut native_module := flow_test_module(edges)
-				mut managed: Hash<String, Integer> := {}
+				mut managed: Array<Integer> := []
 				row = 0
 				while row < 3
 					value := 9007199254740900 + row
-					managed[integer_string(value)] = 1
-					managed[integer_string(native_module.instructions[row].result)] = 1
+					mir_managed_add(managed, value)
+					mir_managed_add(managed, native_module.instructions[row].result)
 					instruction := mir_test_instruction_with_cell(native_module.instructions[row], 0, 13)
 					native_module.instructions[row] = mir_test_instruction_with_cell(instruction, 2, value)
 					row += 1
@@ -153,7 +152,7 @@ describe("MIR root liveness worklist") do
 		native_module.blocks[1] = last
 		instruction := mir_test_instruction_with_cell(native_module.instructions[1], 0, 18)
 		native_module.instructions[1] = mir_test_instruction_with_cell(instruction, 2, 5000)
-		managed := { "1000" => 1, "2000" => 1, "9007199254740900" => 1, "4000" => 1, "5000" => 1, "6000" => 1 }
+		managed := [1000, 2000, 4000, 5000, 6000, 9007199254740900]
 		root_test_compare(native_module, native_module.functions[0], managed)
 		actual := mir_live_incoming(native_module, native_module.functions[0], mir_flow_blocks(native_module, native_module.functions[0]), managed)
 		expect(actual[0]).to_equal([1000, 9007199254740900])

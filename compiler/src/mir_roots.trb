@@ -115,13 +115,40 @@ def mir_live_equal(left: Array<Integer>, right: Array<Integer>): Boolean
 	return true
 end
 
-def mir_live_operand(managed: Hash<String, Integer>, mut live: Array<Integer>, value: Integer)
-	if managed.key?(integer_string(value))
+# Sparse MIR IDs need compact membership storage. Snapshot v4 cannot use an
+# Integer-keyed Hash here; ordered IDs append cheaply and reordered IDs insert.
+def mir_managed_add(mut managed: Array<Integer>, value: Integer)
+	if managed.size() == 0 || managed[managed.size() - 1] < value
+		managed.push(value)
+	else
+		mir_live_add(managed, value)
+	end
+end
+
+def mir_managed_contains(managed: Array<Integer>, value: Integer): Boolean
+	mut start := 0
+	mut finish := managed.size()
+	while start < finish
+		middle := start + (finish - start) / 2
+		if managed[middle] == value
+			return true
+		end
+		if managed[middle] < value
+			start = middle + 1
+		else
+			finish = middle
+		end
+	end
+	return false
+end
+
+def mir_live_operand(managed: Array<Integer>, mut live: Array<Integer>, value: Integer)
+	if mir_managed_contains(managed, value)
 		mir_live_add(live, value)
 	end
 end
 
-def mir_live_before(native_module: MirModule, managed: Hash<String, Integer>, instruction: MirInstruction, after: Array<Integer>): Array<Integer>
+def mir_live_before(native_module: MirModule, managed: Array<Integer>, instruction: MirInstruction, after: Array<Integer>): Array<Integer>
 	mut live: Array<Integer> := []
 	after.each do |value|
 		if value != instruction.result
@@ -179,7 +206,7 @@ def mir_live_edge(native_module: MirModule, function: MirFunction, blocks: Hash<
 	end
 end
 
-def mir_live_exit(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>, managed: Hash<String, Integer>, block: MirBlock, incoming: Array<Array<Integer>>): Array<Integer>
+def mir_live_exit(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>, managed: Array<Integer>, block: MirBlock, incoming: Array<Array<Integer>>): Array<Integer>
 	mut live: Array<Integer> := []
 	if block.terminator == 1 || block.terminator == 2
 		mir_live_edge(native_module, function, blocks, block.first_target, block.first_argument_start, live, incoming)
@@ -201,7 +228,7 @@ record MirLiveTransfer
 	definitions: Array<Integer>
 end
 
-def mir_live_transfer(native_module: MirModule, managed: Hash<String, Integer>, block: MirBlock): MirLiveTransfer
+def mir_live_transfer(native_module: MirModule, managed: Array<Integer>, block: MirBlock): MirLiveTransfer
 	mut uses: Array<Integer> := []
 	mut definitions: Array<Integer> := []
 	mut cursor := block.instruction_start + block.instruction_count - 1
@@ -234,7 +261,7 @@ end
 # All blocks participate, including unreachable regions. A changed live-in set
 # schedules only predecessors, with both branch edges retained by mir_live_exit.
 # Queue storage is bounded by the block count, independent of sparse value IDs.
-def mir_live_incoming(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>, managed: Hash<String, Integer>): Array<Array<Integer>>
+def mir_live_incoming(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>, managed: Array<Integer>): Array<Array<Integer>>
 	mut incoming: Array<Array<Integer>> := []
 	mut predecessors: Array<Array<Integer>> := []
 	mut transfers: Array<MirLiveTransfer> := []
@@ -290,11 +317,11 @@ def mir_function_roots_with_values(native_module: MirModule, function: MirFuncti
 		return MirRootPlan.new(function_id: function.id, instructions: points, roots: roots, capacity: 0)
 	end
 	blocks := mir_flow_blocks(native_module, function)
-	mut managed: Hash<String, Integer> := {}
+	mut managed: Array<Integer> := []
 	mut managed_count := 0
 	values.each do |value|
 		if value.function_id == function.id && mir_managed_type(native_module, value.type_id)
-			managed[integer_string(value.id)] = 1
+			mir_managed_add(managed, value.id)
 			managed_count += 1
 		end
 	end
