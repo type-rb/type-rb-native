@@ -73,6 +73,20 @@ def outcomes_match(actual, expected):
     return all(outcome_matches(actual[path], expected[path]) for path in PATHS)
 
 
+def execution_expectations_match(left, right):
+    if left is None or right is None:
+        return left is right
+    if left.get("timedOut") or right.get("timedOut"):
+        return False
+    # A reviewed first-line contract omits unstable panic stack frames. Compare
+    # its full-stderr counterpart with that contract, not with its JSON keys.
+    if "stderrFirstLine" in left and "stderrFirstLine" not in right:
+        return outcome_matches(right, left)
+    if "stderrFirstLine" in right and "stderrFirstLine" not in left:
+        return outcome_matches(left, right)
+    return left == right
+
+
 def parity_gaps(case):
     native, reference = case["native"], case["reference"]
     gaps = []
@@ -81,7 +95,7 @@ def parity_gaps(case):
             gaps.append(path)
     # Frontend diagnostic identities differ deliberately between compilers.
     # Runtime and REPL behavior are compared separately from check/build wording.
-    if native["execute"] != reference["execute"]:
+    if not execution_expectations_match(native["execute"], reference["execute"]):
         gaps.append("execute")
     left, right = native["repl"], reference["repl"]
     rejected_as_reference = (bool(left["stderr"]) and bool(right["stderr"])
@@ -175,7 +189,7 @@ def coverage_states(case):
             return "accepts" if reference[path]["code"] == 0 else "accepts; reference rejects"
         return "rejects valid input" if reference[path]["code"] == 0 else "rejects as reference"
     execution = ("not reached" if expected["execute"] is None else
-                 "matches reference" if expected["execute"] == reference["execute"] else "differs")
+                 "matches reference" if execution_expectations_match(expected["execute"], reference["execute"]) else "differs")
     repl = expected["repl"]
     repl_state = ("matches reference" if repl == reference["repl"] else
                   "rejects as reference" if "repl" not in parity_gaps(case) else

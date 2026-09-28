@@ -106,6 +106,59 @@ class LanguageCoverageTests(unittest.TestCase):
         self.assertEqual(observed["invalidUtf8"], {"stderr": "e6"})
         self.assertFalse(coverage.outcome_matches(observed, {"code": 0, "stdout": "", "stderr": "\\xe6"}))
 
+    def test_equivalent_runtime_failure_contracts_have_matching_parity_and_display(self):
+        prefix = {"code": 2, "stdout": "effect\n", "stderrFirstLine": "panic: failure"}
+        full = {"code": 2, "stdout": "effect\n", "stderr": "panic: failure\n"}
+        stack = {**full, "stderr": "panic: failure\n\nunstable stack frame\n"}
+        for left, right in ((prefix, full), (prefix, stack), (prefix, prefix), (full, full)):
+            for native, reference in ((left, right), (right, left)):
+                case = copy.deepcopy(self.document["cases"][0])
+                case["native"]["execute"] = native
+                case["reference"]["execute"] = reference
+                with self.subTest(native=native, reference=reference):
+                    self.assertNotIn("execute", coverage.parity_gaps(case))
+                    self.assertEqual(coverage.coverage_states(case)["execute"], "matches reference")
+
+    def test_execution_parity_preserves_failure_differences_and_missing_execution(self):
+        prefix = {"code": 2, "stdout": "effect\n", "stderrFirstLine": "panic: failure"}
+        full = {"code": 2, "stdout": "effect\n", "stderr": "panic: failure\n"}
+        different = [
+            (prefix, {**full, "code": 1}),
+            (prefix, {**full, "stdout": ""}),
+            (prefix, {**full, "stderr": "panic: another failure\n"}),
+            (prefix, {**full, "invalidUtf8": {"stderr": "e6"}}),
+            (prefix, {**full, "invalidUtf8": {"stdout": "e6"}}),
+            (prefix, {**prefix, "stderrFirstLine": "panic: another failure"}),
+            (prefix, {**prefix, "code": 1}),
+            (prefix, {**prefix, "stdout": ""}),
+            (full, {**full, "stderr": "panic: failure\nextra output\n"}),
+            (full, {**full, "invalidUtf8": {"stderr": "e6"}}),
+            (None, full),
+            (None, prefix),
+            (prefix, {**full, "timedOut": True}),
+            ({**full, "timedOut": True}, {**full, "timedOut": True}),
+        ]
+        for left, right in different:
+            for native, reference in ((left, right), (right, left)):
+                case = copy.deepcopy(self.document["cases"][0])
+                case["native"]["execute"] = native
+                case["reference"]["execute"] = reference
+                with self.subTest(native=native, reference=reference):
+                    self.assertIn("execute", coverage.parity_gaps(case))
+        self.assertTrue(coverage.execution_expectations_match(None, None))
+
+    def test_runtime_parity_does_not_weaken_independent_regression_expectations(self):
+        cases = {case["id"]: case for case in self.document["cases"]}
+        case = cases["array-copy-first-empty"]
+        native, reference = case["native"]["execute"], case["reference"]["execute"]
+        self.assertNotIn("execute", coverage.parity_gaps(case))
+        self.assertEqual(coverage.coverage_states(case)["execute"], "matches reference")
+        self.assertIn("execute", coverage.parity_gaps(cases["array-runtime-bounds"]))
+        self.assertTrue(coverage.outcome_matches(native, reference))
+        changed = {**native, "stderr": native["stderr"] + "unexpected Native output\n"}
+        self.assertTrue(coverage.outcome_matches(changed, reference))
+        self.assertFalse(coverage.outcome_matches(changed, native))
+
     def test_reference_syntax_cannot_disappear_or_arrive_in_another_file_unnoticed(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

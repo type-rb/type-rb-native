@@ -4302,12 +4302,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -6823,12 +6821,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -6837,12 +6833,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -6851,12 +6845,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -6865,12 +6857,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -6879,12 +6869,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -6893,12 +6881,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -6955,12 +6941,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -7521,12 +7505,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -7535,12 +7517,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -7549,12 +7529,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -7743,12 +7721,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -7757,12 +7733,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -7771,12 +7745,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -7785,12 +7757,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -7799,12 +7769,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -7813,12 +7781,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -8303,12 +8269,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
@@ -8317,12 +8281,10 @@ export const ordinaryLanguage = {
       "states": {
         "check": "accepts",
         "build": "accepts",
-        "execute": "differs",
+        "execute": "matches reference",
         "repl": "rejects as reference"
       },
-      "gaps": [
-        "execute"
-      ],
+      "gaps": [],
       "referenceReplRejects": true
     },
     {
