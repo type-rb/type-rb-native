@@ -172,11 +172,13 @@ a merged child PR. Set a newly added initiative to Proposed during triage.
 
 ## Authority
 
-Work that reproduces behavior specified by the pinned reference proceeds
-without approval, from task creation through merge and cleanup. The maintainer
-decides what TypeRB is, including specification changes and any Native behavior
-that differs from the pinned reference. The maintainer also decides direction,
-publication, irreversible actions and security-sensitive settings.
+Work that preserves specified behavior and the approved scope and targets
+proceeds without further approval, from task creation through merge and cleanup.
+This includes reference conformance, MIR and performance improvements, and
+maintenance. The maintainer decides what TypeRB is, including specification
+changes and any Native behavior that differs from the pinned reference. The
+maintainer also decides direction, publication, irreversible actions and
+security-sensitive settings.
 
 | Agents act without asking | The maintainer decides; agents set Needs decision |
 | --- | --- |
@@ -186,6 +188,7 @@ publication, irreversible actions and security-sensitive settings.
 | Update the pinned reference revision through the release integration procedure | Remove or weaken required CI checks |
 | Update documentation, fixtures and generated views within the task's scope | Change secrets, permissions, organization or project settings |
 | File, reproduce and triage bugs, and file specification proposals | Post to other repositories or external services |
+| Record current evidence and complete an initiative whose recorded criteria are met | Accept an unmet target or a different outcome; stop or reopen an initiative |
 
 Waiting for a decision blocks only the affected item. Agents continue with other
 eligible work in the meantime.
@@ -202,12 +205,21 @@ comment that produced it. A value without Measured and Evidence is not a
 measurement, and a value measured before the latest relevant merge is stale.
 Compare only measurements taken under the Baseline conditions.
 
-Keep an initiative Active while measuring its outcome. The maintainer confirms
-completion from Evidence against Target, or explicitly accepts a different
-result with the reason recorded. Then set Initiative state to Done and close
-the issue as completed. To stop an initiative, record the maintainer's decision,
-set Done and close as not planned. Reopening requires an explicit lifecycle
-decision and must respect the five-Active limit; it does not resume work by itself.
+Keep an initiative Active while measuring its outcome. When current evidence
+under the recorded baseline conditions meets its existing Target and every
+recorded completion criterion, an agent updates Current, Measured and Evidence,
+records the comparison on the issue, sets Initiative state to Done and closes
+the issue as completed without another approval. A merged child alone is not
+completion evidence. Do not change a target or its measurement conditions to
+claim success. Incomplete or ambiguous evidence leaves the initiative Active;
+continue measuring or request a decision on the unresolved criterion while
+other eligible work proceeds.
+
+Accepting an unmet target or a different outcome requires the maintainer's
+explicit decision with the reason recorded. To stop an initiative, record that
+decision, set Done and close as not planned. Reopening requires an explicit
+lifecycle decision and must respect the five-Active limit; it does not resume
+work by itself.
 
 ## Weekly review
 

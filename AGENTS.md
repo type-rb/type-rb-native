@@ -15,9 +15,13 @@ within that scope. Ask only for missing information or an unresolved decision
 that materially changes the result or requires new authority. Work taken from
 the project board continues through merge, cleanup and the next eligible task
 without further approval, and stops only for the maintainer decisions in the
-workflow's authority table. A request to prepare a PR for review ends with an
-open PR; it does not authorize a merge or another development slice. Later task
-and budget limits narrow earlier standing direction to continue.
+workflow's authority table. This includes reference conformance, MIR and
+performance improvements, and maintenance that preserve specified behavior and
+the approved scope and targets. When an initiative meets its recorded completion
+criteria, record current evidence and mark it Done under the project workflow.
+A request to prepare a PR for review ends with an open PR; it does not authorize
+a merge or another development slice. Later task and budget limits narrow
+earlier standing direction to continue.
 
 Read documents relevant to the affected surface. Use the
 [development skill](.agents/skills/develop-typerb-native/SKILL.md) for compiler,
