@@ -59,7 +59,9 @@ def environment(home):
 
 
 def run_step(binary, root, cwd, args):
-    with tempfile.TemporaryDirectory() as home:
+    # Toolchains such as Go may still write telemetry below the isolated home
+    # after the command exits, so leftover files never fail a replay.
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as home:
         try:
             proc = subprocess.run([str(binary), *args], cwd=root / cwd, capture_output=True,
                                   timeout=900, env=environment(home))
@@ -82,7 +84,7 @@ def with_trb_mode(root, cwd):
 def replay(binary, scenario, native):
     fixture = ROOT / scenario["fixture"]
     results = []
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         written = Path(tmp) / "written" / scenario["id"]
         shutil.copytree(fixture, written)
         substituted = Path(tmp) / "trb" / scenario["id"]
