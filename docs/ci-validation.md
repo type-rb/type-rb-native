@@ -116,7 +116,9 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
 
 1. **Plan and quick feedback.** Planning tests are unconditional. Code or CLI
    changes build the pinned reference compiler, validate canonical compatibility
-   metadata, formatting/core types and root/focused MIR units. No complete
+   metadata, formatting/core types and root/focused MIR units. Quick also replays
+   the shared language cases and the frozen project scenario manifests against
+   the pinned reference and requires their recorded reference outcomes. No complete
    recovery or comparative claim comes from quick feedback. The explicit `quick`
    output also selects Linux-only tooling steps for project/policy test edits;
    code and CLI plans must always require complete quick feedback.

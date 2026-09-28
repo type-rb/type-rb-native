@@ -108,12 +108,20 @@ jobs:
           python3 tools/native-language-coverage.py --reference "$RUNNER_TEMP/trb" \
             --reference-ast .type-rb/internal/ast/ast.go --jobs 2 \
             > "$RUNNER_TEMP/reference-language.json"
+      - name: Verify project scenarios against the exact reference compiler
+        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
+        run: |
+          python3 tools/project-scenarios-test.py
+          GOCACHE="$(go env GOCACHE)" python3 tools/project-scenarios.py \
+            --reference "$RUNNER_TEMP/trb" --jobs 2 > "$RUNNER_TEMP/reference-projects.json"
       - name: Retain reference language observations
         if: always() && (needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true')
         uses: actions/upload-artifact@v6
         with:
           name: reference-language
-          path: ${{ runner.temp }}/reference-language.json
+          path: |
+            ${{ runner.temp }}/reference-language.json
+            ${{ runner.temp }}/reference-projects.json
           if-no-files-found: warn
           retention-days: 30
       - name: Check that the coverage views match the fixture registry
