@@ -18,5 +18,14 @@ Each scenario records:
 `<fixture>`. A failing step ends its sequence, and every scenario runs in a
 fresh copy of its fixture.
 
-Nothing consumes these fixtures yet. The milestone implementation adds the
-runner that replays them.
+`tools/project-scenarios.py --reference TRB` replays every scenario and requires
+the recorded reference outcomes exactly; the quick CI job runs it against the
+pinned reference. `tools/project-scenarios.py --native TRBN` compares Native with
+those outcomes under each expectation:
+
+- Loading and checking steps are compared by acceptance.
+- Execution steps run in `mode: trb` and are compared by exit status and stdout.
+- A rejection caused by missing Native support never counts as a match.
+
+The CLI workflow retains the Native report. It stays report-only until a
+milestone makes it required with `--require`.
