@@ -8,7 +8,7 @@ Each count describes registered probes, not language coverage percentages.
 | Strings and UTF-8 | basic | 9 / 182 | Reference output-mode Unicode case differences (TypeRB #791); Embedded-expression boundaries beyond the reviewed interpolation probes | Literal, InterpolatedString |
 | Numeric and Boolean operations | basic | 1 / 48 | Remaining operators and assignment forms; mixed widening and portable failure boundaries; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
 | Bindings, constants and mutation | basic | 5 / 115 | Contextual empty collection inference beyond constant literals; qualified namespace binding members (TypeRB #787) | VariableStatement, AssignmentStatement |
-| Function declarations and calls | basic | 0 / 10 | Every all-path return, evaluation-order and mutable-argument boundary | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
+| Function declarations and calls | basic | 0 / 48 | none registered | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
 | Defaults and named arguments | basic | 0 / 13 | Method, function-value and payload-enum argument parity |  |
 | Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
 | Loop control and transfers | basic | 0 / 10 | Additional nested transfer and diagnostic-origin differential probes | WhileStatement, BreakStatement, NextStatement |
