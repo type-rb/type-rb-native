@@ -2,9 +2,9 @@
 
 The `Pull request validation` entry has no path filter. Its planning job tests
 and executes `tools/ci-plan.mjs` against the complete merge-base-to-head delta,
-including deletions and both sides of renames. Git output is streamed with NUL
-separators; large evidence inventories, unusual filenames and unknown paths
-cannot silently truncate or bypass validation. Git failures reject planning.
+including deletions and both sides of renames. Git paths and change statuses are
+streamed with NUL separators; large evidence inventories, unusual filenames and
+unknown paths cannot silently truncate or bypass validation. Git failures reject planning.
 
 ## Active MIR integration mode
 
@@ -63,6 +63,7 @@ module. The selected module names are recorded in the main plan output.
 | The two exact planning files | Their unconditional planning tests and documentation |
 | Exact synthetic tool-test files listed in `toolingTests` | Planning and macOS tooling; project/policy shell tests also run Linux quick tooling |
 | Existing compiler unit-test modules listed in `compilerTestInputs` | Complete compiler units, quick, Native, CLI, tooling and target correctness; no unchanged-binary worker-memory measurements |
+| Existing language registry and its two exact generated views, modified in a tiered PR | Planning, reference language quick checks, documentation and unchanged Darwin/Linux CLI builds; no complete compiler units |
 | Exact CLI adapter, launcher, build helper and CLI-test inputs listed in `cliInputs` | Planning, quick, complete compiler units and Darwin/Linux CLI artifacts |
 | Ordinary compiler, conformance, execution workflows and measurement policy | Full applicable correctness, tooling, CLI, target and memory authorities |
 | Other code or unknown files | Complete Native correctness, tooling and CLI/target checks; memory according to the conservative rules in the planner |
@@ -96,6 +97,24 @@ packages Darwin/Linux artifacts. CLI-only changes still run reference
 formatting/type checks and quick tests; changing core source alongside an
 adapter restores the core lanes.
 
+The tiered PR gate has one narrower registry exception. A modification to
+`tools/native-language-cases.json`, alone or with modifications to
+`docs/native-language-feature-inventory.md` and
+`docs/capabilities/ordinary-language.js`, sets `registry_only`. Every changed
+path must match this list and have Git status `M`. Additions, deletions, renames,
+type changes, missing change statuses and any other mixed path keep ordinary
+routing. Complete-gate PRs and main never use the exception.
+
+Registry-only quick retains the pinned reference build and identity checks,
+registry validation, reference AST coverage, every reviewed check/build/execute/
+REPL observation and generated-view checks. It skips unrelated compiler-source
+formatting/types, snapshot, root/MIR, recovery-layout, tooling and project-scenario
+checks. The complete compiler unit job is skipped. Documentation and the existing
+Darwin/Linux CLI jobs remain required, including fresh Native fixed points and
+all Native language observations. CLI workflow scope and main/daily validation
+are unchanged. Acceptance rejects missing or inconsistent registry-only outputs
+and missing, failed or skipped required jobs.
+
 The CLI smoke (`build`) and cache-invalidation (`cache`) jobs run independently
 on Darwin and Linux arm64, so a failed smoke does not require rerunning the
 cache job. The build job verifies a fresh core and CLI fixed point. The cache
@@ -121,7 +140,8 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    the pinned reference and requires their recorded reference outcomes. No complete
    recovery or comparative claim comes from quick feedback. The explicit `quick`
    output also selects Linux-only tooling steps for project/policy test edits;
-   code and CLI plans must always require complete quick feedback.
+   code and CLI plans require complete quick feedback except for the exact
+   registry-only route described above.
    The independent `Complete compiler units` job runs the entire
    `trb test --config compiler/trbconfig.jsonc` suite on Darwin arm64 with the
    exact reference pin and QBE, without recovery, alongside quick. The runner
@@ -133,7 +153,8 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    report every selected test passing, with no missing or duplicate identity.
    It retains the full log and compile, execution and total times as an artifact.
    Its success is required for every code or CLI
-   PR, including drafts; planning rejects missing or malformed routing.
+   PR, including drafts, except for the registry-only route; planning rejects
+   missing or malformed routing.
 2. **Independent tooling.** The former Native `Verify bootstrap seed tooling`
    commands run unchanged on macOS in the separate `CI tooling controls` workflow.
    Its synthetic checks need no compiled candidate, so it can start after

@@ -20,6 +20,12 @@ const documentation = path => staticDocumentationTools.has(path) || path.endsWit
 // not build or execute the compiler. Execution workflows/controllers are not
 // included: changing those still needs the authorities they orchestrate.
 const planningTools = new Set(['tools/ci-plan.mjs', 'tools/ci-plan-test.mjs']);
+const languageRegistry = 'tools/native-language-cases.json';
+const registryInputs = new Set([
+  languageRegistry,
+  'docs/native-language-feature-inventory.md',
+  'docs/capabilities/ordinary-language.js',
+]);
 // Only these synthetic tests can use tooling-only validation. Their production
 // controllers and unknown neighboring paths still require the full code lane.
 // Tests with a second Linux authority retain it through planning or quick.
@@ -144,8 +150,15 @@ function recoveryModuleNames() {
   return new Set(names);
 }
 
-export function classify(paths, draft, gate = 'complete') {
+export function classify(paths, draft, gate = 'complete', changes = []) {
   if (!gates.includes(gate)) throw new Error('Invalid CI gate');
+  // Only content edits to the existing registry and its exact generated views
+  // may omit unrelated PR units. Name-only inventories cannot prove this.
+  // With rename detection disabled, a rename includes a deletion/addition.
+  const registryOnly = gate === 'tiered' && paths.includes(languageRegistry) &&
+    paths.every(path => registryInputs.has(path)) && Array.isArray(changes) &&
+    changes.length === paths.length && paths.every((path, index) =>
+      changes[index]?.path === path && changes[index].status === 'M');
   const executable = paths.filter(path => !documentation(path) && !planningTools.has(path));
   const toolingInput = path => toolingTests.has(path) || dailyMeasurementInputs.has(path);
   const codePaths = executable.filter(path => !toolingInput(path) && !cliInputs.has(path));
@@ -160,25 +173,31 @@ export function classify(paths, draft, gate = 'complete') {
   const complete = cli && (gate === 'complete' || executable.some(path => !pullRequestLane(path)));
   return {
     code, quick: code || executable.some(path => cliInputs.has(path) || quickToolingTests.has(path)),
-    compiler_units: code || cli,
-    documentation: routing || paths.some(documentation),
+    compiler_units: (code || cli) && !registryOnly,
+    documentation: registryOnly || routing || paths.some(documentation),
     memory, draft,
     tooling: code || executable.some(toolingInput),
-    cli, complete,
+    cli, complete, registry_only: registryOnly,
   };
 }
 
 export function acceptance(needs) {
   if (needs.plan?.result !== 'success') return ['CI planning did not succeed'];
   const plan = needs.plan.outputs;
-  if (!plan || ['code', 'documentation', 'memory', 'draft', 'tooling', 'cli', 'quick', 'compiler_units', 'complete']
+  if (!plan || ['code', 'documentation', 'memory', 'draft', 'tooling', 'cli', 'quick', 'compiler_units', 'complete', 'registry_only']
     .some(key => !['true', 'false'].includes(plan[key]))) {
     return ['CI planning outputs are missing or malformed'];
   }
   if ((plan.code === 'true' || plan.cli === 'true') && plan.quick !== 'true') {
     return ['Code and CLI validation require quick feedback'];
   }
-  if ((plan.code === 'true' || plan.cli === 'true') && plan.compiler_units !== 'true') {
+  if (plan.registry_only === 'true' && Object.entries({
+    code: 'false', quick: 'true', compiler_units: 'false', documentation: 'true',
+    memory: 'false', tooling: 'false', cli: 'true', complete: 'false',
+  }).some(([key, value]) => plan[key] !== value)) {
+    return ['Registry-only validation has inconsistent authorities'];
+  }
+  if ((plan.code === 'true' || plan.cli === 'true') && plan.registry_only !== 'true' && plan.compiler_units !== 'true') {
     return ['Code and CLI validation require complete compiler units'];
   }
   const draft = plan.draft === 'true';
@@ -215,26 +234,37 @@ export function mainAcceptance(needs) {
   });
 }
 
-export async function changedPaths(base, head, cwd, direct = false) {
+export async function changedFiles(base, head, cwd, direct = false) {
   // Stream the NUL-delimited list: full evidence snapshots can exceed the
   // synchronous child-process buffer, and truncation could hide a code change.
-  const child = spawn('git', ['diff', '--no-renames', '--name-only', '-z',
+  const child = spawn('git', ['diff', '--no-renames', '--name-status', '-z',
     `${base}${direct ? '..' : '...'}${head}`, '--'], { cwd, stdio: ['ignore', 'pipe', 'inherit'] });
   const completion = once(child, 'close');
   child.stdout.setEncoding('utf8');
-  const paths = [];
+  const changes = [];
   const read = async () => {
     let pending = '';
+    let status;
     for await (const chunk of child.stdout) {
       const parts = (pending + chunk).split('\0');
       pending = parts.pop();
-      paths.push(...parts);
+      for (const part of parts) {
+        if (status === undefined) status = part;
+        else {
+          changes.push({ status, path: part });
+          status = undefined;
+        }
+      }
     }
-    if (pending !== '') throw new Error('Git path list is not NUL-terminated');
+    if (pending !== '' || status !== undefined) throw new Error('Git change list is incomplete');
   };
   const [, [status, signal]] = await Promise.all([read(), completion]);
   if (status !== 0) throw new Error(`Git path inventory failed: ${signal ?? status}`);
-  return paths;
+  return changes;
+}
+
+export async function changedPaths(base, head, cwd, direct = false) {
+  return (await changedFiles(base, head, cwd, direct)).map(change => change.path);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -245,6 +275,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const outputs = needs.plan?.outputs ?? {};
     const message = errors.length || process.argv[2] !== 'accept' ? '' :
       outputs.draft === 'true' ? 'Draft feedback only: complete validation runs when the PR is marked ready.' :
+      outputs.registry_only === 'true' ?
+        'Registry-only validation passed: reference and Native language checks retained; unrelated compiler units omitted.' :
       outputs.complete === 'false' && outputs.cli === 'true' ?
         'Pre-merge lanes passed: Native recovery, CLI cache and arm64 regression run on main after merge.' : '';
     if (message) {
@@ -260,10 +292,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       throw new Error('Usage: ci-plan.mjs BASE_SHA HEAD_SHA true|false [push]');
     }
     // Include both sides of renames, and preserve arbitrary path characters.
-    const paths = await changedPaths(base, head, undefined, mode === 'push');
+    const changes = await changedFiles(base, head, undefined, mode === 'push');
+    const paths = changes.map(change => change.path);
     // Main always plans the complete lanes; only PRs may use the tiered gate.
     const gate = mode === 'push' ? 'complete' : process.env.NATIVE_CI_GATE ?? 'complete';
-    for (const [key, value] of Object.entries(classify(paths, draft === 'true', gate))) {
+    for (const [key, value] of Object.entries(classify(paths, draft === 'true', gate, changes))) {
       console.log(`${key}=${value}`);
     }
     if (mode === 'push') console.log(`recovery_modules=${recoveryModules(paths, recoveryModuleNames())}`);

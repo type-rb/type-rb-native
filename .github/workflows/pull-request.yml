@@ -25,6 +25,7 @@ jobs:
       code: ${{ steps.plan.outputs.code }}
       quick: ${{ steps.plan.outputs.quick }}
       compiler_units: ${{ steps.plan.outputs.compiler_units }}
+      registry_only: ${{ steps.plan.outputs.registry_only }}
       documentation: ${{ steps.plan.outputs.documentation }}
       memory: ${{ steps.plan.outputs.memory }}
       draft: ${{ steps.plan.outputs.draft }}
@@ -55,6 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Check generated recovery import boundaries
+        if: needs.plan.outputs.registry_only != 'true'
         run: |
           python3 tools/recovery_layout_sync_test.py
           python3 tools/recovery_layout_sync.py --check
@@ -85,7 +87,7 @@ jobs:
           python3 -m unittest tools/compatibility_manifest_test.py
           python3 tools/compatibility_manifest.py --reference-trb "$RUNNER_TEMP/trb"
       - name: Check formatting and core types
-        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
+        if: (needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true') && needs.plan.outputs.registry_only != 'true'
         run: |
           python3 tools/unicode-identifier-data.py --check
           python3 tools/unicode-case-data.py --check
@@ -94,9 +96,10 @@ jobs:
           "$RUNNER_TEMP/trb" check --config compiler/trbconfig.jsonc
           tools/check-native-cli.sh "$RUNNER_TEMP/trb"
       - name: Check the Native compiler closure against snapshot v4
-        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
+        if: (needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true') && needs.plan.outputs.registry_only != 'true'
         run: tools/check-bootstrap-snapshot.sh "$RUNNER_TEMP/trb"
       - name: Verify project and cost tooling on Linux
+        if: needs.plan.outputs.registry_only != 'true'
         run: |
           sh tools/compiler-cost-test.sh
           sh tools/compiler-project-test.sh
@@ -109,7 +112,7 @@ jobs:
             --reference-ast .type-rb/internal/ast/ast.go --jobs 2 \
             > "$RUNNER_TEMP/reference-language.json"
       - name: Verify project scenarios against the exact reference compiler
-        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
+        if: (needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true') && needs.plan.outputs.registry_only != 'true'
         run: |
           python3 tools/project-scenarios-test.py
           GOCACHE="$(go env GOCACHE)" python3 tools/project-scenarios.py \
@@ -130,7 +133,7 @@ jobs:
           python3 tools/native-language-coverage.py --check-feature-table docs/native-language-feature-inventory.md
           python3 tools/native-language-coverage.py --check-pages-data docs/capabilities/ordinary-language.js
       - name: Run root units and focused MIR correctness tests
-        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
+        if: (needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true') && needs.plan.outputs.registry_only != 'true'
         env:
           TYPE_RB_NATIVE_ROOT: ${{ github.workspace }}
         run: |
