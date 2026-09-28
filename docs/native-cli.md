@@ -56,6 +56,7 @@ build may leave a lock that must be inspected before removing it.
 ## Commands and project configuration
 
 ```sh
+./trbn install
 ./trbn check examples/main.trb
 ./trbn build
 ./trbn build --stdout
@@ -83,9 +84,20 @@ Configurations follow the reference schema and validation, including `lint`,
 `packageOptions`, `jobs`, `db` and the mode-specific sections. `check` accepts
 every declared mode (`go`, `ruby`, `typescript` and `trb`). Commands that build,
 run or evaluate a program need mode `trb` and report that other modes are not
-available. TypeRB packages and `localPackages` are validated but not loaded yet,
-so a configuration that declares them is rejected when a command loads its
-sources.
+available. `install` resolves portable local TypeRB path packages in every
+mode and atomically writes `trb.lock` with reference-compatible checksums and
+package identities. It does not install host-language dependencies. `check`
+and builds require a current lock for `packages`; edits to package source files
+do not require reinstalling, while configuration or manifest edits do.
+`localPackages` maps names directly to source directories without a manifest or
+lock. Package aliases are scoped to each package's dependencies and take
+precedence over an identically spelled project import.
+
+Git package sources, nonempty native-dependency/adapter manifest fields and
+package loading in the REPL remain unimplemented and fail explicitly. Lock
+update/frozen/offline options are not yet available. Configuration JSON Unicode
+escapes retain their current limitations; package manifests and locks decode
+JSON Unicode escapes separately.
 
 The checkout root contains a small `mode: trb` example project in `examples/`.
 Reference-compiler development checks use the separate
@@ -184,8 +196,8 @@ The ordinary compiler's language and package restrictions still apply,
 including the remaining Unicode-escape and String API gaps. Ordinary UTF-8
 literals, code-point size/indexing and concatenation work in compiled programs
 and the REPL; invalid source encoding is rejected before token decoding.
-Formatting, tests, language-server and package-management commands are not
-implemented by `trbn`.
+Formatting, tests, language-server commands and package-management operations
+beyond local path installation are not implemented by `trbn`.
 The editor does not yet provide the reference formatter's full canonical
 spacing, every readline/vi binding, import-repair and argument-aware completion,
 or full Unicode grapheme-cluster segmentation (for example joined emoji).
