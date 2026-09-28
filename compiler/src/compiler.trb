@@ -17,8 +17,9 @@ import { emit_hash_runtime } from hash_runtime
 import { integer_string } from literals
 import { mir_declare_signatures } from mir_calls
 import { parse_module } from parser
-import { path_basename, path_directory, path_join, string_ends_with, string_starts_with, string_without_suffix } from path
-import { parse_project_config, project_config_support_error } from project_config
+import { path_basename, path_directory, path_join, path_normalize, string_ends_with, string_starts_with, string_without_suffix } from path
+import { compiler_string_bytes } from compiler_bytes
+import { ProjectConfig, parse_project_config, project_config_support_error } from project_config
 import { emit_record_descriptors, emit_static_strings } from qbe_constants
 import { QbeOutput, qbe_output_chunk, qbe_output_line, qbe_output_new } from qbe_output
 import { emit_boolean_puts_runtime, emit_float_array_runtime, emit_float_to_integer_runtime, emit_integer_to_string_runtime, emit_process_runtime, emit_qbe_runtime } from qbe_runtime
@@ -566,22 +567,14 @@ def project_append_imports(
 	return order
 end
 
-def order_project_sources(source_root: String, bundle: CompilerProjectSources): CompilerProjectSources
+def project_source_order(bundle: CompilerProjectSources, names: Array<String>): Array<Integer>
 	mut entry :=- 1
 	mut included: Array<Integer> := []
 	mut module_lookup: Hash<String, Integer> := {}
-	mut prefix_size := source_root.size()
-	if source_root != "/"
-		prefix_size += 1
-	end
 	mut index := 0
 	while index < bundle.paths.size()
 		included.push(0)
-		name := compiler_source_slice(
-			bundle.paths[index],
-			prefix_size,
-			bundle.paths[index].size() - 4,
-		)
+		name := names[index]
 		module_lookup[name] = index
 		if project_source_declares_main(bundle.sources[index])
 			entry = index
@@ -589,7 +582,13 @@ def order_project_sources(source_root: String, bundle: CompilerProjectSources): 
 		index += 1
 	end
 	if entry < 0
-		return bundle
+		mut unchanged: Array<Integer> := []
+		index = 0
+		while index < bundle.paths.size()
+			unchanged.push(index)
+			index += 1
+		end
+		return unchanged
 	end
 
 	mut order := [entry]
@@ -612,15 +611,7 @@ def order_project_sources(source_root: String, bundle: CompilerProjectSources): 
 		index += 1
 	end
 
-	mut paths: Array<String> := []
-	mut sources: Array<String> := []
-	index = 0
-	while index < order.size()
-		paths.push(bundle.paths[order[index]])
-		sources.push(bundle.sources[order[index]])
-		index += 1
-	end
-	return CompilerProjectSources.new(paths: paths, sources: sources, error: "")
+	return order
 end
 
 def project_select_entry(mut state: CompilerState): Boolean
@@ -815,13 +806,116 @@ def load_configured_project(config_source: String, config_path: String): Compile
 		return project_error_state(config_path, 1, unsupported)
 	end
 	root := path_directory(config_path)
-	source_root := project_join(root, config.source_dir)
-	out_root := project_join(root, config.out_dir)
+	source_root := path_normalize(project_join(root, config.source_dir))
+	out_root := path_normalize(project_join(root, config.out_dir))
 	bundle := compiler_collect_project_sources(source_root, out_root)
 	if bundle.error != ""
 		return project_error_state(config_path, 1, "cannot collect project source " + bundle.error)
 	end
-	return load_project_sources(config_path, source_root, bundle)
+	return load_configured_sources(config, config_path, source_root, out_root, bundle)
+end
+
+# Module identities and diagnostic filenames are separate: local packages may
+# live outside sourceDir and still have a stable configured import prefix.
+def project_append_source_names(
+		mut state: CompilerState,
+		source_root: String,
+		prefix: String,
+		bundle: CompilerProjectSources,
+		mut names: Array<String>,
+	): Boolean
+	if bundle.paths.size() != bundle.sources.size()
+		diagnostic(state, "TRBN4010", 1, "project source adapter returned mismatched paths and sources")
+		return false
+	end
+	mut index := 0
+	while index < bundle.paths.size()
+		name := project_module_name(state, source_root, bundle.paths[index])
+		if has_diagnostic(state)
+			return false
+		end
+		if prefix == ""
+			names.push(name)
+		else
+			names.push(prefix + "/" + name)
+		end
+		index += 1
+	end
+	return true
+end
+
+def project_package_name_less(left: String, right: String): Boolean
+	left_bytes := compiler_string_bytes(left)
+	right_bytes := compiler_string_bytes(right)
+	mut index := 0
+	while index < left_bytes.size() && index < right_bytes.size()
+		if left_bytes[index] != right_bytes[index]
+			return left_bytes[index] < right_bytes[index]
+		end
+		index += 1
+	end
+	return left_bytes.size() < right_bytes.size()
+end
+
+def load_configured_sources(
+		config: ProjectConfig,
+		config_path: String,
+		source_root: String,
+		out_root: String,
+		bundle: CompilerProjectSources,
+	): CompilerState
+	mut validation := compiler_new(1024)
+	mut names: Array<String> := []
+	if !project_append_source_names(validation, source_root, "", bundle, names)
+		return project_error_state(config_path, 1, load_string(validation.diagnostics.messages, 0))
+	end
+	mut paths := bundle.paths
+	mut sources := bundle.sources
+	# Configuration maps have reference-sorted traversal, independent of JSON order.
+	mut pending: Array<String> := []
+	config.local_packages.each do |package|
+		pending.push(package.name)
+	end
+	mut consumed := 0
+	while consumed < pending.size()
+		mut selected :=- 1
+		mut index := 0
+		while index < pending.size()
+			if pending[index] != ""
+				if selected < 0
+					selected = index
+				elsif project_package_name_less(pending[index], pending[selected])
+					selected = index
+				end
+			end
+			index += 1
+		end
+		package := config.local_packages[selected]
+		mut package_root := package.path
+		if !string_starts_with(package_root, "/")
+			package_root = project_join(path_directory(config_path), package_root)
+		end
+		package_root = path_normalize(package_root)
+		collected := compiler_collect_project_sources(package_root, out_root)
+		if collected.error != ""
+			return project_error_state(config_path, 1, "local package " + package.name + ": " + collected.error)
+		end
+		if collected.paths.size() == 0
+			return project_error_state(config_path, 1, "local package " + package.name + " has no .trb files at " + package_root)
+		end
+		if !project_append_source_names(validation, package_root, package.name, collected, names)
+			return project_error_state(config_path, 1, load_string(validation.diagnostics.messages, 0))
+		end
+		index = 0
+		while index < collected.paths.size()
+			paths.push(collected.paths[index])
+			sources.push(collected.sources[index])
+			index += 1
+		end
+		pending[selected] = ""
+		consumed += 1
+	end
+	return load_named_project_sources(config_path, CompilerProjectSources.new(paths: paths, sources: sources, error: ""), names)
 end
 
 def load_project_sources(
@@ -829,22 +923,33 @@ def load_project_sources(
 		source_root: String,
 		bundle: CompilerProjectSources,
 	): CompilerState
+	mut validation := compiler_new(1024)
+	mut names: Array<String> := []
+	if !project_append_source_names(validation, source_root, "", bundle, names)
+		return project_error_state(config_path, 1, load_string(validation.diagnostics.messages, 0))
+	end
+	return load_named_project_sources(config_path, bundle, names)
+end
+
+def load_named_project_sources(config_path: String, bundle: CompilerProjectSources, names: Array<String>): CompilerState
 	if bundle.paths.size() == 0
 		return project_error_state(config_path, 1, "no production .trb files found")
 	end
-	if bundle.paths.size() != bundle.sources.size()
+	if bundle.paths.size() != bundle.sources.size() || names.size() != bundle.paths.size()
 		return project_error_state(config_path, 1, "project source adapter returned mismatched paths and sources")
 	end
-	ordered := order_project_sources(source_root, bundle)
+	order := project_source_order(bundle, names)
 	mut state := compiler_new(4194304)
 	mut module_index := 0
-	while module_index < ordered.paths.size()
+	while module_index < order.size()
 		state.module_graph.active_module[0] = module_index
-		name := project_module_name(state, source_root, ordered.paths[module_index])
-		if has_diagnostic(state)
-			return state
+		index := order[module_index]
+		name := names[index]
+		previous := find_module(state, name)
+		if previous >= 0
+			return project_error_state(bundle.paths[index], 1, "module path " + name + " is already provided by " + load_string(state.module_graph.module_files, previous))
 		end
-		add_module(state, name, ordered.paths[module_index])
+		add_module(state, name, bundle.paths[index])
 		module_index += 1
 	end
 	if !validate_project_module_roots(state)
@@ -854,7 +959,7 @@ def load_project_sources(
 	while module_index < state.module_graph.module_count[0]
 		state.module_graph.active_module[0] = module_index
 		start := state.source_tokens.token_count[0]
-		lex_module(state, ordered.sources[module_index], module_index)
+		lex_module(state, bundle.sources[order[module_index]], module_index)
 		if !has_diagnostic(state)
 			parse_module(state, start, module_index)
 		end
