@@ -1,6 +1,7 @@
+import { path_normalize } from path
 import { nullable_apply, nullable_fact, nullable_lookup, nullable_replace, nullable_version } from nullable_flow
 import { check_expression, check_primary } from checked_program
-import { CompilerProjectSources, check, emit_qbe, load_file_root, load_project_sources, string_starts_at } from compiler
+import { CompilerProjectSources, check, emit_qbe, load_file_root, load_named_project_sources, load_project_sources, string_starts_at } from compiler
 import { character_in, lex, lex_module } from lexer
 import { MirInstruction, mir_function_index } from mir
 import { verify_mir } from mir_verifier
@@ -648,6 +649,52 @@ describe("Native TypeRB frontend") do
 		)
 	end
 
+	test("keeps configured package identities separate from physical source paths") do
+		mut state := load_named_project_sources(
+			"/project/trbconfig.jsonc",
+			CompilerProjectSources.new(
+				paths: ["/project/src/main.trb", "/shared sources/api.trb", "/other shared/index.trb"],
+				sources: [
+					"import { label } from local/widgets/api\ndef main()\nputs(label())\nend\n",
+					"import { value } from local/shared\ndef label(): String\nreturn value()\nend\n",
+					"def value(): String\nreturn \"widget\"\nend\n",
+				], error: "",
+			), ["main", "local/widgets/api", "local/shared/index"],
+		)
+		expect(has_diagnostic(state)).to_be_false()
+		expect(resolve(state)).to_be_true()
+		expect(check(state)).to_be_true()
+		shared := find_module(state, "local/shared/index")
+		expect(shared >= 0).to_be_true()
+		expect(load_string(state.module_graph.module_files, shared)).to_equal("/other shared/index.trb")
+		expect(state.module_graph.entry_module[0]).to_equal(0)
+	end
+
+	test("rejects collisions between project and configured package identities") do
+		["local/widgets", "local/widgets/index"].each do |project_name|
+			state := load_named_project_sources(
+				"/project/trbconfig.jsonc",
+				CompilerProjectSources.new(
+					paths: ["/project/src/main.trb", "/project/src/widget.trb", "/shared/index.trb"],
+					sources: ["def main()\nend\n", "def local_value(): Integer\nreturn 1\nend\n", "def package_value(): Integer\nreturn 2\nend\n"], error: "",
+				), ["main", project_name, "local/widgets/index"],
+			)
+			expect(has_diagnostic(state)).to_be_true()
+			message := load_string(state.diagnostics.messages, 0)
+			expect(message.include?("local/widgets")).to_be_true()
+		end
+	end
+
+	test("normalizes configured roots lexically without discarding parent escapes") do
+		inputs := ["/app/../widgets//src/.", "/../../widgets", "/app/./out/../src", "../../src/../lib", "a/../../b", "a/..", "", "//"]
+		expected := ["/widgets/src", "/widgets", "/app/src", "../../lib", "../b", ".", ".", "/"]
+		mut index := 0
+		while index < inputs.size()
+			expect(path_normalize(inputs[index])).to_equal(expected[index])
+			index += 1
+		end
+	end
+
 	test("rejects invalid configured project bundles before checking") do
 		empty := load_project_sources(
 			"/project/trbconfig.jsonc",
@@ -1213,7 +1260,7 @@ describe("Native TypeRB frontend") do
 			expect(true).to_be_true()
 		else
 			base := root + "/compiler/src/"
-			names := ["compiler", "unicode_case_data", "qbe_string_case", "qbe_string_transforms", "hash_key_runtime", "literal_cases", "union_members", "builtin_number_parsing", "qbe_number_parsing", "builtin_lookup", "builtin_results", "unicode_identifier_data", "unicode_identifiers", "compiler_bytes", "literal_types", "literal_type_syntax", "literal_mir", "newtype_mir_types", "newtype_model", "newtype_types", "newtype_syntax", "newtype_resolution", "newtype_mir", "newtype_methods", "sliced_iteration", "array_sorting", "enum_methods", "raw_enum_types", "raw_enum_syntax", "raw_enum_resolution", "raw_enum_checked", "union_types", "union_mir", "union_checked", "qbe_unions", "qbe_scalar_strings", "namespace_model", "namespace_references", "global_model", "global_declarations", "global_analysis", "mir_globals", "qbe_globals", "qbe_array_join", "range_methods", "array_queries", "qbe_array_mutations", "array_methods", "qbe_array_copies", "string_methods", "qbe_string_queries", "qbe_string_sequences", "qbe_string_slices", "qbe_string_trimming", "string_escapes", "qbe_string_literals", "float_methods", "integer_methods", "transform_model", "mir_array_loops", "checked_functions", "literals", "mir", "mir_flow", "mir_roots", "iteration_syntax", "iteration_mir", "path", "hash_types", "hash_mir", "storage", "state", "parser", "checked_values", "resolution", "hash_checked", "iteration_checked", "mir_analysis", "mir_construction", "mir_control", "mir_logical", "mir_calls", "mir_intrinsics", "mir_strings", "mir_instructions", "checked_types", "checked_program", "qbe_output", "hash_runtime", "mir_builder", "mir_passes", "mir_verifier", "project_config", "qbe_constants", "qbe_context", "qbe_roots", "qbe_strings", "qbe_numeric", "qbe_power", "qbe_calls", "qbe_mir", "qbe_control", "qbe_runtime", "mir_types", "mir_arrays", "qbe_arrays", "lexer", "literal_syntax", "mir_records", "qbe_records", "mir_identities", "mir_hashes", "mir_hash_inference", "qbe_hashes", "mir_ranges", "qbe_ranges", "mir_iteration_control", "mir_numeric", "qbe_functions", "argument_binding", "default_arguments", "mir_value_control", "nullable_types", "nullable_mir", "nullable_flow", "qbe_nullable", "checked_submission", "enum_model", "enum_syntax", "enum_types", "enum_checked", "enum_mir", "qbe_enums", "syntax_tokens", "generic_model", "generic_arguments", "generic_syntax", "generic_validation", "declaration_lookup", "type_resolution", "standard_library", "result_model", "result_checked", "checked_body", "generic_functions", "generic_program", "generic_check", "generic_bindings", "alias_model", "alias_syntax", "alias_patterns", "callable_types", "lambda_syntax", "lambda_resolution", "lambda_checking", "lambda_lowering", "mir_bindings", "mir_callables", "qbe_callables", "body_syntax", "declaration_syntax", "object_dispatch", "object_dispatch_mir", "object_dispatch_shapes", "object_fields", "object_initialization", "object_methods", "object_mir", "object_mir_types", "object_model", "object_resolution", "object_syntax", "object_types", "qbe_object_dispatch", "qbe_objects", "syntax_forms", "callable_state", "global_state", "attribute_model", "attribute_syntax", "attribute_check", "nominal_state", "local_state", "catalog_state", "source_state", "checked_collection_inference", "body_resolution", "entry_resolution", "import_resolution", "enum_resolution", "mir_enum_stack"]
+			names := ["compiler", "unicode_case_data", "qbe_string_case", "qbe_string_transforms", "hash_key_runtime", "literal_cases", "union_members", "builtin_number_parsing", "qbe_number_parsing", "builtin_lookup", "builtin_results", "unicode_identifier_data", "unicode_identifiers", "compiler_bytes", "literal_types", "literal_type_syntax", "literal_mir", "newtype_mir_types", "newtype_model", "newtype_types", "newtype_syntax", "newtype_resolution", "newtype_mir", "newtype_methods", "sliced_iteration", "array_sorting", "enum_methods", "raw_enum_types", "raw_enum_syntax", "raw_enum_resolution", "raw_enum_checked", "union_types", "union_mir", "union_checked", "qbe_unions", "qbe_scalar_strings", "namespace_model", "namespace_references", "global_model", "global_declarations", "global_analysis", "mir_globals", "qbe_globals", "qbe_array_join", "range_methods", "array_queries", "qbe_array_mutations", "array_methods", "qbe_array_copies", "string_methods", "qbe_string_queries", "qbe_string_sequences", "qbe_string_slices", "qbe_string_trimming", "string_escapes", "qbe_string_literals", "float_methods", "integer_methods", "transform_model", "mir_array_loops", "checked_functions", "literals", "mir", "mir_flow", "mir_roots", "iteration_syntax", "iteration_mir", "path", "hash_types", "hash_mir", "storage", "state", "parser", "checked_values", "resolution", "hash_checked", "iteration_checked", "mir_analysis", "mir_construction", "mir_control", "mir_logical", "mir_calls", "mir_intrinsics", "mir_strings", "mir_instructions", "checked_types", "checked_program", "qbe_output", "hash_runtime", "mir_builder", "mir_passes", "mir_verifier", "project_config", "qbe_constants", "qbe_context", "qbe_roots", "qbe_strings", "qbe_numeric", "qbe_power", "qbe_calls", "qbe_mir", "qbe_control", "qbe_runtime", "mir_types", "mir_arrays", "qbe_arrays", "lexer", "literal_syntax", "mir_records", "qbe_records", "mir_identities", "mir_hashes", "mir_hash_inference", "qbe_hashes", "mir_ranges", "qbe_ranges", "mir_iteration_control", "mir_numeric", "qbe_functions", "argument_binding", "default_arguments", "mir_value_control", "nullable_types", "nullable_mir", "nullable_flow", "qbe_nullable", "checked_submission", "enum_model", "enum_syntax", "enum_types", "enum_checked", "enum_mir", "qbe_enums", "syntax_tokens", "generic_model", "generic_arguments", "generic_syntax", "generic_validation", "declaration_lookup", "type_resolution", "standard_library", "result_model", "result_checked", "checked_body", "generic_functions", "generic_program", "generic_check", "generic_bindings", "alias_model", "alias_syntax", "alias_patterns", "callable_types", "lambda_syntax", "lambda_resolution", "lambda_checking", "lambda_lowering", "mir_bindings", "mir_callables", "qbe_callables", "body_syntax", "declaration_syntax", "object_dispatch", "object_dispatch_mir", "object_dispatch_shapes", "object_fields", "object_initialization", "object_methods", "object_mir", "object_mir_types", "object_model", "object_resolution", "object_syntax", "object_types", "qbe_object_dispatch", "qbe_objects", "syntax_forms", "callable_state", "global_state", "attribute_model", "attribute_syntax", "attribute_check", "nominal_state", "local_state", "catalog_state", "source_state", "checked_collection_inference", "body_resolution", "entry_resolution", "import_resolution", "enum_resolution", "mir_enum_stack", "package_checksum", "package_manifest", "package_json", "project_packages"]
 			mut sources: Array<String> := []
 			names.each do |name|
 				sources.push(required_test_source(base + name + ".trb"))

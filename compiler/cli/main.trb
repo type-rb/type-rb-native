@@ -1,13 +1,14 @@
+import { project_packages_lock } from project_packages
 import { cli_diagnostic } from diagnostics
 import { CompilerState, has_diagnostic } from state
 import { resolve } from resolution
 import { load_string } from storage
 import trb/std/process
-import { compiler_main as core_main, compiler_file_exists, compiler_read_source, load_configured_project, load_file_root, check, emit_qbe } from compiler
+import { compiler_main as core_main, compiler_file_exists, compiler_read_source, load_configured_project, load_project_packages, load_file_root, check, emit_qbe } from compiler
 import { compiler_source_slice } from lexer
 import { parse_project_config, project_config_declared_mode } from project_config
 import { path_directory, path_basename, path_join, string_ends_with, string_starts_with, string_without_suffix } from path
-import { native_cli_env, native_cli_cwd, native_cli_program, native_cli_tty, native_cli_write, native_cli_mkdir, native_cli_remove, native_cli_temp, native_cli_execute, native_cli_signals, native_cli_target, native_cli_emit, native_cli_tempfile, native_cli_rename } from host
+import { native_cli_env, native_cli_cwd, native_cli_program, native_cli_tty, native_cli_write, native_cli_mkdir, native_cli_remove, native_cli_temp, native_cli_execute, native_cli_signals, native_cli_target, native_cli_emit, native_cli_tempfile, native_cli_rename, native_cli_save, native_cli_chmod } from host
 import { repl_run } from repl
 
 # The entry adapters preserve the internal bootstrap protocol without exposing
@@ -87,6 +88,7 @@ def cli_usage(): Integer
 	puts("  trbn build [SOURCE]          Emit native QBE source")
 	puts("  trbn build --compile [SOURCE] Build an executable")
 	puts("  trbn run [SOURCE] [-- ARGS...] Build and run")
+	puts("  trbn install                Resolve local TypeRB path packages")
 	puts("  trbn repl                   Start a stateful REPL")
 	puts("Options: --mode trb, --config PATH, --outfile PATH, --stdout")
 	puts("TypeRB Native is under development. Currently only mode trb is implemented.")
@@ -166,6 +168,10 @@ def cli_parse_argument(mut options: CliOptions, arguments: Array<String>, mut in
 		return
 	end
 	if options.command[0] == ""
+		if argument == "install"
+			options.command[0] = argument
+			return
+		end
 		if cli_any(cli_any(cli_any(argument == "check", argument == "build"), cli_any(argument == "run", argument == "repl")), cli_any(argument == "help", argument == "version"))
 			options.command[0] = argument
 			return
@@ -357,6 +363,39 @@ def native_cli_main(): Integer
 	end
 	if !project_config_declared_mode(mode)
 		return cli_error("mode must be go, ruby, typescript, or trb")
+	end
+	if command == "install"
+		if config == ""
+			return cli_error("no trbconfig.jsonc found")
+		end
+		project := parse_project_config(compiler_read_source(config))
+		packages := load_project_packages(project, config, false)
+		if packages.error[0] != ""
+			return cli_error(packages.error[0])
+		end
+		if project.packages.size() == 0
+			puts("no TypeRB packages to install")
+			return 0
+		end
+		lock_path := path_join(path_directory(config), "trb.lock")
+		temporary := native_cli_tempfile(lock_path)
+		if temporary == ""
+			return cli_error("cannot create temporary package lock")
+		end
+		if native_cli_save(temporary, project_packages_lock(packages), 0) != 0
+			native_cli_remove(temporary, 0)
+			return cli_error("cannot write package lock")
+		end
+		if native_cli_chmod(temporary, 420) != 0
+			native_cli_remove(temporary, 0)
+			return cli_error("cannot set package lock permissions")
+		end
+		if native_cli_rename(temporary, lock_path) != 0
+			native_cli_remove(temporary, 0)
+			return cli_error("cannot publish package lock")
+		end
+		puts("resolved " + packages.packages.size().to_s() + " TypeRB package(s) -> " + lock_path)
+		return 0
 	end
 	# Every declared mode is analyzed; only mode trb has a backend here.
 	if cli_both(mode != "trb", command != "check")
