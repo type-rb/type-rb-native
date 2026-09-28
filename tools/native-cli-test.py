@@ -349,7 +349,9 @@ end
     assert run('run', hello, '--', '--flag') == '--flag\n'
     run('check', hello)
     run('check', hello, '--mode=trb')
-    assert 'not implemented' in run('check', hello, '--mode', 'go', success=False)
+    run('check', hello, '--mode', 'go')
+    assert 'run is not available for mode go' in run('run', hello, '--mode', 'go', success=False)
+    assert 'mode must be go, ruby, typescript, or trb' in run('check', hello, '--mode', 'python', success=False)
     run('build', hello)
     assert (root / 'build/hello world.ssa').read_text().lstrip().startswith('data ')
     assert 'export function' in run('build', hello, '--stdout')
@@ -483,7 +485,8 @@ end
 
     assert 'override' in run('check', '--mode', 'trb', cwd=project, success=False)
     config.write_text('{"name":"demo","mode":"go","sourceDir":"src","go":{"module":"example.com/demo"}}')
-    assert 'not implemented' in run('run', cwd=project, success=False)
+    run('check', cwd=project)
+    assert 'run is not available for mode go' in run('run', cwd=project, success=False)
     assert '42 : Integer' in run('repl', '--mode=trb', text='answer()\n:quit\n', cwd=project)
     run('run', 'missing.trb', cwd=project, success=False)
     assert '"é" : String' in run('repl', text='"é"\n:quit\n')

@@ -79,6 +79,14 @@ A discovered configuration selects the project. `--config PATH` explicitly
 selects one. `--mode` may select a standalone mode; it cannot override a
 configured build. `repl --mode trb` can explicitly select a REPL mode.
 
+Configurations follow the reference schema and validation, including `lint`,
+`packageOptions`, `jobs`, `db` and the mode-specific sections. `check` accepts
+every declared mode (`go`, `ruby`, `typescript` and `trb`). Commands that build,
+run or evaluate a program need mode `trb` and report that other modes are not
+available. TypeRB packages and `localPackages` are validated but not loaded yet,
+so a configuration that declares them is rejected when a command loads its
+sources.
+
 The checkout root contains a small `mode: trb` example project in `examples/`.
 Reference-compiler development checks use the separate
 `trbconfig.reference.jsonc` explicitly:
