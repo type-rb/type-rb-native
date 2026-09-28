@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from recovery_layout_sync import InventoryError, closure, synchronize
+from recovery_layout_sync import InventoryError, closure, default_mutation, synchronize
 
 
 LAYOUT_HEAD = "record RecoveryCompilerModule\n\tname: String\n\timports: String\nend\n\ndef compiler_recovery_layout(): Array<RecoveryCompilerModule>\n\treturn [\n"
@@ -14,6 +14,17 @@ FRONTEND = (
 
 
 class RecoveryInventorySyncTest(unittest.TestCase):
+    def test_default_mutation_does_not_treat_code_between_strings_as_a_literal(self):
+        source = ('# "comment literal" is not emitted\n'
+                  'record Output\n\tlines: String\n\tflags: Integer\nend\n'
+                  'def branch(condition: String): String\n'
+                  '\treturn "\\tjnz " + condition + ", " + "\\\"quoted\\\""\nend\n')
+        self.assertEqual(default_mutation("output", source),
+                         ["output", "\tlines: String\n\tflags: Integer",
+                          "\tflags: Integer\n\tlines: String"])
+        self.assertEqual(default_mutation("output", source + '\ndef message(): String\nreturn "actual literal"\nend\n'),
+                         ["output", '"actual literal"', '"actual literal~"'])
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.root = Path(self.directory.name)
