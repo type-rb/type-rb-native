@@ -89,9 +89,12 @@ def decode(literal: str) -> str:
 def default_mutation(name: str, source: str) -> list[str] | None:
     """A well-typed edit that must change the emitted compiler QBE."""
     body = source[len(canonical_imports(source)):]
-    for match in SAFE_LITERAL.finditer(body):
+    # Consume complete strings before considering a safe literal. Otherwise the
+    # closing quote of one string and opening quote of the next can make code
+    # such as `" + condition + "` look like a literal and produce invalid source.
+    for match in re.finditer(STRING + r"|#[^\n]*", body):
         needle = match.group(0)
-        if source.count(needle) == 1:
+        if SAFE_LITERAL.fullmatch(needle) and source.count(needle) == 1:
             return [name, needle, needle[:-1] + '~"']
     lines = body.splitlines()
     for index in range(len(lines) - 1):

@@ -3,22 +3,45 @@ import { load_string } from storage
 import { describe, expect, test } from trb/std/test
 
 describe("QBE output construction") do
+	test("shares appended lines and growth through output aliases") do
+		mut output := qbe_output_new(1, [])
+		mut shared := output
+		mut index := 0
+		while index < 513
+			qbe_output_line(shared, "line")
+			index += 1
+		end
+		qbe_output_line(output, "tail")
+		expect(load_string(shared.lines, 0)).to_equal("line")
+		expect(load_string(output.lines, 512)).to_equal("line")
+		expect(load_string(shared.lines, 513)).to_equal("tail")
+		mut position := [0]
+		mut expected := ""
+		index = 0
+		while index < 513
+			expected += "line\n"
+			index += 1
+		end
+		expect(qbe_output_chunk(output, position)).to_equal(expected + "tail")
+		expect(position[0]).to_equal(514)
+	end
+
 	test("keeps ordered lines, branch spelling, and appended output independent") do
 		flags := [1, 0]
 		mut output := qbe_output_new(8, flags)
-		expect(output.count[0]).to_equal(0)
+		expect(output.lines.used[0]).to_equal(0)
 		qbe_output_line(output, "@entry")
 		qbe_output_branch(output, "%condition", "@yes", "@no")
 		mut appended := qbe_output_new(4, [0, 1])
 		qbe_output_line(appended, "@yes")
 		qbe_output_append(output, appended)
-		expect(output.count[0]).to_equal(3)
+		expect(output.lines.used[0]).to_equal(3)
 		expect(load_string(output.lines, 0)).to_equal("@entry")
 		expect(load_string(output.lines, 1)).to_equal("\tjnz %condition, @yes, @no")
 		expect(load_string(output.lines, 2)).to_equal("@yes")
-		expect(appended.count[0]).to_equal(1)
+		expect(appended.lines.used[0]).to_equal(1)
 		qbe_output_line(appended, "@no")
-		expect(output.count[0]).to_equal(3)
+		expect(output.lines.used[0]).to_equal(3)
 		expect(output.runtime_flags[0]).to_equal(1)
 		expect(output.runtime_flags[1]).to_equal(0)
 	end
