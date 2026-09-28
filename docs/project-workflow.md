@@ -61,8 +61,10 @@ distinguishes completed work from work closed as not planned.
 - Tasks may be planned under an Approved or Active initiative.
 - Implement only eligible tasks under an Active initiative. Take P0 before P1
   before P2, and older items first within a priority.
-- Keep at most five initiatives Active so that started work finishes. Before
-  activation, record the Metric, Target and Baseline and prepare the first task.
+- Keep at most five initiatives Active so that started work finishes. When a
+  slot is free, an agent activates the highest-priority Approved initiative
+  after recording its Metric, Target and Baseline and preparing the first task,
+  and notes the activation on the initiative issue.
 - An agent run holds at most two tasks In progress: one being implemented and
   at most one waiting for PR review or CI. Waiting work still counts toward WIP.
 - When `Main validation` fails, repairing or reverting `main` comes first and may
@@ -170,14 +172,26 @@ a merged child PR. Set a newly added initiative to Proposed during triage.
 
 ## Authority
 
-| Agents act without asking | Agents set Needs decision and wait |
+Work that preserves specified behavior and the approved scope and targets
+proceeds without further approval, from task creation through merge and cleanup.
+This includes reference conformance, MIR and performance improvements, and
+maintenance. The maintainer decides what TypeRB is, including specification
+changes and any Native behavior that differs from the pinned reference. The
+maintainer also decides direction, publication, irreversible actions and
+security-sensitive settings.
+
+| Agents act without asking | The maintainer decides; agents set Needs decision |
 | --- | --- |
-| Create, refine and order tasks under Approved or Active initiatives | Approve, activate, rescope or drop an initiative, or change its target |
-| Implement, open PRs, merge after PR acceptance passes and clean up branches | Change bootstrap seeds, the reference pin or releases |
-| Fix or revert a failing `main` | Remove or weaken required CI checks |
-| Update documentation within the task's scope | Change secrets, permissions, organization or project settings |
-| File, reproduce and triage bugs | Post to other repositories or external services |
-| File specification proposals found while reproducing TypeRB | Adopt a specification change or send it upstream |
+| Create, refine and order tasks, and activate the next Approved initiative when a slot is free | Approve a Proposed initiative or a decision record that changes direction; rescope, drop or retarget an initiative |
+| Implement, open PRs, merge after PR acceptance passes and clean up branches | Adopt a specification change or a deviation from the pinned reference, or send one upstream |
+| Fix or revert a failing `main` | Publish releases or new bootstrap seed assets |
+| Update the pinned reference revision through the release integration procedure | Remove or weaken required CI checks |
+| Update documentation, fixtures and generated views within the task's scope | Change secrets, permissions, organization or project settings |
+| File, reproduce and triage bugs, and file specification proposals | Post to other repositories or external services |
+| Record current evidence and complete an initiative whose recorded criteria are met | Accept an unmet target or a different outcome; stop or reopen an initiative |
+
+Waiting for a decision blocks only the affected item. Agents continue with other
+eligible work in the meantime.
 
 A maintainer's direct request defines its own scope and completion point; these
 rules apply to work an agent takes from the board.
@@ -191,12 +205,21 @@ comment that produced it. A value without Measured and Evidence is not a
 measurement, and a value measured before the latest relevant merge is stale.
 Compare only measurements taken under the Baseline conditions.
 
-Keep an initiative Active while measuring its outcome. The maintainer confirms
-completion from Evidence against Target, or explicitly accepts a different
-result with the reason recorded. Then set Initiative state to Done and close
-the issue as completed. To stop an initiative, record the maintainer's decision,
-set Done and close as not planned. Reopening requires an explicit lifecycle
-decision and must respect the five-Active limit; it does not resume work by itself.
+Keep an initiative Active while measuring its outcome. When current evidence
+under the recorded baseline conditions meets its existing Target and every
+recorded completion criterion, an agent updates Current, Measured and Evidence,
+records the comparison on the issue, sets Initiative state to Done and closes
+the issue as completed without another approval. A merged child alone is not
+completion evidence. Do not change a target or its measurement conditions to
+claim success. Incomplete or ambiguous evidence leaves the initiative Active;
+continue measuring or request a decision on the unresolved criterion while
+other eligible work proceeds.
+
+Accepting an unmet target or a different outcome requires the maintainer's
+explicit decision with the reason recorded. To stop an initiative, record that
+decision, set Done and close as not planned. Reopening requires an explicit
+lifecycle decision and must respect the five-Active limit; it does not resume
+work by itself.
 
 ## Weekly review
 
@@ -204,7 +227,8 @@ Each week the maintainer, with an agent preparing the summary, reviews:
 
 - the Decisions view and Blocked items;
 - Current against Target for each Active initiative;
-- Proposed initiatives to approve or drop, and which ones become Active;
+- Proposed initiatives to approve or drop, and the priority order that agents
+  follow when they activate Approved initiatives;
 - stale claims, long-running tasks and PRs waiting for review or CI.
 
 The board and issues are the source of truth for work state. Local session notes

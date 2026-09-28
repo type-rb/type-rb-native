@@ -115,6 +115,16 @@ without introducing a new approval checkpoint. If a skill instruction requires
 a pause, identify the exact file and instruction, and explain the unresolved
 decision; do not turn an optional recommendation into a mandatory approval.
 
+Board work that preserves specified behavior and the approved scope and targets
+needs no confirmation for routine steps. This includes reference conformance,
+MIR and performance improvements, and maintenance. Merge green PRs, clean up,
+update the reference pin through its procedure, mark an initiative Done when
+current evidence meets its recorded completion criteria, activate the next
+Approved initiative in a free slot, and continue. Follow
+`docs/project-workflow.md` for evidence and lifecycle rules. Stop only for its
+listed maintainer decisions, such as a specification change or accepting an
+unmet target.
+
 When the user has authorized continued development, pursue the active milestone
 through cohesive ownership changes within that authorization and budget. Avoid
 turning each helper move or size overrun into a separate acceptance milestone.
