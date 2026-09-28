@@ -67,6 +67,9 @@ The CI plan for the actual changed paths determines required authorities; do
 not skip them because a change looks small. Complete focused local checks and
 the required CI, fixing failures caused by the change. After they pass, repeat
 or broaden checks only for new edits, failures, or unresolved concerns.
+Run `tools/preflight.sh /path/to/pinned/trb` before each push of code; it runs
+the reference-only quick checks, including the recovery snapshot subset, and
+stops at the first failure.
 Use hosted CI as the integration authority. Under the tiered gate, merge after
 PR acceptance; `Main validation` runs the deferred complete lanes, and a red
 main run takes priority over further feature merges. Run full local recovery

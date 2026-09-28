@@ -125,6 +125,21 @@ and the ordinary Native build when compiler source changes. Run full local
 recovery only to diagnose a recovery or platform failure, such as a red
 `Main validation`. Merge only after PR acceptance passes.
 
+Before pushing a code or CLI change, run the local preflight with the pinned
+reference compiler:
+
+```sh
+tools/preflight.sh /path/to/pinned/trb
+```
+
+It repeats the quick checks that need only that compiler, cheapest first, and
+stops at the first failure: whitespace, generated coverage views, reference
+identity, recovery layout, planner tests, Unicode data, formatting, root and
+compiler types, the CLI and core closure, the recovery snapshot subset and the
+project scenarios. A documentation-only change set stops after the generated
+views. `--full` adds the reference language fixtures and the root and compiler
+units. The preflight does not replace the focused checks below or hosted CI.
+
 Keep the edit loop local and narrow. For example, after a MIR Array change,
 run its QBE-backed compiler tests with the pinned reference compiler and QBE:
 
