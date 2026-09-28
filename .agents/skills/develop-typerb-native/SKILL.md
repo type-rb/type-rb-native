@@ -115,6 +115,12 @@ without introducing a new approval checkpoint. If a skill instruction requires
 a pause, identify the exact file and instruction, and explain the unresolved
 decision; do not turn an optional recommendation into a mandatory approval.
 
+Board work reproduces behavior the pinned reference already specifies, so it
+needs no confirmation for routine steps. Merge green PRs, clean up, update the
+reference pin through its procedure, activate the next Approved initiative in a
+free slot, and continue. Stop only for the maintainer decisions listed in
+`docs/project-workflow.md`, such as a specification change.
+
 When the user has authorized continued development, pursue the active milestone
 through cohesive ownership changes within that authorization and budget. Avoid
 turning each helper move or size overrun into a separate acceptance milestone.

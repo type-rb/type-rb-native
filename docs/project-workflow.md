@@ -61,8 +61,10 @@ distinguishes completed work from work closed as not planned.
 - Tasks may be planned under an Approved or Active initiative.
 - Implement only eligible tasks under an Active initiative. Take P0 before P1
   before P2, and older items first within a priority.
-- Keep at most five initiatives Active so that started work finishes. Before
-  activation, record the Metric, Target and Baseline and prepare the first task.
+- Keep at most five initiatives Active so that started work finishes. When a
+  slot is free, an agent activates the highest-priority Approved initiative
+  after recording its Metric, Target and Baseline and preparing the first task,
+  and notes the activation on the initiative issue.
 - An agent run holds at most two tasks In progress: one being implemented and
   at most one waiting for PR review or CI. Waiting work still counts toward WIP.
 - When `Main validation` fails, repairing or reverting `main` comes first and may
@@ -170,14 +172,23 @@ a merged child PR. Set a newly added initiative to Proposed during triage.
 
 ## Authority
 
-| Agents act without asking | Agents set Needs decision and wait |
+Work that reproduces behavior specified by the pinned reference proceeds
+without approval, from task creation through merge and cleanup. The maintainer
+decides what TypeRB is, including specification changes and any Native behavior
+that differs from the pinned reference. The maintainer also decides direction,
+publication, irreversible actions and security-sensitive settings.
+
+| Agents act without asking | The maintainer decides; agents set Needs decision |
 | --- | --- |
-| Create, refine and order tasks under Approved or Active initiatives | Approve, activate, rescope or drop an initiative, or change its target |
-| Implement, open PRs, merge after PR acceptance passes and clean up branches | Change bootstrap seeds, the reference pin or releases |
-| Fix or revert a failing `main` | Remove or weaken required CI checks |
-| Update documentation within the task's scope | Change secrets, permissions, organization or project settings |
-| File, reproduce and triage bugs | Post to other repositories or external services |
-| File specification proposals found while reproducing TypeRB | Adopt a specification change or send it upstream |
+| Create, refine and order tasks, and activate the next Approved initiative when a slot is free | Approve a Proposed initiative or a decision record that changes direction; rescope, drop or retarget an initiative |
+| Implement, open PRs, merge after PR acceptance passes and clean up branches | Adopt a specification change or a deviation from the pinned reference, or send one upstream |
+| Fix or revert a failing `main` | Publish releases or new bootstrap seed assets |
+| Update the pinned reference revision through the release integration procedure | Remove or weaken required CI checks |
+| Update documentation, fixtures and generated views within the task's scope | Change secrets, permissions, organization or project settings |
+| File, reproduce and triage bugs, and file specification proposals | Post to other repositories or external services |
+
+Waiting for a decision blocks only the affected item. Agents continue with other
+eligible work in the meantime.
 
 A maintainer's direct request defines its own scope and completion point; these
 rules apply to work an agent takes from the board.
@@ -204,7 +215,8 @@ Each week the maintainer, with an agent preparing the summary, reviews:
 
 - the Decisions view and Blocked items;
 - Current against Target for each Active initiative;
-- Proposed initiatives to approve or drop, and which ones become Active;
+- Proposed initiatives to approve or drop, and the priority order that agents
+  follow when they activate Approved initiatives;
 - stale claims, long-running tasks and PRs waiting for review or CI.
 
 The board and issues are the source of truth for work state. Local session notes
