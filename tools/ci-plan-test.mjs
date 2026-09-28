@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { acceptance, changedPaths, classify, mainAcceptance, recoveryModules, toolingTests, dailyMeasurementInputs, quickToolingTests, compilerTestInputs, cliInputs } from './ci-plan.mjs';
+import { acceptance, changedFiles, changedPaths, classify, mainAcceptance, recoveryModules, toolingTests, dailyMeasurementInputs, quickToolingTests, compilerTestInputs, cliInputs } from './ci-plan.mjs';
 
 test('main recovery selects only changed compiler modules and fails closed on unknown inputs', () => {
   const modules = new Set(['compiler', 'lexer', 'parser', 'mir']);
@@ -196,7 +196,7 @@ test('documentation-only PRs do not run compiler matrices', () => {
   const plan = classify(['README.md', 'docs/index.html', 'results/a.json',
     'tools/native-mir-array-loop-recovery/README.md', '.github/ISSUE_TEMPLATE/task.yml'], false);
   assert.deepEqual(plan, { code: false, quick: false, compiler_units: false, documentation: true,
-    memory: false, draft: false, tooling: false, cli: false, complete: false });
+    memory: false, draft: false, tooling: false, cli: false, complete: false, registry_only: false });
   assert.deepEqual(acceptance(results(plan)), []);
 });
 test('ordinary language cases use a separate reference oracle and Go-free CLI checks', () => {
@@ -241,7 +241,7 @@ test('static documentation and evidence tools do not run compiler matrices', () 
     '.github/workflows/documentation.yml']) {
     const plan = classify([tool, 'docs/capabilities/benchmarks/data.js'], false);
     assert.deepEqual(plan, { code: false, quick: false, compiler_units: false, documentation: true,
-      memory: false, draft: false, tooling: false, cli: false, complete: false });
+      memory: false, draft: false, tooling: false, cli: false, complete: false, registry_only: false });
     assert.deepEqual(acceptance(results(plan)), []);
     assert.equal(classify([`${tool}.unknown`], false).code, true);
     assert.equal(classify([tool, 'compiler/gate4/src/compiler.trb'], false).memory, true);
@@ -261,7 +261,7 @@ test('planning-only maintenance uses its unconditional tests, not compiler matri
   for (const path of ['tools/ci-plan.mjs', 'tools/ci-plan-test.mjs']) {
     const plan = classify([path, 'docs/evidence-retention.md', 'results/historical/raw.tsv'], false);
     assert.deepEqual(plan, { code: false, quick: false, compiler_units: false, documentation: true,
-      memory: false, draft: false, tooling: false, cli: false, complete: false });
+      memory: false, draft: false, tooling: false, cli: false, complete: false, registry_only: false });
     assert.deepEqual(acceptance(results(plan)), []);
     for (const failure of ['failure', 'cancelled', 'skipped', undefined]) {
       const needs = results(plan);
@@ -385,7 +385,7 @@ test('CLI classifies real historical-to-documentation and current-project rename
     const output = execFileSync(process.execPath, args, { cwd: directory, encoding: 'utf8', env: plannerEnv() });
     assert.deepEqual(Object.fromEntries(output.trim().split('\n').map(row => row.split('='))),
       { code: 'true', quick: 'true', compiler_units: 'true', documentation: 'true', memory: 'true',
-        draft: 'false', tooling: 'true', cli: 'true', complete: 'true' });
+        draft: 'false', tooling: 'true', cli: 'true', complete: 'true', registry_only: 'false' });
     mkdirSync(join(directory, 'compiler/src'), { recursive: true });
     renameSync(join(directory, 'docs/example.md'), join(directory, 'compiler/src/current.trb'));
     git('add', '-A');
@@ -590,7 +590,7 @@ test('known compiler test modules retain correctness without unchanged-binary me
   for (const file of compilerTestInputs) {
     const plan = classify([file], false);
     assert.deepEqual(plan, { code: true, quick: true, compiler_units: true, documentation: false,
-      memory: false, draft: false, tooling: true, cli: true, complete: true });
+      memory: false, draft: false, tooling: true, cli: true, complete: true, registry_only: false });
     assert.deepEqual(acceptance(results(plan)), []);
     for (const job of ['quick', 'compiler_units', 'native', 'targets', 'tooling', 'cli']) {
       for (const state of ['failure', 'cancelled', 'skipped', undefined]) {
@@ -616,10 +616,11 @@ test('synthetic project and policy tests retain Linux without building the refer
   assert(quick.includes("if: needs.plan.outputs.quick == 'true'"));
   assert(entry.includes('quick: ${{ steps.plan.outputs.quick }}'));
   const steps = quick.split('      - ').slice(1);
-  const compilerCondition = "if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'";
+  const compilerCondition = "needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'";
   const recoveryImports = steps.find(step => step.startsWith('name: Check generated recovery import boundaries'));
   assert(recoveryImports?.includes('python3 tools/recovery_layout_sync.py --check'));
-  assert(!recoveryImports.includes('if:'), 'Recovery import check does not need the reference compiler');
+  assert(recoveryImports.includes("if: needs.plan.outputs.registry_only != 'true'"),
+    'Recovery imports keep their Linux authority except for unrelated registry edits');
   for (const step of steps) {
     if (step.includes('repository: type-rb/type-rb') || step.includes('actions/setup-go') ||
       step.startsWith('name: Build the pinned') ||
@@ -627,12 +628,13 @@ test('synthetic project and policy tests retain Linux without building the refer
       step.startsWith('name: Run root')) assert(step.includes(compilerCondition), step);
   }
   const toolingStep = steps.find(step => step.startsWith('name: Verify project'));
-  assert(toolingStep && !toolingStep.includes('if:'), 'Linux controls cannot depend on compiler setup');
+  assert(toolingStep?.includes("if: needs.plan.outputs.registry_only != 'true'"),
+    'Linux controls remain enabled for synthetic tool edits without compiler setup');
   for (const file of quickToolingTests) {
     assert(toolingStep.includes(`sh ${file}`));
     const plan = classify([file], false);
     assert.deepEqual(plan, { code: false, quick: true, compiler_units: false, documentation: false,
-      memory: false, draft: false, tooling: true, cli: false, complete: false });
+      memory: false, draft: false, tooling: true, cli: false, complete: false, registry_only: false });
     assert.deepEqual(acceptance(results(plan)), []);
     for (const job of ['quick', 'tooling']) {
       for (const state of ['failure', 'cancelled', 'skipped', undefined]) {
@@ -818,6 +820,167 @@ test('the planner CLI reads the PR gate, ignores it on main and reports deferred
     assert.throws(() => execFileSync(process.execPath, [planner, 'accept-main'], {
       encoding: 'utf8', stdio: 'pipe', env: { ...process.env, NEEDS_JSON: '{}' },
     }));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+const registry = 'tools/native-language-cases.json';
+const registryViews = ['docs/native-language-feature-inventory.md', 'docs/capabilities/ordinary-language.js'];
+const modified = paths => paths.map(path => ({ path, status: 'M' }));
+
+test('only modified registry and exact generated views select the tiered PR exception', () => {
+  for (const paths of [[registry], [registry, registryViews[0]], [registry, registryViews[1]],
+    [registry, ...registryViews]]) {
+    for (const draft of [false, true]) {
+      const plan = classify(paths, draft, 'tiered', modified(paths));
+      assert.deepEqual(plan, { code: false, quick: true, compiler_units: false, documentation: true,
+        memory: false, draft, tooling: false, cli: true, complete: false, registry_only: true });
+      assert.deepEqual(acceptance(results(plan)), []);
+      assert.equal(classify(paths, draft, 'complete', modified(paths)).registry_only, false);
+      assert.equal(classify(paths, draft, 'complete', modified(paths)).compiler_units, true);
+      for (const changes of [undefined, null, [], new Array(paths.length), modified(paths).slice(1),
+        [...modified(paths), { path: 'unknown', status: 'M' }]]) {
+        assert.equal(classify(paths, draft, 'tiered', changes).registry_only, false);
+      }
+      for (let index = 0; index < paths.length; index++) {
+        for (const status of ['A', 'D', 'T', 'R100', 'C100', 'U', 'X', '', undefined]) {
+          const changes = modified(paths);
+          changes[index].status = status;
+          const fallback = classify(paths, draft, 'tiered', changes);
+          assert.equal(fallback.registry_only, false, `${paths[index]}: ${status}`);
+          assert.equal(fallback.compiler_units, true);
+        }
+      }
+    }
+  }
+  for (const other of ['compiler/src/mir.trb', 'compiler/cli/main.trb',
+    'tools/native-language-coverage.py', 'tools/native-language-coverage-test.py',
+    'tools/project-scenarios.py', 'tools/ci-plan.mjs', 'tools/recovery_stage_test.py',
+    '.github/workflows/pull-request.yml', 'docs/other.md', 'README.md',
+    'docs/capabilities/new.js', registry + '.unknown', 'unknown/file']) {
+    const paths = [registry, other];
+    assert.deepEqual(classify(paths, false, 'tiered', modified(paths)), classify(paths, false, 'tiered'), other);
+    assert.equal(classify(paths, false, 'tiered', modified(paths)).compiler_units, true, other);
+  }
+  assert.equal(classify(registryViews, false, 'tiered', modified(registryViews)).registry_only, false);
+  assert.equal(classify([registry], false, 'tiered', [{ path: registryViews[0], status: 'M' }]).registry_only, false);
+});
+
+test('registry acceptance requires language jobs and rejects inconsistent exception outputs', () => {
+  const plan = classify([registry], false, 'tiered', modified([registry]));
+  const output = execFileSync(process.execPath, [fileURLToPath(new URL('ci-plan.mjs', import.meta.url)), 'accept'], {
+    encoding: 'utf8', env: { ...process.env, NEEDS_JSON: JSON.stringify(results(plan)), GITHUB_STEP_SUMMARY: '' },
+  });
+  assert.match(output, /Registry-only validation passed/);
+  assert.doesNotMatch(output, /Native recovery.*run on main/);
+  for (const job of ['quick', 'documentation', 'cli']) {
+    for (const state of ['failure', 'cancelled', 'skipped', 'pending', undefined]) {
+      const needs = results(plan);
+      needs[job] = state ? { result: state } : undefined;
+      assert.notDeepEqual(acceptance(needs), [], `${job}: ${state}`);
+    }
+  }
+  for (const key of Object.keys(plan)) {
+    const needs = results(plan);
+    delete needs.plan.outputs[key];
+    assert.notDeepEqual(acceptance(needs), [], `missing ${key}`);
+    needs.plan.outputs[key] = 'unknown';
+    assert.notDeepEqual(acceptance(needs), [], `malformed ${key}`);
+    if (key === 'draft') continue;
+    const inconsistent = results({ ...plan, [key]: !plan[key] });
+    assert.notDeepEqual(acceptance(inconsistent), [], `inconsistent ${key}`);
+  }
+  for (const job of ['compiler_units', 'native', 'targets', 'memory', 'tooling']) {
+    const needs = results(plan);
+    needs[job].result = 'success';
+    assert.notDeepEqual(acceptance(needs), [], `unexpected ${job}`);
+  }
+});
+
+test('registry quick retains the reference oracle and views while skipping unrelated steps', () => {
+  const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
+  assert(entry.includes('registry_only: ${{ steps.plan.outputs.registry_only }}'));
+  const quick = entry.match(/^  quick:\n([\s\S]*?)(?=^  compiler_units:)/m)?.[1];
+  const steps = quick.split('      - ').slice(1);
+  for (const name of ['Check generated recovery import boundaries',
+    'Check formatting and core types',
+    'Check the Native compiler closure against snapshot v4', 'Verify project and cost tooling on Linux',
+    'Verify project scenarios against the exact reference compiler', 'Run root units and focused MIR correctness tests']) {
+    const step = steps.find(step => step.startsWith(`name: ${name}\n`));
+    assert(step?.includes("needs.plan.outputs.registry_only != 'true'"), name);
+  }
+  for (const step of steps.filter(step => step.includes('repository: type-rb/type-rb') ||
+    step.includes('actions/setup-go') || step.startsWith('name: Build the pinned') ||
+    step.startsWith('name: Check canonical compatibility') || step.startsWith('name: Verify language fixtures') ||
+    step.startsWith('name: Retain reference language') ||
+    step.startsWith('name: Check that the coverage views'))) {
+    assert(!step.includes('registry_only'), 'Registry edits retain reference setup, all observations and views');
+    assert(step.includes("needs.plan.outputs.cli == 'true'"));
+  }
+});
+
+test('real Git change statuses enable registry edits but exclude additions, deletions, renames and type changes', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'native-ci-registry-test-'));
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=CI Test',
+    '-c', 'user.email=ci-test@example.invalid', '-c', 'commit.gpgsign=false',
+    '-c', 'core.hooksPath=/dev/null', ...args], { cwd: directory, encoding: 'utf8', stdio: 'pipe' }).trim();
+  const planner = fileURLToPath(new URL('ci-plan.mjs', import.meta.url));
+  const write = (path, contents) => {
+    mkdirSync(join(directory, path, '..'), { recursive: true });
+    writeFileSync(join(directory, path), contents);
+  };
+  try {
+    git('init');
+    for (const path of [registry, ...registryViews]) write(path, 'Original\n');
+    git('add', '.');
+    git('commit', '-m', 'Synthetic existing registry and views');
+    const base = git('rev-parse', 'HEAD');
+    const check = async (expected, statuses) => {
+      git('add', '-A');
+      git('commit', '-m', 'Synthetic registry delta');
+      const head = git('rev-parse', 'HEAD');
+      const changes = await changedFiles(base, head, directory);
+      assert.deepEqual(changes.map(change => change.status).sort(), statuses.sort());
+      const run = mode => Object.fromEntries(execFileSync(process.execPath,
+        [planner, base, head, 'false', ...(mode ? [mode] : [])], {
+          cwd: directory, encoding: 'utf8', env: plannerEnv({ NATIVE_CI_GATE: 'tiered' }),
+        }).trim().split('\n').map(row => row.split('=')));
+      assert.equal(run().registry_only, String(expected));
+      assert.equal(run().compiler_units, String(!expected));
+      assert.equal(run('push').registry_only, 'false', 'Main never uses the PR exception');
+      git('reset', '--hard', base);
+    };
+    write(registry, 'Modified\n');
+    await check(true, ['M']);
+    for (const path of [registry, ...registryViews]) write(path, 'Modified\n');
+    await check(true, ['M', 'M', 'M']);
+    rmSync(join(directory, registry));
+    await check(false, ['D']);
+    write(registry, 'Modified\n');
+    rmSync(join(directory, registryViews[0]));
+    await check(false, ['D', 'M']);
+    renameSync(join(directory, registry), join(directory, 'tools/renamed.json'));
+    await check(false, ['A', 'D']);
+    write(registry, 'Modified\n');
+    renameSync(join(directory, registryViews[0]), join(directory, registryViews[1]));
+    await check(false, ['D', 'M']);
+    rmSync(join(directory, registry));
+    symlinkSync('../docs/native-language-feature-inventory.md', join(directory, registry));
+    await check(false, ['T']);
+    write(registry, 'Modified\n');
+    write('unknown\npath', 'Added\n');
+    await check(false, ['A', 'M']);
+    // Reversing a deletion is an addition, even when the path is allowlisted.
+    git('rm', registry);
+    git('commit', '-m', 'Synthetic absent registry');
+    const absent = git('rev-parse', 'HEAD');
+    write(registry, 'Restored\n');
+    git('add', '.');
+    git('commit', '-m', 'Synthetic added registry');
+    const changes = await changedFiles(absent, git('rev-parse', 'HEAD'), directory);
+    assert.deepEqual(changes, [{ status: 'A', path: registry }]);
+    assert.equal(classify([registry], false, 'tiered', changes).registry_only, false);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
