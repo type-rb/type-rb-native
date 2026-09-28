@@ -80,6 +80,9 @@ parity. [Issue #455](https://github.com/type-rb/type-rb-native/issues/455) track
 message detail, real source columns and terminal presentation separately.
 Runtime-failure fixtures may check the exact first
 stderr line, status and stdout, omitting unstable reference panic stack frames.
+Execution parity and its display use that same first-line contract when the
+other implementation records full stderr. Two full-stderr expectations still
+compare exactly; each implementation's regression checks keep its own contract.
 Invalid UTF-8 output retains normalized raw bytes alongside an escaped display;
 it cannot silently compare equal to valid text. Process timeouts always fail.
 
