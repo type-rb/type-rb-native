@@ -1415,7 +1415,7 @@ def _recovery_require_compiler_imports(executable: String, entry: String): Resul
 	if hidden.status != 0 || !hidden.stderr.empty?()
 		return Result<Boolean, String>::Err("hidden compiler-source probe process differs")
 	end
-	if hidden.stdout != "TRBN4003:1:module does not export package_checksum\n"
+	if hidden.stdout != "TRBN4003:1:module does not export validate_compilation_units\n"
 		return Result<Boolean, String>::Err("hidden compiler-source import diagnostic differs: " + hidden.stdout)
 	end
 	return Result<Boolean, String>::Ok(true)
@@ -1928,39 +1928,27 @@ def _recovery_verify_file_root_modules(
 
 	cycle := workspace + "/file-driver-file-root-cycle"
 	try _recovery_reset_directory(cycle)
-	case native_write_text(
-			cycle + "/main.trb",
-			"import { answer } from a\n\ndef main()\n\tputs(answer())\n\treturn\nend\n",
-		)
-	when Result::Ok(_unit)
-	when Result::Err(error)
-		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	try _recovery_write_source(cycle + "/main.trb", "import { answer } from a\ndef main()\nputs(answer())\nend\n")
+	try _recovery_write_source(cycle + "/a.trb", "import { helper } from b\nVALUE := helper()\ndef answer(): String\nreturn VALUE\nend\n")
+	try _recovery_write_source(cycle + "/b.trb", "import { answer } from a\nBASE := \"cycle\"\ndef helper(): String\nreturn BASE\nend\ndef observe(): String\nreturn answer()\nend\n")
+	executables.each.with_index do |executable, generation|
+		try _recovery_verify_built_program(executable, cycle + "/main.trb", cycle + "/program-" + generation.to_s(), qbe, "cycle\n", "cyclic initialization")
 	end
-	case native_write_text(cycle + "/a.trb", "import { helper } from b\n\ndef answer(): String\n\treturn helper()\nend\n")
-	when Result::Ok(_unit)
-	when Result::Err(error)
-		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	# The same generations must reject unsafe value cycles before invoking tools.
+	try _recovery_write_source(cycle + "/main.trb", "import { A } from a\ndef main()\nputs(A)\nend\n")
+	try _recovery_write_source(cycle + "/a.trb", "import { B } from b\nA: String := B\n")
+	try _recovery_write_source(cycle + "/b.trb", "import { A } from a\nB: String := A\n")
+	executables.each do |executable|
+		cycle_build := try _recovery_build(executable, cycle + "/main.trb", cycle + "/invalid-program", workspace + "/missing-qbe", workspace + "/missing-cc")
+		if cycle_build.status != 1 || !cycle_build.stdout.empty?()
+			return Result<Boolean, String>::Err("value initialization cycle did not fail before tools")
+		end
+		if !cycle_build.stderr.include?("TRBN4004:2:value initialization cycle")
+			return Result<Boolean, String>::Err("value initialization cycle diagnostic differs: " + cycle_build.stderr)
+		end
+		try _recovery_require_missing(cycle + "/invalid-program")
+		try _recovery_require_no_intermediates(cycle)
 	end
-	case native_write_text(cycle + "/b.trb", "import { answer } from a\n\ndef helper(): String\n\treturn \"cycle\"\nend\n\ndef observe(): String\n\treturn answer()\nend\n")
-	when Result::Ok(_unit)
-	when Result::Err(error)
-		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
-	end
-	cycle_build := try _recovery_build(
-		executables[0],
-		cycle + "/main.trb",
-		cycle + "/program",
-		workspace + "/missing-qbe",
-		workspace + "/missing-cc",
-	)
-	if cycle_build.status != 1 || !cycle_build.stdout.empty?()
-		return Result<Boolean, String>::Err("file-root cycle did not fail before tools")
-	end
-	if !cycle_build.stderr.include?("TRBN4003:1:import cycle through a")
-		return Result<Boolean, String>::Err("file-root cycle diagnostic differs: " + cycle_build.stderr)
-	end
-	try _recovery_require_missing(cycle + "/program")
-	try _recovery_require_no_intermediates(cycle)
 
 	failure_names := [
 		"missing-module",

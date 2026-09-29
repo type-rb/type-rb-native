@@ -505,12 +505,24 @@
         "binding-collection-shadow",
         "binding-collection-duplicate",
         "binding-sibling-shadow",
-        "module-directory-initialization"
+        "module-directory-initialization",
+        "module-cycle-recursion",
+        "module-cycle-values",
+        "module-cycle-defaults",
+        "module-cycle-class",
+        "module-cycle-indirect",
+        "module-cycle-record",
+        "module-cycle-value-cycle",
+        "module-cycle-inference-cycle",
+        "module-cycle-class-types",
+        "module-cycle-unused",
+        "module-cycle-namespace",
+        "module-cycle-self-import"
       ],
       "pending": [
         "Contextual empty collection inference beyond constant literals; qualified namespace binding members (TypeRB #787)"
       ],
-      "note": "File/project and interactive lowercase variables preserve source identity, shared mutable storage, lexical shadowing, nullable proof invalidation and managed roots. Block declarations may shadow enclosing locals in conditional and collection bodies while duplicate declarations, parameter redeclarations and while-body shadowing are rejected. Retained named functions and anonymous captures share cells; typed witnesses never rerun initializers. Authored order survives load/replay. Mutable record projections accept indexed Array writes and growth; immutable projections reject writes. Empty Array and Hash constants have reference-matching untyped boundaries; broader contextual inference, lowercase namespace-body declarations and forward initialization remain pending."
+      "note": "File/project and interactive lowercase variables preserve source identity, shared mutable storage, lexical shadowing, nullable proof invalidation and managed roots. Block declarations may shadow enclosing locals in conditional and collection bodies while duplicate declarations, parameter redeclarations and while-body shadowing are rejected. Retained named functions and anonymous captures share cells; typed witnesses never rerun initializers. Authored order survives load/replay. Unit-local import cycles use a verified value dependency order, with source diagnostics for initialization cycles and opaque calls; acyclic order is preserved. Mutable record projections accept indexed Array writes and growth; immutable projections reject writes. Empty Array and Hash constants have reference-matching untyped boundaries; broader contextual inference and qualified lowercase namespace-member access remain pending."
     },
     {
       "id": "functions",
@@ -2298,9 +2310,9 @@
         "namespace-binding-import-identity"
       ],
       "pending": [
-        "Forward initialization dependencies and cycles; remaining module method boundaries"
+        "Remaining module method and qualified mutable namespace-member boundaries"
       ],
-      "note": "Nested/reopened namespaces, lexical privacy, ordered runtime constants, imported inferred types and qualified generic aliases are implemented. Reference issues #755 and #756 remain explicit boundaries; classes belong to the object-declaration family."
+      "note": "Nested/reopened namespaces, lexical privacy, ordered runtime constants, imported inferred types and qualified generic aliases are implemented. Cyclic source modules use the checked initialization plan while same-file value order remains enforced. Reference issues #755 and #756 remain explicit boundaries; classes belong to the object-declaration family."
     },
     {
       "id": "symbols",
@@ -81560,6 +81572,621 @@
         "repl": {
           "code": 0,
           "stdout": "shared\nz\ny\nx\n4\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "module-cycle-recursion",
+      "title": "Mutually recursive functions across modules",
+      "declarations": "import { even } from a\n",
+      "body": "puts(even(10))",
+      "files": {
+        "b.trb": "import { even } from a\ndef odd(value: Integer): Boolean\nif value == 0\nreturn false\nend\nreturn even(value - 1)\nend\n",
+        "a.trb": "import { odd } from b\ndef even(value: Integer): Boolean\nif value == 0\nreturn true\nend\nreturn odd(value - 1)\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "module-cycle-values",
+      "title": "Cyclic value initialization follows transitive reads and declaration order",
+      "declarations": "import { FIRST, LAST } from a\nimport { later } from b\n",
+      "body": "puts(FIRST + LAST + later())",
+      "files": {
+        "b.trb": "import { mark, value } from a\nBASE := mark(\"b-base\")\ndef later(): Integer\nreturn value()\nend\n",
+        "a.trb": "import { BASE } from b\ndef value(): Integer\nreturn BASE + 1\nend\ndef mark(label: String): Integer\nputs(label)\nreturn 1\nend\nFIRST := value() + mark(\"a-first\")\nLAST := mark(\"a-last\")\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "b-base\na-first\na-last\n6\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "b-base\na-first\na-last\n6\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "b-base\na-first\na-last\n6\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "b-base\na-first\na-last\n6\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "module-cycle-defaults",
+      "title": "Cyclic initializers evaluate only omitted argument defaults",
+      "declarations": "import { A } from a\nimport { B, LATER } from b\n",
+      "body": "puts(A)\nputs(B)\nputs(LATER)",
+      "files": {
+        "b.trb": "import { A, choose } from a\nB := A + 1\nLATER := choose()\n",
+        "a.trb": "import { B } from b\ndef choose(value: Integer = B): Integer\nreturn value\nend\nA := choose(7)\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n8\n8\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "7\n8\n8\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n8\n8\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "7\n8\n8\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "module-cycle-class",
+      "title": "Cyclic class constants follow prepared superclass declarations",
+      "declarations": "import { Child } from a\n",
+      "body": "puts(Child::VALUE)",
+      "files": {
+        "b.trb": "import { make } from a\nclass Base\nVALUE := 40\ndef number(): Integer\nreturn VALUE\nend\nend\ndef value(): Integer\nreturn make().number()\nend\n",
+        "a.trb": "import { Base } from b\nclass Child < Base\nVALUE := Base::VALUE + 1\nend\ndef make(): Child\nreturn Child.new()\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "41\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "41\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "41\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "41\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "module-cycle-indirect",
+      "title": "Cyclic initializers reject transitive unresolved callable dispatch",
+      "declarations": "import { A } from a\n",
+      "body": "puts(A)",
+      "files": {
+        "b.trb": "import { A } from a\nB := 1\ndef later(): Integer\nreturn A\nend\n",
+        "a.trb": "import { B } from b\ndef invoke(callback: () -> Integer): Integer\nreturn callback()\nend\nA := invoke(fn(): Integer\nreturn B\nend)\n"
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:5:1: error[TRB3000]: initializer in an import cycle reaches an indirect, native, or unverified operation; move the operation into main or use a checked source helper\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:5:1: error[TRB3000]: initializer in an import cycle reaches an indirect, native, or unverified operation; move the operation into main or use a checked source helper\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:5:1: error[TRB3000]: initializer in an import cycle reaches an indirect, native, or unverified operation; move the operation into main or use a checked source helper\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:5: error[TRBN4004]: initializer in an import cycle reaches an indirect, native, or unverified operation\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:5: error[TRBN4004]: initializer in an import cycle reaches an indirect, native, or unverified operation\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/./a.trb:5: error[TRBN4004]: initializer in an import cycle reaches an indirect, native, or unverified operation\n"
+        }
+      }
+    },
+    {
+      "id": "module-cycle-record",
+      "title": "Cyclic inline record layouts are rejected",
+      "declarations": "import { A } from a\ndef use(value: A)\nreturn\nend\n",
+      "body": "return",
+      "files": {
+        "b.trb": "import { A } from a\nrecord B\nnext: A\nend\n",
+        "a.trb": "import { B } from b\nrecord A\nnext: B\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2:1: error[TRB3000]: infinite value layout involving record A; use a nullable value or collection to introduce indirection\n<case>/b.trb:2:1: error[TRB3000]: infinite value layout involving record B; use a nullable value or collection to introduce indirection\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2:1: error[TRB3000]: infinite value layout involving record A; use a nullable value or collection to introduce indirection\n<case>/b.trb:2:1: error[TRB3000]: infinite value layout involving record B; use a nullable value or collection to introduce indirection\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2:1: error[TRB3000]: infinite value layout involving record A; use a nullable value or collection to introduce indirection\n<case>/b.trb:2:1: error[TRB3000]: infinite value layout involving record B; use a nullable value or collection to introduce indirection\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2: error[TRBN4004]: infinite value layout involving record A; use a nullable value or collection to introduce indirection\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2: error[TRBN4004]: infinite value layout involving record A; use a nullable value or collection to introduce indirection\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/./a.trb:2: error[TRBN4004]: infinite value layout involving record A; use a nullable value or collection to introduce indirection\n"
+        }
+      }
+    },
+    {
+      "id": "module-cycle-value-cycle",
+      "title": "Cyclic value dependencies have source diagnostics",
+      "declarations": "import { A } from a\n",
+      "body": "puts(A)",
+      "files": {
+        "b.trb": "import { A } from a\nB: Integer := A\n",
+        "a.trb": "import { B } from b\nA: Integer := B\n"
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2:1: error[TRB3000]: value initialization cycle within source modules a -> b\n  <case>/b.trb:2:1: note: participating declaration\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2:1: error[TRB3000]: value initialization cycle within source modules a -> b\n  <case>/b.trb:2:1: note: participating declaration\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2:1: error[TRB3000]: value initialization cycle within source modules a -> b\n  <case>/b.trb:2:1: note: participating declaration\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2: error[TRBN4004]: value initialization cycle involving A\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2: error[TRBN4004]: value initialization cycle involving A\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/./a.trb:2: error[TRBN4004]: value initialization cycle involving A\n"
+        }
+      }
+    },
+    {
+      "id": "module-cycle-inference-cycle",
+      "title": "Cyclic constant inference has a distinct diagnostic",
+      "declarations": "import { A } from a\n",
+      "body": "puts(A)",
+      "files": {
+        "b.trb": "import { A } from a\nB := A\n",
+        "a.trb": "import { B } from b\nA := B\n"
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2:1: error[TRB3000]: type inference cycle for constant A; add an explicit type annotation\n<case>/b.trb:2:1: error[TRB3000]: type inference cycle for constant B; add an explicit type annotation\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2:1: error[TRB3000]: type inference cycle for constant A; add an explicit type annotation\n<case>/b.trb:2:1: error[TRB3000]: type inference cycle for constant B; add an explicit type annotation\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2:1: error[TRB3000]: type inference cycle for constant A; add an explicit type annotation\n<case>/b.trb:2:1: error[TRB3000]: type inference cycle for constant B; add an explicit type annotation\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2: error[TRBN4004]: type inference cycle for constant A; add an explicit type annotation\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/a.trb:2: error[TRBN4004]: type inference cycle for constant A; add an explicit type annotation\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/./a.trb:2: error[TRBN4004]: type inference cycle for constant A; add an explicit type annotation\n"
+        }
+      }
+    },
+    {
+      "id": "module-cycle-class-types",
+      "title": "Mutually recursive class field types",
+      "declarations": "import { A } from a\n",
+      "body": "puts(A.new().other == nil)",
+      "files": {
+        "a.trb": "import { B } from b\nclass A\n@other: B? := nil\nend\n",
+        "b.trb": "import { A } from a\nclass B\n@other: A? := nil\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "module-cycle-unused",
+      "title": "Unreferenced cyclic program sources are checked without initialization",
+      "declarations": "",
+      "body": "puts(\"main\")",
+      "files": {
+        "a.trb": "import { B } from b\ndef mark(): Integer\nputs(\"unused\")\nreturn B\nend\nA := mark()\n",
+        "b.trb": "import { A } from a\nB := 1\ndef later(): Integer\nreturn A\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "main\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "unused\nmain\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "main\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "unused\nmain\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "module-cycle-namespace",
+      "title": "Module constants participate in cyclic initialization",
+      "declarations": "import { Settings } from a\n",
+      "body": "puts(Settings::VALUE)\nputs(Settings.read())",
+      "files": {
+        "a.trb": "import { BASE } from b\nmodule Settings\nVALUE := BASE + 1\ndef self.read(): Integer\nreturn VALUE\nend\nend\n",
+        "b.trb": "import { Settings } from a\nBASE := 7\ndef later(): Integer\nreturn Settings.read()\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "8\n8\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "8\n8\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "8\n8\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "8\n8\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "module-cycle-self-import",
+      "title": "Self import shares one declaration and initializer",
+      "declarations": "import { VALUE } from value\n",
+      "body": "puts(VALUE)",
+      "files": {
+        "value.trb": "import { read } from value\ndef read(): Integer\nreturn 7\nend\nVALUE := read()\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "7\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "7\n",
           "stderr": ""
         }
       }

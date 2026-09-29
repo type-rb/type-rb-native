@@ -54,8 +54,10 @@ Split the large checker, MIR and emitter modules by those responsibilities, with
 explicit dependencies rather than copied helpers or forwarding aliases.
 The value-join builder and nullable type, flow-fact, MIR, QBE and REPL helpers
 have been extracted. Expression/body checking remains
-mutually recursive; separating it into modules requires removing that dependency
-cycle because ordinary Native module imports must be acyclic.
+mutually recursive. Ordinary imports now permit cycles within a compilation unit,
+with checked initialization dependencies. Adopting those cycles in compiler source
+also requires an accepted bootstrap seed and recovery coverage for that source
+shape; the current source keeps the verified seed's import contract.
 
 The checked-body ownership change moves type applications, nullable, enum, Result,
 Hash, Range and control projections together. Its exit criteria are independent

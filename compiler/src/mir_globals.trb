@@ -1,3 +1,5 @@
+import { module_is_cyclic } from module_components
+import { mir_initializer_dependencies } from mir_initialization
 import { integer_string } from literals
 import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_instruction, scalar_mir_value } from checked_values
 import { MirGlobal, MirInstruction, MirModule, mir_function_index, mir_origin_valid } from mir
@@ -28,7 +30,7 @@ def mir_declare_globals(mut state: CompilerState)
 	while index < state.global_bindings.globals.size()
 		row := state.global_bindings.globals[index]
 		type_id := mir_semantic_type_id(state.scalar_mir, state.global_bindings.global_types[index])
-		state.scalar_mir.globals.push(MirGlobal.new(mutable: row.mutable, runtime: runtime.key?(integer_string(index)), id: index, name: row.name, source_id: row.source_id, line: row.line, type_id: type_id, initializer: state.global_bindings.global_functions[index], managed: mir_managed_type(state.scalar_mir, type_id)))
+		state.scalar_mir.globals.push(MirGlobal.new(cyclic: module_is_cyclic(state, row.source_id), mutable: row.mutable, runtime: runtime.key?(integer_string(index)), id: index, name: row.name, source_id: row.source_id, line: row.line, type_id: type_id, initializer: state.global_bindings.global_functions[index], managed: mir_managed_type(state.scalar_mir, type_id)))
 		index += 1
 	end
 	state.global_bindings.global_order.each do |identity|
@@ -136,6 +138,22 @@ def mir_global_initialization_error(native_module: MirModule): String
 	mut initialized: Hash<String, Integer> := {}
 	native_module.global_initialization.each do |identity|
 		row := native_module.globals[mir_global_index(native_module, identity)]
+		if row.cyclic
+			plan := mir_initializer_dependencies(native_module, row.initializer)
+			if plan.opaque
+				return "MIR cyclic initializer reaches an unverified operation"
+			end
+			plan.values.each do |dependency|
+				if !initialized.key?(integer_string(dependency))
+					return "MIR cyclic initializer can read an uninitialized constant"
+				end
+			end
+			native_module.globals.each do |earlier|
+				if earlier.source_id == row.source_id && earlier.id < row.id && !initialized.key?(integer_string(earlier.id))
+					return "MIR cyclic initialization changes source declaration order"
+				end
+			end
+		end
 		mut pending := [row.initializer]
 		mut visited: Hash<String, Integer> := {}
 		mut cursor := 0

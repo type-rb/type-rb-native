@@ -1,3 +1,4 @@
+import { build_module_components, module_is_cyclic } from module_components
 import { find_declaration_in_module } from declaration_lookup
 import { namespace_parent } from namespace_model
 import { integer_string } from literals
@@ -22,13 +23,14 @@ def order_global_module(mut state: CompilerState, source: Integer, mut visited: 
 	mut index := 0
 	while index < state.global_bindings.globals.size()
 		if state.global_bindings.globals[index].source_id == source
-			state.global_bindings.global_order.push(index)
+			state.global_bindings.runtime_order.push(index)
 		end
 		index += 1
 	end
 end
 
 def declare_global_functions(mut state: CompilerState): Boolean
+	build_module_components(state)
 	if state.global_bindings.globals.size() == 0
 		return true
 	end
@@ -39,15 +41,18 @@ def declare_global_functions(mut state: CompilerState): Boolean
 		source += 1
 	end
 	order_global_module(state, state.module_graph.entry_module[0], visited)
-	state.global_bindings.global_order.each do |identity|
-		state.global_bindings.runtime_order.push(identity)
-	end
-	# Configured projects check every production source, including independent
-	# roots. Only the entry's import closure contributes runtime initializers.
-	source = 0
-	while source < state.module_graph.module_count[0]
-		order_global_module(state, source, visited)
-		source += 1
+	# All sources are checked; only the entry closure executes. SCC membership
+	# changes the ordering only inside a cyclic source component.
+	state.global_bindings.component_modules.each do |members|
+		members.each do |member|
+			mut global := 0
+			while global < state.global_bindings.globals.size()
+				if state.global_bindings.globals[global].source_id == member
+					state.global_bindings.global_order.push(global)
+				end
+				global += 1
+			end
+		end
 	end
 	mut index := 0
 	while index < state.global_bindings.globals.size()
@@ -81,7 +86,11 @@ def declare_global_functions(mut state: CompilerState): Boolean
 		store_integer(state.declarations.function_body_ends, function, row.finish)
 		store_integer(state.declarations.function_lines, function, row.line)
 		store_integer(state.parsed.function_expression_bodies, function, 2)
-		state.global_bindings.global_types.push("")
+		if module_is_cyclic(state, row.source_id)
+			state.global_bindings.global_types.push(type_name)
+		else
+			state.global_bindings.global_types.push("")
+		end
 		state.global_bindings.global_functions.push(function)
 		state.declarations.function_count[0] += 1
 		index += 1

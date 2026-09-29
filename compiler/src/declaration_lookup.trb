@@ -1,3 +1,4 @@
+import { generic_base } from generic_arguments
 import { find_object_in_module } from object_types
 import { find_newtype_in_module } from newtype_types
 import { namespace_parent, namespace_qualify } from namespace_model
@@ -176,6 +177,12 @@ def find_visible_declaration(mut state: CompilerState, source: Integer, name: St
 	end
 	local := find_declaration_in_module(state, source, name, kind)
 	if local >= 0
+		# A self import names the same declaration rather than a conflicting
+		# local binding. Record actual lookup usage just as for other imports.
+		binding := find_import_binding(state, source, name)
+		if binding >= 0 && load_integer(state.module_graph.import_targets, binding) == source && load_string(state.module_graph.import_declarations, binding) == name
+			store_integer(state.module_graph.import_used, binding, 1)
+		end
 		return local
 	end
 	mut root := ""
@@ -233,8 +240,41 @@ def global_binding_precedes(state: CompilerState, identity: Integer, origin: Int
 	return row.finish <= origin
 end
 
+def find_inherited_global(mut state: CompilerState, source: Integer, name: String): Integer
+	mut owner := namespace_parent(name)
+	mut leaf := name
+	if owner != ""
+		leaf = ""
+		mut index := owner.size() + 2
+		while index < name.size()
+			leaf += name[index]
+			index += 1
+		end
+	else
+		owner = state.global_bindings.declaration_owner[0]
+	end
+	mut definition := find_visible_declaration(state, source, owner, 9)
+	mut visited := 0
+	while definition >= 0 && visited < state.nominal.objects.size()
+		row := state.nominal.objects[definition]
+		constant := find_declaration_in_module(state, row.source_id, namespace_qualify(row.name, leaf), 7)
+		if constant >= 0
+			return constant
+		end
+		if row.superclass == ""
+			return -1
+		end
+		definition = find_visible_declaration(state, row.source_id, generic_base(row.superclass), 9)
+		visited += 1
+	end
+	return -1
+end
+
 def find_visible_global(mut state: CompilerState, source: Integer, name: String, origin: Integer): Integer
-	identity := find_visible_declaration(state, source, name, 7)
+	mut identity := find_visible_declaration(state, source, name, 7)
+	if identity < 0
+		identity = find_inherited_global(state, source, name)
+	end
 	if identity < 0
 		return -1
 	end
