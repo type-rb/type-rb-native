@@ -84,14 +84,14 @@ class SeedReleaseTests(unittest.TestCase):
         self.assertIn('AMD64_HASH_SETUP_REVISION: 8a6d9ff73b14a97bca1b010ddaad6a38972b5373', workflow)
         self.assertIn('"$GITHUB_WORKSPACE/.native-target-hash-source"', workflow)
 
-    def test_name_bridge_preserves_historical_argument_shapes(self):
+    def test_cycle_bridge_preserves_historical_argument_shapes(self):
         script = Path(__file__).with_name("linux-amd64-targets.sh").resolve()
         missing = str(Path(self.temporary.name) / "missing-source")
-        for count in range(8, 18):
+        for count in range(8, 19):
             with self.subTest(arguments=count):
                 result = subprocess.run(["/bin/sh", str(script), *([missing] * count)],
                                         capture_output=True, text=True, timeout=10)
-                if 9 <= count <= 16:
+                if 9 <= count <= 17:
                     self.assertEqual(result.returncode, 1, result.stderr)
                     self.assertTrue(result.stderr.startswith("linux-amd64-targets:"), result.stderr)
                     self.assertNotIn("usage:", result.stderr)
@@ -125,10 +125,25 @@ class SeedReleaseTests(unittest.TestCase):
         self.assertIn('9d3fc404ea55f459ef4bf5417112f0bb47054077ea94f3f6a5d57fbc23958ad0 || fail "compiler-name entry digest differs"', observer)
         self.assertIn('"$runtime_seed" emit-qbe "$names_entry"', observer)
         self.assertIn('runtime_seed=$names_transition', observer)
-        self.assertIn('"$names_transition" check "$compiler_entry"', observer)
+        self.assertIn('"$names_transition" check "$names_check_entry"', observer)
         self.assertIn('require_forbidden_processes_absent "$evidence/setup/names-check-process.trace"', observer)
         self.assertIn('AMD64_NAMES_SETUP_REVISION: 6ca79d22cde2ddba5fe836c66899b6e08a6511dc', workflow)
         self.assertIn('"$GITHUB_WORKSPACE/.native-target-names-source"', workflow)
+
+    def test_cycle_bridge_retains_accepted_source_and_prior_handoff(self):
+        root = Path(__file__).resolve().parent.parent
+        observer = (root / "tools/linux-amd64-targets.sh").read_text()
+        workflow = (root / ".github/workflows/linux-amd64-targets.yml").read_text()
+        self.assertIn('require_clean_revision "$cycles_source_root"', observer)
+        self.assertIn('a0f9147d29d73ad8a0237c7c51a0a5993bbe3a36 || fail "module-cycle source revision differs"', observer)
+        self.assertIn('19cd0afbd30f2113c3cfc5bf096ea9108ac9de8a2a835e63d68f8b49f535c116 || fail "module-cycle entry digest differs"', observer)
+        self.assertIn('names_check_entry=$cycles_entry', observer)
+        self.assertIn('"$runtime_seed" emit-qbe "$cycles_entry"', observer)
+        self.assertIn('runtime_seed=$cycles_transition', observer)
+        self.assertIn('"$cycles_transition" check "$compiler_entry"', observer)
+        self.assertIn('require_forbidden_processes_absent "$trace" "module-cycle capability proof"', observer)
+        self.assertIn('AMD64_CYCLES_SETUP_REVISION: a0f9147d29d73ad8a0237c7c51a0a5993bbe3a36', workflow)
+        self.assertIn('"$GITHUB_WORKSPACE/.native-target-cycles-source"', workflow)
 
     def test_target_fixture_identity_matches_current_sources(self):
         root = Path(__file__).resolve().parent.parent
@@ -252,7 +267,7 @@ class SeedReleaseTests(unittest.TestCase):
                     seed.validate_manifest(changed, self.revision, tag)
             manifest["targets"][0]["size"] = 349296
             manifest["targets"][1]["size"] = 325864
-            if tag == seed.TAG or tag in ("bootstrap-seed-2026-09-08-boolean-arrays", "bootstrap-seed-2026-09-09-record-arrays", "bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
+            if tag in (seed.TAG, "bootstrap-seed-2026-09-12-compiler-names") or tag in ("bootstrap-seed-2026-09-08-boolean-arrays", "bootstrap-seed-2026-09-09-record-arrays", "bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
                 seed.validate_manifest(manifest, self.revision, tag)
             else:
                 with self.assertRaises(ValueError):
@@ -265,7 +280,7 @@ class SeedReleaseTests(unittest.TestCase):
             manifest["predecessor"] = seed.PREDECESSORS[tag]
             manifest["targets"][0]["size"] = 365808
             manifest["targets"][1]["size"] = 327736
-            if tag == seed.TAG or tag in ("bootstrap-seed-2026-09-09-record-arrays", "bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
+            if tag in (seed.TAG, "bootstrap-seed-2026-09-12-compiler-names") or tag in ("bootstrap-seed-2026-09-09-record-arrays", "bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
                 seed.validate_manifest(manifest, self.revision, tag)
             else:
                 with self.assertRaises(ValueError):
@@ -278,7 +293,7 @@ class SeedReleaseTests(unittest.TestCase):
             manifest["predecessor"] = seed.PREDECESSORS[tag]
             manifest["targets"][0]["size"] = 398888
             manifest["targets"][1]["size"] = 368936
-            if tag == seed.TAG or tag in ("bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
+            if tag in (seed.TAG, "bootstrap-seed-2026-09-12-compiler-names") or tag in ("bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
                 seed.validate_manifest(manifest, self.revision, tag)
             else:
                 with self.assertRaises(ValueError):
@@ -291,21 +306,23 @@ class SeedReleaseTests(unittest.TestCase):
             manifest["predecessor"] = seed.PREDECESSORS[tag]
             manifest["targets"][0]["size"] = 415432
             manifest["targets"][1]["size"] = 387192
-            if tag in (seed.TAG, "bootstrap-seed-2026-09-11-array-iteration"):
+            if tag in (seed.TAG, "bootstrap-seed-2026-09-12-compiler-names", "bootstrap-seed-2026-09-11-array-iteration"):
                 seed.validate_manifest(manifest, self.revision, tag)
             else:
                 with self.assertRaises(ValueError):
                     seed.validate_manifest(manifest, self.revision, tag)
 
-    def test_name_refresh_authenticates_iteration_and_checks_basic_features(self):
+    def test_cycle_refresh_authenticates_predecessor_and_checks_basic_features(self):
         root = Path(__file__).resolve().parent.parent
         workflow = (root / ".github/workflows/bootstrap-seed-refresh.yml").read_text()
-        self.assertEqual(seed.TAG, "bootstrap-seed-2026-09-12-compiler-names")
-        self.assertIn("tag=bootstrap-seed-2026-09-11-array-iteration", workflow)
-        self.assertIn("revision=b4a1b383e5678907649334203f534ae62fa42af6", workflow)
-        self.assertIn("'bootstrap-seed-2026-09-12-compiler-names' || github.sha", workflow)
-        self.assertIn("tag=bootstrap-seed-2026-09-11-array-iteration", workflow)
+        self.assertEqual(seed.TAG, "bootstrap-seed-2026-09-29-module-cycles")
+        self.assertIn("tag=bootstrap-seed-2026-09-12-compiler-names", workflow)
+        self.assertIn("revision=d7ffb9384229125216696a220c7f370422472178", workflow)
+        self.assertIn("'bootstrap-seed-2026-09-29-module-cycles' || github.sha", workflow)
+        self.assertIn("tag=bootstrap-seed-2026-09-12-compiler-names", workflow)
+        self.assertIn("REGISTERED_COMPILER_SOURCE_TREE: d811b0d7868f5e3701586fd563ef5b496eaba058", workflow)
         observer = (root / "tools/bootstrap-seed-refresh.sh").read_text()
+        self.assertIn("tools/bootstrap-module-cycles.py", observer)
         for fixture in ("array-iteration-live", "array-iteration-control", "array-iteration-managed", "range-values", "range-streaming", "range-extrema", "range-managed"):
             self.assertIn(fixture, observer)
             self.assertTrue((root / "compiler/conformance/valid" / (fixture + ".trb")).is_file())
@@ -320,15 +337,17 @@ class SeedReleaseTests(unittest.TestCase):
             changed["targets"][0]["size"] = value
             with self.subTest(value=value), self.assertRaises(ValueError):
                 seed.validate_manifest(changed, self.revision)
-        # The current tag cannot make predecessor overruns acceptable.
+        # Both migration-era tags retain observations; strict predecessors keep caps.
         for tag in seed.PREDECESSORS:
-            if tag == seed.TAG:
-                continue
             changed = copy.deepcopy(manifest)
             changed["releaseTag"] = tag
             changed["predecessor"] = seed.PREDECESSORS[tag]
-            with self.subTest(tag=tag), self.assertRaises(ValueError):
+            if tag in ("bootstrap-seed-2026-09-12-compiler-names", "bootstrap-seed-2026-09-29-module-cycles"):
+                self.assertEqual(seed.LIMITS[tag], (None, None, None))
                 seed.validate_manifest(changed, self.revision, tag)
+            else:
+                with self.subTest(tag=tag), self.assertRaises(ValueError):
+                    seed.validate_manifest(changed, self.revision, tag)
 
     def test_download_verification_preserves_the_previous_tag(self):
         for tag in seed.PREDECESSORS:

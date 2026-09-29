@@ -37,7 +37,12 @@ jobs:
       - name: Build from the pinned native seed and verify fixed points
         run: ./trbn --version
       - name: Check every reviewed conformance source with the built core compiler
-        run: python3 tools/check-conformance-sources.py .trb/bootstrap/core/compiler
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          python3 tools/check-conformance-sources.py .trb/bootstrap/core/compiler
+          python3 tools/bootstrap-module-cycles.py --compiler .trb/bootstrap/core/compiler \
+            --qbe bin/qbe --profile "$PLATFORM-v0" --evidence "$RUNNER_TEMP/module-cycles"
       - name: Verify deterministic key-reader interruption boundaries
         run: python3 tools/native-cli-key-test.py --qbe bin/qbe --output "$RUNNER_TEMP/native-cli-key.json"
       - name: Retain key-reader boundary observations
@@ -77,6 +82,7 @@ jobs:
           path: |
             ${{ runner.temp }}/native-language.json
             ${{ runner.temp }}/native-projects.json
+            ${{ runner.temp }}/module-cycles
           if-no-files-found: warn
           retention-days: 30
       - name: Exercise REPL screen rendering and terminal restoration

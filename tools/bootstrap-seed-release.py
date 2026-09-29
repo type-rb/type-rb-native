@@ -14,7 +14,7 @@ import shutil
 import statistics
 import sys
 
-TAG = "bootstrap-seed-2026-09-12-compiler-names"
+TAG = "bootstrap-seed-2026-09-29-module-cycles"
 MANIFEST = "type-rb-native-bootstrap-manifest-v2.json"
 PREDECESSORS = {"bootstrap-seed-2026-09-07": {
     "releaseTag": "bootstrap-seed-2026-08-30",
@@ -80,6 +80,14 @@ PREDECESSORS = {"bootstrap-seed-2026-09-07": {
         {"asset": "type-rb-native-bootstrap-darwin-arm64", "sha256": "7ba29a5897782366569be9b2be3461f59fcf3e8feccfe41694ae4a29c457d19a"},
         {"asset": "type-rb-native-bootstrap-linux-arm64", "sha256": "8c9d2ea099880ebbce4f4e91230b1cfab40e3fce4c145adacba36718ddbc5852"},
     ],
+}, "bootstrap-seed-2026-09-29-module-cycles": {
+    "releaseTag": "bootstrap-seed-2026-09-12-compiler-names",
+    "nativeRevision": "d7ffb9384229125216696a220c7f370422472178",
+    "manifestSha256": "04a0242b06818641e72d65ccbe4ece79380d875768772e60500fa36f05559c83",
+    "targets": [
+        {"asset": "type-rb-native-bootstrap-darwin-arm64", "sha256": "28d1b5a3aa42013ea8876173dbf760f7e71ee221a69bf16c915e485ccf60bdd9"},
+        {"asset": "type-rb-native-bootstrap-linux-arm64", "sha256": "40cf35282750792c60dee1efdbdf331681ee7b5dd7efb5fae7a551824db4221c"},
+    ],
 }}
 
 # Published manifests retain their registered source-era size contracts.
@@ -94,6 +102,7 @@ LIMITS = {
     # MIR migration records exact byte sizes without an integration ceiling.
     # Historical tags above keep their strict source-era contracts.
     "bootstrap-seed-2026-09-12-compiler-names": (None, None, None),
+    "bootstrap-seed-2026-09-29-module-cycles": (None, None, None),
 }
 
 BACKEND = {"name": "QBE", "version": "1.3", "sourceSha256": "d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320"}

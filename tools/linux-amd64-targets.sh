@@ -15,7 +15,7 @@ APPLICATION_RUNTIME_ELAPSED_REPETITIONS=32
 usage() {
 	cat >&2 <<'EOF'
 usage: linux-amd64-targets.sh CANDIDATE_ROOT ROOT_QBE QBE CC
-       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT [LOOP_SOURCE_ROOT [BOOLEAN_SOURCE_ROOT [RECORD_SOURCE_ROOT [HASH_SOURCE_ROOT [ITERATION_SOURCE_ROOT [NAMES_SOURCE_ROOT]]]]]]]
+       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT [LOOP_SOURCE_ROOT [BOOLEAN_SOURCE_ROOT [RECORD_SOURCE_ROOT [HASH_SOURCE_ROOT [ITERATION_SOURCE_ROOT [NAMES_SOURCE_ROOT [CYCLES_SOURCE_ROOT]]]]]]]]
 EOF
 	exit 64
 }
@@ -166,7 +166,7 @@ require_go_build() {
 	test -x "$output" || fail "$label did not publish an executable"
 }
 
-test "$#" -eq 9 || test "$#" -eq 10 || test "$#" -eq 11 || test "$#" -eq 12 || test "$#" -eq 13 || test "$#" -eq 14 || test "$#" -eq 15 || test "$#" -eq 16 || usage
+test "$#" -eq 9 || test "$#" -eq 10 || test "$#" -eq 11 || test "$#" -eq 12 || test "$#" -eq 13 || test "$#" -eq 14 || test "$#" -eq 15 || test "$#" -eq 16 || test "$#" -eq 17 || usage
 
 candidate_root=$1
 root_qbe=$2
@@ -184,6 +184,7 @@ record_source_root=${13:-}
 hash_source_root=${14:-}
 iteration_source_root=${15:-}
 names_source_root=${16:-}
+cycles_source_root=${17:-}
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 verifier_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
@@ -1047,6 +1048,16 @@ if test -n "$names_source_root"; then
 	test -f "$names_entry" || fail "compiler-name entry is missing"
 	test "$(sha256 "$names_entry")" = 9d3fc404ea55f459ef4bf5417112f0bb47054077ea94f3f6a5d57fbc23958ad0 || fail "compiler-name entry digest differs"
 fi
+cycles_entry=
+if test -n "$cycles_source_root"; then
+	test -n "$names_source_root" || fail "module-cycle source requires the accepted compiler-name source"
+	require_clean_revision "$cycles_source_root" "accepted module-cycle source"
+	test "$(git -C "$cycles_source_root" rev-parse HEAD)" = \
+		a0f9147d29d73ad8a0237c7c51a0a5993bbe3a36 || fail "module-cycle source revision differs"
+	cycles_entry=$cycles_source_root/compiler/src/compiler.trb
+	test -f "$cycles_entry" || fail "module-cycle entry is missing"
+	test "$(sha256 "$cycles_entry")" = 19cd0afbd30f2113c3cfc5bf096ea9108ac9de8a2a835e63d68f8b49f535c116 || fail "module-cycle entry digest differs"
+fi
 portable_config=$candidate_root/corpus/portable-entry/portable-entry/trbconfig.jsonc
 portable_source=$candidate_root/corpus/portable-entry/portable-entry/src/main.trb
 failure_config=$candidate_root/corpus/portable-entry/runtime-failures/trbconfig.jsonc
@@ -1360,14 +1371,59 @@ if test -n "$names_source_root"; then
 	require_empty_file "$evidence/setup/names-link.stderr" "names transition link wrote stderr"
 	test -x "$names_transition" || fail "names transition compiler is missing"
 	require_tool_observed "$evidence/setup/names-link-process.trace" 'execve\("[^"]*/ld\.lld"' "names transition LLD"
+	# An old bridge checks the next accepted source before compiler self-use adopts cycles.
+	names_check_entry=$compiler_entry
+	if test -n "$cycles_source_root"; then names_check_entry=$cycles_entry; fi
 	strace -f -e trace=process -o "$evidence/setup/names-check-process.trace" \
-		"$names_transition" check "$compiler_entry" \
-		> "$evidence/setup/names-check.stdout" 2> "$evidence/setup/names-check.stderr" || fail "compiler-name bridge rejected current source"
+		"$names_transition" check "$names_check_entry" \
+		> "$evidence/setup/names-check.stdout" 2> "$evidence/setup/names-check.stderr" || fail "compiler-name bridge rejected its successor source"
 	printf 'ok\n' > "$evidence/setup/names-check.expected"
 	cmp "$evidence/setup/names-check.expected" "$evidence/setup/names-check.stdout" > /dev/null || fail "compiler-name check stdout differs"
 	require_empty_file "$evidence/setup/names-check.stderr" "compiler-name check wrote stderr"
 	require_forbidden_processes_absent "$evidence/setup/names-check-process.trace" "compiler-name check"
 	runtime_seed=$names_transition
+fi
+
+if test -n "$cycles_source_root"; then
+	mkdir -p "$workspace/setup/module-cycles"
+	cycles_qbe=$workspace/setup/module-cycles/compiler.ssa
+	cycles_assembly=$workspace/setup/module-cycles/compiler.s
+	cycles_transition=$workspace/setup/module-cycles/compiler
+	strace -f -e trace=process -o "$evidence/setup/cycles-emit-process.trace" \
+		"$runtime_seed" emit-qbe "$cycles_entry" \
+		> "$cycles_qbe" 2> "$evidence/setup/cycles-emit.stderr" || fail "module-cycle source emission failed"
+	require_empty_file "$evidence/setup/cycles-emit.stderr" "module-cycle source emission wrote stderr"
+	test -s "$cycles_qbe" || fail "module-cycle source QBE is empty"
+	require_forbidden_processes_absent "$evidence/setup/cycles-emit-process.trace" "module-cycle source emission"
+	strace -f -e trace=process -o "$evidence/setup/cycles-qbe-process.trace" \
+		"$qbe" -t amd64_sysv -o "$cycles_assembly" "$cycles_qbe" \
+		> "$evidence/setup/cycles-qbe.stdout" 2> "$evidence/setup/cycles-qbe.stderr" || fail "module-cycle QBE translation failed"
+	require_empty_file "$evidence/setup/cycles-qbe.stdout" "module-cycle QBE translation wrote stdout"
+	require_empty_file "$evidence/setup/cycles-qbe.stderr" "module-cycle QBE translation wrote stderr"
+	test -s "$cycles_assembly" || fail "module-cycle assembly is empty"
+	strace -f -e trace=process -o "$evidence/setup/cycles-link-process.trace" \
+		"$cc" -xassembler "$cycles_assembly" -fuse-ld=lld \
+		-Wl,--gc-sections,--strip-all -lm -o "$cycles_transition" \
+		> "$evidence/setup/cycles-link.stdout" 2> "$evidence/setup/cycles-link.stderr" || fail "module-cycle transition link failed"
+	require_empty_file "$evidence/setup/cycles-link.stdout" "module-cycle transition link wrote stdout"
+	require_empty_file "$evidence/setup/cycles-link.stderr" "module-cycle transition link wrote stderr"
+	test -x "$cycles_transition" || fail "module-cycle transition compiler is missing"
+	require_tool_observed "$evidence/setup/cycles-link-process.trace" 'execve\("[^"]*/ld\.lld"' "module-cycle transition LLD"
+	strace -f -e trace=process -o "$evidence/setup/cycles-check-process.trace" \
+		"$cycles_transition" check "$compiler_entry" \
+		> "$evidence/setup/cycles-check.stdout" 2> "$evidence/setup/cycles-check.stderr" || fail "module-cycle bridge rejected current source"
+	printf 'ok\n' > "$evidence/setup/cycles-check.expected"
+	cmp "$evidence/setup/cycles-check.expected" "$evidence/setup/cycles-check.stdout" > /dev/null || fail "module-cycle check stdout differs"
+	require_empty_file "$evidence/setup/cycles-check.stderr" "module-cycle check wrote stderr"
+	require_forbidden_processes_absent "$evidence/setup/cycles-check-process.trace" "module-cycle check"
+	python3 "$verifier_root/tools/bootstrap-module-cycles.py" \
+		--compiler "$cycles_transition" --qbe "$qbe" --profile "$PROFILE" \
+		--evidence "$evidence/setup/module-cycle-capabilities" --trace \
+		> "$evidence/setup/module-cycle-capabilities.stdout" 2> "$evidence/setup/module-cycle-capabilities.stderr" || fail "module-cycle capability proof failed"
+	for trace in "$evidence/setup/module-cycle-capabilities"/*/*.trace; do
+		require_forbidden_processes_absent "$trace" "module-cycle capability proof"
+	done
+	runtime_seed=$cycles_transition
 fi
 
 strace -f -e trace=process -o "$evidence/setup/current-runtime-emit-process.trace" \
@@ -1511,6 +1567,14 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 		printf 'names_transition_qbe_sha256=%s\n' "$(sha256 "$names_qbe")"
 		printf 'names_transition_size=%s\n' "$(file_size "$names_transition")"
 		printf 'names_transition_sha256=%s\n' "$(sha256 "$names_transition")"
+	fi
+	if test -n "$cycles_source_root"; then
+		printf 'cycles_source_revision=%s\n' "$(git -C "$cycles_source_root" rev-parse HEAD)"
+		printf 'cycles_source_entry_sha256=%s\n' "$(sha256 "$cycles_entry")"
+		printf 'cycles_transition_qbe_size=%s\n' "$(file_size "$cycles_qbe")"
+		printf 'cycles_transition_qbe_sha256=%s\n' "$(sha256 "$cycles_qbe")"
+		printf 'cycles_transition_size=%s\n' "$(file_size "$cycles_transition")"
+		printf 'cycles_transition_sha256=%s\n' "$(sha256 "$cycles_transition")"
 	fi
 	printf 'current_runtime_qbe_size=%s\n' "$(file_size "$runtime_qbe")"
 	printf 'current_runtime_qbe_sha256=%s\n' "$(sha256 "$runtime_qbe")"
