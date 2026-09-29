@@ -68,7 +68,7 @@ def mir_nullable_coerce(mut state: CompilerState, mut locals: CheckedLocals, mut
 	if nullable_element(expected) == "" || !object_value_assignable(state, value.type_name, expected)
 		return value
 	end
-	if nullable_element(value.type_name) != ""
+	if nullable_element(value.type_name) != "" || value.type_name == "Any"
 		return mir_nullable_widen(state, locals, value, expected, origin)
 	end
 	if value.type_name == "Nil"
@@ -124,28 +124,37 @@ def mir_nullable_instruction_error(flow: MirFlow, native_module: MirModule, func
 	return ""
 end
 
-# Widening maps the present payload through ordinary typed CFG edges. Absence
-# does not run a conversion or allocate a box.
+# Widening maps the present payload through ordinary typed CFG edges. A dynamic
+# Nil tag is absence, while a boxed typed optional retains its own identity.
+# Absence does not run a conversion or allocate another box.
 def mir_nullable_widen(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, expected: String, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
 		return checked_view(value, expected, 0)
 	end
 	line := load_integer(state.source_tokens.token_lines, origin)
-	condition := mir_checked_nullable(state, locals, 35, value, "Boolean", 1, origin)
+	mut condition := checked_value("Boolean", 0, origin, 0)
+	if value.type_name == "Any"
+		condition = mir_union_operation(state, locals, 53, value, "Nil", "Boolean", origin)
+	else
+		condition = mir_checked_nullable(state, locals, 35, value, "Boolean", 0, origin)
+	end
 	alternate := mir_control_branch(state, locals, condition, line)
-	payload := mir_checked_nullable(state, locals, 36, value, nullable_element(value.type_name), 0, origin)
-	converted := mir_nullable_coerce(state, locals, payload, nullable_element(expected), origin)
-	present := mir_checked_nullable(state, locals, 34, converted, expected, 0, origin)
-	join := mir_control_allocate(locals)
-	arguments := mir_control_arguments(locals, locals.count[0])
-	locals.mir_arguments.push(checked_mir_value(present))
-	mir_control_jump_arguments(state, locals, join, arguments, locals.count[0] + 1)
-	mir_control_enter(state, locals, alternate, line)
 	absent := mir_checked_nullable(state, locals, 33, value, expected, 0, origin)
+	join := mir_control_allocate(locals)
 	none_arguments := mir_control_arguments(locals, locals.count[0])
 	locals.mir_arguments.push(checked_mir_value(absent))
 	mir_control_jump_arguments(state, locals, join, none_arguments, locals.count[0] + 1)
+	mir_control_enter(state, locals, alternate, line)
+	mut payload := checked_view(value, value.type_name, value.category)
+	if nullable_element(value.type_name) != ""
+		payload = mir_checked_nullable(state, locals, 36, value, nullable_element(value.type_name), 0, origin)
+	end
+	converted := mir_nullable_coerce(state, locals, payload, nullable_element(expected), origin)
+	present := mir_checked_nullable(state, locals, 34, converted, expected, 0, origin)
+	arguments := mir_control_arguments(locals, locals.count[0])
+	locals.mir_arguments.push(checked_mir_value(present))
+	mir_control_jump_arguments(state, locals, join, arguments, locals.count[0] + 1)
 	mir_control_enter(state, locals, join, line)
 	result := mir_add_value(state, locals, mir_semantic_type_id(state.scalar_mir, expected), line)
 	locals.mir_arguments.push(result)
