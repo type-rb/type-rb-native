@@ -3,16 +3,21 @@ import { ReplStore, ReplEnvironment, repl_global_key, repl_value } from repl_mod
 import { repl_capture_binding } from repl_values
 import { find_declaration_in_module } from declaration_lookup
 import { CompilerState } from state
+import { mir_global_index } from mir_globals
 
 # A retained REPL program may use different catalog indexes. Persistent values
 # are keyed by source/declaration identity, never by the current array position.
 def repl_initialize_globals(mut state: CompilerState, mut store: ReplStore): Boolean
 	mut added: Array<String> := []
 	store.error[0] = ""
-	state.global_bindings.global_order.each do |identity|
+	state.scalar_mir.global_initialization.each do |identity|
+		row := state.scalar_mir.globals[mir_global_index(state.scalar_mir, identity)]
+		if !row.runtime
+			next
+		end
 		key := repl_global_key(state, identity)
 		if !store.globals.key?(key)
-			value := repl_call(state, state.global_bindings.global_functions[identity], [], store)
+			value := repl_call(state, row.initializer, [], store)
 			if store.error[0] != ""
 				added.each do |name|
 					store.globals.delete(name)
@@ -20,7 +25,11 @@ def repl_initialize_globals(mut state: CompilerState, mut store: ReplStore): Boo
 				return false
 			end
 			store.globals[key] = repl_value(store, "$Binding", 0, 0.0, "", [value])
-			added.push(key)
+			# Cyclic actions commit individually; a later failed action must not
+			# repeat values and side effects that already completed.
+			if !row.cyclic
+				added.push(key)
+			end
 		end
 	end
 	return true
