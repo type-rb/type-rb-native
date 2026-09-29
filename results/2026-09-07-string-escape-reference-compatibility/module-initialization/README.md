@@ -9,7 +9,10 @@ formatting and [PR #832](https://github.com/type-rb/type-rb/pull/832) for
 source-directory-independent Go emission and explicit module initialization.
 The reference AST is unchanged. The structural-test failure observation changes
 only its generated Go type prefix from `main.Point` to `application.Point`;
-the assertion location, values and failure status are unchanged.
+the assertion location, values and failure status are unchanged. The same-named
+record case `type-alias-scope` now builds and executes successfully, matching
+Native. Two existing rejected-output cases retain their failures with generated
+Go paths under `trb/application`; their known semantic gaps remain recorded.
 
 The Native baseline is `095adfe5758b8c94d1f14174d7923915df86bb9e` with successful
 [Main validation](https://github.com/type-rb/type-rb-native/actions/runs/36522013285).
@@ -24,6 +27,6 @@ dependency order, shared dependencies and unused-file effects. Existing
 source-cycle rejection and known Native test-runner gaps remain explicit.
 
 The independent Native `0.1.0-dev` identity, immutable bootstrap assets and
-[earlier reference evidence](../2026-09-07-string-escape-reference-compatibility/README.md)
+[earlier reference evidence](../README.md)
 remain unchanged. This update does not claim complete language or performance
 qualification.

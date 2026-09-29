@@ -92,7 +92,7 @@ def source_case(case, directory):
     write(directory / "trbconfig.jsonc", {
         "name": "daily-" + case["id"], "version": "0.1.0", "mode": "go",
         "sourceDir": "src", "outDir": "build", "copyFiles": False, "packageManagement": "managed",
-        "go": {"module": "example.org/daily/" + case["id"], "version": "1.27", "rootPackage": "main"}})
+        "go": {"module": "example.org/daily/" + case["id"], "version": "1.27"}})
     return (ROOT / case["expectedFile"]).read_bytes() if "expectedFile" in case else case["expected"].encode()
 
 
