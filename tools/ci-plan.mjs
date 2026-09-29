@@ -59,17 +59,17 @@ export const dailyMeasurementInputs = new Set([
 // Keep complete correctness validation; only unchanged-binary measurements
 // are unnecessary. New test paths, configurations and fixtures default to code.
 export const compilerTestInputs = new Set([
-  'compiler/src/checked_binding_test.trb',
-  'compiler/src/checked_program_test.trb',
+  'compiler/src/frontend/checking/checked_binding_test.trb',
+  'compiler/src/frontend/checking/checked_program_test.trb',
   'compiler/src/compiler_test.trb',
-  'compiler/src/literals_test.trb',
-  'compiler/src/mir_test.trb',
-  'compiler/src/hash_test.trb',
-  'compiler/src/parser_test.trb',
-  'compiler/src/project_config_test.trb',
-  'compiler/src/qbe_output_test.trb',
-  'compiler/src/resolution_test.trb',
-  'compiler/src/state_test.trb',
+  'compiler/src/support/literals_test.trb',
+  'compiler/src/mir/mir_test.trb',
+  'compiler/src/frontend/checking/hash_test.trb',
+  'compiler/src/frontend/syntax/parser_test.trb',
+  'compiler/src/project/project_config_test.trb',
+  'compiler/src/backend/qbe/qbe_output_test.trb',
+  'compiler/src/frontend/resolution/resolution_test.trb',
+  'compiler/src/state/state_test.trb',
 ]);
 // These adapters are outside the ordinary compiler source closure. Core edits
 // mixed with them restore all core authorities; new paths default to code.

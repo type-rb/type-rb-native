@@ -67,7 +67,7 @@ def main():
                                 text=True, env=dict(os.environ, GOWORK='off'), timeout=60)
     data = json.loads(result.stdout)
     text = render(data)
-    target = ROOT / 'compiler/src/unicode_identifier_data.trb'
+    target = ROOT / 'compiler/src/support/unicode_identifier_data.trb'
     if args.check:
         if target.read_text() != text:
             raise ValueError('Unicode identifier data differs from the current Go toolchain')

@@ -82,9 +82,9 @@ class DailyTests(unittest.TestCase):
                 state.validate({**state.empty(), "latest": invalid})
 
     def test_nonperformance_changes_skip_but_runtime_and_inputs_do_not(self):
-        for path in ["docs/example.md", "compiler/src/parser_test.trb", "README.md"]:
+        for path in ["docs/example.md", "compiler/src/frontend/syntax/parser_test.trb", "README.md"]:
             self.assertFalse(state.relevant(path), path)
-        for path in ["compiler/src/parser.trb", "src/runtime.trb", "TYPE_RB_REVISION",
+        for path in ["compiler/src/frontend/syntax/parser.trb", "src/runtime.trb", "TYPE_RB_REVISION",
                      "tools/daily-performance/measure.py", ".github/workflows/daily-performance.yml",
                      "tools/runtime-worker-soak/workload.trb", "tools/compiler-cost.sh"]:
             self.assertTrue(state.relevant(path), path)

@@ -57,6 +57,15 @@ class OwnershipTests(unittest.TestCase):
         self.write('src/frontend/checking/expression', 'import trb/std/test\n')
         self.assertIn('production code imports test support', self.errors()[0])
 
+    def test_parsed_state_exception_does_not_admit_other_syntax_dependencies(self):
+        self.write('src/state/source_state', 'import frontend/syntax/iteration_syntax\n')
+        self.write('src/frontend/syntax/iteration_syntax')
+        self.assertEqual(self.errors(), [])
+        self.write('src/state/other', 'import frontend/syntax/iteration_syntax\n')
+        self.write('src/frontend/syntax/parser')
+        self.write('src/state/source_state', 'import frontend/syntax/parser\n')
+        self.assertEqual(len(self.errors()), 2)
+
     def test_cli_can_compose_core_but_core_cannot_import_cli(self):
         self.write('cli/main', 'import compiler\nimport frontend/checking/expression\n')
         self.assertEqual(self.errors(), [])

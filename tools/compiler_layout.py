@@ -26,6 +26,7 @@ EXCEPTIONS = {
     ('backend/qbe/qbe_constants', 'frontend/resolution/entry_resolution'),
     ('frontend/types/transform_model', 'frontend/syntax/iteration_syntax'),
     ('frontend/types/transform_model', 'mir/iteration_mir'),
+    ('state/source_state', 'frontend/syntax/iteration_syntax'),
 }
 IMPORT = re.compile(r'import (?:\{[^}]*\} from )?([a-z][a-z0-9_/]*)(?: as [A-Za-z_][A-Za-z0-9_]*)?(?:\s*#.*)?')
 

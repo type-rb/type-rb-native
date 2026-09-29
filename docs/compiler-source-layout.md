@@ -12,7 +12,7 @@ REPL adapters. Root `src` retains the independent recovery implementation.
 | `frontend/types` | Language type models, nominal identities and substitutions | resolution, state, support; the two projection exceptions below |
 | `frontend/resolution` | Import and declaration lookup, specialization and argument binding | types, syntax, state, support, MIR, project |
 | `frontend/checking` | Expression, statement and body checking; checked operation construction | types, resolution, syntax, state, support, MIR, project |
-| `state` | Compilation state and function-owned checked projections | types, support, MIR |
+| `state` | Compilation state and function-owned checked projections | types, support, MIR; the parsed-iteration exception below |
 | `mir` | Target-independent IR, construction, proofs, passes and verification | checking, types, syntax, resolution, state, support |
 | `backend/qbe` | QBE serialization and emitted runtime and data routines | MIR, state, support, types; the intrinsic-identity exception below |
 | `project` | Configuration, packages, standard-library source catalog and host files | support, syntax, state |
@@ -23,12 +23,14 @@ frontend/MIR imports are permitted; a directory cycle is not an error. These
 rules constrain architecture independently of the language's compilation-unit
 and initialization rules.
 
-Three declaration-specific edges supplement the table:
+Four declaration-specific edges supplement the table:
 
 - `backend/qbe/qbe_constants` imports `frontend/resolution/entry_resolution`
   for declaration-bound intrinsic identity.
 - `frontend/types/transform_model` imports `frontend/syntax/iteration_syntax`
   and `mir/iteration_mir` for its shared parsed and checked projections.
+- `state/source_state` imports `frontend/syntax/iteration_syntax` for the parsed
+  iteration regions retained by `CompilerParsedProgram`.
 
 The exceptions do not grant other modules access to those whole layers.
 Core modules cannot import CLI adapters. Production modules cannot import test

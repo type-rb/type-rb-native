@@ -54,7 +54,7 @@ class CompatibilityManifestTest(unittest.TestCase):
                         self.validate(self.manifest)
 
     def test_target_tokens_are_checked_in_the_runtime_source_owner(self) -> None:
-        runtime = ROOT / "compiler/src/qbe_runtime.trb"
+        runtime = ROOT / "compiler/src/backend/qbe/qbe_runtime.trb"
         read_text = Path.read_text
         source = read_text(runtime, encoding="utf-8")
         profile = self.manifest["targets"][0]["profile"]

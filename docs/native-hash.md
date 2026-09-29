@@ -105,7 +105,7 @@ interpreter stack temporaries.
 
 ## Verification and seed boundary
 
-`compiler/src/hash_test.trb` covers typing, immutable rejection, operation
+`compiler/src/frontend/checking/hash_test.trb` covers typing, immutable rejection, operation
 metadata and malformed plans. `tools/native-hash-test.py` runs ordinary and REPL
 fixtures, automatic-GC stress, cycles, alias preservation, recoverable missing
 keys, and a compiled bucket-storage probe. Pass `--reference /path/to/trb` to

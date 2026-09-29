@@ -635,10 +635,14 @@ test('synthetic project and policy tests retain Linux without building the refer
   assert(recoveryImports?.includes('python3 tools/recovery_layout_sync.py --check'));
   assert(recoveryImports.includes("if: needs.plan.outputs.registry_only != 'true'"),
     'Recovery imports keep their Linux authority except for unrelated registry edits');
+  const ownership = steps.find(step => step.startsWith('name: Check compiler responsibility boundaries'));
+  assert(ownership?.includes('python3 tools/compiler_layout.py'));
+  assert(ownership.includes("if: needs.plan.outputs.registry_only != 'true'"),
+    'Compiler ownership needs only Python, including for synthetic tool edits');
   for (const step of steps) {
     if (step.includes('repository: type-rb/type-rb') || step.includes('actions/setup-go') ||
       step.startsWith('name: Build the pinned') ||
-      (step.startsWith('name: Check ') && step !== recoveryImports) ||
+      (step.startsWith('name: Check ') && step !== recoveryImports && step !== ownership) ||
       step.startsWith('name: Run root')) assert(step.includes(compilerCondition), step);
   }
   const toolingStep = steps.find(step => step.startsWith('name: Verify project'));
