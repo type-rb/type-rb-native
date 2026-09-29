@@ -159,7 +159,7 @@ def sync_layout(root: Path, modules: list[str], sources: dict[str, str], write: 
     return changes
 
 
-def sync_mutations(root: Path, modules: list[str], sources: dict[str, str], write: bool) -> list[str]:
+def sync_mutations(root: Path, modules: list[str], sources: dict[str, str], write: bool, renames: dict[str, str]) -> list[str]:
     path = root / MUTATIONS
     original = path.read_text()
     rows = MUTATION_ROW.findall(original)
@@ -170,7 +170,8 @@ def sync_mutations(root: Path, modules: list[str], sources: dict[str, str], writ
     targets = [name for name in modules if name != "compiler"]
     kept: list[str] = []
     for match in MUTATION_ROW.finditer(original):
-        name, needle, replacement = (decode(literal) for literal in match.groups())
+        previous, needle, replacement = (decode(literal) for literal in match.groups())
+        name = renames.get(previous, previous)
         if name not in targets or name in seen:
             changes.append(f"mutations: remove {name}")
             continue
@@ -182,7 +183,11 @@ def sync_mutations(root: Path, modules: list[str], sources: dict[str, str], writ
             changes.append(f"mutations: regenerate {name}")
             kept.append("\t\t[" + ", ".join(encode(value) for value in generated) + "],\n")
             continue
-        kept.append(match.group(0))
+        if name != previous:
+            changes.append(f"mutations: relocate {previous} to {name}")
+            kept.append("\t\t[" + ", ".join(encode(value) for value in (name, needle, replacement)) + "],\n")
+        else:
+            kept.append(match.group(0))
     for name in targets:
         if name not in seen:
             generated = default_mutation(name, sources[name])
@@ -221,11 +226,16 @@ def sync_frontend_test(root: Path, modules: list[str], write: bool) -> list[str]
     return changes
 
 
-def synchronize(root: Path, write: bool) -> list[str]:
+def synchronize(root: Path, write: bool, renames: dict[str, str] | None = None) -> list[str]:
+    renames = {} if renames is None else renames
+    if (not isinstance(renames, dict) or
+            any(not isinstance(old, str) or not isinstance(new, str) or not MODULE.fullmatch(old) or not MODULE.fullmatch(new) for old, new in renames.items()) or
+            len(set(renames.values())) != len(renames)):
+        raise InventoryError("invalid or colliding module relocation map")
     modules = closure(root)
     sources = {name: (root / "compiler/src" / f"{name}.trb").read_text() for name in modules}
     return (sync_layout(root, modules, sources, write) +
-            sync_mutations(root, modules, sources, write) +
+            sync_mutations(root, modules, sources, write, renames) +
             sync_frontend_test(root, modules, write))
 
 
@@ -234,10 +244,12 @@ def main() -> int:
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--check", action="store_true")
     action.add_argument("--write", action="store_true")
+    parser.add_argument("--module-map", type=Path, help="reviewed migration manifest; preserve matching mutation needles across module moves")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     try:
-        changes = synchronize(root, args.write)
+        renames = json.loads(args.module_map.read_text())["modules"] if args.module_map else {}
+        changes = synchronize(root, args.write, renames)
     except InventoryError as error:
         print(f"Recovery inventory error: {error}")
         return 1

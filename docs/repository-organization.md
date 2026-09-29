@@ -5,6 +5,9 @@ separate from ordinary compilation and share implementation where their semantic
 agree. Completed naming and extraction history is available in the
 [historical documentation](history.md); it is not the current decomposition plan.
 
+The directory responsibility map and enforced dependency rules are in
+[Compiler source responsibilities](compiler-source-layout.md).
+
 ## Current ownership map
 
 | Current area | Responsibility |
@@ -16,18 +19,18 @@ agree. Completed naming and extraction history is available in the
 | `compiler/src/qbe_output.trb` | QBE output appends to zero-origin String storage. Its used-line boundary is the single shared length for emission, concatenation and chunking; output aliases see every append. Appending one output to another preserves independent subsequent appends. |
 | `compiler/src/nominal_state.trb` | `CompilerNominalTypes` owns authored class, newtype and enum declarations alongside concrete class instances and receiver lookup. Template checks share authored declarations while copying concrete object and enum catalogs and mutable receiver bindings. |
 | `compiler/src/global_state.trb`, `callable_state.trb` | Global declarations, inferred bindings, lambda syntax and checked callable bodies have separate state owners. Template forks share authored syntax and ordering, while each fork owns inferred global types, function bindings, callable progress and checked bodies. |
-| `compiler/src/parser.trb`, `body_syntax.trb`, `declaration_syntax.trb`, `syntax_forms.trb` | Module/declaration routing, recursive expression/statement parsing, callable/record/default declarations, and shared token forms have distinct owners. Checking and REPL adapters import shared forms directly; there are no forwarding parser aliases or module cycles. |
+| `compiler/src/parser.trb`, `body_syntax.trb`, `declaration_syntax.trb`, `syntax_forms.trb` | Module/declaration routing, recursive expression/statement parsing, callable/record/default declarations, and shared token forms have distinct owners. Checking and REPL adapters import shared forms directly; there are no forwarding parser aliases. |
 | `compiler/src/object_model.trb`, `object_syntax.trb`, `object_types.trb`, `object_resolution.trb`, `object_methods.trb`, `object_fields.trb`, `object_initialization.trb`, `object_dispatch.trb`, `object_dispatch_shapes.trb`, `object_dispatch_mir.trb`, `object_mir_types.trb`, `object_mir.trb`, `qbe_objects.trb`, `qbe_object_dispatch.trb` | Authored declarations, nominal types, method specialization, initialization proofs and verified field/interface operations have separate owners. Recursive expansion shares `type_resolution.trb`; QBE adapts verified layouts and witness tables. Initialized superclasses and inherited overrides retain explicit guards. |
 | `compiler/src/checked_body.trb` | Concrete function-owned checked projections; shared parsed syntax stays in the program, and backend emission needs only verified MIR. |
 | `compiler/src/lambda_syntax.trb`, `compiler/src/lambda_resolution.trb` | Anonymous parameter grammar and per-body resolved signatures; recursive body parsing lives in `body_syntax.trb`, while `lambda_checking.trb` and `lambda_lowering.trb` analyze and lower lexical captures. |
 | `compiler/src/iteration_syntax.trb`, `iteration_mir.trb` | Parsed source regions are immutable syntax; concrete checked traversal plans bind those regions to receiver/element types and lexical loop owners. Executable traversal is ordinary MIR control flow. |
-| `compiler/src/import_resolution.trb`, `resolution.trb`, `enum_resolution.trb`, `entry_resolution.trb`, `body_resolution.trb`, `checked_collection_inference.trb`, `checked_program.trb` | Import path and binding checks, declaration resolution, enum payload validation, compiler entry/intrinsic identity, and function-body name binding have separate owners. The collection inference owner refines empty Array and Hash bindings and records scoped numeric candidates; recursive expression and statement checking remains in `checked_program.trb`. |
+| `compiler/src/import_resolution.trb`, `resolution.trb`, `enum_resolution.trb`, `entry_resolution.trb`, `body_resolution.trb`, `checked_collection_inference.trb`, `checked_program.trb` | Import path and binding checks, declaration resolution, enum payload validation, compiler entry/intrinsic identity, and function-body name binding have separate owners. The collection inference owner refines empty Array and Hash bindings and records scoped numeric candidates; recursive expression, call, member, statement, control and iteration checking has explicit mutually recursive owners; see the directory responsibility map. |
 | `compiler/src/mir_value_control.trb` | Typed branch exits, common result blocks, selection of evaluated values and numeric join conversions; recursive source checking and REPL evaluation consume shared frontend regions. |
 | `compiler/src/string_methods.trb`, `qbe_string_queries.trb`, `qbe_string_sequences.trb`, `qbe_string_slices.trb`, `qbe_string_trimming.trb` | Receiver method construction and bounded query/sequence/slice runtimes are separate; verified String operation contracts stay in `mir_strings.trb`. |
 | `compiler/src/string_escapes.trb`, `qbe_string_literals.trb` | Escape syntax and validation are separate from the lexer scanner and the private byte-construction runtime. |
 | `compiler/src/array_methods.trb`, `array_queries.trb`, `array_sorting.trb`, `qbe_array_copies.trb`, `qbe_array_mutations.trb` | Array method construction, query/sort loops, copy allocation and in-place insertion/removal have separate owners. Types, effects, loop safety and roots remain MIR responsibilities. |
 | `compiler/src/default_arguments.trb` | Private initializer declaration identities and preceding typed slots; ordinary checked functions and MIR own their bodies and calls. |
-| `compiler/src/newtype_*.trb` | Declaration syntax, nominal identities, representation/mutability resolution, method lookup, MIR construction and independent storage verification. Backend adapters use MIR storage facts while checking retains nominal identities. |
+| `newtype_*` modules in `frontend/syntax`, `frontend/types`, `frontend/resolution` and `mir` | Declaration syntax, nominal identities, representation/mutability resolution, method lookup, MIR construction and independent storage verification. Backend adapters use MIR storage facts while checking retains nominal identities. |
 | `compiler/src/hash_key_runtime.trb`, `hash_runtime.trb` | Scalar/union key hashing and probing are separate from table allocation, growth, deletion and snapshots. `mir_hashes.trb` owns checked key layout selection. |
 | `compiler/cli/repl_project.trb` | REPL project discovery, generated-import filtering and visible nominal type names. Session checking/evaluation remains in the REPL adapters. |
 | `compiler/src/checked_submission.trb`, `compiler/cli/repl_check.trb` | Ordinary checked entry/exit facts and result types, plus REPL source loading and boundary mapping. Session completion and replay own fact persistence; QBE consumes only verified MIR. |
@@ -53,11 +56,11 @@ and verified above QBE; function ABI emission lives in `qbe_functions.trb`.
 Split the large checker, MIR and emitter modules by those responsibilities, with
 explicit dependencies rather than copied helpers or forwarding aliases.
 The value-join builder and nullable type, flow-fact, MIR, QBE and REPL helpers
-have been extracted. Expression/body checking remains
-mutually recursive. Ordinary imports now permit cycles within a compilation unit,
-with checked initialization dependencies. Adopting those cycles in compiler source
-also requires an accepted bootstrap seed and recovery coverage for that source
-shape; the current source keeps the verified seed's import contract.
+have been extracted. Expression and body checking use separate mutually recursive
+owners. Ordinary imports permit cycles within a compilation unit, with checked
+initialization dependencies. The accepted cycle-capable seed and historical
+consumer bridge support this compiler source shape; ordinary and recovery
+validation exercise the canonical nested module closure.
 
 The checked-body ownership change moves type applications, nullable, enum, Result,
 Hash, Range and control projections together. Its exit criteria are independent
