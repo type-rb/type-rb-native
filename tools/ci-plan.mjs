@@ -128,7 +128,7 @@ export function recoveryModules(paths, moduleNames) {
   const names = new Set();
   for (const path of paths) {
     if (documentation(path)) continue;
-    const match = /^compiler\/src\/([a-z][a-z0-9_]*)\.trb$/.exec(path);
+    const match = /^compiler\/src\/([a-z][a-z0-9_]*(?:\/[a-z][a-z0-9_]*)*)\.trb$/.exec(path);
     if (!match) return 'all';
     const name = match[1];
     if (moduleNames.has(name)) {
@@ -142,9 +142,10 @@ export function recoveryModules(paths, moduleNames) {
 
 function recoveryModuleNames() {
   const layout = readFileSync(new URL('../src/compiler_recovery_layout.trb', import.meta.url), 'utf8');
-  const names = [...layout.matchAll(/RecoveryCompilerModule\.new\(name: "([a-z][a-z0-9_]*)"/g)]
+  const names = [...layout.matchAll(/RecoveryCompilerModule\.new\(name: "([a-z][a-z0-9_]*(?:\/[a-z][a-z0-9_]*)*)"/g)]
     .map(match => match[1]);
-  if (!names.includes('compiler') || new Set(names).size !== names.length) {
+  if (!names.includes('compiler') || new Set(names).size !== names.length ||
+      names.length !== [...layout.matchAll(/RecoveryCompilerModule\.new\(name:/g)].length) {
     throw new Error('Recovery module inventory is missing or duplicated');
   }
   return new Set(names);

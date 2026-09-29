@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the built CLI through public commands and a real terminal."""
 import argparse
+from compiler_sources import stage_sources
 import errno
 import json
 import os
@@ -68,10 +69,7 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     # This is a lifetime fixture, not authored fn/REPL closure acceptance.
     cell_source = root / 'binding-source'
     cell_source.mkdir()
-    for directory in (repository / 'compiler/src', repository / 'compiler/cli'):
-        for module in directory.glob('*.trb'):
-            if not module.name.endswith('_test.trb'):
-                shutil.copyfile(module, cell_source / module.name)
+    stage_sources([repository / 'compiler/src', repository / 'compiler/cli'], cell_source)
     probe = cell_source / 'binding_probe.trb'
     probe.write_text('''import { compiler_new } from state
 import { callable_type } from callable_types

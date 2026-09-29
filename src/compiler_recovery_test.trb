@@ -5,7 +5,7 @@ import { decode_recovery_managed_snapshot, decode_bootstrap_snapshot } from reco
 import { build_compiler_recovery_executable, build_recovery_managed_executable } from recovery_managed_toolchain
 import { build_recovery_generation } from recovery_generation
 import { build_matched_go_compiler } from matched_go_driver
-import { RecoveryCompilerSources, read_compiler_recovery_sources, recovery_compiler_source, write_compiler_recovery_sources } from compiler_recovery_source
+import { write_recovery_source_files, RecoveryCompilerSources, read_compiler_recovery_sources, recovery_compiler_source, write_compiler_recovery_sources } from compiler_recovery_source
 import { allocate_compiler_recovery_workspace } from compiler_recovery_workspace
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
@@ -1398,13 +1398,15 @@ def _prepare_compiler_closure(
 		omitted: String,
 	): Result<Boolean, String>
 	try _recovery_reset_directory(directory)
-	mut index := 0
-	while index < names.size()
-		if names[index] != omitted
-			try _recovery_write_source(directory + "/" + names[index] + ".trb", sources[index])
+	mut selected_names: Array<String> := []
+	mut selected_sources: Array<String> := []
+	names.each.with_index do |name, index|
+		if name != omitted
+			selected_names.push(name)
+			selected_sources.push(sources[index])
 		end
-		index += 1
 	end
+	try write_recovery_source_files(selected_names, selected_sources, directory)
 	try _recovery_write_source(directory + "/unrelated.trb", "@\n")
 	return Result<Boolean, String>::Ok(true)
 end

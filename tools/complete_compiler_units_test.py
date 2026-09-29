@@ -77,6 +77,18 @@ class CompleteCompilerUnitsTest(unittest.TestCase):
                 self.assertIn('"name": "alpha_test"', result.stdout)
                 self.assertIn('"name": "beta_test"', result.stdout)
 
+    def test_nested_test_files_are_selected_by_their_complete_paths(self):
+        source = self.root / "compiler/src"
+        (source / "checking").mkdir()
+        (source / "mir/analysis").mkdir(parents=True)
+        (source / "alpha_test.trb").rename(source / "checking/alpha_test.trb")
+        (source / "beta_test.trb").rename(source / "mir/analysis/beta_test.trb")
+        result = self.run_runner()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("2 files, 2 tests", result.stdout)
+        self.assertIn("compiler/src/checking/alpha_test.trb", result.stdout)
+        self.assertIn("compiler/src/mir/analysis/beta_test.trb", result.stdout)
+
     def test_rejects_missing_wrong_duplicate_and_failed_cases(self):
         for mode, expected in (
             ("zero", "test summary does not match"),

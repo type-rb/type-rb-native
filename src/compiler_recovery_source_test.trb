@@ -1,6 +1,6 @@
 import { compiler_recovery_mutations } from compiler_recovery_mutations
 import { compiler_recovery_layout } from compiler_recovery_layout
-import { RecoveryCompilerSources, compiler_source_directory, compiler_source_has_import, compiler_source_path, flatten_compiler_recovery_source, read_compiler_recovery_sources, read_required_compiler_source } from compiler_recovery_source
+import { RecoveryCompilerSources, compiler_source_directory, compiler_source_has_import, compiler_source_path, flatten_compiler_recovery_source, read_compiler_recovery_sources, read_required_compiler_source, valid_recovery_module_name, write_recovery_source_files } from compiler_recovery_source
 import { matched_go_empty_main_source } from matched_go_driver
 import trb/std/result
 import trb/std/process
@@ -71,6 +71,63 @@ describe("Compiler recovery source closure") do
 		expect(compiler_source_directory("a source/compiler.trb")).to_equal("a source")
 		expect(compiler_source_path("/", "storage.trb")).to_equal("/storage.trb")
 		expect(compiler_source_path("a source", "storage.trb")).to_equal("a source/storage.trb")
+	end
+
+	test("validates complete nested module identities before writing") do
+		expect(valid_recovery_module_name("compiler")).to_be_true()
+		expect(valid_recovery_module_name("checking/expressions/value_2")).to_be_true()
+		["", "/compiler", "../compiler", "checking/../compiler", "checking//value", "checking/", "checking/value.trb", "checking\\value"].each do |name|
+			expect(valid_recovery_module_name(name)).to_be_false()
+		end
+	end
+
+	test("writes distinct nested sources and rejects invalid inventories before writes") do
+		case Process.run("/usr/bin/mktemp", ["-d", "/tmp/trbn-source-paths.XXXXXX"])
+		when Result::Ok(created)
+			expect(created.success).to_be_true()
+			directory := created.stdout.split("\n")[0]
+			expect(directory.start_with?("/tmp/trbn-source-paths.")).to_be_true()
+			case write_recovery_source_files(["checking/value", "mir/value"], ["first", "second"], directory)
+			when Result::Ok(written)
+				expect(written).to_be_true()
+			when Result::Err(message)
+				puts(message)
+				expect(false).to_be_true()
+			end
+			case read_required_compiler_source(directory + "/checking/value.trb")
+			when Result::Ok(source)
+				expect(source).to_equal("first")
+			when Result::Err(_message)
+				expect(false).to_be_true()
+			end
+			case read_required_compiler_source(directory + "/mir/value.trb")
+			when Result::Ok(source)
+				expect(source).to_equal("second")
+			when Result::Err(_message)
+				expect(false).to_be_true()
+			end
+			[["first", "../escape"], ["first", "first"]].each do |names|
+				case write_recovery_source_files(names, ["first", "second"], directory + "/invalid")
+				when Result::Ok(_written)
+					expect(false).to_be_true()
+				when Result::Err(message)
+					expect(message.start_with?("invalid compiler module path:")).to_be_true()
+				end
+			end
+			case read_required_compiler_source(directory + "/invalid/first.trb")
+			when Result::Ok(_source)
+				expect(false).to_be_true()
+			when Result::Err(_message)
+			end
+			case Process.run("/bin/rm", ["-r", directory])
+			when Result::Ok(removed)
+				expect(removed.success).to_be_true()
+			when Result::Err(_error)
+				expect(false).to_be_true()
+			end
+		when Result::Err(_error)
+			expect(false).to_be_true()
+		end
 	end
 
 	test("reports an unreadable required source without substituting content") do

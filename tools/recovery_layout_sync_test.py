@@ -52,6 +52,7 @@ class RecoveryInventorySyncTest(unittest.TestCase):
         self.write(f"compiler/src/{name}.trb", text)
 
     def write(self, relative, text):
+        (self.root / relative).parent.mkdir(parents=True, exist_ok=True)
         (self.root / relative).write_text(text)
 
     def read(self, relative):
@@ -66,6 +67,25 @@ class RecoveryInventorySyncTest(unittest.TestCase):
         before = self.snapshot()
         self.assertEqual(synchronize(self.root, True), [])
         self.assertEqual(self.snapshot(), before)
+
+    def test_nested_paths_and_cycles_remain_in_every_inventory(self):
+        self.source("first", 'import { extra } from checking/value\n\ndef label(): String\nreturn "first label" + extra()\nend\n')
+        self.source("checking/value", 'import { label } from first\nimport { last } from mir/value\n\ndef extra(): String\nreturn "nested extra"\nend\n')
+        self.source("mir/value", 'import { extra } from checking/value\n\ndef last(): String\nreturn "nested last"\nend\n')
+        self.assertEqual(closure(self.root), ["compiler", "first", "checking/value", "mir/value"])
+        synchronize(self.root, True)
+        self.assertEqual(synchronize(self.root, False), [])
+        for text in self.snapshot().values():
+            self.assertIn('"checking/value"', text)
+            self.assertIn('"mir/value"', text)
+
+    def test_invalid_escaping_or_missing_imports_reject_before_inventory_writes(self):
+        for name in ("../outside", "/absolute", "nested/../outside", "missing/value"):
+            self.source("first", f'import {{ value }} from {name}\n\ndef label(): String\nreturn "first label"\nend\n')
+            before = self.snapshot()
+            with self.assertRaises(InventoryError):
+                synchronize(self.root, True)
+            self.assertEqual(self.snapshot(), before)
 
     def test_added_module_enters_every_inventory_without_reordering(self):
         self.source("first", 'import { Point } from second\nimport { extra } from third\n\n'

@@ -47,7 +47,7 @@ def main():
     for role, core in cores.items():
         report['roles'][role] = {'coreSha256': digest(core), 'coreBytes': core.stat().st_size,
             'sourceSha256': {str(f.relative_to(sources[role])): digest(f)
-                            for f in sorted((sources[role] / 'compiler/src').glob('*.trb'))
+                            for f in sorted((sources[role] / 'compiler/src').rglob('*.trb'))
                             if not f.name.endswith('_test.trb')}}
     report['roles']['candidate'].update(cliBytes=(candidate / 'bin/trbn').stat().st_size,
         cliSha256=digest(candidate / 'bin/trbn'))
