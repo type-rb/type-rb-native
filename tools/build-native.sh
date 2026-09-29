@@ -82,6 +82,7 @@ stage=$(mktemp -d "$cache/build.XXXXXX")
 (
 	cat "$stage/core-inputs"
 	cd "$repository_root"
+	sha256_files tools/compiler_sources.py
 	source_hashes compiler/cli
 ) > "$stage/inputs"
 # One decision serves the build and --plan, so plan checks exercise the same
@@ -143,10 +144,8 @@ else
 fi
 # The core and CLI share one import root in this derived source tree. The
 # canonical core project remains independently checkable by the reference tool.
-for source in "$repository_root"/compiler/src/*.trb "$repository_root"/compiler/cli/*.trb; do
-	case "$source" in *_test.trb) continue ;; esac
-	cp "$source" "$stage/source/$(basename -- "$source")"
-done
+python3 "$repository_root/tools/compiler_sources.py" "$stage/source" \
+	"$repository_root/compiler/src" "$repository_root/compiler/cli"
 "$core" build "$stage/source/main.trb" --output "$stage/trbn" --qbe "$qbe" --cc "$cc" --target "$profile"
 "$stage/trbn" --version >&2
 "$stage/trbn" --internal-driver build "$stage/source/main.trb" --output "$stage/verify/trbn" --qbe "$qbe" --cc "$cc"

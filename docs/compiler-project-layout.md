@@ -15,6 +15,19 @@ records every canonical module and exact import prefix. Recovery reading, flatte
 and staging consume that inventory; module mutation controls cover its dependencies. Source moves update imports, recovery,
 CLI staging, tests, CI routing and operational consumers together.
 
+CLI and snapshot staging use `tools/compiler_sources.py` to preserve every
+production module's relative path below its source root. Core and CLI trees
+share one derived import root without flattening basenames. Test sources are
+excluded, and duplicate output paths or symlinks fail before copying files.
+The staging helper is part of the CLI content key, so changing it invalidates
+the CLI cache while preserving an unchanged verified core.
+
+Recovery inventories retain complete nested module identities and exact import
+headers. Their traversal admits source cycles and rejects missing or escaping
+module paths. Writers create the required subdirectories only after validating
+all names. CI discovery and recovery selection retain the same identities;
+source moves require the complete validation lanes.
+
 Cross-revision measurement controllers use `tools/compiler-project.sh` from the
 controller checkout and resolve each source root independently. The helper accepts
 the current or authenticated historical project layout, rejects ambiguous/missing

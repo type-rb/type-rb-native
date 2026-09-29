@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Hash behavior, stateful REPL and bucket reclamation through native code."""
 import argparse
+from compiler_sources import stage_sources
 import os
 from pathlib import Path
 import shutil
@@ -124,10 +125,7 @@ end
         # deletion clears references and releases capacity independently of RSS.
         # REPL values retain checked program/type owners. Keep the internal
         # consumer's imports complete as that representation evolves.
-        for directory in (repository / 'compiler/src', repository / 'compiler/cli'):
-            for module in directory.glob('*.trb'):
-                if not module.name.endswith('_test.trb'):
-                    shutil.copyfile(module, root / module.name)
+        stage_sources([repository / 'compiler/src', repository / 'compiler/cli'], root)
         source = root / 'hash_storage_probe.trb'
         source.write_text('''import { repl_store, repl_integer } from repl_model
 import { repl_hash_new, repl_hash_set, repl_hash_delete } from repl_hash

@@ -16,10 +16,8 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 mkdir "$stage/compiler"
-for source in "$repository_root"/compiler/src/*.trb; do
-	case "$source" in *_test.trb) continue ;; esac
-	cp "$source" "$stage/compiler/$(basename -- "$source")"
-done
+python3 "$repository_root/tools/compiler_sources.py" "$stage/compiler" \
+	"$repository_root/compiler/src"
 
 "$reference" compiler bootstrap-snapshot --snapshot-version 4 \
 	"$stage/compiler/compiler.trb" > "$stage/snapshot.json"

@@ -88,6 +88,36 @@ source-era limits remain in the [immutable handoff history](https://github.com/t
 The release manifests and verification runs remain the authority for each tag.
 The current checkout handoff and refresh procedure are below and above.
 
+## Registered module-cycle refresh
+
+Task #706 registers `bootstrap-seed-2026-09-29-module-cycles` so implementation
+modules can use mutually recursive imports. The compiler source is the accepted
+Stage 2 implementation from PR #705 at
+`a0f9147d29d73ad8a0237c7c51a0a5993bbe3a36`, validated by the
+[complete acceptance run](https://github.com/type-rb/type-rb-native/actions/runs/36567058786).
+The refresh workflow requires its exact `compiler/src` tree
+`d811b0d7868f5e3701586fd563ef5b496eaba058`; a later source edit requires a new
+reviewed registration before preparation. The attested full revision also records
+the merged observer and fixtures used for that run.
+
+The predecessor is the verified compiler-name seed listed below, with the same
+exact revision, manifest and both target digests. Preparation and verification
+retain Darwin arm64 on `macos-15` and Linux arm64 on `ubuntu-24.04-arm`, adjacent
+median bounds of 1.25 and every-observation bounds of 2.0. MIR migration continues
+to record exact compiler sizes without introducing an integration ceiling;
+historical strict manifest caps remain unchanged.
+
+In addition to the complete corpus and fixed points, both modes execute the
+shared mutual-recursion and ordered-initializer contracts and reject value
+cycles and unresolved indirect calls. Linux records each capability invocation's
+process trace; Darwin retains its explicit boundary-only status. Ordinary CLI
+CI exercises the same capability observer before publication.
+
+Registration does not publish assets or change checkout pins. The four exact
+attested preparation assets must be published immutably and pass fresh
+published-asset verification before the separate checkout-pin PR and compiler
+source adoption.
+
 ## Current verified checkout seed
 
 Checkout builds pin [bootstrap-seed-2026-09-12-compiler-names](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-12-compiler-names),
@@ -135,8 +165,11 @@ It next builds accepted Array iteration source
 `508f721f8964d67a5893e547d2e2fb3de5b20a63` and checks live iteration, control
 transfer and managed-value fixtures. It then builds the accepted compiler-name
 bridge `6ca79d22cde2ddba5fe836c66899b6e08a6511dc`, verifies its exact entry digest,
-and checks the **candidate** source with that bridge. Only this setup transition
-retains the predecessor declaration spellings. The subsequent
+and uses it to check the accepted module-cycle source
+`a0f9147d29d73ad8a0237c7c51a0a5993bbe3a36`. That next bridge verifies its exact
+entry digest, checks the current candidate, and executes the shared cyclic-module
+capability contracts under process tracing. Only the earlier compiler-name setup
+transition retains the predecessor declaration spellings. The subsequent
 candidate-runtime transition stays separate so a future runtime change still
 precedes ordinary B2/B3/B4. These ordinary and measured generations remain the
 candidate.
@@ -148,7 +181,8 @@ The arm64 comparison authenticates its verified seed independently. Optional
 source arguments accept only their exact registered revisions. The Boolean
 source requires both earlier sources, the record source requires all three,
 the Hash source requires all four, and the Array iteration source requires all
-five; omitted later arguments retain the earlier setup shapes. Omitting every source argument retains the historical
+five; the compiler-name source requires those six, and the module-cycle source
+requires the compiler-name source. Omitted later arguments retain the earlier setup shapes. Omitting every source argument retains the historical
 direct-current-source setup.
 
 Initial publication/release-integrity workflows, retained manifests and earlier

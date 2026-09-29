@@ -20,6 +20,20 @@ test('main recovery selects only changed compiler modules and fails closed on un
   ]) assert.equal(recoveryModules(paths, modules), 'all', String(paths));
 });
 
+test('nested module identities remain distinct and moves retain complete validation', () => {
+  const modules = new Set(['compiler', 'checking/value', 'mir/value']);
+  assert.equal(recoveryModules(['compiler/src/checking/value.trb',
+    'compiler/src/mir/value.trb', 'compiler/src/checking/value_test.trb'], modules), 'checking/value,mir/value');
+  for (const invalid of ['compiler/src/../escape.trb', 'compiler/src/checking//value.trb',
+    'compiler/src/checking/missing.trb']) assert.equal(recoveryModules([invalid], modules), 'all');
+  const moved = ['compiler/src/value.trb', 'compiler/src/checking/value.trb',
+    'src/compiler_recovery_layout.trb', 'tools/compiler-project.sh'];
+  const plan = classify(moved, false, 'tiered');
+  assert.equal(plan.complete, true);
+  assert.equal(plan.compiler_units, true);
+  assert.equal(plan.memory, true);
+});
+
 // Planner subprocesses must not inherit the workflow's own gate setting.
 function plannerEnv(extra = {}) {
   const { NATIVE_CI_GATE, ...env } = process.env;

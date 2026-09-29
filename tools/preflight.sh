@@ -62,6 +62,7 @@ if [ "$plan" = documentation ]; then
 	exit 0
 fi
 
+step "compiler source staging" python3 tools/compiler_sources_test.py
 step "CI planner" node --test tools/ci-plan-test.mjs tools/ci-run-suites-test.mjs tools/recovery-workspace-test.mjs
 step "recovery import boundaries" sh -c '
 	python3 tools/recovery_layout_sync_test.py &&

@@ -1,11 +1,28 @@
 import { compiler_recovery_layout } from compiler_recovery_layout
-import { native_read_text, native_write_text } from native_file_system
+import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/result
 
 record RecoveryCompilerSources
 	names: Array<String>
 	contents: Array<String>
 	flattened: String
+end
+
+def valid_recovery_module_name(name: String): Boolean
+	parts := name.split("/")
+	parts.each do |part|
+		if part.empty?() || !"abcdefghijklmnopqrstuvwxyz".include?(part[0])
+			return false
+		end
+		mut index := 1
+		while index < part.size()
+			if !"abcdefghijklmnopqrstuvwxyz0123456789_".include?(part[index])
+				return false
+			end
+			index += 1
+		end
+	end
+	return true
 end
 
 def compiler_source_has_import(source: String): Boolean
@@ -77,6 +94,9 @@ def flatten_compiler_recovery_source(names: Array<String>, contents: Array<Strin
 	end
 	mut flattened := ""
 	layout.each.with_index do |module, index|
+		if !valid_recovery_module_name(module.name)
+			return Result<String, String>::Err("invalid compiler module path: " + module.name)
+		end
 		if names[index] != module.name
 			return Result<String, String>::Err("compiler source identity differs at " + module.name)
 		end
@@ -104,6 +124,9 @@ def read_compiler_recovery_sources(entry_path: String): Result<RecoveryCompilerS
 	mut names: Array<String> := []
 	mut contents: Array<String> := []
 	compiler_recovery_layout().each do |module|
+		if !valid_recovery_module_name(module.name)
+			return Result<RecoveryCompilerSources, String>::Err("invalid compiler module path: " + module.name)
+		end
 		mut path := compiler_source_path(directory, module.name + ".trb")
 		if module.name == "compiler"
 			path = entry_path
@@ -126,8 +149,34 @@ end
 
 def write_compiler_recovery_sources(sources: RecoveryCompilerSources, directory: String): Result<Boolean, String>
 	try flatten_compiler_recovery_source(sources.names, sources.contents)
-	sources.names.each.with_index do |name, index|
-		case native_write_text(compiler_source_path(directory, name + ".trb"), sources.contents[index])
+	return write_recovery_source_files(sources.names, sources.contents, directory)
+end
+
+def write_recovery_source_files(names: Array<String>, contents: Array<String>, directory: String): Result<Boolean, String>
+	if names.size() != contents.size()
+		return Result<Boolean, String>::Err("compiler source inventory differs")
+	end
+	mut seen: Array<String> := []
+	mut directories: Array<String> := []
+	names.each do |name|
+		if !valid_recovery_module_name(name) || seen.include?(name)
+			return Result<Boolean, String>::Err("invalid compiler module path: " + name)
+		end
+		seen.push(name)
+		parent := compiler_source_directory(compiler_source_path(directory, name + ".trb"))
+		if !directories.include?(parent)
+			directories.push(parent)
+		end
+	end
+	directories.each do |parent|
+		case native_create_directory(parent)
+		when Result::Ok(_output)
+		when Result::Err(error)
+			return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+		end
+	end
+	names.each.with_index do |name, index|
+		case native_write_text(compiler_source_path(directory, name + ".trb"), contents[index])
 		when Result::Ok(_unit)
 		when Result::Err(error)
 			return Result<Boolean, String>::Err(error.operation + ": " + error.message)

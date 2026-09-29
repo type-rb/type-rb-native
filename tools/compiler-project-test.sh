@@ -26,6 +26,15 @@ test "$(native_compiler_project_directory "$historical")" = "$historical/compile
 test "$(native_compiler_project_directory "$spaced")" = "$spaced/compiler"
 test "$(cd "$test_root" && native_compiler_project_directory current)" = current/compiler
 
+# Nested modules retain the same project root, independently of a frozen flat
+# checkout. A controller must not select a subdirectory as another project.
+mkdir -p "$current/compiler/src/checking" "$spaced/compiler/src/mir/analysis"
+printf 'def value(): Integer\nreturn 1\nend\n' > "$current/compiler/src/checking/value.trb"
+printf 'def value(): Integer\nreturn 2\nend\n' > "$spaced/compiler/src/mir/analysis/value.trb"
+test "$(native_compiler_project_directory "$current")" = "$current/compiler"
+test "$(native_compiler_project_directory "$spaced")" = "$spaced/compiler"
+test "$(native_compiler_project_directory "$historical")" = "$historical/compiler/gate4"
+
 assert_rejected() {
 	if native_compiler_project_directory "$1" > "$test_root/output" 2> "$test_root/error"; then
 		printf '%s\n' 'accepted an invalid project layout' >&2

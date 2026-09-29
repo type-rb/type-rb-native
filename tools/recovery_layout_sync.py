@@ -29,7 +29,8 @@ LAYOUT_ROW = re.compile(
     r'(?m)^\t\tRecoveryCompilerModule\.new\(name: "([^"]+)", imports: (' + STRING + r')\),\n'
 )
 MUTATION_ROW = re.compile(r'(?m)^\t\t\[(' + STRING + r'), (' + STRING + r'), (' + STRING + r')\],\n')
-IMPORT = re.compile(r"import (?:\{[^}]*\} from )?([A-Za-z0-9_/]+)")
+IMPORT = re.compile(r"import (?:\{[^}]*\} from )?([^\s]+)(?: as [A-Za-z0-9_]+)?(?:\s*#.*)?")
+MODULE = re.compile(r"[a-z][a-z0-9_]*(?:/[a-z][a-z0-9_]*)*")
 SAFE_LITERAL = re.compile(r'"([A-Za-z0-9 _.,:;!?()<>=+*/-]{3,})"')
 FIELD = re.compile(r"\t[a-z_][a-z0-9_]*: [^\n#]+")
 
@@ -61,7 +62,11 @@ def closure(root: Path) -> list[str]:
         name = pending.pop(0)
         if name in found:
             continue
+        if not MODULE.fullmatch(name):
+            raise InventoryError(f"invalid canonical compiler module {name}")
         path = directory / f"{name}.trb"
+        if path.is_symlink() or not path.resolve().is_relative_to(directory.resolve()):
+            raise InventoryError(f"canonical compiler module escapes its source root: {name}")
         if not path.is_file():
             raise InventoryError(f"missing canonical compiler module {name}")
         found.append(name)
@@ -70,9 +75,13 @@ def closure(root: Path) -> list[str]:
         except InventoryError as error:
             raise InventoryError(f"{name}: {error}") from None
         for line in header.splitlines():
-            match = IMPORT.match(line)
+            if not line:
+                continue
+            match = IMPORT.fullmatch(line)
             target = match and match.group(1)
-            if target and "/" not in target and (directory / f"{target}.trb").is_file():
+            if not target or not MODULE.fullmatch(target):
+                raise InventoryError(f"{name}: invalid canonical import: {line}")
+            if not target.startswith("trb/"):
                 pending.append(target)
     return found
 
@@ -197,7 +206,9 @@ def sync_frontend_test(root: Path, modules: list[str], write: bool) -> list[str]
     finish = original.find("]", start)
     if test < 0 or start < 0 or finish < 0:
         raise InventoryError("own-frontend module list is missing")
-    names = re.findall(r'"([a-z0-9_]+)"', original[start:finish])
+    names = [decode(value) for value in re.findall(STRING, original[start:finish])]
+    if any(not MODULE.fullmatch(name) for name in names) or len(set(names)) != len(names):
+        raise InventoryError("own-frontend module list has invalid or duplicated paths")
     if not names or names[0] != "compiler":
         raise InventoryError("own-frontend module list must start with the compiler entry")
     kept = [name for name in names if name in modules]
