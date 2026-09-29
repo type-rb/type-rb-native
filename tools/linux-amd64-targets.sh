@@ -3,8 +3,8 @@
 set -eu
 
 PRE_IMPLEMENTATION_REVISION=266c996668a4c3e0ad6eb833ca646b73ca7e56e1
-TYPE_RB_REVISION=0504b5a735328f0c665c70f3cad2876baf3839f6
-TYPE_RB_VERSION=0.4.9-dev
+TYPE_RB_REVISION=77cdff4a1e7588d21697b777b352284e812c7567
+TYPE_RB_VERSION=0.4.9
 ROOT_QBE_SIZE=658639
 ROOT_QBE_SHA256=62db3c31527a670c3050051a9fa27bf142b6c5deaab81ef8234104bd467aa95a
 PROFILE=linux-amd64-v0
@@ -1057,11 +1057,11 @@ for required_file in "$compiler_entry" "$portable_config" "$portable_source" "$f
 done
 test "$(sha256 "$portable_config")" = f38bad94e483e16876514e5624e96e11a66eaeb8374e222b14a75c7072dddbf0 ||
 	fail "portable-entry config digest differs"
-test "$(sha256 "$portable_source")" = 67d89532214e49f0a574cc031f33ca0e91f414a63e3185e274d260f80b243f66 ||
+test "$(sha256 "$portable_source")" = 9d23bdf23452e13a0a3dd112714a304cf59c37ebc5e10badd83a5938cccba397 ||
 	fail "portable-entry source digest differs"
 test "$(sha256 "$failure_config")" = 9a81d83d114df62bbe1f0f3e29404d01e6ae49945a0c3afe44b23fdeef228e98 ||
 	fail "runtime-failure config digest differs"
-test "$(sha256 "$failure_source")" = dc9e4ec4667c09fe1392a64b22cad5727568b7b08954d3fc09640847bb60a086 ||
+test "$(sha256 "$failure_source")" = 66b47df1fe37b5c084be7a669542b13694d0afc7a5c28aa9570011d571e60526 ||
 	fail "runtime-failure source digest differs"
 
 mkdir -p \

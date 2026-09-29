@@ -16,15 +16,19 @@ def mir_global_index(native_module: MirModule, identity: Integer): Integer
 		end
 		index += 1
 	end
-	return - 1
+	return -1
 end
 
 def mir_declare_globals(mut state: CompilerState)
+	mut runtime: Hash<String, Integer> := {}
+	state.global_bindings.runtime_order.each do |identity|
+		runtime[integer_string(identity)] = 1
+	end
 	mut index := 0
 	while index < state.global_bindings.globals.size()
 		row := state.global_bindings.globals[index]
 		type_id := mir_semantic_type_id(state.scalar_mir, state.global_bindings.global_types[index])
-		state.scalar_mir.globals.push(MirGlobal.new(mutable: row.mutable, id: index, name: row.name, source_id: row.source_id, line: row.line, type_id: type_id, initializer: state.global_bindings.global_functions[index], managed: mir_managed_type(state.scalar_mir, type_id)))
+		state.scalar_mir.globals.push(MirGlobal.new(mutable: row.mutable, runtime: runtime.key?(integer_string(index)), id: index, name: row.name, source_id: row.source_id, line: row.line, type_id: type_id, initializer: state.global_bindings.global_functions[index], managed: mir_managed_type(state.scalar_mir, type_id)))
 		index += 1
 	end
 	state.global_bindings.global_order.each do |identity|
@@ -47,15 +51,15 @@ def checked_global_read(mut state: CompilerState, mut locals: CheckedLocals, ide
 	mir_control_prepare(state, locals)
 	if mir_control_active(locals)
 		result := scalar_mir_value(state, locals, mir_semantic_type_id(state.scalar_mir, type_name), origin)
-		scalar_mir_instruction(state, locals, 51, result, - 1, - 1, identity, - 1, load_integer(state.source_tokens.token_lines, origin))
+		scalar_mir_instruction(state, locals, 51, result, -1, -1, identity, -1, load_integer(state.source_tokens.token_lines, origin))
 		value = mir_checked_value(type_name, result, origin, 0)
 	end
-	value = CheckedValue.new(type_name: type_name, category: value.category, origin: origin, mutable: mutable, binding: true, readonly: false, immutable_reference: false, nullable_binding: - 1, nullable_field: - 1, truth: - 1, falsity: - 1, flow_type: type_name)
-	return nullable_read(state, locals, value, - identity - 2, - 1, origin)
+	value = CheckedValue.new(type_name: type_name, category: value.category, origin: origin, mutable: mutable, binding: true, readonly: false, immutable_reference: false, nullable_binding: -1, nullable_field: -1, truth: -1, falsity: -1, flow_type: type_name)
+	return nullable_read(state, locals, value, -identity - 2, -1, origin)
 end
 
 def mir_global_assign(state: CompilerState, mut locals: CheckedLocals, identity: Integer, value: CheckedValue, origin: Integer)
-	scalar_mir_instruction(state, locals, 59, - 1, checked_mir_value(value), - 1, identity, - 1, load_integer(state.source_tokens.token_lines, origin))
+	scalar_mir_instruction(state, locals, 59, -1, checked_mir_value(value), -1, identity, -1, load_integer(state.source_tokens.token_lines, origin))
 end
 
 def mir_global_instruction_error(native_module: MirModule, instruction: MirInstruction, result_type: Integer, first_type: Integer, available: Boolean): String
@@ -64,7 +68,7 @@ def mir_global_instruction_error(native_module: MirModule, instruction: MirInstr
 		return "MIR global declaration is missing"
 	end
 	if instruction.kind == 59
-		if instruction.result != - 1 || instruction.second != - 1 || instruction.failure != - 1
+		if instruction.result != -1 || instruction.second != -1 || instruction.failure != -1
 			return "MIR global write shape differs"
 		end
 		if !native_module.globals[index].mutable
@@ -75,7 +79,7 @@ def mir_global_instruction_error(native_module: MirModule, instruction: MirInstr
 		end
 		return ""
 	end
-	if instruction.first != - 1 || instruction.second != - 1 || instruction.failure != - 1
+	if instruction.first != -1 || instruction.second != -1 || instruction.failure != -1
 		return "MIR global read shape differs"
 	end
 	if result_type != native_module.globals[index].type_id
@@ -100,7 +104,7 @@ def mir_globals_error(native_module: MirModule): String
 		end
 		mut root_matches := row.managed
 		if !mir_managed_type(native_module, row.type_id)
-			root_matches =!row.managed
+			root_matches = !row.managed
 		end
 		if !mir_semantic_value_type(native_module, row.type_id) || !root_matches
 			return "MIR global type or persistent root differs"
@@ -155,6 +159,12 @@ def mir_global_initialization_error(native_module: MirModule): String
 					instruction := native_module.instructions[operation]
 					if (instruction.kind == 51 || instruction.kind == 59) && !initialized.key?(integer_string(instruction.payload))
 						return "MIR constant initializer can read an uninitialized constant"
+					end
+					if row.runtime && (instruction.kind == 51 || instruction.kind == 59)
+						dependency := native_module.globals[mir_global_index(native_module, instruction.payload)]
+						if !dependency.runtime
+							return "MIR runtime initializer can read an inactive constant"
+						end
 					end
 					if instruction.kind == 11
 						pending.push(native_module.calls[instruction.payload].callee)

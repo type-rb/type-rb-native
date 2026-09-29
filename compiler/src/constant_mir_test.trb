@@ -25,6 +25,9 @@ describe("MIR constant safety") do
 		if valid
 			before := control_test_output(emit_qbe(state))
 			intrinsic_mir_erase(state)
+			while !state.global_bindings.runtime_order.empty?()
+				state.global_bindings.runtime_order.pop()
+			end
 			while !state.global_bindings.globals.empty?()
 				state.global_bindings.globals.pop()
 				state.global_bindings.global_types.pop()
@@ -84,7 +87,7 @@ describe("MIR constant safety") do
 			mut initializer := old.initializer
 			mut managed := old.managed
 			if mutation == 0
-				identity =- 1
+				identity = -1
 			elsif mutation == 1
 				identity = state.scalar_mir.globals[1].id
 			elsif mutation == 2
@@ -92,11 +95,11 @@ describe("MIR constant safety") do
 			elsif mutation == 3
 				line = 0
 			elsif mutation == 4
-				type_id =- 1
+				type_id = -1
 			elsif mutation == 5
-				managed =!managed
+				managed = !managed
 			elsif mutation == 6
-				initializer =- 1
+				initializer = -1
 			elsif mutation == 7
 				initializer = state.scalar_mir.globals[1].initializer
 			elsif mutation == 8
@@ -126,10 +129,18 @@ describe("MIR constant safety") do
 				end
 				state.scalar_mir.instructions[index] = compiler_test_instruction_with_cell(instruction, cell, value)
 			end
-			state.scalar_mir.globals[0] = MirGlobal.new(mutable: old.mutable, id: identity, name: old.name, source_id: source, line: line, type_id: type_id, initializer: initializer, managed: managed)
+			state.scalar_mir.globals[0] = MirGlobal.new(mutable: old.mutable, runtime: old.runtime, id: identity, name: old.name, source_id: source, line: line, type_id: type_id, initializer: initializer, managed: managed)
 			expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
 			mutation += 1
 		end
+	end
+
+	test("rejects runtime reads from an inactive initializer") do
+		mut state := logical_checked_source("FIRST := 1\ndef read(): Integer\nreturn FIRST\nend\nSECOND := read()\ndef main()\nputs(SECOND)\nend\n")
+		expect(check(state)).to_be_true()
+		old := state.scalar_mir.globals[0]
+		state.scalar_mir.globals[0] = MirGlobal.new(mutable: old.mutable, runtime: false, id: old.id, name: old.name, source_id: old.source_id, line: old.line, type_id: old.type_id, initializer: old.initializer, managed: old.managed)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR runtime initializer can read an inactive constant")
 	end
 
 	test("rejects uninitialized transitive reads after MIR order changes") do
