@@ -282,6 +282,40 @@
       "note": "Ordinary UTF-8 literals, code-point size/index, collections and NUL/long data are covered. Additional CLI tests cover argv, invalid source, forced GC and terminal editing. String empty/include/start/end queries and nullable first/last search now share code-point offsets, argument ordering, optional receivers and managed lifetime checks. Split, literal replace_all and Unicode simple upcase/downcase now have checked MIR, byte-level, lifetime and retained-session coverage. Reference output-mode case differences remain explicit. Chars, codepoints and reverse preserve code-point units, independent result storage, NUL, optional receivers and managed lifetimes. String slice now accepts checked code-point ranges, retaining receiver identity and optional short circuit; negative, reversed and out-of-bounds ranges fail explicitly. Control, octal, hex and scalar Unicode escapes preserve exact bytes, reject invalid scalar/digit forms and do not recursively start interpolation. Strip, lstrip and rstrip use the reference Unicode White_Space set, preserve retained bytes and manage optional, generic, captured and stored values."
     },
     {
+      "id": "bytes",
+      "title": "Immutable Bytes",
+      "scope": "basic",
+      "syntax": [],
+      "cases": [
+        "bytes-unicode",
+        "bytes-empty-nul",
+        "bytes-invalid-prefixes",
+        "bytes-utf8-boundaries",
+        "bytes-body-class",
+        "bytes-generic-record",
+        "bytes-containers",
+        "bytes-optional-closure",
+        "bytes-dynamic-print",
+        "bytes-evaluation-order",
+        "bytes-negative-index",
+        "bytes-past-end",
+        "bytes-empty-index",
+        "bytes-reject-constructor",
+        "bytes-reject-string-argument",
+        "bytes-reject-float-index",
+        "bytes-reject-mutation",
+        "bytes-reject-arity",
+        "bytes-all-byte-values",
+        "bytes-named-index",
+        "bytes-equality-contract",
+        "bytes-safe-argument-order"
+      ],
+      "pending": [
+        "Bytes values across remaining nominal wrappers and imported declarations"
+      ],
+      "note": "String#to_bytes and Bytes size, strict unsigned at, immutable concat, valid_utf8? and maximal-subpart replacement to_s use distinct typed MIR. Shared ordinary and retained REPL probes cover empty/NUL/multibyte input, all 256 byte values, malformed prefixes, scalar boundaries, split-sequence concatenation, class/record fields, generic calls, Array/Hash, nullable values, closures, Any output and argument order. Construction, mutation, equality and invalid method arguments remain rejected as in the pinned reference. Binary encoding and service adapters are separate package work."
+    },
+    {
       "id": "operators",
       "title": "Numeric and Boolean operations",
       "scope": "basic",
@@ -80399,6 +80433,1072 @@
         "repl": {
           "code": 0,
           "stdout": "true\nfalse\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "bytes-unicode",
+      "title": "Bytes byte length, unsigned access and immutable concatenation",
+      "declarations": "def probe()\nvalue: Bytes := \"A\ud83d\ude00\".to_bytes()\nputs(value.size())\nputs(value.at(0))\nputs(value.at(1))\nputs(value.valid_utf8?())\nputs(value.concat(\"!\".to_bytes()).to_s())\nputs(value.to_s())\nend\n",
+      "body": "probe()\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "5\n65\n240\ntrue\nA\ud83d\ude00!\nA\ud83d\ude00\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "5\n65\n240\ntrue\nA\ud83d\ude00!\nA\ud83d\ude00\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "5\n65\n240\ntrue\nA\ud83d\ude00!\nA\ud83d\ude00\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "5\n65\n240\ntrue\nA\ud83d\ude00!\nA\ud83d\ude00\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "bytes-empty-nul",
+      "title": "Empty Bytes and embedded NUL survive concatenation",
+      "declarations": "",
+      "body": "empty := \"\".to_bytes()\nvalue := \"A\\x00B\".to_bytes()\nputs(empty.size())\nputs(empty.valid_utf8?())\nputs(value.size())\nputs(value.at(1))\nputs(empty.concat(value).to_s())\nputs(value.concat(empty).to_s().size())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0\ntrue\n3\n0\nA\u0000B\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "Bytes[] : Bytes\nBytes[65, 0, 66] : Bytes\n0\ntrue\n3\n0\nA\u0000B\n3\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0\ntrue\n3\n0\nA\u0000B\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "Bytes[] : Bytes\nBytes[65, 0, 66] : Bytes\n0\ntrue\n3\n0\nA\u0000B\n3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "bytes-invalid-prefixes",
+      "title": "UTF-8 replacement consumes maximal ill-formed subparts",
+      "declarations": "def probe(text: String)\nvalue := text.to_bytes()\nputs(value.valid_utf8?())\nputs(value.to_s())\nputs(value.to_s().size())\nend\n",
+      "body": "probe(\"\\x80\\x81\")\nprobe(\"\\xc0\\xaf\")\nprobe(\"\\xe2\\x82\")\nprobe(\"\\xf0\\x9f\\x98\")\nprobe(\"\\xe2\\x82A\")\nprobe(\"\\xed\\xa0\\x80\")\nprobe(\"\\xf4\\x90\\x80\\x80\")\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "false\n\ufffd\ufffd\n2\nfalse\n\ufffd\ufffd\n2\nfalse\n\ufffd\n1\nfalse\n\ufffd\n1\nfalse\n\ufffdA\n2\nfalse\n\ufffd\ufffd\ufffd\n3\nfalse\n\ufffd\ufffd\ufffd\ufffd\n4\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "false\n\ufffd\ufffd\n2\nfalse\n\ufffd\ufffd\n2\nfalse\n\ufffd\n1\nfalse\n\ufffd\n1\nfalse\n\ufffdA\n2\nfalse\n\ufffd\ufffd\ufffd\n3\nfalse\n\ufffd\ufffd\ufffd\ufffd\n4\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "false\n\ufffd\ufffd\n2\nfalse\n\ufffd\ufffd\n2\nfalse\n\ufffd\n1\nfalse\n\ufffd\n1\nfalse\n\ufffdA\n2\nfalse\n\ufffd\ufffd\ufffd\n3\nfalse\n\ufffd\ufffd\ufffd\ufffd\n4\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "false\n\ufffd\ufffd\n2\nfalse\n\ufffd\ufffd\n2\nfalse\n\ufffd\n1\nfalse\n\ufffd\n1\nfalse\n\ufffdA\n2\nfalse\n\ufffd\ufffd\ufffd\n3\nfalse\n\ufffd\ufffd\ufffd\ufffd\n4\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "bytes-utf8-boundaries",
+      "title": "UTF-8 scalar boundaries and joined split sequences",
+      "declarations": "def probe(text: String)\nvalue := text.to_bytes()\nputs(value.valid_utf8?())\nputs(value.to_s().size())\nend\n",
+      "body": "probe(\"\\xc2\\x80\")\nprobe(\"\\xdf\\xbf\")\nprobe(\"\\xe0\\xa0\\x80\")\nprobe(\"\\xed\\x9f\\xbf\")\nprobe(\"\\xf0\\x90\\x80\\x80\")\nprobe(\"\\xf4\\x8f\\xbf\\xbf\")\nleft := \"\\xf0\\x9f\".to_bytes()\nright := \"\\x98\\x80\".to_bytes()\njoined := left.concat(right)\nputs(left.valid_utf8?())\nputs(right.valid_utf8?())\nputs(joined.valid_utf8?())\nputs(joined.to_s())\nputs(joined.to_s().size())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n1\ntrue\n1\ntrue\n1\ntrue\n1\ntrue\n1\ntrue\n1\nfalse\nfalse\ntrue\n\ud83d\ude00\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n1\ntrue\n1\ntrue\n1\ntrue\n1\ntrue\n1\ntrue\n1\nBytes[240, 159] : Bytes\nBytes[152, 128] : Bytes\nBytes[240, 159, 152, 128] : Bytes\nfalse\nfalse\ntrue\n\ud83d\ude00\n1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n1\ntrue\n1\ntrue\n1\ntrue\n1\ntrue\n1\ntrue\n1\nfalse\nfalse\ntrue\n\ud83d\ude00\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n1\ntrue\n1\ntrue\n1\ntrue\n1\ntrue\n1\ntrue\n1\nBytes[240, 159] : Bytes\nBytes[152, 128] : Bytes\nBytes[240, 159, 152, 128] : Bytes\nfalse\nfalse\ntrue\n\ud83d\ude00\n1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "bytes-body-class",
+      "title": "Body-shaped class retains typed Bytes fields",
+      "declarations": "class Body\nreadonly @_bytes: Bytes\ndef initialize(bytes: Bytes)\n@_bytes = bytes\nreturn\nend\ndef bytes(): Bytes\nreturn @_bytes\nend\ndef self.empty(): Body\nreturn Body.new(\"\".to_bytes())\nend\ndef empty?(): Boolean\nreturn @_bytes.size() == 0\nend\ndef size(): Integer\nreturn @_bytes.size()\nend\ndef to_s(): String\nreturn @_bytes.to_s()\nend\nend\n",
+      "body": "puts(Body.empty().empty?())\nputs(Body.new(\"A\ud83d\ude00\".to_bytes()).size())\nputs(Body.new(\"text\".to_bytes()).to_s())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n5\ntext\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n5\ntext\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n5\ntext\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n5\ntext\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "bytes-generic-record",
+      "title": "Bytes survives generic record fields and function boundaries",
+      "declarations": "record Packet<T>\nvalue: T\nend\ndef keep<T>(value: T): T\nreturn value\nend\n",
+      "body": "holder := Packet<Bytes>.new(value: keep<Bytes>(\"record\".to_bytes()))\nputs(holder.value.to_s())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "record\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "Packet(value: Bytes[114, 101, 99, 111, 114, 100]) : Packet<Bytes>\nrecord\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "record\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "Packet(value: Bytes[114, 101, 99, 111, 114, 100]) : Packet<Bytes>\nrecord\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "bytes-containers",
+      "title": "Bytes values in Array and Hash retain identity",
+      "declarations": "",
+      "body": "values: Array<Bytes> := [\"first\".to_bytes(), \"second\".to_bytes()]\nvalues.each do |value|\nputs(value.to_s())\nend\nlookup: Hash<String, Bytes> := {\"key\": values[1]}\nputs(lookup[\"key\"]&.to_s())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "first\nsecond\nsecond\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[Bytes[102, 105, 114, 115, 116], Bytes[115, 101, 99, 111, 110, 100]] : Array<Bytes>\nfirst\nsecond\n{\"key\": Bytes[115, 101, 99, 111, 110, 100]} : Hash<String, Bytes>\nsecond\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "first\nsecond\nsecond\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[Bytes[102, 105, 114, 115, 116], Bytes[115, 101, 99, 111, 110, 100]] : Array<Bytes>\nfirst\nsecond\n{\"key\": Bytes[115, 101, 99, 111, 110, 100]} : Hash<String, Bytes>\nsecond\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "bytes-optional-closure",
+      "title": "Nullable Bytes and captured values survive control flow",
+      "declarations": "",
+      "body": "present: Bytes? := \"kept\".to_bytes()\nabsent: Bytes? := nil\nputs(present&.size())\nputs(absent&.size())\nread := fn(): Bytes\nif present != nil\nreturn present\nend\nreturn \"fallback\".to_bytes()\nend\nputs(read().to_s())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "4\n<nil>\nkept\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "Bytes[107, 101, 112, 116] : Bytes?\nnil : Bytes?\n4\nnil\n#<fn> : () -> Bytes\nkept\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "4\n<nil>\nkept\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "Bytes[107, 101, 112, 116] : Bytes?\nnil : Bytes?\n4\nnil\n#<fn> : () -> Bytes\nkept\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "bytes-dynamic-print",
+      "title": "Bytes values render through Any and direct output",
+      "declarations": "",
+      "body": "value := \"A\ud83d\ude00\".to_bytes()\nboxed: Any := value\nputs(value)\nputs(boxed)\nvalue\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "[65 240 159 152 128]\n[65 240 159 152 128]\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "Bytes[65, 240, 159, 152, 128] : Bytes\nBytes[65, 240, 159, 152, 128] : Any\nBytes[65, 240, 159, 152, 128]\nBytes[65, 240, 159, 152, 128]\nBytes[65, 240, 159, 152, 128] : Bytes\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "[65 240 159 152 128]\n[65 240 159 152 128]\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "Bytes[65, 240, 159, 152, 128] : Bytes\nBytes[65, 240, 159, 152, 128] : Any\nBytes[65, 240, 159, 152, 128]\nBytes[65, 240, 159, 152, 128]\nBytes[65, 240, 159, 152, 128] : Bytes\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "bytes-evaluation-order",
+      "title": "Receiver and argument effects run once in order",
+      "declarations": "def make(label: String): Bytes\nputs(label)\nreturn label.to_bytes()\nend\n",
+      "body": "puts(make(\"left\").concat(make(\"right\")).to_s())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "left\nright\nleftright\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "left\nright\nleftright\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "left\nright\nleftright\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "left\nright\nleftright\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "bytes-negative-index",
+      "title": "Bytes rejects negative indexes",
+      "declarations": "",
+      "body": "puts(\"A\".to_bytes().at(-1))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Bytes index is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:6: error: Bytes index is out of bounds\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Bytes index is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error: Bytes index is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "bytes-past-end",
+      "title": "Bytes rejects an index equal to its byte length",
+      "declarations": "",
+      "body": "puts(\"A\".to_bytes().at(1))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Bytes index is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:6: error: Bytes index is out of bounds\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Bytes index is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error: Bytes index is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "bytes-empty-index",
+      "title": "Empty Bytes rejects every index",
+      "declarations": "",
+      "body": "puts(\"\".to_bytes().at(0))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Bytes index is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:6: error: Bytes index is out of bounds\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Bytes index is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error: Bytes index is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "bytes-reject-constructor",
+      "title": "Bytes has no authored constructor",
+      "declarations": "",
+      "body": "value := Bytes.new([])\nputs(value.size())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:10: error[TRB3000]: type Bytes has no member new\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:10: error[TRB3000]: type Bytes has no member new\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:10: error[TRB3000]: type Bytes has no member new\n(trb):1:6: error[TRB3000]: value is not declared\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4003]: unresolved record Bytes\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4003]: unresolved record Bytes\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4003]: unresolved record Bytes\n(trb):1: error[TRBN4003]: unresolved local value\n"
+        }
+      }
+    },
+    {
+      "id": "bytes-reject-string-argument",
+      "title": "Bytes concatenation requires Bytes",
+      "declarations": "",
+      "body": "puts(\"A\".to_bytes().concat(\"B\"))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:28: error[TRB3000]: argument 1 to concat() has type String, expected Bytes\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:28: error[TRB3000]: argument 1 to concat() has type String, expected Bytes\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:28: error[TRB3000]: argument 1 to concat() has type String, expected Bytes\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Bytes, found String\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Bytes, found String\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: expected Bytes, found String\n"
+        }
+      }
+    },
+    {
+      "id": "bytes-reject-float-index",
+      "title": "Bytes indexing requires Integer",
+      "declarations": "",
+      "body": "puts(\"A\".to_bytes().at(0.5))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:24: error[TRB3000]: argument 1 to at() has type Float, expected Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:24: error[TRB3000]: argument 1 to at() has type Float, expected Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:24: error[TRB3000]: argument 1 to at() has type Float, expected Integer\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Integer, found Float\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Integer, found Float\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: expected Integer, found Float\n"
+        }
+      }
+    },
+    {
+      "id": "bytes-reject-mutation",
+      "title": "Bytes exposes no Array mutation",
+      "declarations": "",
+      "body": "value := \"A\".to_bytes()\nvalue.push(66)\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: type Bytes has no member push\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: type Bytes has no member push\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "Bytes[65] : Bytes\n",
+          "stderr": "(trb):2:1: error[TRB3000]: type Bytes has no member push\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: push is unavailable on Bytes\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: push is unavailable on Bytes\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "Bytes[65] : Bytes\n",
+          "stderr": "(trb):2: error[TRBN4004]: push is unavailable on Bytes\n"
+        }
+      }
+    },
+    {
+      "id": "bytes-reject-arity",
+      "title": "Bytes byte size accepts no argument",
+      "declarations": "",
+      "body": "puts(\"A\".to_bytes().size(1))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: size() expects 0..0 arguments, got 1\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: size() expects 0..0 arguments, got 1\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:6: error[TRB3000]: size() expects 0..0 arguments, got 1\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: Bytes method argument count differs\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: Bytes method argument count differs\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: Bytes method argument count differs\n"
+        }
+      }
+    },
+    {
+      "id": "bytes-all-byte-values",
+      "title": "All unsigned byte values survive binary conversion and replacement decoding",
+      "declarations": "def probe()\nvalue := \"\\x00\\x01\\x02\\x03\\x04\\x05\\x06\\x07\\x08\\x09\\x0a\\x0b\\x0c\\x0d\\x0e\\x0f\\x10\\x11\\x12\\x13\\x14\\x15\\x16\\x17\\x18\\x19\\x1a\\x1b\\x1c\\x1d\\x1e\\x1f\\x20\\x21\\x22\\x23\\x24\\x25\\x26\\x27\\x28\\x29\\x2a\\x2b\\x2c\\x2d\\x2e\\x2f\\x30\\x31\\x32\\x33\\x34\\x35\\x36\\x37\\x38\\x39\\x3a\\x3b\\x3c\\x3d\\x3e\\x3f\\x40\\x41\\x42\\x43\\x44\\x45\\x46\\x47\\x48\\x49\\x4a\\x4b\\x4c\\x4d\\x4e\\x4f\\x50\\x51\\x52\\x53\\x54\\x55\\x56\\x57\\x58\\x59\\x5a\\x5b\\x5c\\x5d\\x5e\\x5f\\x60\\x61\\x62\\x63\\x64\\x65\\x66\\x67\\x68\\x69\\x6a\\x6b\\x6c\\x6d\\x6e\\x6f\\x70\\x71\\x72\\x73\\x74\\x75\\x76\\x77\\x78\\x79\\x7a\\x7b\\x7c\\x7d\\x7e\\x7f\\x80\\x81\\x82\\x83\\x84\\x85\\x86\\x87\\x88\\x89\\x8a\\x8b\\x8c\\x8d\\x8e\\x8f\\x90\\x91\\x92\\x93\\x94\\x95\\x96\\x97\\x98\\x99\\x9a\\x9b\\x9c\\x9d\\x9e\\x9f\\xa0\\xa1\\xa2\\xa3\\xa4\\xa5\\xa6\\xa7\\xa8\\xa9\\xaa\\xab\\xac\\xad\\xae\\xaf\\xb0\\xb1\\xb2\\xb3\\xb4\\xb5\\xb6\\xb7\\xb8\\xb9\\xba\\xbb\\xbc\\xbd\\xbe\\xbf\\xc0\\xc1\\xc2\\xc3\\xc4\\xc5\\xc6\\xc7\\xc8\\xc9\\xca\\xcb\\xcc\\xcd\\xce\\xcf\\xd0\\xd1\\xd2\\xd3\\xd4\\xd5\\xd6\\xd7\\xd8\\xd9\\xda\\xdb\\xdc\\xdd\\xde\\xdf\\xe0\\xe1\\xe2\\xe3\\xe4\\xe5\\xe6\\xe7\\xe8\\xe9\\xea\\xeb\\xec\\xed\\xee\\xef\\xf0\\xf1\\xf2\\xf3\\xf4\\xf5\\xf6\\xf7\\xf8\\xf9\\xfa\\xfb\\xfc\\xfd\\xfe\\xff\".to_bytes()\nmut index := 0\nmut sum := 0\nwhile index < value.size()\nsum += value.at(index)\nindex += 1\nend\nputs(value.size())\nputs(sum)\nputs(value.at(255))\nputs(value.valid_utf8?())\nputs(value.to_s().size())\nputs(value.to_s().to_bytes().size())\nend\n",
+      "body": "probe()\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "256\n32640\n255\nfalse\n256\n512\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "256\n32640\n255\nfalse\n256\n512\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "256\n32640\n255\nfalse\n256\n512\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "256\n32640\n255\nfalse\n256\n512\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "bytes-named-index",
+      "title": "Bytes named indexing arguments follow the reference contract",
+      "declarations": "",
+      "body": "puts(\"A\".to_bytes().at(index: 0))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:31: error[TRB3000]: at() has no named argument index\n<case>/main.trb:3:6: error[TRB3000]: at() is missing required argument index\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:31: error[TRB3000]: at() has no named argument index\n<case>/main.trb:3:6: error[TRB3000]: at() is missing required argument index\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:31: error[TRB3000]: at() has no named argument index\n(trb):1:6: error[TRB3000]: at() is missing required argument index\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: unresolved value index\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: unresolved value index\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: unresolved value index\n"
+        }
+      }
+    },
+    {
+      "id": "bytes-equality-contract",
+      "title": "Bytes equality follows the reference type contract",
+      "declarations": "",
+      "body": "puts(\"A\".to_bytes() == \"A\".to_bytes())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: operator == does not support Bytes and Bytes\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: operator == does not support Bytes and Bytes\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:6: error[TRB3000]: operator == does not support Bytes and Bytes\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: unsupported operator == for Bytes\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: unsupported operator == for Bytes\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: unsupported operator == for Bytes\n"
+        }
+      }
+    },
+    {
+      "id": "bytes-safe-argument-order",
+      "title": "Absent Bytes receiver skips concatenation arguments",
+      "declarations": "def marker(): Bytes\nputs(\"argument\")\nreturn \"B\".to_bytes()\nend\ndef probe()\nabsent: Bytes? := nil\npresent: Bytes? := \"A\".to_bytes()\nputs(absent&.concat(marker())&.to_s())\nputs(present&.concat(marker())&.to_s())\nend\n",
+      "body": "probe()\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "<nil>\nargument\nAB\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil\nargument\nAB\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "<nil>\nargument\nAB\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil\nargument\nAB\n",
           "stderr": ""
         }
       }
