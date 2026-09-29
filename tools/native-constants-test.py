@@ -115,11 +115,31 @@ end
 VALUE := mark()
 ''')
     assert run([binary, 'check', '--config', config]).stdout == b'ok\n'
-    assert run([binary, 'run', '--config', config]).stdout == b'independent\nentry\n'
+    assert run([binary, 'run', '--config', config]).stdout == b'entry\n'
     emitted = run([binary, '--internal-driver', 'emit-qbe', entry])
     (root / 'file.ssa').write_bytes(emitted.stdout)
     run([binary.with_name('qbe'), '-o', root / 'file.s', root / 'file.ssa'])
     run(['/usr/bin/cc', root / 'file.s', '-lm', '-o', root / 'file'])
     assert run([root / 'file']).stdout == b'entry\n'
 
-print('PASS Native constant GC roots, once-only evaluation, retention and replay')
+    # Source imports retain their authored DFS order across directory boundaries.
+    files = {
+        'shared.trb': 'def mark(value: String): Integer\nputs(value)\nreturn 1\nend\nBASE := mark("shared")\n',
+        'a/z.trb': 'import { mark, BASE } from shared\nZ := mark("z") + BASE\n',
+        'b/y.trb': 'import { mark } from shared\nimport { Z } from a/z\nY := mark("y") + Z\n',
+        'a/x.trb': 'import { mark } from shared\nimport { Y } from b/y\nX := mark("x") + Y\n',
+        'main.trb': 'import { X } from a/x\nimport { Z } from a/z\ndef main()\nputs(X)\nputs(Z)\nend\n',
+    }
+    for name, source in files.items():
+        path = project / 'src' / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source)
+    assert run([binary, 'run', '--config', config]).stdout == b'shared\nz\ny\nx\n4\n2\n'
+
+    # Suppressing execution must not suppress static diagnostics in unused files.
+    (project / 'src/invalid.trb').write_text('INVALID: Integer := "wrong"\n')
+    invalid = subprocess.run([binary, 'check', '--config', config], cwd=root,
+                             env=env, capture_output=True, timeout=60)
+    assert invalid.returncode != 0 and b'Integer' in invalid.stderr, invalid
+
+print('PASS Native constant runtime roots, import order, GC roots, retention and replay')

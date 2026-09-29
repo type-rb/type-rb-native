@@ -21,22 +21,27 @@ initializer becomes a private zero-argument checked function; the expression-bod
 mechanism is shared with declaration-owned defaults. Type inference checks those
 expressions without executing them before the MIR signature catalog is frozen.
 Imported dependencies precede their consumers, and constants within a source
-retain declaration order. A configured project includes all its loaded production
-sources; a file-root build has the closure selected by its loader.
+retain declaration order. A configured project checks all its loaded production
+sources, but runtime initialization follows only the entry's import closure.
+Unreferenced sources still receive static diagnostics without executing their
+initializers. A file-root build uses the closure selected by its loader. REPL
+imports contribute their ordinary dependency closures. Native test-root loading
+remains part of the test-runner coverage work.
 
 `MirGlobal` stores a declaration identity, source origin, exact type, initializer
-function identity and managed-root classification. An explicit initialization
-list names identities, independently of catalog row order. Instruction 51 reads
+function identity, runtime membership and managed-root classification. An explicit
+initialization list names identities, independently of catalog row order. Instruction 51 reads
 a global without source operands. Its contract includes failure if initialization
 has not completed. Verification checks catalog uniqueness, the full order,
 initializer signatures and bodies, result types, origins and persistent-root
 classification. It also rejects direct and transitively known ordinary-call
-reads of a later global. Verified indirect calls retain their usual effects;
+reads of a later global or a runtime initializer's dependency on an inactive
+global. Verified indirect calls retain their usual effects;
 runtime checks protect global reads reached dynamically.
 
 The adapter creates typed storage and initialized flags from verified MIR, calls
-each initializer once before authored entry code, and publishes its result before
-resetting initializer temporaries. Managed globals have a generated root-address
+each runtime initializer once before authored entry code, and publishes its result
+before resetting initializer temporaries. Managed globals have a generated root-address
 vector which the collector scans. It has no fixed slot limit and does not reuse
 the external-root array. Earlier initializer results remain rooted while later
 initializers allocate. Nullable constant facts use declaration identities rather
