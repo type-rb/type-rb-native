@@ -71,5 +71,18 @@ cmp "$workspace/b4/compiler" "$package/$asset"
 for fixture in logical-short-circuit elsif-control elsif-managed loop-transfer-recovery boolean-array-values boolean-array-effects boolean-array-recovery record-array-values record-array-effects record-array-managed record-array-recovery hash-values hash-managed hash-cycles array-iteration-live array-iteration-control array-iteration-managed range-values range-streaming range-extrema range-managed; do
     "$package/$asset" check "$root/compiler/conformance/valid/$fixture.trb"
 done
+# Execute the same positive and negative module contracts used by ordinary CI.
+trace_flag=
+if test "$profile" = linux-arm64-v0; then trace_flag=--trace; fi
+python3 "$root/tools/bootstrap-module-cycles.py" --compiler "$package/$asset" \
+    --qbe "$qbe" --profile "$profile" --evidence "$workspace/evidence/module-cycles" $trace_flag
+if test -n "$trace_flag"; then
+    for trace in "$workspace/evidence/module-cycles"/*/*.trace; do
+        if grep -E 'execve\("[^"]*/(go|trb|sh|bash|dash|zsh)"|compiler-recovery' "$trace" > /dev/null; then
+            printf '%s\n' 'module-cycle capability proof launched a forbidden process' >&2
+            exit 1
+        fi
+    done
+fi
 find "$workspace" -name '*.trbn.*' -print > "$workspace/temporary-inventory.txt"
 test ! -s "$workspace/temporary-inventory.txt"
