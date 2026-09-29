@@ -1,4 +1,4 @@
-import { MirInstruction } from mir
+import { MirInstruction, MirModule } from mir
 import { mir_operand_type, mir_storage_type_name } from mir_types
 import { QbeEmitContext, QbeValue, emit_temporary, emitted_value } from qbe_context
 import { QbeOutput, qbe_output_line } from qbe_output
@@ -31,7 +31,18 @@ end
 
 # A negative span consumes one maximal ill-formed UTF-8 subpart.
 # Bounds and validity belong to these explicit runtime operations.
-def emit_bytes_runtime(mut output: QbeOutput)
+def emit_bytes_runtime(native_module: MirModule, mut output: QbeOutput)
+	# Emit binary services only when a verified semantic Bytes identity exists.
+	# Ordinary programs without Bytes keep their existing runtime surface.
+	mut needed := false
+	native_module.types.each do |row|
+		if row.kind == 17
+			needed = true
+		end
+	end
+	if !needed
+		return
+	end
 	qbe_output_line(output, "data $trbn_bytes_bounds_error = { b \"panic: Bytes index is out of bounds\", b 10 }\n")
 	qbe_output_line(output, "function l $trbn_bytes_at(l %value, l %index) {\n@start\n %lenp =l add %value, 8\n %length =l loadl %lenp\n %negative =w csltl %index, 0\n %past =w csgel %index, %length\n %bad =w or %negative, %past\n jnz %bad, @fail, @read\n@fail\n call $trbn_fail(l $trbn_bytes_bounds_error, l 36)\n hlt\n@read\n %data =l add %value, 24\n %address =l add %data, %index\n %byte =w loadub %address\n %result =l extuw %byte\n ret %result\n}\n")
 	qbe_output_line(output, "function l $trbn_bytes_utf8_span(l %data, l %remaining) {\n@start\n %lead =w loadub %data\n %ascii =w cultw %lead, 128\n jnz %ascii, @ascii, @two_test\n@ascii\n ret 1\n@two_test\n %two_low =w cugew %lead, 194\n %two_high =w culew %lead, 223\n %two =w and %two_low, %two_high\n jnz %two, @two, @three_test\n@two\n jmp @second_bounds\n@three_test\n %three_low =w cugew %lead, 224\n %three_high =w culew %lead, 239\n %three =w and %three_low, %three_high\n jnz %three, @three, @four_test\n@three\n jmp @second_bounds\n@four_test\n %four_low =w cugew %lead, 240\n %four_high =w culew %lead, 244\n %four =w and %four_low, %four_high\n jnz %four, @four, @invalid_lead\n@four\n jmp @second_bounds\n@invalid_lead\n ret -1\n@second_bounds\n %width =l phi @two 2, @three 3, @four 4\n %missing =w cultl %remaining, 2\n jnz %missing, @invalid_lead, @second\n@second\n %secondp =l add %data, 1\n %second =w loadub %secondp\n %below =w cultw %second, 128\n %above =w cugtw %second, 191\n %not_continuation =w or %below, %above\n %e0 =w ceqw %lead, 224\n %short3 =w cultw %second, 160\n %overlong3 =w and %e0, %short3\n %ed =w ceqw %lead, 237\n %surrogate =w cugew %second, 160\n %surrogate3 =w and %ed, %surrogate\n %f0 =w ceqw %lead, 240\n %short4 =w cultw %second, 144\n %overlong4 =w and %f0, %short4\n %f4 =w ceqw %lead, 244\n %high4 =w cugew %second, 144\n %outside =w and %f4, %high4\n %bad1 =w or %not_continuation, %overlong3\n %bad2 =w or %surrogate3, %overlong4\n %bad3 =w or %bad1, %bad2\n %bad =w or %bad3, %outside\n jnz %bad, @invalid_lead, @second_valid\n@second_valid\n jmp @scan\n@scan\n %index =l phi @second_valid 2, @more %next\n %complete =w ceql %index, %width\n jnz %complete, @valid, @bounds\n@bounds\n %truncated =w cugel %index, %remaining\n jnz %truncated, @invalid_prefix, @continuation\n@continuation\n %address =l add %data, %index\n %byte =w loadub %address\n %low =w cultw %byte, 128\n %high =w cugtw %byte, 191\n %invalid =w or %low, %high\n jnz %invalid, @invalid_prefix, @more\n@more\n %next =l add %index, 1\n jmp @scan\n@invalid_prefix\n %negative =l sub 0, %index\n ret %negative\n@valid\n ret %width\n}\n")
