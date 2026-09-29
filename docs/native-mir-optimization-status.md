@@ -92,7 +92,9 @@ not a performance improvement.
 - `mir_logical.trb`: conditional RHS and expression-result join construction.
 - `checked_types.trb`: assignability, operator result types and diagnostics.
 - `argument_binding.trb`: shared required positional/named slots and record labels; authored evaluation precedes operand reordering.
-- `checked_program.trb`: recursive source checking; it invokes these owners.
+- `frontend/checking/checked_program.trb` and its call, collection, member,
+  statement, control and iteration owners: mutually recursive source checking
+  that invokes the shared MIR construction owners.
 - `qbe_context.trb`, `qbe_functions.trb`, `qbe_numeric.trb`, `qbe_constants.trb`:
   target operands/labels, function ABI and MIR-selected root-frame prologues,
   selected numeric spelling and static data. No lexical local/header/root analysis.
