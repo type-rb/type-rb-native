@@ -31,6 +31,8 @@ text and applicable documentation CI. For code, complete the authorities in
 [CI validation](docs/ci-validation.md); avoid redundant runs after they pass
 unless a new change, failure, or unresolved concern warrants them.
 Use focused local proof during development and hosted CI for integration.
+Before pushing code, run `tools/preflight.sh /path/to/pinned/trb` so quick CI
+failures that need only the reference compiler surface locally first.
 During alpha development the PR gate is tiered: merge once PR acceptance passes;
 `Main validation` then runs the deferred complete lanes. When it is red, fixing
 or reverting main comes before merging more feature PRs. Run full local recovery
