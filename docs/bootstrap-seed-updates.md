@@ -100,8 +100,9 @@ The refresh workflow requires its exact `compiler/src` tree
 reviewed registration before preparation. The attested full revision also records
 the merged observer and fixtures used for that run.
 
-The predecessor is the verified compiler-name seed listed below, with the same
-exact revision, manifest and both target digests. Preparation and verification
+The predecessor is the immutable compiler-name seed. Its exact revision,
+manifest and both target digests remain authenticated in the release manifest.
+Preparation and verification
 retain Darwin arm64 on `macos-15` and Linux arm64 on `ubuntu-24.04-arm`, adjacent
 median bounds of 1.25 and every-observation bounds of 2.0. MIR migration continues
 to record exact compiler sizes without introducing an integration ceiling;
@@ -113,40 +114,40 @@ cycles and unresolved indirect calls. Linux records each capability invocation's
 process trace; Darwin retains its explicit boundary-only status. Ordinary CLI
 CI exercises the same capability observer before publication.
 
-Registration does not publish assets or change checkout pins. The four exact
-attested preparation assets must be published immutably and pass fresh
-published-asset verification before the separate checkout-pin PR and compiler
-source adoption.
+The four exact attested assets are published immutably and have passed fresh
+published-asset verification. Checkout builds and active consumers use the
+verified seed recorded below; compiler source adoption retains ordinary and
+recovery validation.
 
 ## Current verified checkout seed
 
-Checkout builds pin [bootstrap-seed-2026-09-12-compiler-names](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-12-compiler-names),
+Checkout builds pin [bootstrap-seed-2026-09-29-module-cycles](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-29-module-cycles),
 an immutable experimental prerelease from accepted source
-`d7ffb9384229125216696a220c7f370422472178`. Its compiler source tree is
-`4fc8da9eedafadda9dce7fb80357d8db2594b382` from PR #442.
+`04993b6bf598356a51143edd9dbde1a024c403cc`. Its compiler source tree is
+`d811b0d7868f5e3701586fd563ef5b496eaba058` from the accepted module-cycle implementation.
 
-- [Preparation and attestations](https://github.com/type-rb/type-rb-native/actions/runs/34694042015) passed both arm64 targets and all 28 retained observations. All four assets were authenticated against the exact source and hosted preparation workflow before publication.
-- [Fresh published-asset verification](https://github.com/type-rb/type-rb-native/actions/runs/34694464071) passed both targets, including equality of each downloaded seed with B1/B2/B3/B4, the complete corpus, all 42 retained generation observations and ordinary Linux process boundaries. Darwin retains its explicit boundary-only inventory.
-- Darwin compiler: 432,008 bytes, SHA-256 `28d1b5a3aa42013ea8876173dbf760f7e71ee221a69bf16c915e485ccf60bdd9` (asset 559250651).
-- Linux compiler: 394,352 bytes, SHA-256 `40cf35282750792c60dee1efdbdf331681ee7b5dd7efb5fae7a551824db4221c` (asset 559250648).
-- Combined: 826,360 bytes. These are authenticated MIR migration observations, not a passing historical size comparison.
-- Manifest: SHA-256 `04a0242b06818641e72d65ccbe4ece79380d875768772e60500fa36f05559c83` (asset 559250654).
-- Checksum index: SHA-256 `fb66a448d3aaf1f590c7495fa456f1ed68013990367b06ff0adab04530f3267e` (asset 559250647).
+- [Preparation and attestations](https://github.com/type-rb/type-rb-native/actions/runs/36579382624) passed both arm64 targets and all 28 retained generation observations. All four assets were authenticated against the exact source and hosted preparation workflow before publication.
+- [Fresh published-asset verification](https://github.com/type-rb/type-rb-native/actions/runs/36582600586) passed both targets, including equality of each downloaded seed with B1/B2/B3/B4, the complete corpus, all 42 retained generation observations and ordinary Linux process boundaries. Both runs exercise the shared mutual-recursion and ordered-initializer contracts and reject value cycles and unproven indirect initialization calls. Darwin retains its explicit boundary-only inventory.
+- Darwin compiler: 2,365,384 bytes, SHA-256 `54337b2b4e3aebc1a81260ad3be071008b88b6e30685d182db81a138f11ac216` (asset 598412238).
+- Linux compiler: 2,321,904 bytes, SHA-256 `3627fd8c574a668173ac6bb25eb41371c0f6cf0fa9da1016eebfc08b078d4060` (asset 598412235).
+- Combined: 4,687,288 bytes, recorded under the registered MIR migration and generation bounds.
+- Manifest: SHA-256 `8d0b6a23b004c5a697715f8f0af454615edd7a69d6f7db9e65680e7914ec7b12` (asset 598412236).
+- Checksum index: SHA-256 `4e48f0dcd6428dbea75bc48260cd7b7351438da940963037bc2f657dc807e210` (asset 598412237).
 
-The immutable [Array-iteration predecessor](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-11-array-iteration)
-remains at `b4a1b383e5678907649334203f534ae62fa42af6`. Its exact identities,
+The immutable [compiler-name predecessor](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-12-compiler-names)
+remains at `d7ffb9384229125216696a220c7f370422472178`. Its exact identities,
 preparation/verification runs and earlier predecessor history remain in the
-[source-era handoff record](https://github.com/type-rb/type-rb-native/blob/d7ffb9384229125216696a220c7f370422472178/docs/bootstrap-seed-updates.md#current-verified-checkout-seed).
+[source-era handoff record](https://github.com/type-rb/type-rb-native/blob/04993b6bf598356a51143edd9dbde1a024c403cc/docs/bootstrap-seed-updates.md#current-verified-checkout-seed).
 Every historical tag retains its exact predecessor and size contracts.
 
-Compiler binaries and detailed run artifacts remain outside Git. This compact
-handoff record does not introduce another retained benchmark result directory
-or claim a runtime speedup.
+Compiler binaries and detailed run artifacts remain outside Git. The current
+seed and the registered historical consumer bridge permit compiler implementation
+modules to adopt cyclic imports while retaining ordinary and recovery validation.
 
 ## Active CI consumers versus historical recovery
 
 Current compiler-cost, worker-memory, formal runtime/build benchmark, daily/weekly
-performance and Linux arm64 regression workflows use the exact compiler-name
+performance and Linux arm64 regression workflows use the exact module-cycle
 seed and the shared strict download/authentication helper. Their manual seed input must match the recorded
 source revision; an older or unknown tag fails rather than bypassing provenance.
 Changing a setup seed does not move a frozen benchmark baseline or change any
