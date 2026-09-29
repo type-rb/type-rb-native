@@ -64,6 +64,14 @@ class CompilerSourceStagingTest(unittest.TestCase):
             stage_sources([self.core], fresh)
         self.assertEqual(list(outside.iterdir()), [])
 
+    def test_file_and_directory_collisions_fail_before_any_copy(self):
+        self.write(self.core, 'group.trb', 'core')
+        self.write(self.cli, 'group.trb/child.trb', 'cli')
+        for roots in ([self.core, self.cli], [self.cli, self.core]):
+            with self.assertRaisesRegex(ValueError, 'collision'):
+                stage_sources(roots, self.output)
+            self.assertFalse(self.output.exists())
+
 
 if __name__ == '__main__':
     unittest.main()

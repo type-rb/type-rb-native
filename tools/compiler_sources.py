@@ -21,10 +21,13 @@ def source_files(root):
 def stage_sources(roots, destination):
     destination = Path(destination)
     selected = {}
+    directories = set()
     for root in roots:
         for relative, source in source_files(root):
             target = destination / relative
-            if relative in selected or target.exists() or target.is_symlink():
+            if (relative in selected or relative in directories or
+                    any(parent in selected for parent in relative.parents) or
+                    target.exists() or target.is_symlink()):
                 raise ValueError(f"compiler source collision: {relative}")
             for parent in target.parents:
                 if parent.is_symlink() or parent.exists() and not parent.is_dir():
@@ -32,6 +35,7 @@ def stage_sources(roots, destination):
                 if parent == destination:
                     break
             selected[relative] = source
+            directories.update(relative.parents)
     # Validate every input and destination before publishing any staged file.
     for relative, source in selected.items():
         target = destination / relative
