@@ -154,7 +154,7 @@ test('complete compiler units run independently for code and CLI and fail closed
   const units = workflow.match(/^  compiler_units:\n([\s\S]*?)(?=^  documentation:)/m)?.[1];
   assert(units?.includes("if: needs.plan.outputs.compiler_units == 'true'"));
   assert(units.includes('runs-on: macos-14'), 'QBE execution tests assemble arm64_apple code');
-  assert(units.includes('ref: 77cdff4a1e7588d21697b777b352284e812c7567'));
+  assert(units.includes('ref: af8e5f52e18e265d20bab7efbeaa2c36ea9342ae'));
   assert(units.includes('test "$(cat TYPE_RB_REVISION)" = "$(git -C .type-rb rev-parse HEAD)"'));
   assert(units.includes('d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320'));
   assert(units.includes('TYPE_RB_NATIVE_QBE: ${{ runner.temp }}/qbe-1.3/qbe'));
