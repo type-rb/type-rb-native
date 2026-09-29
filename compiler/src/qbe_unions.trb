@@ -76,6 +76,7 @@ def emit_any_output_runtime(state: CompilerState, mut output: QbeOutput)
 	qbe_output_line(output, "data $trbn_any_array_open = { b \"&[\" }\ndata $trbn_any_hash_open = { b \"map[\" }\ndata $trbn_any_close = { b \"]\" }\ndata $trbn_any_space = { b \" \" }\ndata $trbn_any_colon = { b \":\" }\ndata $trbn_any_dot = { b \".\" }\ndata $trbn_any_minus = { b \"-\" }\ndata $trbn_any_zero = { b \"0\" }\ndata $trbn_any_nil = { b \"<nil>\" }\ndata $trbn_any_true = { b \"true\" }\ndata $trbn_any_false = { b \"false\" }\ndata $trbn_any_positive_inf = { b \"+Inf\" }\ndata $trbn_any_negative_inf = { b \"-Inf\" }\ndata $trbn_any_exponent = { b \"e%+03d\", b 0 }\ndata $trbn_any_newline = { b 10 }\ndata $trbn_any_error = { b \"panic: Any value cannot be printed\", b 10 }")
 	qbe_output_line(output, "\nfunction $trbn_any_write_string(l %value) {\n@start\n %length_address =l add %value, 8\n %length =l loadl %length_address\n %data =l add %value, 24\n call $write(w 1, l %data, l %length)\n ret\n}\n")
 	qbe_output_line(output, "\nfunction $trbn_any_write_integer(l %value) {\n@start\n %string =l call $trbn_integer_to_string(l %value)\n call $trbn_any_write_string(l %string)\n ret\n}\n")
+	qbe_output_line(output, "data $trbn_any_bytes_open = { b \"[\" }")
 	emit_any_float_writer(output)
 	mut type_id := 1
 	while type_id < state.scalar_mir.types.size() + 9
@@ -121,6 +122,10 @@ def emit_any_type_writer(state: CompilerState, type_id: Integer, mut output: Qbe
 	end
 	if type_id >= 9
 		row := state.scalar_mir.types[type_id - 9]
+		if row.kind == 17
+			qbe_output_line(output, " call $write(w 1, l $trbn_any_bytes_open, l 1)\n %lenp =l add %value, 8\n %length =l loadl %lenp\n %data =l add %value, 24\n jmp @loop\n@loop\n %index =l phi @start 0, @next %following\n %done =w ceql %index, %length\n jnz %done, @close, @item\n@item\n %first =w ceql %index, 0\n jnz %first, @byte, @space\n@space\n call $write(w 1, l $trbn_any_space, l 1)\n jmp @byte\n@byte\n %address =l add %data, %index\n %raw =w loadub %address\n %byte =l extuw %raw\n call $trbn_any_write_integer(l %byte)\n jmp @next\n@next\n %following =l add %index, 1\n jmp @loop\n@close\n call $write(w 1, l $trbn_any_close, l 1)\n ret\n}\n")
+			return
+		end
 		if row.kind == 1
 			emit_any_array_writer(row.element, output)
 			return

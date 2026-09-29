@@ -6,6 +6,7 @@ Each count describes registered probes, not language coverage percentages.
 | --- | --- | --- | --- | --- |
 | Source text and lexical forms | basic | 0 / 64 | Invalid UTF-8 source and diagnostic positions; CRLF and source normalization; Remaining reserved contexts and malformed literal contracts | CommentStatement, BlankStatement, Identifier |
 | Strings and UTF-8 | basic | 2 / 182 | Reference output-mode Unicode case differences (TypeRB #791); Embedded-expression boundaries beyond the reviewed interpolation probes | Literal, InterpolatedString |
+| Immutable Bytes | basic | 0 / 22 | Bytes values across remaining nominal wrappers and imported declarations |  |
 | Numeric and Boolean operations | basic | 1 / 50 | Remaining operators and assignment forms; mixed widening and portable failure boundaries; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
 | Bindings, constants and mutation | basic | 5 / 115 | Contextual empty collection inference beyond constant literals; qualified namespace binding members (TypeRB #787) | VariableStatement, AssignmentStatement |
 | Function declarations and calls | basic | 0 / 49 | none registered | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |

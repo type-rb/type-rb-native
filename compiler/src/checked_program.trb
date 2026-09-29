@@ -1,3 +1,4 @@
+import { bytes_method_argument_type, bytes_method_arity, bytes_method_kind, mir_bytes_method } from bytes_mir
 import { checked_array_numeric_candidate, checked_array_numeric_record, checked_array_numeric_region, checked_array_refine, checked_hash_inference_region, checked_hash_numeric_region, checked_hash_refine } from checked_collection_inference
 import { checked_instance_field, checked_object_field, mir_checked_object_store } from object_fields
 import { object_field_index, object_function_owner, object_instance_type, object_static_self_type, object_value_assignable } from object_types
@@ -796,7 +797,7 @@ def check_method_call(
 		checked_array_numeric_record(locals, receiver, conversion)
 		return result
 	end
-	if (receiver.type_name == "Range<Integer>" && method == "to_a") || (receiver.type_name == "Integer" && integer_method_kind(method) > 0) || (receiver.type_name == "Float" && float_method_kind(method) > 0) || (receiver.type_name == "String" && string_method_kind(method) > 0) || (array_element_type(receiver.type_name) != "" && array_method_kind(method) > 0) || (receiver.type_name == "Array" && method == "empty?")
+	if bytes_method_kind(receiver.type_name, method) > 0 || (receiver.type_name == "Range<Integer>" && method == "to_a") || (receiver.type_name == "Integer" && integer_method_kind(method) > 0) || (receiver.type_name == "Float" && float_method_kind(method) > 0) || (receiver.type_name == "String" && string_method_kind(method) > 0) || (array_element_type(receiver.type_name) != "" && array_method_kind(method) > 0) || (receiver.type_name == "Array" && method == "empty?")
 		return check_primitive_method(state, position, locals, receiver, method)
 	end
 	line := load_integer(state.source_tokens.token_lines, position[0])
@@ -959,7 +960,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 		return check_union_member(state, locals, value, member, position[0] - 1)
 	end
 	if token_is(state, position[0], "(")
-		if value.category < 4 && !(member == "raw_value" && raw_enum_type(state, find_enum_type(state, value.type_name)) != "") && enum_method_function(state, value.type_name, member) < 0 && builtin_result_method(value.type_name, member) == 0 && member != "size" && member != "to_i" && member != "to_f" && member != "to_s" && member != "push" && member != "new" && !(value.type_name == "Range<Integer>" && member == "to_a") && !(value.type_name == "Integer" && integer_method_kind(member) > 0) && !(value.type_name == "Float" && float_method_kind(member) > 0) && !(value.type_name == "String" && string_method_kind(member) > 0) && !(array_element_type(value.type_name) != "" && array_method_kind(member) > 0) && !(value.type_name == "Array" && (member == "empty?" || member == "unshift")) && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
+		if value.category < 4 && bytes_method_kind(value.type_name, member) == 0 && !(member == "raw_value" && raw_enum_type(state, find_enum_type(state, value.type_name)) != "") && enum_method_function(state, value.type_name, member) < 0 && builtin_result_method(value.type_name, member) == 0 && member != "size" && member != "to_i" && member != "to_f" && member != "to_s" && member != "push" && member != "new" && !(value.type_name == "Range<Integer>" && member == "to_a") && !(value.type_name == "Integer" && integer_method_kind(member) > 0) && !(value.type_name == "Float" && float_method_kind(member) > 0) && !(value.type_name == "String" && string_method_kind(member) > 0) && !(array_element_type(value.type_name) != "" && array_method_kind(member) > 0) && !(value.type_name == "Array" && (member == "empty?" || member == "unshift")) && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
 			scalar_mir_disable(locals)
 		end
 		if value.category >= 4
@@ -2698,7 +2699,11 @@ def check_primitive_method(mut state: CompilerState, mut position: Array<Integer
 	mut kind := integer_method_kind(method)
 	mut arity := integer_method_arity(kind)
 	mut argument_type := "Integer"
-	if receiver.type_name == "Range<Integer>"
+	if bytes_method_kind(receiver.type_name, method) > 0
+		kind = bytes_method_kind(receiver.type_name, method)
+		arity = bytes_method_arity(kind)
+		argument_type = bytes_method_argument_type(kind)
+	elsif receiver.type_name == "Range<Integer>"
 		kind = 1
 		arity = 0
 	elsif receiver.type_name == "Float"
@@ -2768,6 +2773,12 @@ def check_primitive_method(mut state: CompilerState, mut position: Array<Integer
 	end
 	if has_diagnostic(state)
 		return checked_value("Invalid", 0, origin, 0)
+	end
+	if bytes_method_kind(receiver.type_name, method) > 0
+		if arity == 0
+			return mir_bytes_method(state, locals, kind, receiver, receiver, origin)
+		end
+		return mir_bytes_method(state, locals, kind, receiver, arguments[0], origin)
 	end
 	if receiver.type_name == "Range<Integer>"
 		return mir_range_array(state, locals, receiver, origin)
