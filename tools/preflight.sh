@@ -63,6 +63,7 @@ if [ "$plan" = documentation ]; then
 fi
 
 step "compiler source staging" python3 tools/compiler_sources_test.py
+step "compiler ownership and migration" sh -c 'python3 tools/compiler_layout_test.py && python3 tools/migrate_compiler_layout_test.py && python3 tools/compiler_layout.py'
 step "CI planner" node --test tools/ci-plan-test.mjs tools/ci-run-suites-test.mjs tools/recovery-workspace-test.mjs
 step "recovery import boundaries" sh -c '
 	python3 tools/recovery_layout_sync_test.py &&

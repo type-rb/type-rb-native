@@ -87,6 +87,22 @@ class RecoveryInventorySyncTest(unittest.TestCase):
                 synchronize(self.root, True)
             self.assertEqual(self.snapshot(), before)
 
+    def test_explicit_relocation_preserves_reviewed_mutation_needles(self):
+        self.source("compiler", 'import { label } from checking/first\n\ndef main()\nputs(label())\nend\n')
+        self.source("checking/first", self.read("compiler/src/first.trb"))
+        (self.root / "compiler/src/first.trb").unlink()
+        synchronize(self.root, True, {"first": "checking/first"})
+        mutations = self.read("src/compiler_recovery_mutations.trb")
+        self.assertIn('["checking/first", "\\\"first label\\\"", "\\\"first title\\\""]', mutations)
+        self.assertEqual(synchronize(self.root, False), [])
+
+    def test_invalid_relocation_map_does_not_write_inventories(self):
+        for renames in ({"first": "../outside"}, {"first": "same", "second": "same"}):
+            before = self.snapshot()
+            with self.assertRaises(InventoryError):
+                synchronize(self.root, True, renames)
+            self.assertEqual(self.snapshot(), before)
+
     def test_added_module_enters_every_inventory_without_reordering(self):
         self.source("first", 'import { Point } from second\nimport { extra } from third\n\n'
                              'def label(): String\n\treturn "first label" + extra()\nend\n')

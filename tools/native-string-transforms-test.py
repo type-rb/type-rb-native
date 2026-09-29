@@ -65,7 +65,7 @@ with tempfile.TemporaryDirectory(prefix='native-string-transforms-') as temporar
     # Go's complete mapping tables are independently regenerated in quick CI.
     # Compare the actual QBE binary-search implementation at every code point.
     maps = {}
-    for line in (repository / 'compiler/src/unicode_case_data.trb').read_text().splitlines():
+    for line in (repository / 'compiler/src/backend/qbe/unicode_case_data.trb').read_text().splitlines():
         if '\tqbe_output_line(output, ' not in line:
             continue
         declaration = json.loads(line.split('output, ', 1)[1][:-1])

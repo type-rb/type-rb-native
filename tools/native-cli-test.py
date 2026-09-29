@@ -71,8 +71,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     cell_source.mkdir()
     stage_sources([repository / 'compiler/src', repository / 'compiler/cli'], cell_source)
     probe = cell_source / 'binding_probe.trb'
-    probe.write_text('''import { compiler_new } from state
-import { callable_type } from callable_types
+    probe.write_text('''import { compiler_new } from state/state
+import { callable_type } from frontend/types/callable_types
 import { repl_store, repl_environment, repl_integer, repl_string, repl_value, repl_activate } from repl_model
 import { repl_bind, repl_capture_binding, repl_binding_value, repl_assign_binding, repl_compact } from repl_values
 

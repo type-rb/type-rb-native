@@ -1,0 +1,107 @@
+import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from frontend/checking/checked_values
+import { mir_control_active, mir_control_prepare } from mir/mir_control
+import { MirBlock, MirInstruction, MirModule } from mir/mir
+import { MirFlow, mir_flow_type, mir_value_available } from mir/mir_flow
+import { mir_semantic_type_id, mir_semantic_type_name } from mir/mir_types
+import { CompilerState } from state/state
+import { CheckedLocals } from state/local_state
+import { load_integer } from support/storage
+
+# Bytes operations keep binary identity and strict indexing explicit in MIR:
+# 67 String conversion, 68 byte size, 69 strict byte access, 70 immutable
+# concatenation, 71 UTF-8 replacement decoding, 72 UTF-8 validity.
+def bytes_method_kind(receiver: String, name: String): Integer
+	if receiver == "String" && name == "to_bytes"
+		return 1
+	end
+	if receiver != "Bytes"
+		return 0
+	end
+	if name == "size"
+		return 2
+	elsif name == "at"
+		return 3
+	elsif name == "concat"
+		return 4
+	elsif name == "to_s"
+		return 5
+	elsif name == "valid_utf8?"
+		return 6
+	end
+	return 0
+end
+
+def bytes_method_arity(kind: Integer): Integer
+	if kind == 3 || kind == 4
+		return 1
+	end
+	return 0
+end
+
+def bytes_method_argument_type(kind: Integer): String
+	if kind == 4
+		return "Bytes"
+	end
+	return "Integer"
+end
+
+def bytes_method_result(kind: Integer): String
+	if kind == 2 || kind == 3
+		return "Integer"
+	elsif kind == 5
+		return "String"
+	elsif kind == 6
+		return "Boolean"
+	end
+	return "Bytes"
+end
+
+def mir_bytes_method(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, receiver: CheckedValue, argument: CheckedValue, origin: Integer): CheckedValue
+	mir_control_prepare(state, locals)
+	first := checked_mir_value(receiver)
+	mut second := -1
+	if bytes_method_arity(kind) == 1
+		second = checked_mir_value(argument)
+	end
+	if first < 0 || (bytes_method_arity(kind) == 1 && second < 0)
+		scalar_mir_disable(locals)
+	end
+	result_type := bytes_method_result(kind)
+	if !mir_control_active(locals)
+		return checked_value(result_type, 0, 9007199254740991, 0)
+	end
+	result := scalar_mir_value(state, locals, mir_semantic_type_id(state.scalar_mir, result_type), origin)
+	scalar_mir_instruction(state, locals, kind + 66, result, first, second, 0, -1, load_integer(state.source_tokens.token_lines, origin))
+	return mir_checked_value(result_type, result, 9007199254740991, 0)
+end
+
+def mir_bytes_instruction_error(flow: MirFlow, native_module: MirModule, block: MirBlock, index: Integer, instruction: MirInstruction): String
+	kind := instruction.kind - 66
+	if kind < 1 || kind > 6 || instruction.payload != 0 || instruction.failure != -1
+		return "MIR Bytes operation shape differs"
+	end
+	if !mir_value_available(flow, block, index, instruction.first)
+		return "MIR Bytes receiver is unavailable"
+	end
+	mut receiver_type := "Bytes"
+	if kind == 1
+		receiver_type = "String"
+	end
+	if mir_semantic_type_name(native_module, mir_flow_type(flow, instruction.first)) != receiver_type
+		return "MIR Bytes receiver type differs"
+	end
+	if bytes_method_arity(kind) == 1
+		if !mir_value_available(flow, block, index, instruction.second)
+			return "MIR Bytes argument is unavailable"
+		end
+		if mir_semantic_type_name(native_module, mir_flow_type(flow, instruction.second)) != bytes_method_argument_type(kind)
+			return "MIR Bytes argument type differs"
+		end
+	elsif instruction.second != -1
+		return "MIR Bytes operand count differs"
+	end
+	if mir_semantic_type_name(native_module, mir_flow_type(flow, instruction.result)) != bytes_method_result(kind)
+		return "MIR Bytes result type differs"
+	end
+	return ""
+end

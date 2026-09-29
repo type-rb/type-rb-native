@@ -116,7 +116,9 @@ boundaries are:
 | `qbe_*` and runtime modules | QBE/ABI adaptation of verified MIR, managed runtime code and target output. |
 | `compiler.trb` | Entry orchestration, final checking and emission lifetime. |
 
-The recursive checker remains in `checked_program.trb`; the CLI/REPL reuses
+Expression, call, collection, member, statement, control and iteration checking
+have explicit mutually recursive owners under `frontend/checking`; see the
+[directory and dependency map](compiler-source-layout.md). The CLI/REPL reuses
 checked source identities and core runtime behavior. Calls, including standard
 package and host adapters, carry typed signatures and conservative effects in
 MIR. The backend consumes verified plans and does not recover source-level
