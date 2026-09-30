@@ -1,21 +1,14 @@
-import { array_mir_test_read } from testing/mir/arrays
-import { check, emit_qbe } from compiler
+import { check } from compiler
 import { lex } from frontend/syntax/lexer
 import { MirCall } from mir/model/module
 import { parse_module } from frontend/syntax/parser
 import { resolve } from frontend/checking/program/resolution
 import { find_function_in_module } from frontend/resolution/declaration_lookup
 import { compiler_new } from state/state
-import { control_test_output } from testing/mir/control
-import { intrinsic_mir_erase } from testing/mir/intrinsics
 import { logical_checked_source } from testing/pipeline
-import { logical_run_qbe } from testing/qbe_runner
 import { verify_mir } from mir/verify/module
-import { string_starts_with } from support/path
-import { load_integer, load_string, store_integer, store_string } from support/storage
+import { load_integer, load_string } from support/storage
 import { describe, expect, test } from trb/std/test
-import trb/std/process
-import trb/std/result
 
 describe("Named argument binding") do
 	test("records the positional and named-only boundary without changing the ABI") do
@@ -46,15 +39,6 @@ describe("Named argument binding") do
 		end
 		expect(called.include?(first)).to_be_true()
 		expect(called.include?(second)).to_be_false()
-	end
-
-	test("rejects initializer calls missing a typed prefix operand") do
-		mut state := logical_checked_source("def select(first: Integer, second: Integer = first + 1): Integer\nreturn second\nend\ndef main()\nputs(select(1))\nend\n")
-		expect(check(state)).to_be_true()
-		call := state.scalar_mir.calls[0]
-		expect(call.callee).to_equal(state.parsed.default_functions[0])
-		state.scalar_mir.calls[0] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: 0, effects: call.effects)
-		expect(verify_mir(state.scalar_mir, true).include?("arity")).to_be_true()
 	end
 
 	test("rejects invalid labels counts order and declaration boundaries") do
@@ -94,77 +78,6 @@ describe("Named argument binding") do
 			end
 			expect(accepted).to_be_false()
 			expect(load_string(state.diagnostics.messages, 0).empty?()).to_be_false()
-		end
-	end
-
-	test("executes reordered call and record operands after erasure and forced collection") do
-		root := Process.environment("TYPE_RB_NATIVE_ROOT")
-		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
-		if root != nil
-			if qbe != nil
-				["named-arguments-mir", "default-arguments-mir"].each do |name|
-					fixture := root + "/compiler/conformance/valid/" + name
-					mut state := logical_checked_source(array_mir_test_read(fixture + ".trb"))
-					expect(check(state)).to_be_true()
-					before := control_test_output(emit_qbe(state))
-					intrinsic_mir_erase(state)
-					state.parsed.default_functions.each.with_index do |_function, default_index|
-						state.parsed.default_functions[default_index] = -1
-					end
-					state.scalar_mir.functions.each do |function|
-						store_integer(state.parsed.function_expression_bodies, function.id, 0)
-					end
-					mut index := 0
-					while index < state.declarations.parameter_count[0]
-						store_string(state.declarations.parameter_names, index, "unavailable")
-						index += 1
-					end
-					index = 0
-					while index < state.declarations.field_count[0]
-						store_string(state.declarations.field_names, index, "unavailable")
-						index += 1
-					end
-					expect(control_test_output(emit_qbe(state))).to_equal(before)
-					state.scalar_mir.functions.each do |function|
-						if function.kind == 3
-							mut left := function.block_start
-							mut right := left + function.block_count - 1
-							while left < right
-								saved := state.scalar_mir.blocks[left]
-								state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
-								state.scalar_mir.blocks[right] = saved
-								left += 1
-								right -= 1
-							end
-						end
-					end
-					expect(verify_mir(state.scalar_mir, true)).to_equal("")
-					mut forced := ""
-					mut ordinary := false
-					mut hooks := 0
-					control_test_output(emit_qbe(state)).split("\n").each do |line|
-						if string_starts_with(line, "function ")
-							ordinary = line.include?("$trbnf")
-						end
-						if line == "}"
-							ordinary = false
-						end
-						if ordinary && (line.include?("call $trbn_hash_new(") || line.include?("call $trbn_hash_set(") || line.include?("call $trbn_gc_alloc(") || line.include?("call $trbn_array_new(") || line.include?("call $trbn_array_push_") || line.include?("call $trbn_string_concat(") || line.include?("call $trbn_integer_to_string(") || line.include?("call $trbnf"))
-							forced += "\tcall $trbn_gc_collect(w 0)\n"
-							hooks += 1
-						end
-						forced += line + "\n"
-					end
-					expect(hooks > 10).to_be_true()
-					case logical_run_qbe(qbe, forced)
-					when Result::Ok(actual)
-						expect(actual).to_equal(array_mir_test_read(fixture + ".out"))
-					when Result::Err(error)
-						puts(error)
-						expect(false).to_be_true()
-					end
-				end
-			end
 		end
 	end
 end

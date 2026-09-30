@@ -167,7 +167,7 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
         if added.parent.name == 'unused':
             added.parent.rmdir()
         expect_plan('cached', f'{directory} addition removed')
-    for file, scope in [('compiler/cli/repl_hash.trb', 'cli'), ('compiler/src/support/literals.trb', 'core')]:
+    for file, scope in [('compiler/cli/repl/hash.trb', 'cli'), ('compiler/src/support/literals.trb', 'core')]:
         path = root / file
         moved = root / (file + '.moved')
         path.rename(moved)

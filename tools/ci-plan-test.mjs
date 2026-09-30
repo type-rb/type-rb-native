@@ -471,8 +471,8 @@ test('exact CLI inputs run quick and CLI authorities without core measurements',
   for (const name of ['native-enum-test.py', 'native-repl-flow-test.py', 'native-callable-test.py']) {
     assert(cliTests.includes(name), `the CLI authority must execute ${name}`);
   }
-  for (const name of ['repl_check.trb', 'repl_defaults.trb', 'repl_callables.trb', 'repl_types.trb']) {
-    assert(cliInputs.has(`compiler/cli/${name}`));
+  for (const name of ['check.trb', 'defaults.trb', 'callables.trb', 'types.trb']) {
+    assert(cliInputs.has(`compiler/cli/repl/${name}`));
   }
   assert(workflow.includes('  workflow_call:'));
   assert(!workflow.includes('  pull_request:'), 'one shared PR planner, no separate path-filtered run');
@@ -690,7 +690,7 @@ test('the tiered PR gate defers complete lanes only for ordinary compiler, CLI a
   for (const paths of [
     ['compiler/src/compiler.trb'],
     ['compiler/src/new_mir_pass.trb', 'recovery/src/compiler/layout.trb', 'recovery/src/compiler/mutations.trb'],
-    ['compiler/conformance/valid/new.trb', 'compiler/cli/repl.trb', 'tools/native-cli-test.py'],
+    ['compiler/conformance/valid/new.trb', 'compiler/cli/repl/session.trb', 'tools/native-cli-test.py'],
     ['compiler/cli/main.trb', 'tools/recovery_stage_test.py', 'docs/architecture.md'],
   ]) {
     const tiered = classify(paths, false, 'tiered');

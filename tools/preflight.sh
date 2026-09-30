@@ -73,7 +73,7 @@ step "reference identity" sh -c '
 	python3 tools/compatibility_manifest.py --reference-trb "$1"' preflight "$reference"
 step "Unicode data" sh -c 'python3 tools/unicode-identifier-data.py --check && python3 tools/unicode-case-data.py --check'
 step "formatting" "$reference" fmt --check recovery compiler corpus tools benchmarks
-step "root types" "$reference" check --config recovery/trbconfig.jsonc
+step "recovery types" "$reference" check --config recovery/trbconfig.jsonc
 step "compiler types" "$reference" check --config compiler/trbconfig.jsonc
 step "CLI and core closure" sh tools/check-native-cli.sh "$reference"
 step "bootstrap snapshot v4 closure" sh tools/check-bootstrap-snapshot.sh "$reference"
@@ -97,7 +97,7 @@ if [ "$full" = --full ]; then
 		step "language fixtures against the reference" sh -c '
 			python3 tools/native-language-coverage.py --reference "$1" --jobs 4 > /dev/null' preflight "$reference"
 	fi
-	step "root units" env TYPE_RB_NATIVE_ROOT="$root" "$reference" test --config recovery/trbconfig.jsonc
+	step "recovery units" env TYPE_RB_NATIVE_ROOT="$root" "$reference" test --config recovery/trbconfig.jsonc
 	step "compiler units" env TYPE_RB_NATIVE_ROOT="$root" "$reference" test --config compiler/trbconfig.jsonc
 fi
 printf 'preflight: passed\n'

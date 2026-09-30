@@ -127,8 +127,8 @@ end
         # consumer's imports complete as that representation evolves.
         stage_sources([repository / 'compiler/src', repository / 'compiler/cli'], root)
         source = root / 'hash_storage_probe.trb'
-        source.write_text('''import { repl_store, repl_integer } from repl_model
-import { repl_hash_new, repl_hash_set, repl_hash_delete } from repl_hash
+        source.write_text('''import { repl_store, repl_integer } from repl/model
+import { repl_hash_new, repl_hash_set, repl_hash_delete } from repl/hash
 
 def main()
  mut store := repl_store()

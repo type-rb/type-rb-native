@@ -21,6 +21,8 @@ production module's relative path below its source root. Core and CLI trees
 share one derived import root without flattening basenames. Test sources,
 `testing/` helpers and `tests/` suites are excluded from both staging and source
 content keys. Duplicate output paths or symlinks fail before copying files.
+The CLI entry composes `compiler/cli/repl/session.trb`; the other REPL modules
+retain their paths under `repl/` in the composed source tree.
 The staging helper is part of the CLI content key, so changing it invalidates
 the CLI cache while preserving an unchanged verified core.
 
