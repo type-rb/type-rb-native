@@ -165,6 +165,22 @@ class RecoveryInventorySyncTest(unittest.TestCase):
         with self.assertRaisesRegex(InventoryError, "second"):
             synchronize(self.root, False)
 
+    def test_unique_boolean_cell_is_a_constructor_mutation(self):
+        for initial, changed in (("true", "false"), ("false", "true")):
+            source = f"def fresh(): Array<Boolean>\n\treturn [{initial}]\nend\n"
+            self.assertEqual(default_mutation("fresh", source),
+                             ["fresh", f"[{initial}]", f"[{changed}]"])
+            self.assertIsNone(default_mutation("fresh", source + source))
+        self.assertIsNone(default_mutation("comments", '# [true]\n# [false]\n'))
+        # These strings are not SAFE_LITERAL candidates; their contents must
+        # not be mistaken for Boolean cells either.
+        self.assertIsNone(default_mutation("strings", 'def text(): String\nreturn "[true]" + "[false]"\nend\n'))
+        self.source("second", "def fresh(): Array<Boolean>\n\treturn [true]\nend\n")
+        self.assertEqual(synchronize(self.root, True), ["mutations: regenerate second"])
+        self.assertIn('["second", "[true]", "[false]"]',
+                      self.read("recovery/src/compiler/mutations.trb"))
+        self.assertEqual(synchronize(self.root, False), [])
+
     def test_imports_must_lead_and_the_entry_must_start_the_frontend_list(self):
         self.source("first", 'def label(): String\n\treturn "first label"\nend\nimport { Point } from second\n')
         with self.assertRaisesRegex(InventoryError, "leading block"):

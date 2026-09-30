@@ -112,6 +112,12 @@ def default_mutation(name: str, source: str) -> list[str] | None:
             needle = first + "\n" + second
             if source.count(needle) == 1:
                 return [name, needle, second + "\n" + first]
+    # Constructor-only modules may have neither text literals nor record fields.
+    # Flip a unique Boolean cell, consuming strings/comments before candidates.
+    for match in re.finditer(STRING + r"|#[^\n]*|\[(?:true|false)\]", body):
+        needle = match.group(0)
+        if needle in ("[true]", "[false]") and source.count(needle) == 1:
+            return [name, needle, "[false]" if needle == "[true]" else "[true]"]
     return None
 
 
