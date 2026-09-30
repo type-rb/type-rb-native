@@ -22,7 +22,8 @@ queries = source.with_name('string_queries.trb')
 decoded += '\n' + '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', queries.read_text()))
 names = ['trbn_string_index', 'trbn_utf8_width', 'trbn_utf8_count', 'trbn_utf8_span',
          'trbn_string_offset', 'trbn_string_from_codepoint', 'trbn_utf8_scalar', 'trbn_source_slice',
-         'trbn_string_is_utf8', 'trbn_string_query', 'trbn_string_codepoint_query']
+         'trbn_string_is_utf8', 'trbn_string_query', 'trbn_string_codepoint_query',
+         'trbn_string_find_bytes']
 bodies = []
 for name in names:
     matches = re.findall(r'^function l \$' + name + r'\([^\n]*\) \{.*?^\}', decoded, re.M | re.S)
@@ -50,6 +51,7 @@ extern struct string *trbn_source_slice(struct string *, int64_t, int64_t);
 extern int64_t trbn_utf8_count(const unsigned char *, int64_t);
 extern int64_t trbn_utf8_scalar(const unsigned char *, int64_t);
 extern int64_t trbn_string_query(struct string *, struct string *, int64_t);
+extern int64_t trbn_string_find_bytes(struct string *, struct string *, int64_t);
 static unsigned allocations;
 void *trbn_string_alloc(int64_t size) { ++allocations; return calloc(1, (size_t)size + 8); }
 void trbn_fail(const void *message, int64_t size) {
@@ -81,6 +83,47 @@ static void expect_query(struct string *value, const unsigned char *part, size_t
     for (int mode = 0; mode < 5; ++mode)
         assert(trbn_string_query(value, pattern, mode) == expected[mode]);
     free(pattern);
+}
+static int64_t byte_find(const unsigned char *value, size_t length,
+                         const unsigned char *part, size_t size, size_t start) {
+    for (size_t at = start; size <= length && at <= length - size; ++at)
+        if (!memcmp(value + at, part, size)) return (int64_t)at;
+    return -1;
+}
+static void expect_literal_queries(struct string *value, const unsigned char *part, size_t size) {
+    struct string *pattern = make(part, size);
+    int64_t found = byte_find(value->bytes, value->length, part, size, 0);
+    int64_t prefix = size <= (size_t)value->length && !memcmp(value->bytes, part, size) ? 0 : -1;
+    int64_t suffix = size <= (size_t)value->length &&
+        !memcmp(value->bytes + value->length - size, part, size) ? 0 : -1;
+    assert(trbn_string_query(value, pattern, 2) == prefix);
+    assert(trbn_string_query(value, pattern, 3) == suffix);
+    assert(trbn_string_query(value, pattern, 4) == (found < 0 ? -1 : 0));
+    if (size) {
+        for (size_t start = 0; start <= (size_t)value->length; ++start)
+            assert(trbn_string_find_bytes(value, pattern, start) ==
+                   byte_find(value->bytes, value->length, part, size, start));
+    }
+    free(pattern);
+}
+/* Independent scalar decoder: malformed input consumes exactly one byte. */
+static int64_t reference_count(const unsigned char *data, size_t length) {
+    int64_t count = 0;
+    for (size_t at = 0; at < length; ++count) {
+        unsigned first = data[at];
+        size_t width = first >= 0xc2 && first <= 0xdf ? 2 :
+                       first >= 0xe0 && first <= 0xef ? 3 :
+                       first >= 0xf0 && first <= 0xf4 ? 4 : 1;
+        if (width > length - at) width = 1;
+        for (size_t tail = 1; tail < width; ++tail)
+            if ((data[at + tail] & 0xc0) != 0x80) { width = 1; break; }
+        if (width >= 3 && ((first == 0xe0 && data[at + 1] < 0xa0) ||
+                          (first == 0xed && data[at + 1] >= 0xa0) ||
+                          (first == 0xf0 && data[at + 1] < 0x90) ||
+                          (first == 0xf4 && data[at + 1] >= 0x90))) width = 1;
+        at += width;
+    }
+    return count;
 }
 int main(int argc, char **argv) {
     unsigned char ascii[128];
@@ -181,6 +224,43 @@ int main(int argc, char **argv) {
     assert(munmap(value.region, value.size) == 0);
     assert(munmap(invalid_value.region, invalid_value.size) == 0);
     assert(munmap(empty.region, empty.size) == 0);
+    /* Exercise every short needle, including NUL and malformed bytes, with
+       the receiver ending at an inaccessible page. A matching first byte at
+       the final position must not admit a two-byte read past that boundary. */
+    const unsigned char edge_bytes[] = {'A', 0, 0x80, 0xc2, 0xa2, 'A', 'b', 'A'};
+    struct guarded edge = guard(edge_bytes, sizeof edge_bytes);
+    unsigned char needle[2];
+    for (unsigned first = 0; first < 256; ++first) {
+        needle[0] = first;
+        expect_literal_queries(edge.value, needle, 1);
+        for (unsigned second = 0; second < 256; ++second) {
+            needle[1] = second;
+            expect_literal_queries(edge.value, needle, 2);
+            int64_t expected = first >= 0xc2 && first <= 0xdf &&
+                               second >= 0x80 && second <= 0xbf ? 1 : 2;
+            assert(trbn_utf8_count(needle, 2) == expected);
+        }
+    }
+    for (size_t start = 0; start < sizeof edge_bytes; ++start)
+        expect_literal_queries(edge.value, edge_bytes + start, sizeof edge_bytes - start);
+    assert(munmap(edge.region, edge.size) == 0);
+    /* A deterministic byte corpus checks the ASCII path against the decoder,
+       including unaligned suffixes, truncated tails and a zero-length span at
+       the protected page itself. */
+    uint32_t random = 1;
+    for (unsigned round = 0; round < 4096; ++round) {
+        unsigned char bytes[8];
+        for (unsigned i = 0; i < sizeof bytes; ++i) {
+            random = random * 1664525u + 1013904223u;
+            bytes[i] = random >> 24;
+            if (round < 128) bytes[i] &= 0x7f;
+        }
+        struct guarded span = guard(bytes, sizeof bytes);
+        for (size_t offset = 0; offset <= sizeof bytes; ++offset)
+            assert(trbn_utf8_count(span.value->bytes + offset, sizeof bytes - offset) ==
+                   reference_count(bytes + offset, sizeof bytes - offset));
+        assert(munmap(span.region, span.size) == 0);
+    }
     assert(allocations == before_queries);
     puts("String indexing, Unicode lifetime, allocation-free queries and guarded bounds passed");
     return 0;
@@ -199,6 +279,10 @@ with tempfile.TemporaryDirectory(prefix='native String index ') as directory:
     observations.append({'case': 'ascii-cache', 'reads': 256, 'allocations': 0})
     observations.append({'case': 'string-queries', 'modes': 5, 'allocations': 0,
                          'controls': ['overlap', 'nul', 'invalid-utf8', 'guarded-spans', 'empty', 'oversized']})
+    observations.append({'case': 'short-byte-search', 'singleByteNeedles': 256,
+                         'twoByteNeedles': 65536, 'guardedReceiverBytes': 8, 'startPositions': 9})
+    observations.append({'case': 'utf8-count-oracle', 'twoByteInputs': 65536,
+                         'guardedInputs': 4096, 'suffixesPerInput': 9})
     for length, index in [(0, 0), (0, -1), (128, -129), (128, 128), (128, -9007199254740991), (128, 9007199254740991)]:
         result = subprocess.run([str(root / 'probe'), str(length), str(index)], capture_output=True, timeout=10)
         assert result.returncode == 70 and result.stdout == b'', result
