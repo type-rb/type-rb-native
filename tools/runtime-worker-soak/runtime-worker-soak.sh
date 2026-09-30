@@ -9,7 +9,11 @@ compiler_cost_mode > /dev/null || exit 64
 MAX_PEAK_HEAP_BYTES=4194304
 MAX_SMOKE_SECONDS=2.25
 MIN_FORMAL_ALLOCATED_BYTES=32212254720
-EXPECTED_FORMAL_ALLOCATED_BYTES=32832000576
+# Initial state: Array handle/backing (40 + 512) and WorkerState (24).
+# Each batch: two Array handles/backings (2 * (40 + 2048)), WorkerBatch (32),
+# and eight retry Strings (8 * (19 + 33)). Original payloads are static.
+EXPECTED_INITIAL_ALLOCATED_BYTES=576
+EXPECTED_BATCH_ALLOCATED_BYTES=4624
 STAT_PREFIX=type-rb-native-gc-stat-v1
 PHASE_MARKER=native-worker-phase
 SUCCESS_MARKER=native-worker-ok
@@ -395,9 +399,10 @@ allocated=$(summary_value allocated_bytes "$evidence/collector-statistics.txt") 
 	fail "allocated byte summary is missing"
 if test "$mode" = formal; then
 	test "$allocated" -ge "$MIN_FORMAL_ALLOCATED_BYTES" || fail "formal allocation is below 30 GiB"
-	test "$allocated" -eq "$EXPECTED_FORMAL_ALLOCATED_BYTES" ||
-		fail "formal allocation differs from the registered exact workload"
 fi
+expected_allocated=$((EXPECTED_INITIAL_ALLOCATED_BYTES + phases * batches * EXPECTED_BATCH_ALLOCATED_BYTES))
+test "$allocated" -eq "$expected_allocated" ||
+	fail "allocation differs from the exact worker workload"
 
 cp "$source" "$evidence/workload.trb"
 cp "$workspace/native/program-first.ssa" "$evidence/program.ssa"
