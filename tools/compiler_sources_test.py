@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from compiler_sources import stage_sources
+from compiler_sources import source_hashes, stage_sources
 
 
 class CompilerSourceStagingTest(unittest.TestCase):
@@ -44,6 +44,17 @@ class CompilerSourceStagingTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'collision'):
             stage_sources([self.core, self.cli], self.output)
         self.assertFalse(self.output.exists())
+
+    def test_helpers_never_enter_staging_or_production_content_keys(self):
+        self.write(self.core, 'compiler.trb', 'entry')
+        self.write(self.core, 'testing/nested/runner.trb', 'test harness')
+        self.write(self.core, 'tests/arrays/execute_test.trb', 'test case')
+        before = source_hashes(self.core)
+        self.write(self.core, 'testing/nested/runner.trb', 'changed harness')
+        self.assertEqual(source_hashes(self.core), before)
+        self.assertEqual(stage_sources([self.core], self.output), [Path('compiler.trb')])
+        self.write(self.core, 'compiler.trb', 'changed entry')
+        self.assertNotEqual(source_hashes(self.core), before)
 
     def test_existing_destinations_and_symlinks_are_not_overwritten(self):
         self.write(self.core, 'nested/value.trb', 'core')

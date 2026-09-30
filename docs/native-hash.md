@@ -39,20 +39,20 @@ String representation; additional Unicode APIs remain separate coverage work.
 
 ## Representation and ownership
 
-`hash_types.trb` owns canonical type decomposition and managed layout
-classification. `hash_mir.trb` owns the named `MirHashOperation` carrier,
+`compiler/src/frontend/types/hash_types.trb` owns canonical type decomposition and managed layout
+classification. `compiler/src/mir/model/hashes.trb` owns the named `MirHashOperation` carrier,
 mutation requirements and literal capacity planning. The checked frontend
-publishes one plan per operation; `hash_checked.trb` verifies source boundaries,
+publishes one plan per operation; `compiler/src/frontend/checking/collections/hashes.trb` verifies source boundaries,
 operation kinds, key/value metadata and mutation permissions before MIR construction
-or REPL evaluation. `mir_hashes.trb` publishes typed allocation, lookup, store and
-method instructions. `mir_hash_inference.trb` finalizes checked first-store types
+or REPL evaluation. `compiler/src/mir/lowering/hashes.trb` publishes typed allocation, lookup, store and
+method instructions. `compiler/src/mir/lowering/collection_inference.trb` finalizes checked first-store types
 across CFG arguments and parameters before publication. It inserts the required
 Float, nullable, or union representation at a joined store, without speculative
 allocation for exact-type stores; raw MIR verification
 never infers or repairs malformed types. Independent empty bindings retain
 independent constraints.
 
-Admitted functions use `qbe_hashes.trb` without reading source operation plans.
+Admitted functions use `compiler/src/backend/qbe/emit/hashes.trb` without reading source operation plans.
 Stores retain the evaluated Hash and key across RHS effects. `merge` becomes an
 explicit copy followed by update, so the copied table is an SSA value with a
 verified live root at the allocating update. Shared MIR effects and liveness own
@@ -105,7 +105,7 @@ interpreter stack temporaries.
 
 ## Verification and seed boundary
 
-`compiler/src/frontend/checking/hash_test.trb` covers typing, immutable rejection, operation
+`compiler/src/frontend/checking/collections/hashes_test.trb` covers typing, immutable rejection, operation
 metadata and malformed plans. `tools/native-hash-test.py` runs ordinary and REPL
 fixtures, automatic-GC stress, cycles, alias preservation, recoverable missing
 keys, and a compiled bucket-storage probe. Pass `--reference /path/to/trb` to
@@ -141,7 +141,7 @@ explicit rejection of other Hash shapes and operations in this recovery path.
 Ordinary Hash coverage remains wider.
 
 The recovery MIR checks canonical key layout, Hash receiver identity, operand
-types, entry-list arity and source origins. `recovery_hash_runtime.trb` owns
+types, entry-list arity and source origins. `recovery/src/managed/hash_runtime.trb` owns
 only this snapshot ABI's storage: content-hashed String buckets, Integer values,
 geometric growth and the existing precise collector's root frames. It is emitted
 only for snapshots containing Hash values; existing snapshots keep their output.

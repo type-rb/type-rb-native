@@ -304,7 +304,7 @@ def validate_repository_values(
 
     snapshot_version = manifest["bootstrap"]["snapshotSchemaVersion"]
     snapshot_source = _require_text(
-        root / "src/recovery_managed_snapshot.trb",
+        root / "recovery/src/managed/snapshot.trb",
         [f"if version != {snapshot_version}"],
         "bootstrap snapshot",
     )
@@ -349,7 +349,7 @@ def validate_repository_values(
     recovered_targets = current_targets[len(seed_targets) :]
 
     runtime_source = _require_text(
-        root / "compiler/src/backend/qbe/qbe_runtime.trb",
+        root / "compiler/src/backend/qbe/runtime/system.trb",
         [
             *[f'b \\"{target["profile"]}\\"' for target in current_targets],
             *[f'b \\"{target["qbeTarget"]}\\"' for target in current_targets],

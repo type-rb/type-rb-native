@@ -62,6 +62,13 @@ poor diagnostics, propose an improvement:
 
 ## Verify the affected surface
 
+Colocate unit tests as `some_test.trb` beside `some.trb`, classifying them by the
+contract they verify rather than their import count or setup machinery. Follow
+`docs/compiler-source-layout.md` for feature/system suites and shared `testing`
+helpers. Move unit tests with their owner; never import one test file from
+another or allow production to depend on test helpers. Source staging and cache
+selection must agree about these repository roles.
+
 Use `docs/ci-validation.md` and the maintained commands in `CONTRIBUTING.md`.
 The CI plan for the actual changed paths determines required authorities; do
 not skip them because a change looks small. Complete focused local checks and
@@ -100,12 +107,12 @@ For root TypeRB source checks, use the exact `TYPE_RB_REVISION` compiler:
 
 ```sh
 trb fmt --check .
-trb check --config trbconfig.reference.jsonc
-TYPE_RB_NATIVE_ROOT="$PWD" trb test --config trbconfig.reference.jsonc
+trb check --config recovery/trbconfig.jsonc
+TYPE_RB_NATIVE_ROOT="$PWD" trb test --config recovery/trbconfig.jsonc
 ```
 
 The default root configuration runs the example; root verification explicitly
-uses `trbconfig.reference.jsonc`, and the compiler suite uses
+uses `recovery/trbconfig.jsonc`, and the compiler suite uses
 `compiler/trbconfig.jsonc`. For compiler-source changes, load the bootstrap
 reference above: successful optional tests without the recovery/QBE environment
 do not establish recovery coverage.

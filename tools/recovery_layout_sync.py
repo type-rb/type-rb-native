@@ -4,11 +4,11 @@
 The closure is every compiler module reachable through imports from
 compiler/src/compiler.trb. Three hand-read inventories must match it:
 
-- src/compiler_recovery_layout.trb: one row per module with its exact import
+- recovery/src/compiler/layout.trb: one row per module with its exact import
   header, in the recovery flattening order;
-- src/compiler_recovery_mutations.trb: one observable source mutation per
+- recovery/src/compiler/mutations.trb: one observable source mutation per
   module except the entry, whose needle occurs exactly once; and
-- the module list parsed by compiler/src/compiler_test.trb's own-frontend test.
+- the module list parsed by compiler/src/tests/compiler/source_loading_test.trb's own-frontend test.
 
 --check reports drift. --write adds and removes rows, resynchronizes import
 headers and generates a default mutation for a module without a usable one.
@@ -20,9 +20,9 @@ import re
 from pathlib import Path
 
 
-LAYOUT = "src/compiler_recovery_layout.trb"
-MUTATIONS = "src/compiler_recovery_mutations.trb"
-FRONTEND_TEST = "compiler/src/compiler_test.trb"
+LAYOUT = "recovery/src/compiler/layout.trb"
+MUTATIONS = "recovery/src/compiler/mutations.trb"
+FRONTEND_TEST = "compiler/src/tests/compiler/source_loading_test.trb"
 FRONTEND_TEST_NAME = "parses the checked-in compiler closure through its own frontend"
 STRING = r'"(?:\\.|[^"\\])*"'
 LAYOUT_ROW = re.compile(
@@ -239,6 +239,18 @@ def synchronize(root: Path, write: bool, renames: dict[str, str] | None = None) 
             sync_frontend_test(root, modules, write))
 
 
+def relocation_map(manifest: dict, inventory: str) -> dict[str, str]:
+    """Select only present historical identities before checking collisions."""
+    modules = manifest["modules"]
+    aliases = dict(modules)
+    for previous, owner in manifest.get("previousModules", {}).items():
+        if owner not in modules:
+            raise InventoryError(f"previous module has no current owner: {previous}")
+        aliases[previous] = modules[owner]
+    present = {decode(match[1]) for match in MUTATION_ROW.finditer(inventory)}
+    return {old: new for old, new in aliases.items() if old in present}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     action = parser.add_mutually_exclusive_group(required=True)
@@ -248,7 +260,7 @@ def main() -> int:
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     try:
-        renames = json.loads(args.module_map.read_text())["modules"] if args.module_map else {}
+        renames = relocation_map(json.loads(args.module_map.read_text()), (root / MUTATIONS).read_text()) if args.module_map else {}
         changes = synchronize(root, args.write, renames)
     except InventoryError as error:
         print(f"Recovery inventory error: {error}")

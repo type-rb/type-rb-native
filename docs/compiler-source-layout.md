@@ -1,10 +1,10 @@
 # Compiler source responsibilities
 
 The ordinary compiler entry is `compiler/src/compiler.trb`. Other production
-modules live under the following responsibility owners. Existing module
-basenames and function names remain descriptive source identities; their full
-module paths include the owner. `compiler/cli` composes the core with CLI and
-REPL adapters. Root `src` retains the independent recovery implementation.
+modules live under the following responsibility owners. Redundant filename
+prefixes are removed when the directory supplies the same context; meaningful names and
+function names are retained. `compiler/cli` composes the core with CLI and
+REPL adapters. `recovery/src` contains the independent recovery implementation.
 
 | Owner under `compiler/src` | Responsibility | Permitted other owners |
 | --- | --- | --- |
@@ -25,40 +25,84 @@ and initialization rules.
 
 Four declaration-specific edges supplement the table:
 
-- `backend/qbe/qbe_constants` imports `frontend/resolution/entry_resolution`
+- `backend/qbe/emit/constants` imports `frontend/resolution/entry_resolution`
   for declaration-bound intrinsic identity.
 - `frontend/types/transform_model` imports `frontend/syntax/iteration_syntax`
-  and `mir/iteration_mir` for its shared parsed and checked projections.
+  and `mir/model/iteration` for its shared parsed and checked projections.
 - `state/source_state` imports `frontend/syntax/iteration_syntax` for the parsed
   iteration regions retained by `CompilerParsedProgram`.
 
 The exceptions do not grant other modules access to those whole layers.
 Core modules cannot import CLI adapters. Production modules cannot import test
-modules or `trb/std/test`. Focused tests live beside their responsibility owner;
-tests may exercise the complete core pipeline and reuse other core test helpers.
-The whole-compiler suite remains in `compiler/src/compiler_test.trb`. CLI tests
-can exercise the composed CLI and core. All discovered `.trb` files, including
+modules, `testing` helpers or `trb/std/test`. Unit tests live beside their owner
+as `<filename>_test.trb` for `<filename>.trb`, even when preparing an input uses
+other components. Tests may exercise the complete core pipeline and share
+explicit helpers under `testing`, but cannot import another test file.
+Compiler system suites live in `compiler/src/tests/compiler/`, split into source
+loading, scale and execution contracts. CLI tests can exercise the composed CLI
+and core. All discovered `.trb` files, including
 modules outside the entry's reachable closure, participate in the ownership
 check; unknown directories, unresolved imports and composed path collisions fail.
 
-## Recursive checking
+Test placement follows the contract being verified, not the number of imports
+or whether setup runs QBE. Feature contracts spanning checking, MIR and execution
+belong in `tests/<family>` using the shared language registry's family ids.
+System contracts belong with their subsystem. Local invariants remain colocated;
+move unit tests with their production owner when splitting a directory. A large
+local suite may have concern-specific `<filename>_<concern>_test.trb` companions.
+Do not create tests merely to match every implementation file.
 
-`frontend/checking/checked_program.trb` owns primary and precedence-based
-expression checking. Calls, collections, member access, statements, control flow
-and iteration have separate `checked_*` owners. Lambda body checking lives in
-`lambda_checking.trb`. Their explicit imports may be mutually recursive; there
-are no forwarding copies. Checking still constructs independently verified MIR,
-and the QBE backend consumes those facts.
+`testing` contains fixtures, pipeline adapters and execution helpers without
+test-case registration. Dependencies run from tests to helpers to production;
+production cannot import helpers, and helpers cannot import test cases. These
+are repository roles, not new TypeRB directory semantics. Staging and content
+keys exclude `testing`, `tests` and `_test.trb` files using the same selection.
+The ordinary compiler import closure and recovery inventories contain no test
+helpers. CLI and recovery-specific helpers belong with those subsystems.
+
+## Responsibility subdirectories
+
+| Area | Subdirectories |
+| --- | --- |
+| `frontend/checking` | `program` (declarations, generics and submissions), `body` (expressions, calls, members, statements and control), `builtins`, `nominal`, `collections` |
+| `mir` | `model`, `build`, `lowering`, `analysis`, `passes`, `verify` |
+| `backend/qbe` | `emit` for verified-MIR adaptation, `runtime` for emitted support routines and tables; shared context and output stay at the owner root |
+| `recovery/src` | `snapshot`, `scalar`, `aggregate`, `managed`, `compiler`, `driver`, `support`, plus test-only `testing` and `tests` |
+
+Around 25–30 production files in one directory or more than three directory
+levels below `compiler/src` prompts a responsibility review; neither is a limit.
+Split cohesive responsibilities, not arbitrary batches. Test counts alone do
+not justify moving a local invariant away from its owner. For example,
+`mir/lowering/arrays.trb` keeps `arrays_test.trb` beside it, while an Array
+execution contract spanning the toolchain lives under `tests/arrays/`.
+A shared runtime helper can support a colocated unit without changing its role.
+
+`frontend/checking/body/expressions.trb` owns primary and precedence-based
+expression checking. Calls, collections, members, statements, control and
+iteration have separate body owners; `lambdas.trb` owns lambda body checking.
+Their explicit imports may be mutually recursive; there are no forwarding
+copies. Checking constructs independently verified MIR; QBE consumes those facts.
+
+Recovery has its own `recovery/trbconfig.jsonc`, project name
+`type-rb-native-recovery`, and Go module
+`github.com/type-rb/type-rb-native/recovery`. Compiler production code cannot
+import recovery. Recovery imports stay within its own root and read ordinary
+compiler sources as data. Similar MIR/QBE names do not imply that independently
+validated recovery implementations should share ordinary compiler code.
 
 ## Checking and repeating the migration
 
 `python3 tools/compiler_layout.py` checks the ownership rules in preflight and
 quick CI. Its synthetic tests demonstrate that permitted cycles pass and that
-forbidden ownership edges still fail. The complete compiler unit runner discovers
+forbidden ownership edges, test-to-test imports and misplaced unit filenames
+still fail. Filename checks support the placement rule; reviewers decide the
+contract a suite guarantees. The complete compiler unit runner discovers
 nested tests dynamically.
 
-For a branch based on the earlier flat layout, rebase onto the accepted source
-and run:
+When rebasing source changes, retain the accepted helper extraction and test
+splits first. The migration tool relocates assigned modules and imports from
+flat or previous nested identities; it does not reconstruct historical test
+splits. Then run:
 
 ```sh
 python3 tools/migrate_compiler_layout.py --write
@@ -76,7 +120,7 @@ idempotent. It also regenerates the canonical recovery inventories with the
 shared synchronization tool, preserving reviewed mutation needles when their
 module paths change and the needles still match exactly once.
 
-Embedded test programs, root recovery imports, immutable evidence and historical
+Embedded test programs, recovery imports, immutable evidence and historical
 cross-revision consumers are outside general import rewriting. Current probes
 that deliberately import the compiler and own-frontend identity assertions have
 explicit replacements. Frozen source paths retain their original identities;

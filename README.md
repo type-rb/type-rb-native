@@ -101,8 +101,8 @@ See the [development and validation plan](docs/experiment-plan.md).
 ## Repository layout
 
 - `compiler/src/`: the current ordinary self-hosted compiler.
-- `src/`: snapshot/MIR adapters, runtime generation, recovery/comparison
-  support, and tests; historical names do not mean unused code.
+- `recovery/src/`: independent snapshot/MIR adapters, runtime generation,
+  recovery/comparison support and their tests.
 - `tools/` and `corpus/`: verification and measurement drivers and inputs.
 - `docs/`: architecture, plans, current status, and historical decisions.
 - `results/`: registered active evidence with retirement and size limits;

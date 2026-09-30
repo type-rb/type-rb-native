@@ -87,7 +87,8 @@ def extract_checker(sources, owners):
         sources[owner] = new_header + ('\n' if new_header else '') + new_body
 
 
-def rewrite_imports(source, modules, owners):
+def rewrite_imports(source, modules, owners, default_imports=None):
+    default_imports = default_imports or {}
     header, body = split_header(source)
     lines = []
     for line in header.splitlines(keepends=True):
@@ -102,8 +103,18 @@ def rewrite_imports(source, modules, owners):
                 lines.append('import { ' + ', '.join(members) + ' } from ' + module + match[3] + '\n')
         elif line.startswith('import '):
             parts = line.rstrip('\n').split(' ')
-            parts[1] = modules.get(parts[1], parts[1])
-            lines.append(' '.join(parts) + '\n')
+            old = parts[1]
+            parts[1] = modules.get(old, old)
+            if old in default_imports and parts[1] != old:
+                member = default_imports[old]
+                suffix = ' '.join(parts[2:])
+                if suffix.startswith('as '):
+                    alias, *tail = suffix[3:].split(' ', 1)
+                    member += ' as ' + alias
+                    suffix = tail[0] if tail else ''
+                lines.append('import { ' + member + ' } from ' + parts[1] + (' ' + suffix if suffix else '') + '\n')
+            else:
+                lines.append(' '.join(parts) + '\n')
         else:
             lines.append(line)
     return ''.join(lines) + body
@@ -113,6 +124,15 @@ def plan(root, manifest):
     root = Path(root)
     modules = manifest['modules']
     owners = manifest['checkerFunctions']
+    previous = manifest.get('previousModules', {})
+    import_paths = dict(modules)
+    default_imports = dict(manifest.get('defaultImports', {}))
+    for old, owner in previous.items():
+        if owner not in modules:
+            raise ValueError(f'previous module has no current owner: {old}')
+        import_paths[old] = modules[owner]
+        if owner in default_imports:
+            default_imports[old] = default_imports[owner]
     if (any(not MODULE.fullmatch(name) or not MODULE.fullmatch(target) for name, target in modules.items())
             or len(set(modules.values())) != len(modules)):
         raise ValueError('invalid or colliding module assignments')
@@ -121,7 +141,7 @@ def plan(root, manifest):
     reverse = {target: name for name, target in modules.items()}
     for path in sorted(directory.rglob('*.trb')):
         name = path.relative_to(directory).with_suffix('').as_posix()
-        original = name if name in modules else reverse.get(name)
+        original = name if name in modules else reverse.get(name, previous.get(name))
         if original is None:
             raise ValueError(f'unassigned compiler module: {name}')
         if original in sources:
@@ -148,7 +168,7 @@ def plan(root, manifest):
             if parent.is_symlink() or (parent.exists() and not parent.is_dir()):
                 raise ValueError(f'invalid destination parent: {parent.relative_to(root)}')
             parent = parent.parent
-        content = rewrite_imports(source, modules, owners)
+        content = rewrite_imports(source, import_paths, owners, default_imports)
         if destination != original or content != original.read_text():
             writes[destination] = content
         if original and original != destination:
@@ -156,7 +176,7 @@ def plan(root, manifest):
     for path in sorted((root / 'compiler/cli').rglob('*.trb')):
         if path.is_symlink():
             raise ValueError('CLI source symlinks are not migration inputs')
-        content = rewrite_imports(path.read_text(), modules, owners)
+        content = rewrite_imports(path.read_text(), import_paths, owners, default_imports)
         if content != path.read_text():
             writes[path] = content
     # These reviewed current consumers contain canonical paths or generated
@@ -167,10 +187,10 @@ def plan(root, manifest):
         original = path.read_text()
         content = writes.get(path, original)
         if name in manifest.get('pathConsumers', []):
-            for old, new in modules.items():
+            for old, new in import_paths.items():
                 content = content.replace('compiler/src/' + old + '.trb', 'compiler/src/' + new + '.trb')
         if name in manifest.get('moduleConsumers', []):
-            for old, new in modules.items():
+            for old, new in import_paths.items():
                 content = re.sub(r'(?<=from )' + re.escape(old) + r'(?=[\n\'\"]|\\n)', new, content)
         for module in manifest.get('lookupConsumers', {}).get(name, []):
             content = content.replace('find_module(state, "' + module + '")',

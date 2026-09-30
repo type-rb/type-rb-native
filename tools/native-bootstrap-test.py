@@ -127,6 +127,10 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
     assert build() == '' and snapshot() == baseline
     (root / 'compiler/cli/main.trb').touch()
     (root / 'compiler/cli/ignored_test.trb').write_text('invalid test source\n')
+    for name in ('testing/nested/fixture.trb', 'tests/arrays/ignored_test.trb'):
+        ignored = root / 'compiler/src' / name
+        ignored.parent.mkdir(parents=True, exist_ok=True)
+        ignored.write_text('invalid test-only source\n')
     assert build() == '' and snapshot() == baseline
     run('git', 'init', '--quiet')
     for message in ['first', 'documentation-only']:

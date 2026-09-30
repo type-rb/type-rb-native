@@ -1,0 +1,681 @@
+import { MirObject, MirObjectField } from frontend/types/object_model
+import { object_initializer_function, object_instance_type } from frontend/types/object_types
+import { mir_object_types_error } from mir/model/objects
+import { type_display } from frontend/resolution/type_resolution
+import { literal_type_base } from frontend/types/literal_types
+import { mir_newtype_types_error, mir_representation_type } from mir/model/newtypes
+import { MirNewtype } from frontend/types/newtype_model
+import { newtype_type } from frontend/types/newtype_types
+import { union_parts, union_type } from frontend/types/union_types
+import { callable_parts, callable_type } from frontend/types/callable_types
+import { enum_type } from frontend/types/enum_types
+import { nullable_element } from frontend/types/nullable_types
+import { hash_key_type, hash_scalar_key, hash_type, hash_value_type } from frontend/types/hash_types
+import { integer_string } from support/literals
+import { string_starts_with } from support/path
+import { MirCallable, MirField, MirModule, MirRecord, MirType, MirUnion, mir_array_element_type, mir_control_value_type, mir_origin_valid, mir_table_span_valid, mir_type_id, mir_type_name } from mir/model/module
+import { CompilerState } from state/state
+import { load_integer, load_string } from support/storage
+
+# Semantic identity is independent of pointer layout and authored import aliases.
+def mir_semantic_type_name(native_module: MirModule, type_id: Integer): String
+	if type_id < 9
+		return mir_type_name(type_id)
+	end
+	if type_id - 9 >= native_module.types.size()
+		return "Invalid"
+	end
+	return native_module.types[type_id - 9].name
+end
+
+def mir_semantic_value_type(native_module: MirModule, type_id: Integer): Boolean
+	if mir_control_value_type(type_id) || type_id == 3 || type_id == 6
+		return true
+	end
+	if type_id >= 9
+		return type_id - 9 < native_module.types.size()
+	end
+	return false
+end
+
+def mir_managed_type(native_module: MirModule, type_id: Integer): Boolean
+	storage := mir_representation_type(native_module, type_id)
+	if storage != type_id
+		return mir_managed_type(native_module, storage)
+	end
+	if type_id == 8 || type_id == 3 || type_id == 6
+		return true
+	end
+	if type_id >= 9 && type_id - 9 < native_module.types.size()
+		if native_module.types[type_id - 9].kind == 7
+			return false
+		end
+		return true
+	end
+	return false
+end
+
+def mir_element_type(native_module: MirModule, type_id: Integer): Integer
+	if type_id < 9
+		return mir_array_element_type(type_id)
+	end
+	if type_id - 9 >= native_module.types.size()
+		return 0
+	end
+	row := native_module.types[type_id - 9]
+	if row.kind != 1
+		return 0
+	end
+	return row.element
+end
+
+def mir_record_id(native_module: MirModule, type_id: Integer): Integer
+	if type_id < 9 || type_id - 9 >= native_module.types.size()
+		return -1
+	end
+	row := native_module.types[type_id - 9]
+	if row.kind != 2
+		return -1
+	end
+	return row.declaration
+end
+
+def mir_hash_kind(native_module: MirModule, type_id: Integer): Integer
+	if type_id >= 9 && type_id - 9 < native_module.types.size()
+		kind := native_module.types[type_id - 9].kind
+		if kind == 3 || kind == 5
+			return kind
+		end
+	end
+	return 0
+end
+
+def mir_hash_key_type(native_module: MirModule, type_id: Integer): Integer
+	if mir_hash_kind(native_module, type_id) == 3
+		return native_module.types[type_id - 9].key
+	end
+	return 0
+end
+
+def mir_hash_value_type(native_module: MirModule, type_id: Integer): Integer
+	if mir_hash_kind(native_module, type_id) == 3
+		return native_module.types[type_id - 9].element
+	end
+	return 0
+end
+
+def mir_semantic_type_id(mut native_module: MirModule, name: String): Integer
+	primitive := mir_type_id(name)
+	if primitive != 0
+		return primitive
+	end
+	mut index := 0
+	while index < native_module.types.size()
+		if native_module.types[index].name == name
+			return index + 9
+		end
+		index += 1
+	end
+	base := literal_type_base(name)
+	if base != ""
+		id := native_module.types.size() + 9
+		native_module.types.push(MirType.new(kind: 12, name: name, element: mir_type_id(base), key: 0, declaration: -1))
+		return id
+	end
+	alternatives := union_parts(name)
+	if alternatives.size() > 0
+		mut types: Array<Integer> := []
+		mut valid := union_type(alternatives) == name
+		alternatives.each do |alternative|
+			type_id := mir_semantic_type_id(native_module, alternative)
+			if !mir_semantic_value_type(native_module, type_id)
+				valid = false
+			end
+			types.push(type_id)
+		end
+		if !valid
+			return 0
+		end
+		id := native_module.types.size() + 9
+		native_module.types.push(MirType.new(kind: 10, name: name, element: 0, key: 0, declaration: native_module.unions.size()))
+		native_module.unions.push(MirUnion.new(type_id: id, alternatives: types))
+		return id
+	end
+	callable := callable_parts(name)
+	if callable.size() > 0
+		mut parameters: Array<Integer> := []
+		mut result := 0
+		if callable[0] != "Void"
+			result = mir_semantic_type_id(native_module, callable[0])
+			if !mir_semantic_value_type(native_module, result)
+				return 0
+			end
+		end
+		index = 1
+		while index < callable.size()
+			parameter := mir_semantic_type_id(native_module, callable[index])
+			if !mir_semantic_value_type(native_module, parameter)
+				return 0
+			end
+			parameters.push(parameter)
+			index += 1
+		end
+		id := native_module.types.size() + 9
+		native_module.types.push(MirType.new(kind: 9, name: name, element: 0, key: 0, declaration: native_module.callables.size()))
+		native_module.callables.push(MirCallable.new(type_id: id, parameters: parameters, result: result))
+		return id
+	end
+	mut kind := 1
+	mut element := 0
+	mut key := 0
+	if name == "Bytes"
+		kind = 17
+	elsif name == "Any"
+		kind = 16
+	elsif name == "Nil"
+		kind = 7
+	elsif nullable_element(name) != ""
+		kind = 6
+		element = mir_semantic_type_id(native_module, nullable_element(name))
+		if !mir_semantic_value_type(native_module, element)
+			return 0
+		end
+	elsif name == "Range<Integer>"
+		kind = 4
+	elsif name == "Hash"
+		kind = 5
+	elsif name == "Array"
+		kind = 15
+	elsif hash_key_type(name) != ""
+		kind = 3
+		key = mir_semantic_type_id(native_module, hash_key_type(name))
+		element = mir_semantic_type_id(native_module, hash_value_type(name))
+	elsif string_starts_with(name, "Array<") && name.size() >= 8 && name[name.size() - 1] == ">"
+		mut inner := ""
+		index = 6
+		while index < name.size() - 1
+			inner += name[index]
+			index += 1
+		end
+		element = mir_semantic_type_id(native_module, inner)
+	else
+		return 0
+	end
+	if kind <= 3 && !mir_semantic_value_type(native_module, element)
+		return 0
+	end
+	id := native_module.types.size() + 9
+	native_module.types.push(MirType.new(kind: kind, name: name, element: element, key: key, declaration: -1))
+	return id
+end
+
+# Predeclare every nominal shell before resolving fields. Container edges point
+# backwards, while fields may close a recursive graph through those shells.
+def mir_declare_types(mut state: CompilerState)
+	mut native_module := state.scalar_mir
+	mut count := state.module_graph.module_count[0]
+	if count == 0
+		count = 1
+	end
+	native_module.source_count[0] = count
+	mut declaration := 0
+	while declaration < state.declarations.record_count[0]
+		id := native_module.types.size() + 9
+		native_module.types.push(MirType.new(kind: 2, name: "Record#" + integer_string(declaration), element: 0, key: 0, declaration: declaration))
+		native_module.records.push(MirRecord.new(declaration: declaration, type_id: id, name: load_string(state.declarations.record_names, declaration), source_id: load_integer(state.declarations.record_modules, declaration), line: load_integer(state.declarations.record_lines, declaration), field_start: load_integer(state.declarations.record_field_starts, declaration), field_count: load_integer(state.declarations.record_field_counts, declaration)))
+		declaration += 1
+	end
+	state.nominal.newtypes.each do |definition|
+		id := native_module.types.size() + 9
+		owner := native_module.newtypes.size()
+		native_module.types.push(MirType.new(kind: 11, name: newtype_type(owner), element: 0, key: 0, declaration: owner))
+		native_module.newtypes.push(MirNewtype.new(declaration: owner, type_id: id, name: definition.name, source_id: definition.source_id, line: definition.line, representation: 0, closed: definition.closed))
+	end
+	declaration = 0
+	state.nominal.object_instances.each do |instance|
+		definition := state.nominal.objects[instance.definition]
+		id := native_module.types.size() + 9
+		mut kind := 13
+		if definition.interface_type
+			kind = 14
+		end
+		name := object_instance_type(state, declaration)
+		native_module.types.push(MirType.new(kind: kind, name: name, element: 0, key: 0, declaration: declaration))
+		native_module.objects.push(MirObject.new(initializer: object_initializer_function(state, declaration), declaration: declaration, type_id: id, name: type_display(state, name), source_id: definition.source_id, line: definition.line, interface_type: definition.interface_type, superclass: -1, interfaces: [], fields: []))
+		declaration += 1
+	end
+	mir_declare_enums(state)
+	declaration = 0
+	state.nominal.object_instances.each do |instance|
+		row := native_module.objects[declaration]
+		mut parent := -1
+		if instance.superclass >= 0
+			parent = native_module.objects[instance.superclass].type_id
+		end
+		mut interfaces: Array<Integer> := []
+		instance.interfaces.each do |contract|
+			interfaces.push(native_module.objects[contract].type_id)
+		end
+		mut fields: Array<MirObjectField> := []
+		instance.fields.each do |field|
+			fields.push(MirObjectField.new(name: field.name, type_id: mir_semantic_type_id(native_module, field.type_name), line: field.line, readonly: field.readonly))
+		end
+		native_module.objects[declaration] = MirObject.new(initializer: row.initializer, declaration: declaration, type_id: row.type_id, name: row.name, source_id: row.source_id, line: row.line, interface_type: row.interface_type, superclass: parent, interfaces: interfaces, fields: fields)
+		declaration += 1
+	end
+	declaration = 0
+	while declaration < native_module.newtypes.size()
+		row := native_module.newtypes[declaration]
+		representation := mir_semantic_type_id(native_module, state.nominal.newtypes[declaration].representation)
+		native_module.newtypes[declaration] = MirNewtype.new(declaration: declaration, type_id: row.type_id, name: row.name, source_id: row.source_id, line: row.line, representation: representation, closed: row.closed)
+		declaration += 1
+	end
+	declaration = 0
+	while declaration < native_module.records.size()
+		definition := native_module.records[declaration]
+		mut field := definition.field_start
+		while field < definition.field_start + definition.field_count
+			type_id := mir_semantic_type_id(native_module, load_string(state.declarations.field_types, field))
+			native_module.fields.push(MirField.new(owner: declaration, name: load_string(state.declarations.field_names, field), type_id: type_id, source_id: definition.source_id, line: load_integer(state.declarations.field_lines, field)))
+			field += 1
+		end
+		declaration += 1
+	end
+end
+
+def mir_record_types_error(native_module: MirModule): String
+	mut declaration := 0
+	mut field := 0
+	while declaration < native_module.records.size()
+		definition := native_module.records[declaration]
+		if definition.declaration != declaration || mir_record_id(native_module, definition.type_id) != declaration || definition.name == ""
+			return "MIR nominal declaration identity differs"
+		end
+		if !mir_origin_valid(definition.source_id, definition.line, native_module.source_count[0])
+			return "MIR nominal declaration origin is invalid"
+		end
+		if definition.field_start != field || !mir_table_span_valid(definition.field_start, definition.field_count, native_module.fields.size())
+			return "MIR nominal field span differs"
+		end
+		mut previous := 0
+		while previous < declaration
+			other := native_module.records[previous]
+			if other.source_id == definition.source_id && other.name == definition.name
+				return "MIR nominal declaration is duplicated"
+			end
+			previous += 1
+		end
+		while field < definition.field_start + definition.field_count
+			row := native_module.fields[field]
+			if row.owner != declaration || row.name == "" || !mir_semantic_value_type(native_module, row.type_id)
+				return "MIR nominal field identity or type differs"
+			end
+			if row.source_id != definition.source_id || !mir_origin_valid(row.source_id, row.line, native_module.source_count[0])
+				return "MIR nominal field origin is invalid"
+			end
+			previous = definition.field_start
+			while previous < field
+				if native_module.fields[previous].name == row.name
+					return "MIR nominal field is duplicated"
+				end
+				previous += 1
+			end
+			field += 1
+		end
+		declaration += 1
+	end
+	if field != native_module.fields.size()
+		return "MIR nominal field is unowned"
+	end
+	return ""
+end
+
+# Reject forged identities before operations, GC descriptors or roots consume
+# the table. Only nominal field references permit recursive type graphs.
+def mir_types_error(native_module: MirModule): String
+	mut index := 0
+	while index < native_module.types.size()
+		row := native_module.types[index]
+		if row.kind < 1 || row.kind > 17
+			return "MIR composite kind is invalid"
+		end
+		if row.kind == 1 || row.kind == 3 || row.kind == 6 || row.kind == 12
+			if row.element >= index + 9 || !mir_semantic_value_type(native_module, row.element)
+				return "MIR composite element type is invalid"
+			end
+		elsif row.element != 0
+			return "MIR composite element shape differs"
+		end
+		mut expected := ""
+		if row.kind == 1
+			expected = "Array<" + mir_semantic_type_name(native_module, row.element) + ">"
+		elsif row.kind == 2
+			if row.declaration < 0 || row.declaration >= native_module.records.size()
+				return "MIR nominal declaration is missing"
+			end
+			if native_module.records[row.declaration].type_id != index + 9
+				return "MIR nominal type identity differs"
+			end
+			expected = "Record#" + integer_string(row.declaration)
+		elsif row.kind == 13 || row.kind == 14
+			if row.declaration < 0 || row.declaration >= native_module.objects.size()
+				return "MIR object declaration is missing"
+			end
+			definition := native_module.objects[row.declaration]
+			if definition.type_id != index + 9
+				return "MIR object type identity differs"
+			end
+			expected = "Class#" + integer_string(row.declaration)
+			if row.kind == 14
+				expected = "Interface#" + integer_string(row.declaration)
+			end
+		elsif row.kind == 12
+			base := literal_type_base(row.name)
+			if base == "" || row.element != mir_type_id(base)
+				return "MIR literal constraint or base differs"
+			end
+			expected = row.name
+		elsif row.kind == 11
+			if row.declaration < 0 || row.declaration >= native_module.newtypes.size()
+				return "MIR newtype declaration is missing"
+			end
+			if native_module.newtypes[row.declaration].type_id != index + 9
+				return "MIR newtype identity differs"
+			end
+			expected = newtype_type(row.declaration)
+		elsif row.kind == 10
+			if row.declaration < 0 || row.declaration >= native_module.unions.size()
+				return "MIR union alternatives are missing"
+			end
+			definition := native_module.unions[row.declaration]
+			if definition.type_id != index + 9 || definition.alternatives.size() < 2
+				return "MIR union type identity differs"
+			end
+			mut names: Array<String> := []
+			mut valid := true
+			definition.alternatives.each do |alternative|
+				if alternative >= index + 9 || !mir_semantic_value_type(native_module, alternative)
+					valid = false
+				end
+				names.push(mir_semantic_type_name(native_module, alternative))
+			end
+			if !valid
+				return "MIR union alternative type differs"
+			end
+			expected = union_type(names)
+			canonical := union_parts(expected)
+			if canonical.size() != names.size()
+				return "MIR union alternatives are not canonical"
+			end
+			mut part := 0
+			while part < names.size()
+				if names[part] != canonical[part]
+					return "MIR union alternative order differs"
+				end
+				part += 1
+			end
+		elsif row.kind == 9
+			if row.declaration < 0 || row.declaration >= native_module.callables.size()
+				return "MIR callable signature is missing"
+			end
+			callable := native_module.callables[row.declaration]
+			if callable.type_id != index + 9
+				return "MIR callable type identity differs"
+			end
+			mut parameters: Array<String> := []
+			mut valid := true
+			callable.parameters.each do |parameter|
+				if parameter >= index + 9 || !mir_semantic_value_type(native_module, parameter)
+					valid = false
+				end
+				parameters.push(mir_semantic_type_name(native_module, parameter))
+			end
+			mut result := "Void"
+			if callable.result != 0
+				if callable.result >= index + 9 || !mir_semantic_value_type(native_module, callable.result)
+					valid = false
+				end
+				result = mir_semantic_type_name(native_module, callable.result)
+			end
+			if !valid
+				return "MIR callable signature type differs"
+			end
+			expected = callable_type(parameters, result)
+		elsif row.kind == 8
+			if row.declaration < 0 || row.declaration >= native_module.enums.size()
+				return "MIR enum declaration is missing"
+			end
+			expected = "Enum#" + integer_string(row.declaration)
+		elsif row.kind == 3
+			if row.key >= index + 9 || !hash_scalar_key(mir_semantic_type_name(native_module, row.key))
+				return "MIR Hash key type differs"
+			end
+			expected = hash_type(mir_semantic_type_name(native_module, row.key), mir_semantic_type_name(native_module, row.element))
+		elsif row.kind == 6
+			expected = mir_semantic_type_name(native_module, row.element) + "?"
+			if nullable_element(mir_semantic_type_name(native_module, row.element)) != "" || mir_semantic_type_name(native_module, row.element) == "Nil"
+				return "MIR nullable payload type differs"
+			end
+		elsif row.kind == 7
+			expected = "Nil"
+		elsif row.kind == 4
+			expected = "Range<Integer>"
+		elsif row.kind == 17
+			expected = "Bytes"
+		elsif row.kind == 16
+			expected = "Any"
+		elsif row.kind == 15
+			expected = "Array"
+		else
+			expected = "Hash"
+		end
+		if (row.kind != 2 && row.kind != 8 && row.kind != 9 && row.kind != 10 && row.kind != 11 && row.kind != 13 && row.kind != 14 && row.declaration != -1) || (row.kind != 3 && row.key != 0)
+			return "MIR composite identity shape differs"
+		end
+		if row.name != expected || mir_type_id(row.name) != 0
+			return "MIR composite type identity differs"
+		end
+		mut previous := 0
+		while previous < index
+			if native_module.types[previous].name == row.name
+				return "MIR composite type is duplicated"
+			end
+			previous += 1
+		end
+		index += 1
+	end
+	index = 0
+	while index < native_module.callables.size()
+		id := native_module.callables[index].type_id
+		if id < 9 || id - 9 >= native_module.types.size()
+			return "MIR callable type is missing"
+		end
+		if native_module.types[id - 9].kind != 9 || native_module.types[id - 9].declaration != index
+			return "MIR callable signature ownership differs"
+		end
+		index += 1
+	end
+	index = 0
+	while index < native_module.unions.size()
+		id := native_module.unions[index].type_id
+		if mir_union_id(native_module, id) != index
+			return "MIR union alternative ownership differs"
+		end
+		index += 1
+	end
+	object_error := mir_object_types_error(native_module)
+	if object_error != ""
+		return object_error
+	end
+	newtype_error := mir_newtype_types_error(native_module)
+	if newtype_error != ""
+		return newtype_error
+	end
+	error := mir_enum_types_error(native_module)
+	if error != ""
+		return error
+	end
+	return mir_record_types_error(native_module)
+end
+
+# A backend's function-local operand table comes from verified value identities.
+def mir_operand_type(types: Array<Integer>, value: Integer): Integer
+	if value < 0 || value >= types.size()
+		return 0
+	end
+	return types[value]
+end
+
+# Only verified optional types own a payload type; Nil owns no payload.
+def mir_nullable_element(native_module: MirModule, type_id: Integer): Integer
+	if type_id >= 9 && type_id - 9 < native_module.types.size()
+		row := native_module.types[type_id - 9]
+		if row.kind == 6
+			return row.element
+		end
+	end
+	return 0
+end
+
+def mir_enum_id(native_module: MirModule, type_id: Integer): Integer
+	if type_id >= 9 && type_id - 9 < native_module.types.size()
+		row := native_module.types[type_id - 9]
+		if row.kind == 8
+			return row.declaration
+		end
+	end
+	return -1
+end
+
+def mir_declare_enums(mut state: CompilerState)
+	mut native_module := state.scalar_mir
+	mut owner := 0
+	state.nominal.enums.each do |definition|
+		native_module.types.push(MirType.new(kind: 8, name: enum_type(owner), element: 0, key: 0, declaration: owner))
+		native_module.enums.push(definition)
+		owner += 1
+	end
+	mut variant := 0
+	state.nominal.enum_variants.each do |row|
+		native_module.enum_variants.push(row)
+		mut field := row.field_start
+		while field < row.field_start + row.field_count
+			item := state.nominal.enum_fields[field]
+			type_id := mir_semantic_type_id(native_module, item.type_name)
+			native_module.enum_fields.push(MirField.new(owner: variant, name: item.name, type_id: type_id, source_id: state.nominal.enums[row.owner].source_id, line: item.line))
+			field += 1
+		end
+		variant += 1
+	end
+end
+
+def mir_enum_types_error(native_module: MirModule): String
+	mut owner := 0
+	mut variant := 0
+	mut field := 0
+	while owner < native_module.enums.size()
+		definition := native_module.enums[owner]
+		mut identities := 0
+		native_module.types.each do |row|
+			if row.kind == 8 && row.declaration == owner
+				identities += 1
+			end
+		end
+		if identities != 1 || definition.name == "" || !mir_origin_valid(definition.source_id, definition.line, native_module.source_count[0])
+			return "MIR enum identity or origin differs"
+		end
+		if definition.variant_start != variant || definition.variant_count < 1 || !mir_table_span_valid(variant, definition.variant_count, native_module.enum_variants.size())
+			return "MIR enum variant span differs"
+		end
+		mut previous := 0
+		while previous < owner
+			other := native_module.enums[previous]
+			if other.source_id == definition.source_id && other.name == definition.name
+				return "MIR enum declaration is duplicated"
+			end
+			previous += 1
+		end
+		while variant < definition.variant_start + definition.variant_count
+			row := native_module.enum_variants[variant]
+			if row.owner != owner || row.name == "" || !mir_origin_valid(definition.source_id, row.line, native_module.source_count[0])
+				return "MIR enum variant identity differs"
+			end
+			previous = definition.variant_start
+			while previous < variant
+				if native_module.enum_variants[previous].name == row.name
+					return "MIR enum variant is duplicated"
+				end
+				previous += 1
+			end
+			if row.field_start != field || !mir_table_span_valid(field, row.field_count, native_module.enum_fields.size())
+				return "MIR enum payload span differs"
+			end
+			while field < row.field_start + row.field_count
+				item := native_module.enum_fields[field]
+				if item.owner != variant || item.name == "" || !mir_semantic_value_type(native_module, item.type_id) || item.source_id != definition.source_id || !mir_origin_valid(item.source_id, item.line, native_module.source_count[0])
+					return "MIR enum payload identity or type differs"
+				end
+				previous = row.field_start
+				while previous < field
+					if native_module.enum_fields[previous].name == item.name
+						return "MIR enum payload is duplicated"
+					end
+					previous += 1
+				end
+				field += 1
+			end
+			variant += 1
+		end
+		owner += 1
+	end
+	if variant != native_module.enum_variants.size() || field != native_module.enum_fields.size()
+		return "MIR enum member is unowned"
+	end
+	return ""
+end
+
+# Only the verified type catalog owns union alternatives and their order.
+def mir_union_id(native_module: MirModule, type_id: Integer): Integer
+	if type_id >= 9 && type_id - 9 < native_module.types.size()
+		row := native_module.types[type_id - 9]
+		if row.kind == 10
+			return row.declaration
+		end
+	end
+	return -1
+end
+
+def mir_union_contains(native_module: MirModule, type_id: Integer, alternative: Integer): Boolean
+	if mir_semantic_type_name(native_module, type_id) == "Any"
+		if alternative == type_id
+			return false
+		end
+		return mir_semantic_value_type(native_module, alternative)
+	end
+	owner := mir_union_id(native_module, type_id)
+	if owner < 0 || owner >= native_module.unions.size()
+		return false
+	end
+	mut found := false
+	native_module.unions[owner].alternatives.each do |candidate|
+		if candidate == alternative
+			found = true
+		end
+	end
+	return found
+end
+
+def mir_storage_type_name(native_module: MirModule, type_id: Integer): String
+	return mir_semantic_type_name(native_module, mir_representation_type(native_module, type_id))
+end
+
+def mir_storage_name(native_module: MirModule, name: String): String
+	mut index := 0
+	while index < native_module.types.size()
+		if native_module.types[index].name == name
+			return mir_storage_type_name(native_module, index + 9)
+		end
+		index += 1
+	end
+	return name
+end

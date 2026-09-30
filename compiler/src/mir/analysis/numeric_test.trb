@@ -1,0 +1,162 @@
+import { check, emit_qbe } from compiler
+import { check_function_body, checked_function_locals } from frontend/checking/program/functions
+import { scalar_mir_disable } from frontend/checking/body/values
+import { control_test_output } from testing/mir/control
+import { intrinsic_mir_erase } from testing/mir/intrinsics
+import { logical_checked_source } from testing/pipeline
+import { logical_run_qbe } from testing/qbe_runner
+import { MirNumericOperation, MirNumericPlan } from mir/model/module
+import { mir_declare_signatures } from mir/lowering/calls
+import { mir_declare_types } from mir/model/types
+import { mir_numeric_find, mir_numeric_operation, mir_numeric_plans_equal } from mir/analysis/numeric
+import { optimize_verified_mir } from mir/passes/optimize
+import { verify_mir } from mir/verify/module
+import { CompilerState } from state/state
+import { load_string } from support/storage
+import { describe, expect, test } from trb/std/test
+import trb/std/process
+import trb/std/result
+
+def numeric_mir_check(source: String): CompilerState
+	mut state := logical_checked_source(source)
+	expect(check(state)).to_be_true()
+	expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	return state
+end
+
+def numeric_mir_source(): String
+	return "def leaf(left: Integer, right: Integer): Integer\nreturn left * right + 1\nend\ndef run(mut value: Integer): Integer\nvalue += 1\nvalue += 1\nvalue += 1\nvalue += 1\nvalue += 1\nvalue += 1\nvalue += 1\nmut index := 0\nwhile index < 3\nvalue = leaf(value, 1024)\nvalue = leaf(value, 1025)\nvalue = leaf(value, 1024)\nindex += 1\nend\nreturn value\nend\ndef main()\nend\n"
+end
+
+describe("MIR numeric expansion ownership") do
+	test("uses verified collection lengths for one-sided Integer range checks") do
+		source := "def add_array_size(value: Integer, numbers: Array<Integer>): Integer\nreturn value + numbers.size()\nend\ndef add_string_size(value: Integer, text: String): Integer\nreturn value + text.size()\nend\ndef add_unknown(value: Integer, step: Integer): Integer\nreturn value + step\nend\ndef main()\nputs(add_array_size(4, [1, 2]))\nputs(add_string_size(4, \"xy\"))\nputs(add_unknown(4, -1))\nend\n"
+		mut state := numeric_mir_check(source)
+		known := mir_numeric_find(state.scalar_mir.numeric_plans[0], 0, -1, -1)
+		string_plan := mir_numeric_find(state.scalar_mir.numeric_plans[0], 1, -1, -1)
+		unknown := mir_numeric_find(state.scalar_mir.numeric_plans[0], 2, -1, -1)
+		expect(known.operations.size()).to_equal(1)
+		expect(known.operations[0].mode).to_equal(2)
+		expect(string_plan.operations.size()).to_equal(1)
+		expect(string_plan.operations[0].mode).to_equal(2)
+		expect(unknown.operations.size()).to_equal(1)
+		expect(unknown.operations[0].mode).to_equal(1)
+		before := control_test_output(emit_qbe(state))
+		expect(before.include?("=w csgtl")).to_be_true()
+		expect(before.include?("=w cugtl")).to_be_true()
+		intrinsic_mir_erase(state)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, before)
+			when Result::Ok(actual)
+				expect(actual).to_equal("6\n6\n3\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
+	test("emits checked Integer and Float powers from verified MIR after source erasure") do
+		mut state := numeric_mir_check("def integer_power(value: Integer): Integer\nreturn value ** 3\nend\ndef float_power(value: Float): Float\nreturn value ** 0.5\nend\ndef main()\nputs(integer_power(3))\nputs(float_power(4.0))\nend\n")
+		qbe := control_test_output(emit_qbe(state))
+		expect(qbe.include?("call $trbn_integer_power")).to_be_true()
+		expect(qbe.include?("call $pow(d ")).to_be_true()
+		expect(qbe.include?("function l $trbn_integer_power")).to_be_true()
+		intrinsic_mir_erase(state)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(control_test_output(emit_qbe(state))).to_equal(qbe)
+	end
+
+	test("selects bounded calls from CFG loops independently of the outside reserve") do
+		state := numeric_mir_check(numeric_mir_source())
+		mut expanded := 0
+		state.scalar_mir.numeric_plans[0].each do |plan|
+			if plan.caller >= 0
+				expect(plan.caller).to_equal(1)
+				expect(plan.function_id).to_equal(0)
+				operation := state.scalar_mir.blocks[state.scalar_mir.functions[0].block_start].instruction_start
+				if expanded == 0
+					expect(mir_numeric_operation(plan, operation)).to_equal(1)
+				else
+					# 1025 is positive but cannot justify a machine-width multiply.
+					expect(mir_numeric_operation(plan, operation)).to_equal(5)
+				end
+				expanded += 1
+			end
+		end
+		expect(expanded).to_equal(2)
+		caller := mir_numeric_find(state.scalar_mir.numeric_plans[0], 1, -1, -1)
+		# The leaf's standalone add spends one of the six outside expansions;
+		# five remain in run, and its loop increment has an independent reserve.
+		expect(caller.operations.size()).to_equal(6)
+		qbe := control_test_output(emit_qbe(state))
+		expect(qbe.include?("call $trbnf0(")).to_be_true()
+		expect(qbe.include?("function l $trbnf0(")).to_be_true()
+	end
+
+	test("rejects forged instruction modes call owners sites and missing plans") do
+		mut mode := 0
+		while mode < 6
+			mut state := numeric_mir_check(numeric_mir_source())
+			mut plans := state.scalar_mir.numeric_plans[0]
+			original := plans[0]
+			if mode == 0
+				state.scalar_mir.numeric_plans[0] = []
+			elsif mode == 1
+				plans.push(original)
+			elsif mode == 2
+				plans[0] = MirNumericPlan.new(function_id: 999, caller: original.caller, call_instruction: original.call_instruction, operations: original.operations)
+			elsif mode == 3
+				plans[0] = MirNumericPlan.new(function_id: original.function_id, caller: 1, call_instruction: 999, operations: original.operations)
+			else
+				operation := original.operations[0]
+				mut instruction := operation.instruction
+				mut selection := operation.mode
+				if mode == 4
+					instruction = 999999
+				else
+					selection = 5
+				end
+				plans[0] = MirNumericPlan.new(function_id: original.function_id, caller: original.caller, call_instruction: original.call_instruction, operations: [MirNumericOperation.new(instruction: instruction, mode: selection)])
+			end
+			expect(verify_mir(state.scalar_mir, true)).to_equal("MIR numeric plan differs")
+			mode += 1
+		end
+	end
+
+	test("retains plans after source erasure physical reordering and repeated optimization") do
+		mut state := numeric_mir_check(numeric_mir_source())
+		before := control_test_output(emit_qbe(state))
+		plans := state.scalar_mir.numeric_plans[0]
+		intrinsic_mir_erase(state)
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		state.scalar_mir.functions.each do |function|
+			mut left := function.block_start
+			mut right := left + function.block_count - 1
+			while left < right
+				saved := state.scalar_mir.blocks[left]
+				state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
+				state.scalar_mir.blocks[right] = saved
+				left += 1
+				right -= 1
+			end
+		end
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		optimize_verified_mir(state.scalar_mir)
+		expect(mir_numeric_plans_equal(plans, state.scalar_mir.numeric_plans[0])).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+
+	test("requires a MIR body before a checked function can be finalized") do
+		mut state := logical_checked_source("def main()\nputs(1)\nend\n")
+		mir_declare_types(state)
+		mir_declare_signatures(state)
+		mut locals := checked_function_locals(state, 0)
+		scalar_mir_disable(locals)
+		expect(check_function_body(state, 0, locals)).to_be_false()
+		expect(load_string(state.diagnostics.messages, 0)).to_equal("checked function has no MIR body")
+	end
+end

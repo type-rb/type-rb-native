@@ -4,15 +4,15 @@ The reference compiler supplies a versioned, data-only snapshot for recovery and
 differential testing. This path is separate from ordinary file/project compilation
 and does not establish ordinary Native coverage for every snapshot feature.
 
-`src/snapshot_validation.trb` validates the interchange before lowering.
+`recovery/src/snapshot/validation.trb` validates the interchange before lowering.
 `recovery_scalar_*` owns scalar control flow and checked arithmetic;
 `recovery_aggregate_*` adds heap-free records, tagged values and Result propagation;
 `recovery_managed_*` handles managed Strings, Arrays, closures and exact-root tracing.
-Shared arithmetic and QBE formatting live in `src/qbe.trb`. Distinct recovery models
+Shared arithmetic and QBE formatting live in `recovery/src/scalar/qbe.trb`. Distinct recovery models
 use those shared operations without merging their representation contracts.
 
 The ordinary compiler's recovery input is derived from its canonical source
-closure by `src/compiler_recovery_source.trb`. It is temporary, validated and never
+closure by `recovery/src/compiler/source.trb`. It is temporary, validated and never
 substituted for the file-root source used in ordinary self-hosting. Required suites
 cover reconstruction, repeated generations, differential behavior and workspace
 cleanup; see [validation](ci-validation.md) and [architecture](architecture.md).

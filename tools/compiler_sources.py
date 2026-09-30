@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compose compiler source roots without changing their logical module paths."""
 import argparse
+import hashlib
 from pathlib import Path
 import shutil
 
@@ -13,9 +14,17 @@ def source_files(root):
     for source in sorted(root.rglob('*')):
         if source.is_symlink():
             raise ValueError(f"compiler source symlink is not supported: {source}")
-        if source.is_file() and source.suffix == '.trb' and not source.name.endswith('_test.trb'):
+        relative = source.relative_to(root)
+        if (source.is_file() and source.suffix == '.trb'
+                and not source.name.endswith('_test.trb')
+                and relative.parts[0] not in ('testing', 'tests')):
             sources.append((source.relative_to(root), source))
     return sources
+
+
+def source_hashes(root):
+    return [f'{hashlib.sha256(source.read_bytes()).hexdigest()}  {source.as_posix()}'
+            for _, source in source_files(root)]
 
 
 def stage_sources(roots, destination):
@@ -46,11 +55,20 @@ def stage_sources(roots, destination):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('destination', type=Path)
-    parser.add_argument('sources', type=Path, nargs='+')
+    parser.add_argument('--hash', dest='hash_root', type=Path,
+                        help='print production content keys using the staging selection')
+    parser.add_argument('destination', type=Path, nargs='?')
+    parser.add_argument('sources', type=Path, nargs='*')
     args = parser.parse_args()
     try:
-        stage_sources(args.sources, args.destination)
+        if args.hash_root is not None:
+            if args.destination is not None or args.sources:
+                parser.error('--hash accepts one source root and no staging arguments')
+            print('\n'.join(source_hashes(args.hash_root)))
+        else:
+            if args.destination is None or not args.sources:
+                parser.error('staging requires a destination and at least one source root')
+            stage_sources(args.sources, args.destination)
     except (OSError, ValueError) as error:
         parser.exit(1, f"compiler source staging: {error}\n")
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Correctness suites only. Performance authorities run after the joined job.
 export async function runSuites({ executable, suites, evidence, cwd = process.cwd(), env = process.env, graceMs = 1000, recoveryStages = false }) {
@@ -128,8 +128,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         !process.env.TYPE_RB_NATIVE_ROOT || !process.env.TYPE_RB_NATIVE_REFERENCE_TRB || !process.env.TYPE_RB_NATIVE_QBE) {
       throw new Error('Usage: ci-run-suites.mjs ABSOLUTE_TRB EVIDENCE (with all recovery/QBE environment variables)');
     }
+    const layout = spawnSync('/bin/sh', ['-c', '. "$1"; native_recovery_project_config "$2"',
+      'recovery-layout', fileURLToPath(new URL('./compiler-project.sh', import.meta.url)), process.cwd()], { encoding: 'utf8' });
+    if (layout.status !== 0) throw new Error(layout.stderr || 'Cannot resolve recovery project');
     process.exitCode = await runSuites({ executable, evidence, recoveryStages: true, suites: [
-      { name: 'root', args: ['test', '--config', 'trbconfig.reference.jsonc'] },
+      { name: 'root', args: ['test', '--config', layout.stdout.trim()] },
       { name: 'compiler', args: ['test', '--config', 'compiler/trbconfig.jsonc'] },
     ] });
   } catch (error) {

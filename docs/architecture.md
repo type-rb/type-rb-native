@@ -103,7 +103,7 @@ remaining optimization work.
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
 Its explicit transitive import closure is registered in
-`src/compiler_recovery_layout.trb`.
+`recovery/src/compiler/layout.trb`.
 
 The import closure changes as language coverage grows; the generated layout,
 not a hand-maintained module table, is the exact inventory. Its main responsibility
@@ -114,7 +114,7 @@ boundaries are:
 | Lexer, parser, resolution and checked declarations | Authored syntax, names, semantic types, diagnostics and source origins. |
 | `mir_*` and checked construction modules | Typed operations, control flow, effects, liveness, proof plans and independent verification. |
 | `qbe_*` and runtime modules | QBE/ABI adaptation of verified MIR, managed runtime code and target output. |
-| `compiler.trb` | Entry orchestration, final checking and emission lifetime. |
+| `compiler/src/compiler.trb` | Entry orchestration, final checking and emission lifetime. |
 
 Expression, call, collection, member, statement, control and iteration checking
 have explicit mutually recursive owners under `frontend/checking`; see the
@@ -128,7 +128,7 @@ responsibilities without duplicating the canonical compiler closure.
 The CLI/REPL under `compiler/cli/` is outside the ordinary core closure.
 Snapshot recovery derives a temporary flattened source
 from the canonical modules using
-[strict closure validation](../src/compiler_recovery_source.trb); it does not
+[strict closure validation](../recovery/src/compiler/source.trb); it does not
 replace file-root imports in ordinary self-hosting. The
 [organization guide](repository-organization.md) tracks further extraction
 and removal of superseded implementation.
@@ -215,11 +215,11 @@ would duplicate optimizer behavior and make a backend comparison ambiguous.
 
 Numeric Array functions now use the same general typed CFG as other managed
 functions. The former signature-selected induction/reduction builders, positional
-six-block adapter and dedicated emitter are removed. `mir_array_loops.trb`
+six-block adapter and dedicated emitter are removed. `compiler/src/mir/analysis/array_loops.trb`
 derives natural-loop membership, SSA forwarding, checked unit-step induction,
 Array identity and stable storage from verified edges and instructions. Plans name
 the preheader, owner, size operation and proved reads; verification re-derives
-those plans before `qbe_arrays.trb` may reuse headers or omit access checks.
+those plans before `compiler/src/backend/qbe/emit/arrays.trb` may reuse headers or omit access checks.
 Block storage order and source tokens are not proof inputs. Unknown aliases,
 changed guards or indexes, calls and allocation/mutation outside the admitted
 operation set retain checks. Integer arithmetic overflow checks remain explicit.

@@ -62,6 +62,25 @@ assert_rejected "$test_root/broken-legacy"
 
 printf '%s\n' 'compiler project layout tests passed'
 
+mkdir -p "$current/recovery/src/driver" "$spaced/recovery/src/driver" "$historical/src"
+for project_root in "$current" "$spaced"; do
+	printf '{}\n' > "$project_root/recovery/trbconfig.jsonc"
+	printf 'def main()\nend\n' > "$project_root/recovery/src/driver/main.trb"
+done
+printf '{}\n' > "$historical/trbconfig.reference.jsonc"
+printf 'def main()\nend\n' > "$historical/src/recovery_driver.trb"
+test "$(native_recovery_project_config "$current")" = "$current/recovery/trbconfig.jsonc"
+test "$(native_recovery_project_config "$spaced")" = "$spaced/recovery/trbconfig.jsonc"
+test "$(native_recovery_project_config "$historical")" = "$historical/trbconfig.reference.jsonc"
+printf '{}\n' > "$current/trbconfig.reference.jsonc"
+if native_recovery_project_config "$current" > "$test_root/output" 2> "$test_root/error"; then
+	exit 1
+fi
+rm "$current/trbconfig.reference.jsonc" "$current/recovery/src/driver/main.trb"
+if native_recovery_project_config "$current" > "$test_root/output" 2> "$test_root/error"; then
+	exit 1
+fi
+
 make_fixture() {
 	mkdir -p "$1/configured-project"
 	printf '{}\n' > "$1/configured-project/trbconfig.jsonc"

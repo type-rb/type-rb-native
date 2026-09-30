@@ -1,0 +1,51 @@
+import { MirInstruction, MirModule } from mir/model/module
+import { mir_operand_type, mir_storage_type_name } from mir/model/types
+import { QbeEmitContext, QbeValue, emit_temporary, emitted_value } from backend/qbe/context
+import { QbeOutput, qbe_output_line } from backend/qbe/output
+import { CompilerState } from state/state
+
+# Immutable Bytes can share raw String backing. Their semantic type stays
+# distinct; decoding recomputes valid UTF-8 and its code-point count.
+def emit_mir_bytes_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+	first := operands[instruction.first]
+	result_type := mir_storage_type_name(state.scalar_mir, mir_operand_type(value_types, instruction.result))
+	if instruction.kind == 67
+		return emitted_value(first, result_type)
+	end
+	result := emit_temporary(context)
+	if instruction.kind == 68
+		address := emit_temporary(context)
+		qbe_output_line(output, "\t" + address + " =l add " + first + ", 8")
+		qbe_output_line(output, "\t" + result + " =l loadl " + address)
+	elsif instruction.kind == 69
+		qbe_output_line(output, "\t" + result + " =l call $trbn_bytes_at(l " + first + ", l " + operands[instruction.second] + ")")
+	elsif instruction.kind == 70
+		qbe_output_line(output, "\t" + result + " =l call $trbn_string_concat(l " + first + ", l " + operands[instruction.second] + ")")
+	elsif instruction.kind == 71
+		qbe_output_line(output, "\t" + result + " =l call $trbn_bytes_to_string(l " + first + ")")
+	else
+		qbe_output_line(output, "\t" + result + " =l call $trbn_bytes_valid_utf8(l " + first + ")")
+	end
+	return emitted_value(result, result_type)
+end
+
+# A negative span consumes one maximal ill-formed UTF-8 subpart.
+# Bounds and validity belong to these explicit runtime operations.
+def emit_bytes_runtime(native_module: MirModule, mut output: QbeOutput)
+	# Emit binary services only when a verified semantic Bytes identity exists.
+	# Ordinary programs without Bytes keep their existing runtime surface.
+	mut needed := false
+	native_module.types.each do |row|
+		if row.kind == 17
+			needed = true
+		end
+	end
+	if !needed
+		return
+	end
+	qbe_output_line(output, "data $trbn_bytes_bounds_error = { b \"panic: Bytes index is out of bounds\", b 10 }\n")
+	qbe_output_line(output, "function l $trbn_bytes_at(l %value, l %index) {\n@start\n %lenp =l add %value, 8\n %length =l loadl %lenp\n %negative =w csltl %index, 0\n %past =w csgel %index, %length\n %bad =w or %negative, %past\n jnz %bad, @fail, @read\n@fail\n call $trbn_fail(l $trbn_bytes_bounds_error, l 36)\n hlt\n@read\n %data =l add %value, 24\n %address =l add %data, %index\n %byte =w loadub %address\n %result =l extuw %byte\n ret %result\n}\n")
+	qbe_output_line(output, "function l $trbn_bytes_utf8_span(l %data, l %remaining) {\n@start\n %lead =w loadub %data\n %ascii =w cultw %lead, 128\n jnz %ascii, @ascii, @two_test\n@ascii\n ret 1\n@two_test\n %two_low =w cugew %lead, 194\n %two_high =w culew %lead, 223\n %two =w and %two_low, %two_high\n jnz %two, @two, @three_test\n@two\n jmp @second_bounds\n@three_test\n %three_low =w cugew %lead, 224\n %three_high =w culew %lead, 239\n %three =w and %three_low, %three_high\n jnz %three, @three, @four_test\n@three\n jmp @second_bounds\n@four_test\n %four_low =w cugew %lead, 240\n %four_high =w culew %lead, 244\n %four =w and %four_low, %four_high\n jnz %four, @four, @invalid_lead\n@four\n jmp @second_bounds\n@invalid_lead\n ret -1\n@second_bounds\n %width =l phi @two 2, @three 3, @four 4\n %missing =w cultl %remaining, 2\n jnz %missing, @invalid_lead, @second\n@second\n %secondp =l add %data, 1\n %second =w loadub %secondp\n %below =w cultw %second, 128\n %above =w cugtw %second, 191\n %not_continuation =w or %below, %above\n %e0 =w ceqw %lead, 224\n %short3 =w cultw %second, 160\n %overlong3 =w and %e0, %short3\n %ed =w ceqw %lead, 237\n %surrogate =w cugew %second, 160\n %surrogate3 =w and %ed, %surrogate\n %f0 =w ceqw %lead, 240\n %short4 =w cultw %second, 144\n %overlong4 =w and %f0, %short4\n %f4 =w ceqw %lead, 244\n %high4 =w cugew %second, 144\n %outside =w and %f4, %high4\n %bad1 =w or %not_continuation, %overlong3\n %bad2 =w or %surrogate3, %overlong4\n %bad3 =w or %bad1, %bad2\n %bad =w or %bad3, %outside\n jnz %bad, @invalid_lead, @second_valid\n@second_valid\n jmp @scan\n@scan\n %index =l phi @second_valid 2, @more %next\n %complete =w ceql %index, %width\n jnz %complete, @valid, @bounds\n@bounds\n %truncated =w cugel %index, %remaining\n jnz %truncated, @invalid_prefix, @continuation\n@continuation\n %address =l add %data, %index\n %byte =w loadub %address\n %low =w cultw %byte, 128\n %high =w cugtw %byte, 191\n %invalid =w or %low, %high\n jnz %invalid, @invalid_prefix, @more\n@more\n %next =l add %index, 1\n jmp @scan\n@invalid_prefix\n %negative =l sub 0, %index\n ret %negative\n@valid\n ret %width\n}\n")
+	qbe_output_line(output, "function l $trbn_bytes_valid_utf8(l %value) {\n@start\n %lenp =l add %value, 8\n %length =l loadl %lenp\n %data =l add %value, 24\n jmp @scan\n@scan\n %offset =l phi @start 0, @advance %next\n %done =w ceql %offset, %length\n jnz %done, @valid, @read\n@read\n %address =l add %data, %offset\n %remaining =l sub %length, %offset\n %span =l call $trbn_bytes_utf8_span(l %address, l %remaining)\n %bad =w csltl %span, 0\n jnz %bad, @invalid, @advance\n@advance\n %next =l add %offset, %span\n jmp @scan\n@invalid\n ret 0\n@valid\n ret 1\n}\n")
+	qbe_output_line(output, "function l $trbn_bytes_to_string(l %value) {\n@start\n %lenp =l add %value, 8\n %length =l loadl %lenp\n %too_large =w cugtl %length, 3002399751580325\n jnz %too_large, @fail, @allocate\n@fail\n call $trbn_fail(l $trbn_allocation_error, l 26)\n hlt\n@allocate\n %roots =l loadl $trbn_gc_temp_count\n call $trbn_gc_temp_push(l %value)\n %maximum =l mul %length, 3\n %size =l add %maximum, 17\n %result =l call $trbn_string_alloc(l %size)\n %data =l add %value, 24\n %target =l add %result, 24\n jmp @scan\n@scan\n %offset =l phi @allocate 0, @advance %next_input\n %written =l phi @allocate 0, @advance %next_output\n %points =l phi @allocate 0, @advance %next_points\n %done =w ceql %offset, %length\n jnz %done, @finish, @read\n@read\n %address =l add %data, %offset\n %remaining =l sub %length, %offset\n %span =l call $trbn_bytes_utf8_span(l %address, l %remaining)\n %out =l add %target, %written\n %valid =w csgtl %span, 0\n jnz %valid, @copy, @replace\n@copy\n call $memcpy(l %out, l %address, l %span)\n %copied_input =l add %offset, %span\n %copied_output =l add %written, %span\n jmp @advance\n@replace\n storeb 239, %out\n %second =l add %out, 1\n storeb 191, %second\n %third =l add %out, 2\n storeb 189, %third\n %replaced_input =l sub %offset, %span\n %replaced_output =l add %written, 3\n jmp @advance\n@advance\n %next_input =l phi @copy %copied_input, @replace %replaced_input\n %next_output =l phi @copy %copied_output, @replace %replaced_output\n %next_points =l add %points, 1\n jmp @scan\n@finish\n %result_len =l add %result, 8\n storel %written, %result_len\n %result_points =l add %result, 16\n storel %points, %result_points\n %end =l add %target, %written\n storeb 0, %end\n storel %roots, $trbn_gc_temp_count\n ret %result\n}\n")
+end
