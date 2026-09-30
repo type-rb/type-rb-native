@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Check managed initialization with poisoned allocation and real String helpers."""
 import argparse
-import json
 from pathlib import Path
 import re
 import subprocess
@@ -9,23 +8,31 @@ import tempfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--qbe', type=Path, required=True)
+parser.add_argument('--compiler', type=Path, required=True)
 args = parser.parse_args()
-repo = Path(__file__).resolve().parent.parent
-sources = [repo / 'compiler/src/backend/qbe/runtime/managed_storage.trb',
-           repo / 'compiler/src/backend/qbe/runtime/system.trb',
-           repo / 'compiler/src/backend/qbe/emit/strings.trb',
-           repo / 'compiler/src/backend/qbe/emit/bytes.trb']
-decoded = '\n'.join(json.loads(s) for source in sources
-                    for s in re.findall(r'"(?:[^"\\]|\\.)*"', source.read_text()))
+with tempfile.TemporaryDirectory(prefix='native-string-emission-') as temporary:
+    source = Path(temporary) / 'main.trb'
+    source.write_text('def main()\nnumber := 123\nputs(number.to_s())\n'
+                      'puts("raw".to_bytes().to_s())\nend\n')
+    emitted = subprocess.run([str(args.compiler.resolve()), 'emit-qbe', str(source)],
+                             check=True, capture_output=True, timeout=30)
+    assert not emitted.stderr, emitted
+    decoded = emitted.stdout.decode()
 names = ['trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert',
          'trbn_storage_unlink', 'trbn_gc_alloc', 'trbn_string_alloc', 'trbn_string_from_bytes',
          'trbn_string_concat', 'trbn_integer_to_string', 'trbn_string_from_codepoint',
-         'trbn_utf8_width', 'trbn_utf8_count', 'trbn_bytes_utf8_span', 'trbn_bytes_to_string']
+         'trbn_utf8_width', 'trbn_utf8_count', 'trbn_bytes_utf8_span', 'trbn_bytes_to_string',
+         'trbn_gc_temp_push', 'trbn_gc_temp_grow']
 bodies = []
 for name in names:
     matches = re.findall(r'^function (?:l )?\$' + name + r'\([^\n]*\) \{.*?^\}', decoded, re.M | re.S)
     assert len(matches) == 1, name
-    bodies.append('export ' + matches[0].replace('call $malloc(', 'call $poison_malloc('))
+    body = matches[0].replace('call $malloc(', 'call $poison_malloc(')
+    if name == 'trbn_gc_alloc':
+        # Observe the real append's completed state, without replacing it.
+        assert body.count('ret %object') == 1
+        body = body.replace('ret %object', 'call $observe_publication(l %object)\n\tret %object')
+    bodies.append('export ' + body)
 error = re.findall(r'^data \$trbn_allocation_error = [^\n]+', decoded, re.M)
 assert len(error) == 1
 storage = re.findall(r'^data \$trbn_storage_available = [^\n]+', decoded, re.M)
@@ -48,7 +55,8 @@ extern struct string *trbn_integer_to_string(int64_t);
 extern struct string *trbn_string_from_codepoint(int64_t);
 int64_t trbn_desc_string[3], other_descriptor[3];
 void *trbn_gc_heap;
-int64_t trbn_gc_heap_bytes, trbn_gc_allocated_bytes, trbn_gc_temp_count;
+int64_t trbn_gc_heap_bytes, trbn_gc_allocated_bytes, trbn_gc_temp_count, trbn_gc_temp_capacity;
+void **trbn_gc_temp_data;
 
 static int64_t projected, peak, published;
 static int fail_allocation;
@@ -60,11 +68,11 @@ void *poison_malloc(size_t size) {
 }
 void trbn_gc_maybe_collect(int64_t size) { projected = size; }
 void trbn_gc_update_peak(int64_t size) { if (peak < size) peak = size; }
-void trbn_gc_temp_push(struct string *s) {
-    if (previous_bytes == trbn_gc_heap_bytes) return; /* Retain an existing input. */
+void observe_publication(struct string *s) {
     /* Publication must see the valid initialized header, even before the
        constructor fills the immutable bytes. It must also see accounting. */
     assert((unsigned char *)s == (unsigned char *)trbn_gc_heap + 8);
+    assert(trbn_gc_temp_count > 0 && trbn_gc_temp_data[trbn_gc_temp_count - 1] == s);
     assert(peak == trbn_gc_heap_bytes);
     if (s->descriptor == (uintptr_t)trbn_desc_string)
         assert(s->length == 0 && s->points == 0);
@@ -84,6 +92,7 @@ static void clear(void) {
         trbn_storage_free(bases[i - 1], sizes[i - 1]);
     trbn_gc_heap = NULL; previous_bytes = 0;
     trbn_gc_heap_bytes = trbn_gc_allocated_bytes = peak = published = 0;
+    trbn_gc_temp_count = 0;
 }
 static void expect(struct string *s, const void *bytes, size_t size, int64_t points) {
     assert(s->descriptor == (uintptr_t)trbn_desc_string);
@@ -190,6 +199,7 @@ int main(int argc, char **argv) {
     expect(trbn_string_from_codepoint(0x10ffff), "\xf4\x8f\xbf\xbf", 4, 1);
     expect(trbn_string_from_codepoint(0xd800), "\xef\xbf\xbd", 3, 1);
     clear();
+    free(trbn_gc_temp_data);
     puts("Managed initialization and poisoned String construction passed");
     return 0;
 }
