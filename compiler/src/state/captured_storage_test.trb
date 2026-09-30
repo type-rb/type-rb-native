@@ -1,13 +1,9 @@
-import { checked_body_new } from state/checked_body
 import { LambdaCapture } from frontend/types/callable_types
-import { callable_forced_collection } from mir/callable_mir_test
-import { checked_function_locals, finalize_checked_module } from frontend/checking/checked_functions
+import { checked_function_locals } from frontend/checking/checked_functions
 import { checked_mir_value } from frontend/checking/checked_values
-import { check_function, emit_qbe } from compiler
-import { control_test_output } from mir/control_mir_test
+import { check_function } from compiler
 import { find_function_in_module } from frontend/resolution/declaration_lookup
-import { intrinsic_mir_erase } from mir/intrinsic_mir_test
-import { logical_checked_source, logical_run_qbe } from frontend/checking/logical_test
+import { logical_checked_source } from testing/pipeline
 import { mir_checked_array_literal } from mir/mir_arrays
 import { mir_binding_capture } from mir/mir_bindings
 import { scalar_mir_commit } from mir/mir_builder
@@ -15,71 +11,14 @@ import { mir_declare_signatures } from mir/mir_calls
 import { mir_checked_closure } from mir/mir_callables
 import { mir_control_return } from mir/mir_control
 import { mir_declare_types } from mir/mir_types
-import { verify_mir } from mir/mir_verifier
-import { CompilerState, select_checked_body } from state/state
+import { select_checked_body } from state/state
 import { local_bind, local_identity, local_storage_type } from state/local_state
 import { load_integer, load_string } from support/storage
-import trb/std/process
-import trb/std/result
 import { describe, expect, test } from trb/std/test
-
-def captured_storage_run(mut state: CompilerState, expected: String)
-	finished := finalize_checked_module(state)
-	if !finished
-		puts(load_string(state.diagnostics.messages, 0))
-	end
-	expect(finished).to_be_true()
-	if !finished
-		return
-	end
-	captured_storage_execute(state, expected)
-end
-
-def captured_storage_execute(mut state: CompilerState, expected: String)
-	before := control_test_output(emit_qbe(state))
-	intrinsic_mir_erase(state)
-	mut body := 0
-	while body < state.callables.checked_bodies.size()
-		state.callables.checked_bodies[body] = checked_body_new(-1, 0, 0)
-		body += 1
-	end
-	state.callables.checked[0] = checked_body_new(-1, 0, 0)
-	expect(verify_mir(state.scalar_mir, true)).to_equal("")
-	expect(control_test_output(emit_qbe(state))).to_equal(before)
-	qbe := Process.environment("TYPE_RB_NATIVE_QBE")
-	if qbe != nil
-		case logical_run_qbe(qbe, callable_forced_collection(before))
-		when Result::Ok(actual)
-			expect(actual).to_equal(expected)
-		when Result::Err(error)
-			puts(error)
-			expect(false).to_be_true()
-		end
-	end
-end
+import { captured_storage_run, captured_storage_source } from testing/storage
 
 # An explicit analyzed plan drives ordinary declaration, read, write and edge
 # lowering. Authored fn materialization and retained REPL code are still pending.
-def captured_storage_source(source: String, name: String, identities: Array<Integer>): CompilerState
-	mut state := logical_checked_source(source)
-	function := find_function_in_module(state, state.module_graph.entry_module[0], name)
-	select_checked_body(state, function)
-	identities.each do |identity|
-		state.callables.checked[0].shared_bindings.push(identity)
-	end
-	mir_declare_types(state)
-	mir_declare_signatures(state)
-	mut index := 0
-	while index < state.declarations.function_count[0]
-		valid := check_function(state, index)
-		if !valid
-			puts(load_string(state.diagnostics.messages, 0))
-		end
-		expect(valid).to_be_true()
-		index += 1
-	end
-	return state
-end
 
 describe("Captured binding storage") do
 	test("carries cells through branches and loops while preserving parameter ABI and semantic types") do

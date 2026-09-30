@@ -1,88 +1,21 @@
-import { native_read_text, native_write_text } from project/native_file_system
-import trb/std/process
-import trb/std/result
+import { native_read_text } from project/native_file_system
 import { check, emit_qbe } from compiler
 import { lex } from frontend/syntax/lexer
 import { mir_function_index, mir_logical_plan, mir_logical_short_value } from mir/mir
-import { control_test_output } from mir/control_mir_test
+import { control_test_output } from testing/mir/control
 import { verify_mir } from mir/mir_verifier
 import { parse_module } from frontend/syntax/parser
 import { syntax_expression_precedence } from frontend/syntax/syntax_forms
 import { resolve } from frontend/checking/resolution
-import { CompilerState, compiler_new } from state/state
+import { compiler_new } from state/state
 import { load_integer, load_string, store_string } from support/storage
 import { describe, expect, test } from trb/std/test
-
-def logical_checked_source(source: String): CompilerState
-	mut state := compiler_new(source.size() + 1)
-	expect(lex(state, source)).to_be_true()
-	expect(parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
-	expect(resolve(state)).to_be_true()
-	return state
-end
+import { logical_checked_source } from testing/pipeline
+import { logical_run_qbe } from testing/qbe_runner
+import trb/std/process
+import trb/std/result
 
 # Use a fresh workspace so concurrent correctness runs cannot share artifacts.
-def logical_run_qbe(qbe_path: String, source: String): Result<String, String>
-	return logical_run_qbe_arguments(qbe_path, source, [])
-end
-
-def logical_run_qbe_arguments(qbe_path: String, source: String, arguments: Array<String>): Result<String, String>
-	allocated := case Process.run("/usr/bin/mktemp", ["-d", "/tmp/type-rb-native-logical-layout.XXXXXX"])
-	when Result::Ok(result)
-		result
-	when Result::Err(error)
-		return Result<String, String>::Err(error.message)
-	end
-	if !allocated.success
-		return Result<String, String>::Err(allocated.stderr)
-	end
-	workspace := allocated.stdout.strip()
-	case native_write_text(workspace + "/module.ssa", source)
-	when Result::Ok(_unit)
-	when Result::Err(error)
-		return Result<String, String>::Err(error.message)
-	end
-	assembled := case Process.run(qbe_path, ["-t", "arm64_apple", workspace + "/module.ssa"])
-	when Result::Ok(result)
-		result
-	when Result::Err(error)
-		return Result<String, String>::Err(error.message)
-	end
-	if !assembled.success
-		return Result<String, String>::Err(assembled.stderr)
-	end
-	case native_write_text(workspace + "/module.s", assembled.stdout)
-	when Result::Ok(_unit)
-	when Result::Err(error)
-		return Result<String, String>::Err(error.message)
-	end
-	linked := case Process.run("/usr/bin/cc", [workspace + "/module.s", "-lm", "-o", workspace + "/program"])
-	when Result::Ok(result)
-		result
-	when Result::Err(error)
-		return Result<String, String>::Err(error.message)
-	end
-	if !linked.success
-		return Result<String, String>::Err(linked.stderr)
-	end
-	case Process.run(workspace + "/program", arguments)
-	when Result::Ok(result)
-		if !result.success || !result.stderr.empty?()
-			return Result<String, String>::Err(result.stderr)
-		end
-		case Process.run("/bin/rm", ["-r", workspace])
-		when Result::Ok(cleanup)
-			if !cleanup.success
-				return Result<String, String>::Err(cleanup.stderr)
-			end
-		when Result::Err(error)
-			return Result<String, String>::Err(error.message)
-		end
-		return Result<String, String>::Ok(result.stdout)
-	when Result::Err(error)
-		return Result<String, String>::Err(error.message)
-	end
-end
 
 describe("Short-circuit Boolean expressions") do
 	test("recognizes logical and block pipes but rejects bitwise expressions") do

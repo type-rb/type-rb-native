@@ -62,6 +62,13 @@ poor diagnostics, propose an improvement:
 
 ## Verify the affected surface
 
+Colocate unit tests as `some_test.trb` beside `some.trb`, classifying them by the
+contract they verify rather than their import count or setup machinery. Follow
+`docs/compiler-source-layout.md` for feature/system suites and shared `testing`
+helpers. Move unit tests with their owner; never import one test file from
+another or allow production to depend on test helpers. Source staging and cache
+selection must agree about these repository roles.
+
 Use `docs/ci-validation.md` and the maintained commands in `CONTRIBUTING.md`.
 The CI plan for the actual changed paths determines required authorities; do
 not skip them because a change looks small. Complete focused local checks and

@@ -14,11 +14,7 @@ sha256_files() {
 	fi
 }
 source_hashes() {
-	if command -v sha256sum >/dev/null 2>&1; then
-		find "$1" -type f -name '*.trb' ! -name '*_test.trb' -exec sha256sum {} + > "$stage/source-hashes"
-	else
-		find "$1" -type f -name '*.trb' ! -name '*_test.trb' -exec shasum -a 256 {} + > "$stage/source-hashes"
-	fi
+	python3 tools/compiler_sources.py --hash "$1" > "$stage/source-hashes"
 	LC_ALL=C sort "$stage/source-hashes"
 }
 sha256() { sha256_files "$1" | cut -d ' ' -f 1; }

@@ -34,12 +34,30 @@ Four declaration-specific edges supplement the table:
 
 The exceptions do not grant other modules access to those whole layers.
 Core modules cannot import CLI adapters. Production modules cannot import test
-modules or `trb/std/test`. Focused tests live beside their responsibility owner;
-tests may exercise the complete core pipeline and reuse other core test helpers.
+modules, `testing` helpers or `trb/std/test`. Unit tests live beside their owner
+as `<filename>_test.trb` for `<filename>.trb`, even when preparing an input uses
+other components. Tests may exercise the complete core pipeline and share
+explicit helpers under `testing`, but cannot import another test file.
 The whole-compiler suite remains in `compiler/src/compiler_test.trb`. CLI tests
 can exercise the composed CLI and core. All discovered `.trb` files, including
 modules outside the entry's reachable closure, participate in the ownership
 check; unknown directories, unresolved imports and composed path collisions fail.
+
+Test placement follows the contract being verified, not the number of imports
+or whether setup runs QBE. Feature contracts spanning checking, MIR and execution
+belong in `tests/<family>` using the shared language registry's family ids.
+System contracts belong with their subsystem. Local invariants remain colocated;
+move unit tests with their production owner when splitting a directory. A large
+local suite may have concern-specific `<filename>_<concern>_test.trb` companions.
+Do not create tests merely to match every implementation file.
+
+`testing` contains fixtures, pipeline adapters and execution helpers without
+test-case registration. Dependencies run from tests to helpers to production;
+production cannot import helpers, and helpers cannot import test cases. These
+are repository roles, not new TypeRB directory semantics. Staging and content
+keys exclude `testing`, `tests` and `_test.trb` files using the same selection.
+The ordinary compiler import closure and recovery inventories contain no test
+helpers. CLI and recovery-specific helpers belong with those subsystems.
 
 ## Recursive checking
 

@@ -1,27 +1,16 @@
-import { MirTransform } from frontend/types/transform_model
-import { MirIteration } from mir/iteration_mir
-import trb/std/process
-import trb/std/result
 import { check, emit_qbe } from compiler
-import { compiler_test_instruction_with_cell } from compiler_test
-import { control_test_output } from mir/control_mir_test
-import { array_mir_test_read } from mir/array_mir_test
-import { mir_hash_operation } from mir/hash_mir
-import { logical_checked_source, logical_run_qbe } from frontend/checking/logical_test
+import { compiler_test_instruction_with_cell } from testing/compiler
+import { control_test_output } from testing/mir/control
+import { logical_checked_source } from testing/pipeline
+import { logical_run_qbe } from testing/qbe_runner
 import { MirRootPlan } from mir/mir
 import { mir_instruction_effects } from mir/mir_roots
 import { verify_mir } from mir/mir_verifier
-import { string_starts_with } from support/path
-import { CompilerState, has_diagnostic } from state/state
-import { load_integer, load_string, store_integer, store_string } from support/storage
+import { load_string } from support/storage
 import { describe, expect, test } from trb/std/test
-
-def hash_value_mir_state(): CompilerState
-	mut state := logical_checked_source("def main()\nmut table := {\"key\" => \"value\"}\ntable[\"key\"] = \"updated\"\nmerged := table.merge({\"next\" => \"other\"})\nputs(merged[\"next\"])\nend\n")
-	expect(check(state)).to_be_true()
-	expect(state.scalar_mir.functions.size()).to_equal(1)
-	return state
-end
+import { hash_value_mir_state, managed_mir_test_fixture } from testing/mir/managed
+import trb/std/process
+import trb/std/result
 
 describe("Hash value MIR") do
 	test("boxes explicit and inferred Any collection elements with verified MIR") do
@@ -258,104 +247,3 @@ end
 
 # Verify ownership without source plans, arbitrary block storage and collection
 # before every allocating operation; shared by managed Hash and iteration cases.
-def managed_mir_test_fixture(name: String, minimum_hooks: Integer)
-	root := Process.environment("TYPE_RB_NATIVE_ROOT")
-	qbe := Process.environment("TYPE_RB_NATIVE_QBE")
-	if root != nil
-		if qbe != nil
-			fixture := root + "/compiler/conformance/valid/" + name
-			mut state := logical_checked_source(array_mir_test_read(fixture + ".trb"))
-			checked := check(state)
-			if !checked
-				puts(name + ": " + load_string(state.diagnostics.messages, 0))
-			end
-			expect(checked).to_be_true()
-			expect(state.scalar_mir.functions.size()).to_equal(state.declarations.function_count[0])
-			before := control_test_output(emit_qbe(state))
-			if has_diagnostic(state)
-				puts(name + ": " + load_string(state.diagnostics.messages, 0))
-			end
-			expect(state.diagnostics.count[0]).to_equal(0)
-			state.scalar_mir.functions.each do |function|
-				mut token := load_integer(state.declarations.function_body_starts, function.id)
-				while token < load_integer(state.declarations.function_body_ends, function.id)
-					store_string(state.source_tokens.token_texts, token, "unavailable")
-					token += 1
-				end
-			end
-			state.callables.checked_bodies.each do |body|
-				mut index := 0
-				while index < body.hash_operations.size()
-					body.hash_operations[index] = mir_hash_operation(0, -1, -1, -1, "", false, 0)
-					index += 1
-				end
-			end
-			state.parsed.iterations.each do |plan|
-				store_integer(state.parsed.iteration_origins, plan.origin, 0)
-				store_integer(state.parsed.iteration_origins, plan.body_finish, 0)
-			end
-			state.parsed.transforms.each do |plan|
-				store_integer(state.parsed.transform_origins, plan.iteration.origin, 0)
-				store_integer(state.parsed.transform_origins, plan.iteration.body_finish, 0)
-			end
-			state.callables.checked_bodies.each do |body|
-				# Typed traversal projections are not an execution dependency either.
-				body.iterations.each.with_index do |plan, index|
-					body.iterations[index] = MirIteration.new(syntax: plan.syntax, parent_loop: -1, source_kind: 0, type_name: "", element_type: "")
-				end
-				body.transforms.each.with_index do |plan, index|
-					body.transforms[index] = MirTransform.new(syntax: plan.syntax, iteration: plan.iteration, type_name: "", key_type: "")
-					store_integer(body.transform_origins, plan.syntax.iteration.origin, 0)
-					store_string(body.transform_types, plan.syntax.iteration.origin, "")
-					store_string(body.transform_key_types, plan.syntax.iteration.origin, "")
-				end
-				body.ranges.each do |plan|
-					store_integer(body.range_origins, plan.operator_origin, 0)
-				end
-			end
-			expect(control_test_output(emit_qbe(state))).to_equal(before)
-			state.scalar_mir.functions.each do |function|
-				mut left := function.block_start
-				mut right := left + function.block_count - 1
-				while left < right
-					saved := state.scalar_mir.blocks[left]
-					state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
-					state.scalar_mir.blocks[right] = saved
-					left += 1
-					right -= 1
-				end
-			end
-			expect(verify_mir(state.scalar_mir, true)).to_equal("")
-			reordered := control_test_output(emit_qbe(state))
-			expect(state.diagnostics.count[0]).to_equal(0)
-			mut forced := ""
-			mut ordinary := false
-			mut hooks := 0
-			reordered.split("\n").each do |line|
-				if string_starts_with(line, "function ")
-					ordinary = line.include?("$trbnf")
-				end
-				if line == "}"
-					ordinary = false
-				end
-				allocates := line.include?("call $trbn_bytes_to_string(") || line.include?("call $trbn_hash_new(") || line.include?("call $trbn_hash_set(") || line.include?("call $trbn_hash_copy(") || line.include?("call $trbn_hash_update(") || line.include?("call $trbn_hash_delete(") || line.include?("call $trbn_hash_entries(") || line.include?("call $trbn_gc_alloc(") || line.include?("call $trbn_array_new(") || line.include?("call $trbn_array_copy(") || line.include?("call $trbn_array_join(") || line.include?("call $trbn_array_push_") || line.include?("call $trbn_string_concat(") || line.include?("call $trbn_string_sequence(") || line.include?("call $trbn_string_reverse(") || line.include?("call $trbn_string_slice(") || line.include?("call $trbn_string_trim(") || line.include?("call $trbn_string_split(") || line.include?("call $trbn_string_replace(") || line.include?("call $trbn_string_case(") || line.include?("call $trbn_float_to_string(") || line.include?("call $trbn_integer_to_string(") || line.include?("call $trbnf")
-				if ordinary && (allocates || line.include?("call $trbn_array_unshift("))
-					forced += "\tcall $trbn_gc_collect(w 0)\n"
-					hooks += 1
-				end
-				forced += line + "\n"
-			end
-			if hooks < minimum_hooks
-				puts(name + ": collection hooks " + hooks.to_s() + ", diagnostic " + load_string(state.diagnostics.messages, 0))
-			end
-			expect(hooks >= minimum_hooks).to_be_true()
-			case logical_run_qbe(qbe, forced)
-			when Result::Ok(actual)
-				expect(actual).to_equal(array_mir_test_read(fixture + ".out"))
-			when Result::Err(error)
-				puts(error)
-				expect(false).to_be_true()
-			end
-		end
-	end
-end

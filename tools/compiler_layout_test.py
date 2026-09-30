@@ -48,14 +48,27 @@ class OwnershipTests(unittest.TestCase):
         self.assertEqual(len(self.errors()), 1)
 
     def test_tests_cover_all_core_owners_but_production_cannot_import_them(self):
-        self.write('src/support/path_test', 'import backend/qbe/output\nimport compiler_test\nimport trb/std/test\n')
+        self.write('src/support/path_test', 'import backend/qbe/output\nimport testing/pipeline\nimport trb/std/test\n')
         self.write('src/backend/qbe/output')
+        self.write('src/testing/pipeline', 'import backend/qbe/output\nimport { expect } from trb/std/test\n')
         self.write('src/compiler_test')
         self.assertEqual(self.errors(), [])
         self.write('src/frontend/checking/expression', 'import support/path_test\n')
-        self.assertIn('production code imports test module', self.errors()[0])
+        self.assertIn('test modules cannot be imported', self.errors()[0])
         self.write('src/frontend/checking/expression', 'import trb/std/test\n')
         self.assertIn('production code imports test support', self.errors()[0])
+
+    def test_test_case_imports_and_production_helper_dependencies_fail(self):
+        self.write('src/testing/pipeline', 'import frontend/checking/expression\n')
+        self.write('src/tests/arrays/execution_test', 'import testing/pipeline\n')
+        self.write('src/support/path_test', 'import tests/arrays/execution_test\n')
+        self.assertIn('test modules cannot be imported', self.errors()[0])
+        self.write('src/support/path_test', 'import testing/pipeline\n')
+        self.write('src/frontend/checking/expression', 'import testing/pipeline\n')
+        self.assertIn('production code imports testing helper', self.errors()[0])
+        self.write('src/frontend/checking/expression', '')
+        self.write('src/testing/pipeline', 'import { describe, test } from trb/std/test\n')
+        self.assertIn('test helpers cannot register cases', self.errors()[0])
 
     def test_parsed_state_exception_does_not_admit_other_syntax_dependencies(self):
         self.write('src/state/source_state', 'import frontend/syntax/iteration_syntax\n')

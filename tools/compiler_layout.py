@@ -63,10 +63,14 @@ def check(root):
                 errors.append(f'{label}: duplicate composed module {name}')
                 continue
             group = 'cli' if area == 'cli' else relative.parent.as_posix()
+            if relative.parts[0] in ('testing', 'tests'):
+                group = relative.parts[0]
             if group == '.' and (name == 'compiler' or name.endswith('_test')):
                 group = 'entry'
-            if group not in GROUPS and group not in ('entry', 'cli'):
+            if group not in GROUPS and group not in ('entry', 'cli', 'testing', 'tests'):
                 errors.append(f'{label}: missing responsibility owner')
+            if group == 'tests' and not name.endswith('_test'):
+                errors.append(f'{label}: test cases require the _test suffix; helpers belong in testing')
             modules[name] = (path, group, name.endswith('_test'), area)
     if 'compiler' not in modules:
         errors.append('compiler/src/compiler.trb: missing compiler entry')
@@ -80,8 +84,12 @@ def check(root):
             continue
         for line, target in imports:
             if target.startswith('trb/'):
-                if target == 'trb/std/test' and not test:
+                if target == 'trb/std/test' and not test and group != 'testing':
                     errors.append(f'{label}:{line}: production code imports test support')
+                if target == 'trb/std/test' and group == 'testing':
+                    declaration = path.read_text().splitlines()[line - 1]
+                    if re.search(r'\b(describe|test)\b', declaration.split(' from ')[0]):
+                        errors.append(f'{label}:{line}: test helpers cannot register cases')
                 continue
             edge_count += 1
             if target not in modules:
@@ -90,9 +98,11 @@ def check(root):
             _, target_group, target_test, target_area = modules[target]
             if area == 'src' and target_area == 'cli':
                 errors.append(f'{label}:{line}: core cannot depend on CLI module {target}')
-            elif not test and target_test:
-                errors.append(f'{label}:{line}: production code imports test module {target}')
-            elif test or group in ('entry', 'cli'):
+            elif target_test:
+                errors.append(f'{label}:{line}: test modules cannot be imported ({target})')
+            elif not test and group != 'testing' and target_group == 'testing':
+                errors.append(f'{label}:{line}: production code imports testing helper {target}')
+            elif test or group in ('entry', 'cli', 'testing'):
                 continue
             elif target_group not in GROUPS.get(group, set()) and (name, target) not in EXCEPTIONS:
                 errors.append(f'{label}:{line}: forbidden responsibility dependency {group} -> {target_group} ({target})')
