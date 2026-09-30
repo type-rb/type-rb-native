@@ -22,7 +22,8 @@ queries = source.with_name('string_queries.trb')
 decoded += '\n' + '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', queries.read_text()))
 names = ['trbn_string_index', 'trbn_utf8_width', 'trbn_utf8_count', 'trbn_utf8_span',
          'trbn_string_offset', 'trbn_string_from_codepoint', 'trbn_utf8_scalar', 'trbn_source_slice',
-         'trbn_string_is_utf8', 'trbn_string_query', 'trbn_string_codepoint_query',
+         'trbn_string_is_utf8', 'trbn_string_index_query', 'trbn_string_anchor_query',
+         'trbn_string_contains_query', 'trbn_string_codepoint_query',
          'trbn_string_find_bytes']
 bodies = []
 for name in names:
@@ -50,7 +51,16 @@ extern struct string *trbn_string_from_codepoint(int64_t);
 extern struct string *trbn_source_slice(struct string *, int64_t, int64_t);
 extern int64_t trbn_utf8_count(const unsigned char *, int64_t);
 extern int64_t trbn_utf8_scalar(const unsigned char *, int64_t);
-extern int64_t trbn_string_query(struct string *, struct string *, int64_t);
+extern int64_t trbn_string_index_query(struct string *, struct string *, int64_t);
+extern int64_t trbn_string_anchor_query(struct string *, struct string *, int64_t);
+extern int64_t trbn_string_contains_query(struct string *, struct string *);
+/* Keep the corpus's five operations explicit while calling their actual entries. */
+static int64_t probe_query(struct string *value, struct string *part, int64_t mode) {
+    if (mode < 2) return trbn_string_index_query(value, part, mode);
+    if (mode < 4) return trbn_string_anchor_query(value, part, mode);
+    assert(mode == 4);
+    return trbn_string_contains_query(value, part);
+}
 extern int64_t trbn_string_find_bytes(struct string *, struct string *, int64_t);
 static unsigned allocations;
 void *trbn_string_alloc(int64_t size) { ++allocations; return calloc(1, (size_t)size + 8); }
@@ -81,7 +91,7 @@ static void expect_query(struct string *value, const unsigned char *part, size_t
     struct string *pattern = make(part, size);
     const int64_t expected[] = {first, last, prefix, suffix, contains};
     for (int mode = 0; mode < 5; ++mode)
-        assert(trbn_string_query(value, pattern, mode) == expected[mode]);
+        assert(probe_query(value, pattern, mode) == expected[mode]);
     free(pattern);
 }
 static int64_t byte_find(const unsigned char *value, size_t length,
@@ -96,9 +106,9 @@ static void expect_literal_queries(struct string *value, const unsigned char *pa
     int64_t prefix = size <= (size_t)value->length && !memcmp(value->bytes, part, size) ? 0 : -1;
     int64_t suffix = size <= (size_t)value->length &&
         !memcmp(value->bytes + value->length - size, part, size) ? 0 : -1;
-    assert(trbn_string_query(value, pattern, 2) == prefix);
-    assert(trbn_string_query(value, pattern, 3) == suffix);
-    assert(trbn_string_query(value, pattern, 4) == (found < 0 ? -1 : 0));
+    assert(probe_query(value, pattern, 2) == prefix);
+    assert(probe_query(value, pattern, 3) == suffix);
+    assert(probe_query(value, pattern, 4) == (found < 0 ? -1 : 0));
     if (size) {
         for (size_t start = 0; start <= (size_t)value->length; ++start)
             assert(trbn_string_find_bytes(value, pattern, start) ==
@@ -211,15 +221,15 @@ int main(int argc, char **argv) {
     expect_query(value.value, (const unsigned char *)"\xf0\x9f\x98\x80", 4, 2, 2, -1, -1, 0);
     expect_query(value.value, (const unsigned char *)"cd", 2, 3, 3, -1, 0, 0);
     expect_query(value.value, (const unsigned char *)"ce", 2, -1, -1, -1, -1, -1);
-    for (int mode = 0; mode < 5; ++mode) assert(trbn_string_query(value.value, value.value, mode) == 0);
+    for (int mode = 0; mode < 5; ++mode) assert(probe_query(value.value, value.value, mode) == 0);
     struct guarded invalid_value = guard((const unsigned char *)"abcdef\xe3\x81", 8);
     expect_query(invalid_value.value, (const unsigned char *)"\xef\xbf\xbd", 3, 6, 7, -1, -1, -1);
     expect_query(invalid_value.value, (const unsigned char *)"\xe3\x81", 2, 6, 6, -1, 0, 0);
     struct guarded empty = guard((const unsigned char *)"", 0);
     for (int mode = 0; mode < 5; ++mode) {
-        assert(trbn_string_query(empty.value, empty.value, mode) == 0);
-        assert(trbn_string_query(empty.value, value.value, mode) == -1);
-        assert(trbn_string_query(value.value, empty.value, mode) == (mode == 1 ? 5 : 0));
+        assert(probe_query(empty.value, empty.value, mode) == 0);
+        assert(probe_query(empty.value, value.value, mode) == -1);
+        assert(probe_query(value.value, empty.value, mode) == (mode == 1 ? 5 : 0));
     }
     assert(munmap(value.region, value.size) == 0);
     assert(munmap(invalid_value.region, invalid_value.size) == 0);
