@@ -1,6 +1,6 @@
 import { check } from compiler
 import { logical_checked_source } from testing/pipeline
-import { CompilerState } from state/state
+import { CompilerState, has_diagnostic } from state/state
 import { load_string } from support/storage
 import { describe, expect, test } from trb/std/test
 
@@ -16,7 +16,7 @@ describe("Authored binding usage") do
 		expect(load_string(unused.diagnostics.messages, 0)).to_equal("local variable unused is not used")
 		expect(load_string(unused.diagnostics.codes, 0)).to_equal("TRBN4004")
 		used := binding_usage_checked("def probe()\n_unused := 1\nputs(\"ok\")\nend\ndef main()\nprobe()\nend\n")
-		expect(used.diagnostics.count[0]).to_equal(0)
+		expect(has_diagnostic(used)).to_be_false()
 	end
 
 	test("rejects unused block, pattern and catch bindings") do
@@ -30,7 +30,7 @@ describe("Authored binding usage") do
 
 	test("counts closure captures and checks closure parameters") do
 		captured := binding_usage_checked("def probe(): Integer\nvalue := 3\ncallback := fn(): Integer; return value; end\nreturn callback()\nend\ndef main()\nputs(probe())\nend\n")
-		expect(captured.diagnostics.count[0]).to_equal(0)
+		expect(has_diagnostic(captured)).to_be_false()
 		unused := binding_usage_checked("def main()\ncallback := fn(value: Integer); puts(\"ok\"); end\ncallback(1)\nend\n")
 		expect(load_string(unused.diagnostics.messages, 0)).to_equal("block parameter value is not used")
 	end
@@ -43,6 +43,6 @@ describe("Authored binding usage") do
 		prefixed := binding_usage_checked("import trb/std/result\ndef main()\n_value := Result<Integer, String>::Ok(1)\nend\n")
 		expect(load_string(prefixed.diagnostics.messages, 0)).to_equal("Result binding _value must be used")
 		assigned := binding_usage_checked("def main()\nmut value := 1\nvalue = 2\nend\n")
-		expect(assigned.diagnostics.count[0]).to_equal(0)
+		expect(has_diagnostic(assigned)).to_be_false()
 	end
 end
