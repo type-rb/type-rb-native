@@ -7,6 +7,8 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -27,6 +29,128 @@ def snapshot(status="measured"):
 
 
 class DailyTests(unittest.TestCase):
+    def preparation_fixture(self, root):
+        """Run the real controller against source revisions and executable seeds."""
+        repository = root / "repository"
+        repository.mkdir()
+        tools = repository / "tools"
+        (tools / "daily-performance").mkdir(parents=True)
+        shutil.copy(Path(__file__).with_name("prepare-compilers.sh"), tools / "daily-performance")
+        source = repository / "compiler/src/compiler.trb"
+        source.parent.mkdir(parents=True)
+
+        def git(*args):
+            return subprocess.check_output(["git", *args], cwd=repository, text=True,
+                                           stderr=subprocess.DEVNULL).strip()
+
+        git("init")
+        git("config", "user.name", "Preparation Test")
+        git("config", "user.email", "test@example.invalid")
+        revisions = []
+        for name in ("frozen", "previous", "current"):
+            source.write_text(name)
+            git("add", ".")
+            git("commit", "-m", name)
+            revisions.append(git("rev-parse", "HEAD"))
+        (tools / "daily-performance/suite.json").write_text(json.dumps({"baseline": revisions[0]}))
+        (repository / "TYPE_RB_REVISION").write_text("d" * 40)
+        verifier = tools / "bootstrap-seed.sh"
+        verifier.write_text('''#!/bin/sh
+set -eu
+while test "$#" -gt 0; do
+  case "$1" in
+    --input) input=$2 ;;
+    --output) output=$2 ;;
+    --evidence) evidence=$2 ;;
+    --measurement-policy) test "$2" = diagnostic ;;
+  esac
+  shift 2
+done
+mkdir -p "$evidence"
+cp "$input" "$output"
+''')
+        seed_body = '''import json, os, pathlib, shutil, sys
+source = pathlib.Path(sys.argv[2]).read_text()
+with open(os.environ["PREPARATION_CALLS"], "a") as log:
+    log.write(json.dumps({"source": source, "seed": kind}) + "\\n")
+if source == "frozen" and kind != "historical":
+    print("incompatible compiler entry", file=sys.stderr)
+    sys.exit(71)
+output = pathlib.Path(sys.argv[sys.argv.index("--output") + 1])
+shutil.copy(sys.argv[0], output)
+'''
+        seeds = []
+        for kind in ("current", "historical"):
+            path = root / (kind + "-seed")
+            path.write_text(f"#!{sys.executable}\nkind = {kind!r}\n" + seed_body)
+            path.chmod(0o755)
+            seeds.append(path)
+        bin_dir = root / "bin"
+        bin_dir.mkdir()
+        trace = bin_dir / "strace"
+        trace.write_text('''#!/bin/sh
+set -eu
+test "$1" = -f
+test "$2" = -e
+test "$3" = trace=process
+test "$4" = -o
+printf 'synthetic compiler process\\n' > "$5"
+shift 5
+exec "$@"
+''')
+        trace.chmod(0o755)
+        environment = {**os.environ, "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
+                       "PREPARATION_CALLS": str(root / "calls.jsonl"), "RUNNER_TEMP": str(root)}
+        command = ["/bin/sh", str(tools / "daily-performance/prepare-compilers.sh"),
+                   str(seeds[0]), "qbe", revisions[1], str(root / "compilers")]
+        return repository, command, environment, revisions, seeds
+
+    def test_preparation_preserves_frozen_source_with_its_compatible_seed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo, command, env, revisions, seeds = self.preparation_fixture(root)
+            result = subprocess.run(command + ["--baseline-seed", str(seeds[1])], cwd=repo,
+                                    env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            calls = [json.loads(line) for line in (root / "calls.jsonl").read_text().splitlines()]
+            self.assertEqual(calls, [{"source": source, "seed": seed}
+                                    for source, seed in (("current", "current"), ("previous", "current"),
+                                                         ("frozen", "historical")) for _ in range(2)])
+            roles = json.loads((root / "compilers/compilers.json").read_text())
+            self.assertEqual(roles["baseline"]["revision"], revisions[0])
+            for revision, seed in zip(revisions, (seeds[1], seeds[0], seeds[0])):
+                evidence = json.loads((root / f"compilers/{revision}/seed-input.json").read_text())
+                self.assertEqual(evidence["sha256"], hashlib.sha256(seed.read_bytes()).hexdigest())
+
+    def test_current_only_preparation_reuses_one_chain_without_a_historical_seed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo, command, env, revisions, _ = self.preparation_fixture(root)
+            result = subprocess.run(command + ["--current-only"], cwd=repo, env=env,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(len((root / "calls.jsonl").read_text().splitlines()), 2)
+            roles = json.loads((root / "compilers/compilers.json").read_text())
+            self.assertTrue(all(roles[role]["revision"] == revisions[2]
+                                for role in ("native", "previous", "baseline")))
+
+    def test_preparation_requires_seed_selection_and_retains_generation_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo, command, env, revisions, seeds = self.preparation_fixture(root)
+            missing = subprocess.run(command, cwd=repo, env=env, capture_output=True)
+            self.assertEqual(missing.returncode, 64)
+            self.assertFalse((root / "compilers").exists())
+            failed = subprocess.run(command + ["--baseline-seed", str(seeds[0])], cwd=repo,
+                                    env=env, capture_output=True, text=True)
+            self.assertEqual(failed.returncode, 71)
+            self.assertIn(f"revision={revisions[0]} generation=first status=71", failed.stderr)
+            self.assertIn("incompatible compiler entry", failed.stderr)
+            evidence = root / f"compilers/{revisions[0]}"
+            self.assertEqual((evidence / "first.stderr").read_text(), "incompatible compiler entry\n")
+            self.assertTrue((evidence / "first.trace").exists())
+            self.assertFalse((root / "compilers/compilers.json").exists())
+
     def test_self_compile_records_sizes_without_retaining_generated_artifacts(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

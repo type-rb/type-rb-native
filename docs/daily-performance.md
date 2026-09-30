@@ -86,7 +86,14 @@ current Native, the previously measured Native revision, a frozen Native
 baseline, and the exact compatible TypeRB Go revision in `TYPE_RB_REVISION`.
 These four roles compile the same TypeRB source bytes. Each Native chain is closed through
 the existing bootstrap verifier from an exact published seed. Identical role
-revisions share a compiler preparation inside one run. Preparation explicitly selects
+revisions share a compiler preparation inside one run. The frozen source retains
+its compatible `bootstrap-seed-2026-09-09-record-arrays` input because current
+seeds no longer implement its historical compiler intrinsic names. Both published
+seed packages receive the same manifest and attestation verification. The
+preparation evidence records each input hash and preserves generation stdout,
+stderr and process traces, including failures. This does not replace the frozen
+source or skip its subsequent ordinary generations and correctness checks.
+Preparation explicitly selects
 `bootstrap-seed.sh --measurement-policy diagnostic`: the Native generations,
 fixed-point/QBE identity checks, valid and invalid corpus, process/tool boundaries,
 cleanup controls and size observations still run. It omits the separate legacy

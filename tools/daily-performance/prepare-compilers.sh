@@ -1,16 +1,26 @@
 #!/bin/sh
 set -eu
 
-test "$#" -eq 4 || { test "$#" -eq 5 && test "$5" = --current-only; } || exit 64
+test "$#" -ge 4 || exit 64
 seed=$1
 qbe=$2
 previous=$3
 workspace=$4
+shift 4
+baseline_seed=
+current_only=false
+case "$#:${1:-}" in
+  2:--baseline-seed) baseline_seed=$2 ;;
+  1:--current-only) current_only=true ;;
+  *) exit 64 ;;
+esac
+test -x "$seed"
+if test "$current_only" = false; then test -x "$baseline_seed"; fi
 root=$(pwd)
 mkdir -p "$workspace"
 baseline=$(python3 -c 'import json; print(json.load(open("tools/daily-performance/suite.json"))["baseline"])')
 current=$(git rev-parse HEAD)
-if test "${5:-}" = --current-only; then previous=$current; baseline=$current; fi
+if test "$current_only" = true; then previous=$current; baseline=$current; fi
 
 for revision in "$current" "$previous" "$baseline"; do
   # Reuse identical revisions inside this run, never a floating compiler binary.
@@ -22,12 +32,29 @@ for revision in "$current" "$previous" "$baseline"; do
   mkdir -p "$directory/first" "$directory/transition"
   git worktree add --detach "$directory/source" "$revision"
   source="$directory/source/compiler/src/compiler.trb"
+  input_seed=$seed
+  # The frozen source uses historical compiler intrinsic names. A newer seed
+  # can compile it without preserving its compiler runtime entry adapters.
+  if test "$current_only" = false && test "$revision" = "$baseline"; then
+    input_seed=$baseline_seed
+  fi
+  python3 - "$input_seed" "$directory/seed-input.json" <<'PY'
+import hashlib, json, pathlib, sys
+seed, output = map(pathlib.Path, sys.argv[1:])
+output.write_text(json.dumps({"sha256": hashlib.sha256(seed.read_bytes()).hexdigest()}) + "\n")
+PY
   for generation in first transition; do
-    if test "$generation" = first; then compiler=$seed; else compiler="$directory/first/compiler"; fi
+    if test "$generation" = first; then compiler=$input_seed; else compiler="$directory/first/compiler"; fi
+    status=0
     strace -f -e trace=process -o "$directory/$generation.trace" \
       "$compiler" build "$source" --output "$directory/$generation/compiler" \
       --qbe "$qbe" --cc /usr/bin/cc --target linux-arm64-v0 \
-      > "$directory/$generation.stdout" 2> "$directory/$generation.stderr"
+      > "$directory/$generation.stdout" 2> "$directory/$generation.stderr" || status=$?
+    if test "$status" -ne 0; then
+      printf 'Compiler preparation failed: revision=%s generation=%s status=%s\n' "$revision" "$generation" "$status" >&2
+      cat "$directory/$generation.stdout" "$directory/$generation.stderr" >&2
+      exit "$status"
+    fi
     test ! -s "$directory/$generation.stdout"
     test ! -s "$directory/$generation.stderr"
     if grep -E 'execve\("[^"]*/(go|trb|sh|bash|zsh)"' "$directory/$generation.trace"; then exit 1; fi
