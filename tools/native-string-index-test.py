@@ -261,6 +261,31 @@ int main(int argc, char **argv) {
                    reference_count(bytes + offset, sizeof bytes - offset));
         assert(munmap(span.region, span.size) == 0);
     }
+    /* Wide ASCII counting must stay within the supplied span, including
+       unaligned starts and lengths on either side of the four-byte boundary. */
+    for (unsigned kind = 0; kind < 6; ++kind) {
+        unsigned char bytes[256];
+        const unsigned char patterns[][8] = {
+            {'a', 0, 'b', 'c', 'd', 'e', 'f', 'g'},
+            {0xc2, 0xa2, 0xc2, 0xa2, 0xc2, 0xa2, 0xc2, 0xa2},
+            {0xe3, 0x81, 0x82, 0xe3, 0x81, 0x82, 0xe3, 0x81},
+            {0xf0, 0x9f, 0x98, 0x80, 0xf0, 0x9f, 0x98, 0x80},
+            {'a', 'b', 'c', 'd', 0xc2, 0xa2, 'e', 'f'},
+            {0xff, 0xc0, 0xaf, 0xe3, 0x81, 0xf4, 0x90, 0x80}
+        };
+        for (size_t i = 0; i < sizeof bytes; ++i) bytes[i] = patterns[kind][i % 8];
+        struct guarded span = guard(bytes, sizeof bytes);
+        for (size_t start = 0; start <= sizeof bytes; ++start) {
+            size_t length = sizeof bytes - start;
+            assert(trbn_utf8_count(span.value->bytes + start, length) ==
+                   reference_count(bytes + start, length));
+            /* Also exercise every truncated prefix at this alignment. */
+            for (size_t prefix = 0; prefix < 9 && prefix <= length; ++prefix)
+                assert(trbn_utf8_count(span.value->bytes + start, prefix) ==
+                       reference_count(bytes + start, prefix));
+        }
+        assert(munmap(span.region, span.size) == 0);
+    }
     assert(allocations == before_queries);
     puts("String indexing, Unicode lifetime, allocation-free queries and guarded bounds passed");
     return 0;
@@ -283,6 +308,8 @@ with tempfile.TemporaryDirectory(prefix='native String index ') as directory:
                          'twoByteNeedles': 65536, 'guardedReceiverBytes': 8, 'startPositions': 9})
     observations.append({'case': 'utf8-count-oracle', 'twoByteInputs': 65536,
                          'guardedInputs': 4096, 'suffixesPerInput': 9})
+    observations.append({'case': 'utf8-count-groups', 'corpora': 6, 'bytesPerCorpus': 256,
+                         'guardedSuffixesPerCorpus': 257, 'truncatedPrefixes': 9})
     for length, index in [(0, 0), (0, -1), (128, -129), (128, 128), (128, -9007199254740991), (128, 9007199254740991)]:
         result = subprocess.run([str(root / 'probe'), str(length), str(index)], capture_output=True, timeout=10)
         assert result.returncode == 70 and result.stdout == b'', result
