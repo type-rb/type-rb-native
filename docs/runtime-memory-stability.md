@@ -47,6 +47,21 @@ released before the Array handle. A collection leaves objects in place, so the
 QBE ABI does not require forwarding updates. The next heap target is at least
 1 MiB and otherwise twice the post-sweep live heap plus 64 KiB.
 
+Managed object requests from 16 through 64 bytes use eight-byte size classes
+within 4 KiB storage pages. Each page has a 64-byte header and each cell has an
+eight-byte owner prefix outside the visible object layout. Available pages and
+freed cells are linked per class and per page respectively; full pages leave
+the available list, and the final cell release immediately frees its page.
+Larger objects retain direct system allocation. Array backing stores and the
+exact-root buffer remain separate allocations. These raw storage operations
+cannot trigger collection or a managed callback.
+
+Collector accounting and pacing count the exact requested object and Array
+backing bytes. They exclude page headers, owner prefixes, class rounding and
+unused cells. Thus logical heap statistics are not physical storage or RSS
+measurements. Empty pages are never cached, and final reclamation must release
+all page storage as well as every directly allocated object and Array buffer.
+
 The versioned `TYPE_RB_NATIVE_RUNTIME_STATS` switch is internal test machinery.
 It reports collection count, automatic collection count, cumulative allocated
 and reclaimed bytes, final live bytes, and peak managed heap to stderr after
