@@ -4,9 +4,9 @@
 The closure is every compiler module reachable through imports from
 compiler/src/compiler.trb. Three hand-read inventories must match it:
 
-- src/compiler_recovery_layout.trb: one row per module with its exact import
+- recovery/src/compiler/layout.trb: one row per module with its exact import
   header, in the recovery flattening order;
-- src/compiler_recovery_mutations.trb: one observable source mutation per
+- recovery/src/compiler/mutations.trb: one observable source mutation per
   module except the entry, whose needle occurs exactly once; and
 - the module list parsed by compiler/src/compiler_test.trb's own-frontend test.
 
@@ -20,8 +20,8 @@ import re
 from pathlib import Path
 
 
-LAYOUT = "src/compiler_recovery_layout.trb"
-MUTATIONS = "src/compiler_recovery_mutations.trb"
+LAYOUT = "recovery/src/compiler/layout.trb"
+MUTATIONS = "recovery/src/compiler/mutations.trb"
 FRONTEND_TEST = "compiler/src/compiler_test.trb"
 FRONTEND_TEST_NAME = "parses the checked-in compiler closure through its own frontend"
 STRING = r'"(?:\\.|[^"\\])*"'

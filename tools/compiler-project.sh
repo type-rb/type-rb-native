@@ -26,6 +26,29 @@ native_compiler_project_directory() (
 
 # Bootstrap validation must use the fixture from the same frozen checkout as
 # the compiler, including its original location before the corpus rename.
+native_recovery_project_config() (
+	if test "$#" -ne 1 || test ! -d "$1"; then
+		printf '%s\n' 'recovery-project: expected one existing repository root' >&2
+		exit 1
+	fi
+	current=$1/recovery
+	historical=$1/trbconfig.reference.jsonc
+	if test -e "$current" || test -L "$current"; then
+		if test -e "$historical" || test -L "$historical" ||
+			test ! -f "$current/trbconfig.jsonc" || test ! -f "$current/src/driver/main.trb"; then
+			printf '%s\n' 'recovery-project: ambiguous or incomplete current layout' >&2
+			exit 1
+		fi
+		printf '%s\n' "$current/trbconfig.jsonc"
+	else
+		if test ! -f "$historical" || test ! -f "$1/src/recovery_driver.trb"; then
+			printf '%s\n' 'recovery-project: incomplete historical layout' >&2
+			exit 1
+		fi
+		printf '%s\n' "$historical"
+	fi
+)
+
 native_configured_fixture_directory() (
 	if test "$#" -ne 1 || test ! -d "$1"; then
 		printf '%s\n' 'configured-fixture: expected one existing repository root' >&2

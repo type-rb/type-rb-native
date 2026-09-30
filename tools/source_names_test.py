@@ -12,7 +12,7 @@ class SourceNamesTests(unittest.TestCase):
     def test_source_comment_and_identifier(self):
         for text in ("# gate-specific module models", "def Gate4SymbolIndex()", "# Gate 6M compiler"):
             with self.subTest(text=text):
-                self.assertTrue(NAMES.retired_names("src/qbe.trb", text))
+                self.assertTrue(NAMES.retired_names("recovery/src/scalar/qbe.trb", text))
 
     def test_current_markdown_including_labels(self):
         self.assertTrue(NAMES.retired_names("docs/architecture.md", "[Gate 4](https://example.test/history)"))

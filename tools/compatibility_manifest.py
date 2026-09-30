@@ -304,7 +304,7 @@ def validate_repository_values(
 
     snapshot_version = manifest["bootstrap"]["snapshotSchemaVersion"]
     snapshot_source = _require_text(
-        root / "src/recovery_managed_snapshot.trb",
+        root / "recovery/src/managed/snapshot.trb",
         [f"if version != {snapshot_version}"],
         "bootstrap snapshot",
     )

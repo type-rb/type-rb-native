@@ -13,8 +13,8 @@ test('main recovery selects only changed compiler modules and fails closed on un
     'compiler/src/compiler_test.trb', 'docs/architecture.md'], modules), 'lexer,mir');
   assert.equal(recoveryModules(['compiler/src/compiler.trb', 'compiler/src/parser_test.trb'], modules), 'none');
   for (const paths of [
-    ['compiler/src/new_module.trb'], ['src/compiler_recovery_test.trb'],
-    ['src/compiler_recovery_mutations.trb'], ['tools/recovery_layout_sync.py'],
+    ['compiler/src/new_module.trb'], ['recovery/src/tests/compiler/bootstrap_test.trb'],
+    ['recovery/src/compiler/mutations.trb'], ['tools/recovery_layout_sync.py'],
     ['.github/workflows/native-validation.yml'], ['TYPE_RB_REVISION'],
     ['compiler/src/lexer.trb', 'fixtures/recovery/changed.trb'],
   ]) assert.equal(recoveryModules(paths, modules), 'all', String(paths));
@@ -27,7 +27,7 @@ test('nested module identities remain distinct and moves retain complete validat
   for (const invalid of ['compiler/src/../escape.trb', 'compiler/src/checking//value.trb',
     'compiler/src/checking/missing.trb']) assert.equal(recoveryModules([invalid], modules), 'all');
   const moved = ['compiler/src/value.trb', 'compiler/src/checking/value.trb',
-    'src/compiler_recovery_layout.trb', 'tools/compiler-project.sh'];
+    'recovery/src/compiler/layout.trb', 'tools/compiler-project.sh'];
   const plan = classify(moved, false, 'tiered');
   assert.equal(plan.complete, true);
   assert.equal(plan.compiler_units, true);
@@ -689,7 +689,7 @@ test('controller-only test edits keep both Linux and macOS execution', () => {
 test('the tiered PR gate defers complete lanes only for ordinary compiler, CLI and conformance edits', () => {
   for (const paths of [
     ['compiler/src/compiler.trb'],
-    ['compiler/src/new_mir_pass.trb', 'src/compiler_recovery_layout.trb', 'src/compiler_recovery_mutations.trb'],
+    ['compiler/src/new_mir_pass.trb', 'recovery/src/compiler/layout.trb', 'recovery/src/compiler/mutations.trb'],
     ['compiler/conformance/valid/new.trb', 'compiler/cli/repl.trb', 'tools/native-cli-test.py'],
     ['compiler/cli/main.trb', 'tools/recovery_stage_test.py', 'docs/architecture.md'],
   ]) {
@@ -707,7 +707,7 @@ test('the tiered PR gate defers complete lanes only for ordinary compiler, CLI a
     assert.notDeepEqual(acceptance({ ...needs, native: { result: 'success' } }), [],
       'a deferred authority cannot silently run');
   }
-  for (const other of ['src/recovery_managed_mir.trb', 'src/compiler_recovery_test.trb',
+  for (const other of ['recovery/src/managed/mir.trb', 'recovery/src/tests/compiler/bootstrap_test.trb',
     'fixtures/recovery/programs/x.trb', 'corpus/recovery-scalar/a/main.trb', 'benchmarks/benchmarksgame/a.trb',
     'TYPE_RB_REVISION', 'compatibility/current.json', 'trbn', 'tools/build-native.sh',
     'tools/native-bootstrap-test.py', 'tools/check-bootstrap-snapshot.sh', 'tools/recovery-bootstrap.sh',

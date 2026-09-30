@@ -11,7 +11,7 @@ the compiler and CLI import those declarations directly.
 
 Ordinary builds start at the canonical entry and follow explicit imports.
 Snapshot recovery validates that closure and derives a temporary flattened input;
-it does not replace normal source loading. `src/compiler_recovery_layout.trb`
+it does not replace normal source loading. `recovery/src/compiler/layout.trb`
 records every canonical module and exact import prefix. Recovery reading, flattening
 and staging consume that inventory; module mutation controls cover its dependencies. Source moves update imports, recovery,
 CLI staging, tests, CI routing and operational consumers together.

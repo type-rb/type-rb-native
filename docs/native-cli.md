@@ -101,11 +101,11 @@ JSON Unicode escapes separately.
 
 The checkout root contains a small `mode: trb` example project in `examples/`.
 Reference-compiler development checks use the separate
-`trbconfig.reference.jsonc` explicitly:
+`recovery/trbconfig.jsonc` explicitly:
 
 ```sh
-trb check --config trbconfig.reference.jsonc
-trb test --config trbconfig.reference.jsonc
+trb check --config recovery/trbconfig.jsonc
+trb test --config recovery/trbconfig.jsonc
 tools/check-native-cli.sh /path/to/trb
 ```
 

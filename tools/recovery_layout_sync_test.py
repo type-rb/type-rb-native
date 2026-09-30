@@ -34,12 +34,12 @@ class RecoveryInventorySyncTest(unittest.TestCase):
         self.source("first", 'import { Point } from second\n\ndef label(): String\n\treturn "first label"\nend\n')
         self.source("second", "record Point\n\tx: Integer\n\ty: String\nend\n")
         self.source("unrelated", 'def unused(): String\n\treturn "not in the closure"\nend\n')
-        self.write("src/compiler_recovery_layout.trb", LAYOUT_HEAD +
+        self.write("recovery/src/compiler/layout.trb", LAYOUT_HEAD +
                    '\t\tRecoveryCompilerModule.new(name: "second", imports: ""),\n'
                    '\t\tRecoveryCompilerModule.new(name: "first", imports: "import { Point } from second\\n\\n"),\n'
                    '\t\tRecoveryCompilerModule.new(name: "compiler", imports: "import { label } from first\\n\\n"),\n'
                    "\t]\nend\n")
-        self.write("src/compiler_recovery_mutations.trb", MUTATIONS_HEAD +
+        self.write("recovery/src/compiler/mutations.trb", MUTATIONS_HEAD +
                    '\t\t["first", "\\"first label\\"", "\\"first title\\""],\n'
                    '\t\t["second", "\\tx: Integer\\n\\ty: String", "\\ty: String\\n\\tx: Integer"],\n'
                    "\t]\nend\n")
@@ -60,7 +60,7 @@ class RecoveryInventorySyncTest(unittest.TestCase):
 
     def snapshot(self):
         return {path: self.read(path) for path in (
-            "src/compiler_recovery_layout.trb", "src/compiler_recovery_mutations.trb", "compiler/src/compiler_test.trb")}
+            "recovery/src/compiler/layout.trb", "recovery/src/compiler/mutations.trb", "compiler/src/compiler_test.trb")}
 
     def test_synchronized_inventories_are_unchanged(self):
         self.assertEqual(closure(self.root), ["compiler", "first", "second"])
@@ -92,7 +92,7 @@ class RecoveryInventorySyncTest(unittest.TestCase):
         self.source("checking/first", self.read("compiler/src/first.trb"))
         (self.root / "compiler/src/first.trb").unlink()
         synchronize(self.root, True, {"first": "checking/first"})
-        mutations = self.read("src/compiler_recovery_mutations.trb")
+        mutations = self.read("recovery/src/compiler/mutations.trb")
         self.assertIn('["checking/first", "\\\"first label\\\"", "\\\"first title\\\""]', mutations)
         self.assertEqual(synchronize(self.root, False), [])
 
@@ -114,40 +114,40 @@ class RecoveryInventorySyncTest(unittest.TestCase):
                                    "frontend test: add third"])
         synchronize(self.root, True)
         self.assertEqual(synchronize(self.root, False), [])
-        layout = self.read("src/compiler_recovery_layout.trb")
+        layout = self.read("recovery/src/compiler/layout.trb")
         self.assertLess(layout.index('"second"'), layout.index('"compiler"'))
         self.assertLess(layout.index('name: "third"'), layout.index('name: "compiler"'))
         self.assertIn('RecoveryCompilerModule.new(name: "compiler", imports: "import { label } from first\\n\\n"),\n\t]', layout)
         self.assertIn('imports: "import { Point } from second\\nimport { extra } from third\\n\\n"', layout)
         self.assertIn('["third", "\\"third extra\\"", "\\"third extra~\\""],\n\t]',
-                      self.read("src/compiler_recovery_mutations.trb"))
+                      self.read("recovery/src/compiler/mutations.trb"))
         self.assertIn('names := ["compiler", "second", "first", "third"]', self.read("compiler/src/compiler_test.trb"))
 
     def test_misplaced_compiler_entry_is_moved_to_the_end(self):
-        layout = self.read("src/compiler_recovery_layout.trb")
+        layout = self.read("recovery/src/compiler/layout.trb")
         compiler = '\t\tRecoveryCompilerModule.new(name: "compiler", imports: "import { label } from first\\n\\n"),\n'
-        self.write("src/compiler_recovery_layout.trb", layout.replace(compiler, "").replace(
+        self.write("recovery/src/compiler/layout.trb", layout.replace(compiler, "").replace(
             '\t\tRecoveryCompilerModule.new(name: "first", imports: "import { Point } from second\\n\\n"),\n',
             compiler + '\t\tRecoveryCompilerModule.new(name: "first", imports: "import { Point } from second\\n\\n"),\n',
         ))
         self.assertEqual(synchronize(self.root, False), ["layout: move compiler to final position"])
         synchronize(self.root, True)
         self.assertEqual(synchronize(self.root, False), [])
-        self.assertIn(compiler + "\t]\n", self.read("src/compiler_recovery_layout.trb"))
+        self.assertIn(compiler + "\t]\n", self.read("recovery/src/compiler/layout.trb"))
 
     def test_module_leaving_the_closure_is_removed_everywhere(self):
         self.source("first", 'def label(): String\n\treturn "first label"\nend\n')
         self.assertEqual(synchronize(self.root, True), [
             "layout: remove second", "layout: imports first", "mutations: remove second", "frontend test: remove second"])
-        self.assertNotIn('"second"', self.read("src/compiler_recovery_layout.trb"))
-        self.assertNotIn('"second"', self.read("src/compiler_recovery_mutations.trb"))
+        self.assertNotIn('"second"', self.read("recovery/src/compiler/layout.trb"))
+        self.assertNotIn('"second"', self.read("recovery/src/compiler/mutations.trb"))
         self.assertIn('names := ["compiler", "first"]', self.read("compiler/src/compiler_test.trb"))
 
     def test_stale_needles_regenerate_from_literals_or_record_fields(self):
         self.source("first", 'import { Point } from second\n\ndef label(): String\n\treturn "renamed label"\nend\n')
         self.source("second", "record Point\n\ty: String\n\tx: Integer\nend\n")
         self.assertEqual(synchronize(self.root, True), ["mutations: regenerate first", "mutations: regenerate second"])
-        mutations = self.read("src/compiler_recovery_mutations.trb")
+        mutations = self.read("recovery/src/compiler/mutations.trb")
         self.assertIn('["first", "\\"renamed label\\"", "\\"renamed label~\\""]', mutations)
         self.assertIn('["second", "\\ty: String\\n\\tx: Integer", "\\tx: Integer\\n\\ty: String"]', mutations)
 

@@ -100,6 +100,20 @@ class OwnershipTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             import_header('import { broken\n')
 
+    def test_recovery_is_an_independent_root_with_test_only_helpers(self):
+        source = self.root / 'recovery/src'
+        (source / 'driver').mkdir(parents=True)
+        (source / 'testing').mkdir()
+        driver = source / 'driver/main.trb'
+        driver.write_text('import testing/fixture\n')
+        (source / 'testing/fixture.trb').write_text('')
+        self.assertIn('recovery production imports testing helper', self.errors()[0])
+        driver.write_text('import frontend/checking/expression\n')
+        self.assertIn('recovery import outside its source root', self.errors()[0])
+        driver.write_text('')
+        self.write('src/frontend/checking/expression', 'import recovery/driver/main\n')
+        self.assertIn('missing composed module', self.errors()[0])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -106,7 +106,51 @@ def check(root):
                 continue
             elif target_group not in GROUPS.get(group, set()) and (name, target) not in EXCEPTIONS:
                 errors.append(f'{label}:{line}: forbidden responsibility dependency {group} -> {target_group} ({target})')
+    errors.extend(check_recovery(root))
     return errors, len(modules), edge_count
+
+
+def check_recovery(root):
+    """Recovery owns an independent import root and reads compiler input as data."""
+    directory = root / 'recovery/src'
+    modules = {}
+    errors = []
+    for path in sorted(directory.rglob('*.trb')):
+        relative = path.relative_to(directory)
+        name = relative.with_suffix('').as_posix()
+        owner = relative.parts[0]
+        if path.is_symlink() or not path.resolve().is_relative_to(directory.resolve()):
+            errors.append(f'{path.relative_to(root)}: recovery source escapes its root')
+        if owner not in ('snapshot', 'scalar', 'aggregate', 'managed', 'compiler', 'driver', 'support', 'testing', 'tests'):
+            errors.append(f'{path.relative_to(root)}: missing recovery responsibility owner')
+        if owner == 'tests' and not name.endswith('_test'):
+            errors.append(f'{path.relative_to(root)}: recovery helpers belong in testing')
+        modules[name] = (path, owner, name.endswith('_test'))
+    for name, (path, owner, test) in modules.items():
+        label = path.relative_to(root).as_posix()
+        try:
+            imports = import_header(path.read_text())
+        except ValueError as error:
+            errors.append(f'{label}: {error}')
+            continue
+        for line, target in imports:
+            if target.startswith('trb/'):
+                if target == 'trb/std/test' and not test and owner != 'testing':
+                    errors.append(f'{label}:{line}: recovery production imports test support')
+                if target == 'trb/std/test' and owner == 'testing':
+                    declaration = path.read_text().splitlines()[line - 1]
+                    if re.search(r'\b(describe|test)\b', declaration.split(' from ')[0]):
+                        errors.append(f'{label}:{line}: recovery helpers cannot register cases')
+                continue
+            if target not in modules:
+                errors.append(f'{label}:{line}: recovery import outside its source root: {target}')
+                continue
+            _, target_owner, target_test = modules[target]
+            if target_test:
+                errors.append(f'{label}:{line}: recovery test modules cannot be imported')
+            elif not test and owner != 'testing' and target_owner == 'testing':
+                errors.append(f'{label}:{line}: recovery production imports testing helper')
+    return errors
 
 
 def main():

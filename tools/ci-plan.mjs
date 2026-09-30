@@ -117,7 +117,7 @@ export const cliInputs = new Set([
 const completeCliInputs = new Set(['trbn', 'tools/build-native.sh', 'tools/native-bootstrap-test.py']);
 const pullRequestLane = path =>
   ['compiler/src/', 'compiler/cli/', 'compiler/conformance/'].some(prefix => path.startsWith(prefix)) ||
-  ['compiler/trbconfig.jsonc', 'src/compiler_recovery_layout.trb', 'src/compiler_recovery_mutations.trb',
+  ['compiler/trbconfig.jsonc', 'recovery/src/compiler/layout.trb', 'recovery/src/compiler/mutations.trb',
     'tools/check-conformance-sources.py'].includes(path) ||
   (cliInputs.has(path) && !completeCliInputs.has(path)) || toolingTests.has(path);
 export const gates = ['complete', 'tiered'];
@@ -141,7 +141,7 @@ export function recoveryModules(paths, moduleNames) {
 }
 
 function recoveryModuleNames() {
-  const layout = readFileSync(new URL('../src/compiler_recovery_layout.trb', import.meta.url), 'utf8');
+  const layout = readFileSync(new URL('../recovery/src/compiler/layout.trb', import.meta.url), 'utf8');
   const names = [...layout.matchAll(/RecoveryCompilerModule\.new\(name: "([a-z][a-z0-9_]*(?:\/[a-z][a-z0-9_]*)*)"/g)]
     .map(match => match[1]);
   if (!names.includes('compiler') || new Set(names).size !== names.length ||

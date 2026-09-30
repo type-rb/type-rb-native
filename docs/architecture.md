@@ -103,7 +103,7 @@ remaining optimization work.
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
 Its explicit transitive import closure is registered in
-`src/compiler_recovery_layout.trb`.
+`recovery/src/compiler/layout.trb`.
 
 The import closure changes as language coverage grows; the generated layout,
 not a hand-maintained module table, is the exact inventory. Its main responsibility
@@ -128,7 +128,7 @@ responsibilities without duplicating the canonical compiler closure.
 The CLI/REPL under `compiler/cli/` is outside the ordinary core closure.
 Snapshot recovery derives a temporary flattened source
 from the canonical modules using
-[strict closure validation](../src/compiler_recovery_source.trb); it does not
+[strict closure validation](../recovery/src/compiler/source.trb); it does not
 replace file-root imports in ordinary self-hosting. The
 [organization guide](repository-organization.md) tracks further extraction
 and removal of superseded implementation.

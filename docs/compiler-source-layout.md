@@ -4,7 +4,7 @@ The ordinary compiler entry is `compiler/src/compiler.trb`. Other production
 modules live under the following responsibility owners. Existing module
 basenames and function names remain descriptive source identities; their full
 module paths include the owner. `compiler/cli` composes the core with CLI and
-REPL adapters. Root `src` retains the independent recovery implementation.
+REPL adapters. `recovery/src` contains the independent recovery implementation.
 
 | Owner under `compiler/src` | Responsibility | Permitted other owners |
 | --- | --- | --- |
@@ -94,7 +94,7 @@ idempotent. It also regenerates the canonical recovery inventories with the
 shared synchronization tool, preserving reviewed mutation needles when their
 module paths change and the needles still match exactly once.
 
-Embedded test programs, root recovery imports, immutable evidence and historical
+Embedded test programs, recovery imports, immutable evidence and historical
 cross-revision consumers are outside general import rewriting. Current probes
 that deliberately import the compiler and own-frontend identity assertions have
 explicit replacements. Frozen source paths retain their original identities;

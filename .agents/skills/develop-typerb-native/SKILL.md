@@ -107,12 +107,12 @@ For root TypeRB source checks, use the exact `TYPE_RB_REVISION` compiler:
 
 ```sh
 trb fmt --check .
-trb check --config trbconfig.reference.jsonc
-TYPE_RB_NATIVE_ROOT="$PWD" trb test --config trbconfig.reference.jsonc
+trb check --config recovery/trbconfig.jsonc
+TYPE_RB_NATIVE_ROOT="$PWD" trb test --config recovery/trbconfig.jsonc
 ```
 
 The default root configuration runs the example; root verification explicitly
-uses `trbconfig.reference.jsonc`, and the compiler suite uses
+uses `recovery/trbconfig.jsonc`, and the compiler suite uses
 `compiler/trbconfig.jsonc`. For compiler-source changes, load the bootstrap
 reference above: successful optional tests without the recovery/QBE environment
 do not establish recovery coverage.

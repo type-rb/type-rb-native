@@ -198,9 +198,9 @@ For source and compatibility validation, run the maintained root checks:
 
 ```sh
 trb fmt --check .
-trb check --config trbconfig.reference.jsonc
+trb check --config recovery/trbconfig.jsonc
 tools/check-native-cli.sh /path/to/trb
-TYPE_RB_NATIVE_ROOT="$PWD" trb test --config trbconfig.reference.jsonc
+TYPE_RB_NATIVE_ROOT="$PWD" trb test --config recovery/trbconfig.jsonc
 python3 -m unittest tools/compatibility_manifest_test.py
 python3 tools/compatibility_manifest.py --reference-trb /path/to/pinned/trb
 ```
