@@ -1411,6 +1411,11 @@ def _prepare_compiler_closure(
 	return Result<Boolean, String>::Ok(true)
 end
 
+# The omitted module may be the only file in its directory.
+def _recovery_restore_module(directory: String, name: String, source: String): Result<Boolean, String>
+	return write_recovery_source_files([name], [source], directory)
+end
+
 # Check the isolated entry before expensive generation controls as well as on B1.
 def _recovery_require_compiler_imports(executable: String, entry: String): Result<Boolean, String>
 	hidden := try _recovery_process(executable, ["--source-content", "check", entry])
@@ -1484,7 +1489,7 @@ def _recovery_verify_module_control(control: RecoveryModuleControl): Result<Bool
 
 	# Restore the omitted module with invalid source. The compiler must still
 	# reject it before launching either external tool.
-	try _recovery_write_source(negative + "/" + names[index] + ".trb", sources[index] + "\n`\n")
+	try _recovery_restore_module(negative, names[index], sources[index] + "\n`\n")
 	malformed_output := negative + "/compiler-malformed"
 	malformed_build := try _recovery_build(executable, negative + "/compiler.trb", malformed_output, negative + "/missing-qbe", negative + "/missing-cc")
 	if malformed_build.status != 1 || !malformed_build.stdout.empty?()
@@ -2048,6 +2053,49 @@ def _recovery_verify_file_root_modules(
 end
 
 describe("Native compiler recovery") do
+	test("restores an omitted module in a previously absent directory") do
+		case allocate_compiler_recovery_workspace("")
+		when Result::Err(message)
+			puts(message)
+			expect(false).to_be_true()
+		when Result::Ok(workspace)
+			directory := workspace + "/missing-module"
+			name := "only/nested/value"
+			source := "def value(): Integer\n\treturn 1\nend\n"
+			case _prepare_compiler_closure(directory, ["compiler", name], ["import only/nested/value\n", source], name)
+			when Result::Err(message)
+				puts(message)
+				expect(false).to_be_true()
+			when Result::Ok(_ready)
+				case _recovery_require_missing(directory + "/only/nested")
+				when Result::Ok(_absent)
+				when Result::Err(message)
+					puts(message)
+					expect(false).to_be_true()
+				end
+				case _recovery_restore_module(directory, name, source + "\n`\n")
+				when Result::Err(message)
+					puts(message)
+					expect(false).to_be_true()
+				when Result::Ok(_restored)
+					case _recovery_read(directory + "/" + name + ".trb")
+					when Result::Ok(contents)
+						expect(contents).to_equal(source + "\n`\n")
+					when Result::Err(message)
+						puts(message)
+						expect(false).to_be_true()
+					end
+				end
+			end
+			case Process.run("/bin/rm", ["-r", workspace])
+			when Result::Ok(removed)
+				expect(removed.success).to_be_true()
+			when Result::Err(_error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("builds B0 from the TypeRB compiler source and executes its checked entry") do
 		root := _recovery_environment("TYPE_RB_NATIVE_ROOT")
 		reference_trb := _recovery_environment("TYPE_RB_NATIVE_REFERENCE_TRB")
