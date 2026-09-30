@@ -15,7 +15,7 @@ parser.add_argument('--output', type=Path)
 parser.add_argument('--source', type=Path)
 args = parser.parse_args()
 repo = Path(__file__).resolve().parent.parent
-source = args.source or repo / 'compiler/src/backend/qbe/qbe_runtime.trb'
+source = args.source or repo / 'compiler/src/backend/qbe/runtime/system.trb'
 functions = []
 for literal in re.findall(r'"(?:[^"\\]|\\.)*"', source.read_text()):
     decoded = json.loads(literal)

@@ -18,8 +18,9 @@ CLI staging, tests, CI routing and operational consumers together.
 
 CLI and snapshot staging use `tools/compiler_sources.py` to preserve every
 production module's relative path below its source root. Core and CLI trees
-share one derived import root without flattening basenames. Test sources are
-excluded, and duplicate output paths or symlinks fail before copying files.
+share one derived import root without flattening basenames. Test sources,
+`testing/` helpers and `tests/` suites are excluded from both staging and source
+content keys. Duplicate output paths or symlinks fail before copying files.
 The staging helper is part of the CLI content key, so changing it invalidates
 the CLI cache while preserving an unchanged verified core.
 
@@ -33,6 +34,10 @@ Cross-revision measurement controllers use `tools/compiler-project.sh` from the
 controller checkout and resolve each source root independently. The helper accepts
 the current or authenticated historical project layout, rejects ambiguous/missing
 projects, and runs before timing. It is not a compiler subprocess.
+
+The helper also selects `recovery/trbconfig.jsonc` for current recovery suites
+and the root reference config for frozen historical checkouts. It rejects
+ambiguous or incomplete recovery projects before execution.
 
 The same helper resolves the configured-project corpus fixture independently
 of the compiler layout. Bootstrap validation and its path-with-spaces copy use

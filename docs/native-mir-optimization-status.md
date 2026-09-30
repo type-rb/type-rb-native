@@ -33,7 +33,7 @@ control targets, declaration/call/return types, conservative call effects and so
 QBE adaptation captures edge values before overwriting destinations. Instruction
 results retain stable MIR operand names even when block storage is reordered.
 
-`mir_flow.trb` derives reachability, reverse postorder, immediate dominators and
+`compiler/src/mir/analysis/flow.trb` derives reachability, reverse postorder, immediate dominators and
 value definition sites and function-local value/type and block indexes after structural/identity validation.
 Its predecessor and incoming-argument indexes retain both arms when a branch
 targets the same block. Array-loop alias propagation and natural-loop traversal
@@ -57,48 +57,48 @@ not a performance improvement.
 
 ## Responsibility boundaries
 
-- `mir.trb`: typed module, function, block, instruction and value records, with
+- `compiler/src/mir/model/module.trb`: typed module, function, block, instruction and value records, with
   shared scalar encodings and identity/range queries, plus portable declarations
   and conservative call records.
-- `mir_analysis.trb`, `mir_numeric.trb`, `mir_flow.trb`, `mir_passes.trb`: portable numeric proofs, expansion selection, CFG/dominance
-  and rewrites. `mir_verifier.trb` checks structure/edges; `mir_instructions.trb`
+- `compiler/src/mir/analysis/ranges.trb`, `compiler/src/mir/analysis/numeric.trb`, `compiler/src/mir/analysis/flow.trb`, `compiler/src/mir/passes/optimize.trb`: portable numeric proofs, expansion selection, CFG/dominance
+  and rewrites. `compiler/src/mir/verify/module.trb` checks structure/edges; `compiler/src/mir/verify/instructions.trb`
   checks typed instruction contracts.
-- `checked_values.trb`, `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`:
+- `compiler/src/frontend/checking/body/values.trb`, `compiler/src/mir/build/blocks.trb`, `compiler/src/mir/build/functions.trb`, `compiler/src/mir/build/control.trb`:
   checked value projection, block construction and function publication.
-- `mir_identities.trb`: fresh sparse function/value identities and definition counts, avoiding whole-module pairwise comparisons.
-- `mir_types.trb`: canonical composite type identities and shared managed/element
+- `compiler/src/mir/analysis/identities.trb`: fresh sparse function/value identities and definition counts, avoiding whole-module pairwise comparisons.
+- `compiler/src/mir/model/types.trb`: canonical composite type identities and shared managed/element
   classification, with unique container identities and predeclared nominal shells for recursive record fields.
-- `mir_arrays.trb`: typed Array construction, selection, load/store and push
+- `compiler/src/mir/lowering/arrays.trb`: typed Array construction, selection, load/store and push
   contracts; no backend address is retained across a right-hand side.
-- `mir_array_loops.trb`: verified loop-header and within-block checked-index
+- `compiler/src/mir/analysis/array_loops.trb`: verified loop-header and within-block checked-index
   reuse plans. Stable Arrays retain their own length and storage across pure
   Array-size or scalar-counted loops; only the Array-size guard proves checked
   positions for its own owner. Proven nonnegative positions still check each
   other Array's own length.
   Allocation, mutation, I/O and calls with unknown effects invalidate reuse.
-- `mir_records.trb`, `qbe_records.trb`: nominal construction/projection contracts and their ABI adaptation. Readonly field bindings remain distinct from SSA IDs and mutable projected values.
-- `qbe_arrays.trb`: ABI adaptation of verified Array operations.
-- `mir_calls.trb`: declaration capture, checked calls and their verification.
-- `mir_strings.trb`: String, conversion and output construction/contracts.
-- `mir_roots.trb`: operation effects, backward managed-value liveness and exact
+- `compiler/src/mir/lowering/records.trb`, `compiler/src/backend/qbe/emit/records.trb`: nominal construction/projection contracts and their ABI adaptation. Readonly field bindings remain distinct from SSA IDs and mutable projected values.
+- `compiler/src/backend/qbe/emit/arrays.trb`: ABI adaptation of verified Array operations.
+- `compiler/src/mir/lowering/calls.trb`: declaration capture, checked calls and their verification.
+- `compiler/src/mir/lowering/strings.trb`: String, conversion and output construction/contracts.
+- `compiler/src/mir/analysis/roots.trb`: operation effects, backward managed-value liveness and exact
   safe-point root plans. Block parameters transfer only demanded values. Instruction
   uses and definitions are summarized once per block; a bounded predecessor worklist solves live-in sets
   before the exact safe-point walk. These summaries are rebuilt from verified MIR
   and are never input optimization facts.
-- `qbe_strings.trb`, `qbe_roots.trb`: runtime adaptation of those operations and
+- `compiler/src/backend/qbe/emit/strings.trb`, `compiler/src/backend/qbe/emit/roots.trb`: runtime adaptation of those operations and
   publication of the verified root lists. The adapter reuses unchanged leading
   slots within one MIR block and resets the exact root count at every safe point;
   it does not perform a separate backend lifetime analysis.
-- `mir_logical.trb`: conditional RHS and expression-result join construction.
-- `checked_types.trb`: assignability, operator result types and diagnostics.
-- `argument_binding.trb`: shared required positional/named slots and record labels; authored evaluation precedes operand reordering.
-- `frontend/checking/checked_program.trb` and its call, collection, member,
+- `compiler/src/mir/build/logical.trb`: conditional RHS and expression-result join construction.
+- `compiler/src/frontend/checking/body/types.trb`: assignability, operator result types and diagnostics.
+- `compiler/src/frontend/resolution/argument_binding.trb`: shared required positional/named slots and record labels; authored evaluation precedes operand reordering.
+- `frontend/checking/body/expressions.trb` and its call, collection, member,
   statement, control and iteration owners: mutually recursive source checking
   that invokes the shared MIR construction owners.
-- `qbe_context.trb`, `qbe_functions.trb`, `qbe_numeric.trb`, `qbe_constants.trb`:
+- `compiler/src/backend/qbe/context.trb`, `compiler/src/backend/qbe/emit/functions.trb`, `compiler/src/backend/qbe/emit/numeric.trb`, `compiler/src/backend/qbe/emit/constants.trb`:
   target operands/labels, function ABI and MIR-selected root-frame prologues,
   selected numeric spelling and static data. No lexical local/header/root analysis.
-- `qbe_mir.trb`, `qbe_control.trb`: existing optimized MIR, explicit calls and scalar-block
+- `compiler/src/backend/qbe/emit/mir.trb`, `compiler/src/backend/qbe/emit/control.trb`: existing optimized MIR, explicit calls and scalar-block
   adaptation, sharing one scalar operation adapter.
 
 The [architecture map](architecture.md) records the complete ordinary closure.
@@ -107,7 +107,7 @@ extracted implementation is copied or kept behind an old-name wrapper.
 
 ## Nominal record validation
 
-`record_mir_test.trb` rejects forged nominal identities, field owners/types and
+`compiler/src/mir/lowering/records_test.trb` rejects forged nominal identities, field owners/types and
 origins, wrong constructor arguments and missing initializer roots. Same-shaped
 records remain distinct. Grouping must retain readonly field bindings while
 projected mutable Array values remain usable. The `managed-record-mir` fixture
@@ -130,11 +130,11 @@ The checker rejects an accepted function without a MIR body. QBE uses the verifi
 signature for parameter/result ABI and the MIR root plan for frame capacity.
 The direct expression/body emitter, token Array regions and assignment-effect
 analyses, backend numeric budgets, lexical local slots, header caches and textual
-root-publication filtering are removed. `qbe_functions.trb` owns function emission;
-`compiler.trb` retains orchestration and declaration-bound runtime hooks. Output
+root-publication filtering are removed. `compiler/src/backend/qbe/emit/functions.trb` owns function emission;
+`compiler/src/compiler.trb` retains orchestration and declaration-bound runtime hooks. Output
 storage grows with emitted lines instead of imposing a source-token size guess.
 
-`mir_numeric.trb` derives natural-loop membership through dominance and selects
+`compiler/src/mir/analysis/numeric.trb` derives natural-loop membership through dominance and selects
 expansion in function/block identity order. Modules with at most 32 bodies have
 64 loop operations, six outside operations and two leaf-call expansions; modules
 with at most 96 bodies have 32 loop and three outside operations. Larger modules

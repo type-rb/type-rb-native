@@ -24,8 +24,7 @@ native_compiler_project_directory() (
 	printf '%s\n' "$project"
 )
 
-# Bootstrap validation must use the fixture from the same frozen checkout as
-# the compiler, including its original location before the corpus rename.
+# Recovery suites must use the configuration belonging to the source checkout.
 native_recovery_project_config() (
 	if test "$#" -ne 1 || test ! -d "$1"; then
 		printf '%s\n' 'recovery-project: expected one existing repository root' >&2
@@ -49,6 +48,8 @@ native_recovery_project_config() (
 	fi
 )
 
+# Bootstrap validation must use the fixture from the same frozen checkout as
+# the compiler, including its original location before the corpus rename.
 native_configured_fixture_directory() (
 	if test "$#" -ne 1 || test ! -d "$1"; then
 		printf '%s\n' 'configured-fixture: expected one existing repository root' >&2

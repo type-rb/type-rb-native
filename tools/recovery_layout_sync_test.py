@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from recovery_layout_sync import InventoryError, closure, default_mutation, synchronize
+from recovery_layout_sync import InventoryError, closure, default_mutation, relocation_map, synchronize
 
 
 LAYOUT_HEAD = "record RecoveryCompilerModule\n\tname: String\n\timports: String\nend\n\ndef compiler_recovery_layout(): Array<RecoveryCompilerModule>\n\treturn [\n"
@@ -43,7 +43,7 @@ class RecoveryInventorySyncTest(unittest.TestCase):
                    '\t\t["first", "\\"first label\\"", "\\"first title\\""],\n'
                    '\t\t["second", "\\tx: Integer\\n\\ty: String", "\\ty: String\\n\\tx: Integer"],\n'
                    "\t]\nend\n")
-        self.write("compiler/src/compiler_test.trb", FRONTEND.format(names='"compiler", "second", "first"'))
+        self.write("compiler/src/tests/compiler/source_loading_test.trb", FRONTEND.format(names='"compiler", "second", "first"'))
 
     def tearDown(self):
         self.directory.cleanup()
@@ -60,7 +60,16 @@ class RecoveryInventorySyncTest(unittest.TestCase):
 
     def snapshot(self):
         return {path: self.read(path) for path in (
-            "recovery/src/compiler/layout.trb", "recovery/src/compiler/mutations.trb", "compiler/src/compiler_test.trb")}
+            "recovery/src/compiler/layout.trb", "recovery/src/compiler/mutations.trb", "compiler/src/tests/compiler/source_loading_test.trb")}
+
+    def test_relocation_uses_present_identity_from_multiple_layouts(self):
+        manifest = {"modules": {"first": "support/first", "second": "support/second"},
+                    "previousModules": {"old/first": "first", "old/second": "second"}}
+        inventory = self.read("recovery/src/compiler/mutations.trb")
+        self.assertEqual(relocation_map(manifest, inventory), manifest["modules"])
+        inventory = inventory.replace('["first",', '["old/first",')
+        self.assertEqual(relocation_map(manifest, inventory),
+                         {"old/first": "support/first", "second": "support/second"})
 
     def test_synchronized_inventories_are_unchanged(self):
         self.assertEqual(closure(self.root), ["compiler", "first", "second"])
@@ -121,7 +130,7 @@ class RecoveryInventorySyncTest(unittest.TestCase):
         self.assertIn('imports: "import { Point } from second\\nimport { extra } from third\\n\\n"', layout)
         self.assertIn('["third", "\\"third extra\\"", "\\"third extra~\\""],\n\t]',
                       self.read("recovery/src/compiler/mutations.trb"))
-        self.assertIn('names := ["compiler", "second", "first", "third"]', self.read("compiler/src/compiler_test.trb"))
+        self.assertIn('names := ["compiler", "second", "first", "third"]', self.read("compiler/src/tests/compiler/source_loading_test.trb"))
 
     def test_misplaced_compiler_entry_is_moved_to_the_end(self):
         layout = self.read("recovery/src/compiler/layout.trb")
@@ -141,7 +150,7 @@ class RecoveryInventorySyncTest(unittest.TestCase):
             "layout: remove second", "layout: imports first", "mutations: remove second", "frontend test: remove second"])
         self.assertNotIn('"second"', self.read("recovery/src/compiler/layout.trb"))
         self.assertNotIn('"second"', self.read("recovery/src/compiler/mutations.trb"))
-        self.assertIn('names := ["compiler", "first"]', self.read("compiler/src/compiler_test.trb"))
+        self.assertIn('names := ["compiler", "first"]', self.read("compiler/src/tests/compiler/source_loading_test.trb"))
 
     def test_stale_needles_regenerate_from_literals_or_record_fields(self):
         self.source("first", 'import { Point } from second\n\ndef label(): String\n\treturn "renamed label"\nend\n')
@@ -162,7 +171,7 @@ class RecoveryInventorySyncTest(unittest.TestCase):
             synchronize(self.root, False)
         self.tearDown()
         self.setUp()
-        self.write("compiler/src/compiler_test.trb", FRONTEND.format(names='"first", "compiler", "second"'))
+        self.write("compiler/src/tests/compiler/source_loading_test.trb", FRONTEND.format(names='"first", "compiler", "second"'))
         with self.assertRaisesRegex(InventoryError, "compiler entry"):
             synchronize(self.root, False)
 

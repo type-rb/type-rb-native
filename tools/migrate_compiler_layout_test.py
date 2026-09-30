@@ -66,7 +66,7 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(self.snapshot(), before)
 
     def test_source_collision_fails_before_any_write(self):
-        self.write('compiler/src/frontend/checking/checked_program.trb', 'different')
+        self.write('compiler/src/' + self.manifest['modules']['checked_program'] + '.trb', 'different')
         before = self.snapshot()
         with self.assertRaisesRegex(ValueError, 'flat/nested source collision'):
             apply(self.root, self.manifest)
@@ -89,7 +89,7 @@ class MigrationTests(unittest.TestCase):
 
     def test_partial_migration_and_escaping_assignment_fail(self):
         apply(self.root, self.manifest)
-        path = self.root / 'compiler/src/frontend/checking/checked_statements.trb'
+        path = self.root / ('compiler/src/' + self.manifest['modules']['checked_statements'] + '.trb')
         path.write_text('')
         with self.assertRaisesRegex(ValueError, 'partially applied'):
             plan(self.root, self.manifest)
@@ -111,6 +111,20 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual((self.root / 'docs/history.md').read_text(), 'compiler/src/support.trb')
         self.assertEqual((self.root / 'tools/probe.py').read_text().count('from support/storage'), 2)
         self.assertIn('find_module(state, "support/storage")', entry.read_text())
+        self.assertEqual(plan(self.root, self.manifest), ({}, []))
+
+    def test_previous_nested_layout_and_default_import_identity(self):
+        apply(self.root, self.manifest)
+        previous = self.manifest['modules']['support']
+        self.manifest['previousModules'] = {previous: 'support'}
+        self.manifest['modules']['support'] = 'support/values'
+        self.manifest['defaultImports'] = {'support': 'Storage'}
+        self.write('compiler/cli/main.trb', 'import support/storage as Value # retained name\n')
+        apply(self.root, self.manifest)
+        self.assertEqual((self.root / 'compiler/cli/main.trb').read_text(),
+                         'import { Storage as Value } from support/values # retained name\n')
+        self.assertFalse((self.root / 'compiler/src/support/storage.trb').exists())
+        self.assertIn('from support/values', (self.root / 'compiler/src/frontend/checking/checked_statements.trb').read_text())
         self.assertEqual(plan(self.root, self.manifest), ({}, []))
 
     def test_import_order_is_preserved(self):

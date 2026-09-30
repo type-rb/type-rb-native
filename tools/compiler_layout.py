@@ -20,12 +20,19 @@ GROUPS = {
     'backend/qbe': {'backend/qbe', 'mir', 'state', 'support', 'frontend/types'},
     'project': {'project', 'support', 'frontend/syntax', 'state'},
 }
+DIRECTORY_OWNERS = {name: name for name in GROUPS}
+for owner, children in {
+    'frontend/checking': ('body', 'program', 'builtins', 'nominal', 'collections'),
+    'mir': ('model', 'build', 'lowering', 'analysis', 'passes', 'verify'),
+    'backend/qbe': ('emit', 'runtime'),
+}.items():
+    DIRECTORY_OWNERS.update({owner + '/' + child: owner for child in children})
 # Existing declaration-bound intrinsic identity and the shared parsed/checked
 # iteration projection have narrow exceptions, not permission for whole layers.
 EXCEPTIONS = {
-    ('backend/qbe/qbe_constants', 'frontend/resolution/entry_resolution'),
+    ('backend/qbe/emit/constants', 'frontend/resolution/entry_resolution'),
     ('frontend/types/transform_model', 'frontend/syntax/iteration_syntax'),
-    ('frontend/types/transform_model', 'mir/iteration_mir'),
+    ('frontend/types/transform_model', 'mir/model/iteration'),
     ('state/source_state', 'frontend/syntax/iteration_syntax'),
 }
 IMPORT = re.compile(r'import (?:\{[^}]*\} from )?([a-z][a-z0-9_/]*)(?: as [A-Za-z_][A-Za-z0-9_]*)?(?:\s*#.*)?')
@@ -46,6 +53,14 @@ def import_header(source):
     return result
 
 
+def unit_test_owner(path):
+    """Concern-specific suites must still name a colocated production owner."""
+    stem = path.stem.removesuffix('_test')
+    return any(not source.stem.endswith('_test') and
+               (stem == source.stem or stem.startswith(source.stem + '_'))
+               for source in path.parent.glob('*.trb'))
+
+
 def check(root):
     root = Path(root)
     modules = {}
@@ -62,7 +77,8 @@ def check(root):
             if name in modules:
                 errors.append(f'{label}: duplicate composed module {name}')
                 continue
-            group = 'cli' if area == 'cli' else relative.parent.as_posix()
+            directory_owner = relative.parent.as_posix()
+            group = 'cli' if area == 'cli' else DIRECTORY_OWNERS.get(directory_owner, directory_owner)
             if relative.parts[0] in ('testing', 'tests'):
                 group = relative.parts[0]
             if group == '.' and (name == 'compiler' or name.endswith('_test')):
@@ -77,6 +93,8 @@ def check(root):
     edge_count = 0
     for name, (path, group, test, area) in modules.items():
         label = path.relative_to(root).as_posix()
+        if test and group not in ('tests', 'testing') and not unit_test_owner(path):
+            errors.append(f'{label}: unit test must name a colocated production owner; system/feature suites belong in tests')
         try:
             imports = import_header(path.read_text())
         except ValueError as error:
@@ -128,6 +146,8 @@ def check_recovery(root):
         modules[name] = (path, owner, name.endswith('_test'))
     for name, (path, owner, test) in modules.items():
         label = path.relative_to(root).as_posix()
+        if test and owner not in ('tests', 'testing') and not unit_test_owner(path):
+            errors.append(f'{label}: recovery unit test must name a colocated production owner')
         try:
             imports = import_header(path.read_text())
         except ValueError as error:

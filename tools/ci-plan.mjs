@@ -59,16 +59,17 @@ export const dailyMeasurementInputs = new Set([
 // Keep complete correctness validation; only unchanged-binary measurements
 // are unnecessary. New test paths, configurations and fixtures default to code.
 export const compilerTestInputs = new Set([
-  'compiler/src/frontend/checking/checked_binding_test.trb',
-  'compiler/src/frontend/checking/checked_program_test.trb',
-  'compiler/src/compiler_test.trb',
+  'compiler/src/frontend/checking/body/statements_bindings_test.trb',
+  'compiler/src/frontend/checking/body/expressions_test.trb',
+  'compiler/src/tests/compiler/source_loading_test.trb',
   'compiler/src/support/literals_test.trb',
-  'compiler/src/mir/mir_test.trb',
-  'compiler/src/frontend/checking/hash_test.trb',
-  'compiler/src/frontend/syntax/parser_test.trb',
-  'compiler/src/project/project_config_test.trb',
-  'compiler/src/backend/qbe/qbe_output_test.trb',
-  'compiler/src/frontend/resolution/resolution_test.trb',
+  'compiler/src/mir/model/module_test.trb',
+  'compiler/src/frontend/checking/collections/hashes_test.trb',
+  'compiler/src/frontend/syntax/syntax_tokens_test.trb',
+  'compiler/src/frontend/syntax/syntax_forms_test.trb',
+  'compiler/src/project/config_test.trb',
+  'compiler/src/backend/qbe/output_test.trb',
+  'compiler/src/frontend/resolution/type_resolution_test.trb',
   'compiler/src/state/state_test.trb',
 ]);
 // These adapters are outside the ordinary compiler source closure. Core edits

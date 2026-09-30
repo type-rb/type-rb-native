@@ -41,13 +41,14 @@ class OwnershipTests(unittest.TestCase):
         self.assertIn('support -> backend/qbe', self.errors()[1])
 
     def test_identity_exception_does_not_allow_neighboring_resolution_imports(self):
-        self.write('src/backend/qbe/qbe_constants', 'import frontend/resolution/entry_resolution\n')
+        self.write('src/backend/qbe/emit/constants', 'import frontend/resolution/entry_resolution\n')
         self.write('src/frontend/resolution/entry_resolution')
         self.assertEqual(self.errors(), [])
         self.write('src/backend/qbe/other', 'import frontend/resolution/entry_resolution\n')
         self.assertEqual(len(self.errors()), 1)
 
     def test_tests_cover_all_core_owners_but_production_cannot_import_them(self):
+        self.write('src/support/path')
         self.write('src/support/path_test', 'import backend/qbe/output\nimport testing/pipeline\nimport trb/std/test\n')
         self.write('src/backend/qbe/output')
         self.write('src/testing/pipeline', 'import backend/qbe/output\nimport { expect } from trb/std/test\n')
@@ -61,14 +62,24 @@ class OwnershipTests(unittest.TestCase):
     def test_test_case_imports_and_production_helper_dependencies_fail(self):
         self.write('src/testing/pipeline', 'import frontend/checking/expression\n')
         self.write('src/tests/arrays/execution_test', 'import testing/pipeline\n')
+        self.write('src/support/path')
         self.write('src/support/path_test', 'import tests/arrays/execution_test\n')
         self.assertIn('test modules cannot be imported', self.errors()[0])
+        self.write('src/support/path')
         self.write('src/support/path_test', 'import testing/pipeline\n')
         self.write('src/frontend/checking/expression', 'import testing/pipeline\n')
         self.assertIn('production code imports testing helper', self.errors()[0])
         self.write('src/frontend/checking/expression', '')
         self.write('src/testing/pipeline', 'import { describe, test } from trb/std/test\n')
         self.assertIn('test helpers cannot register cases', self.errors()[0])
+
+    def test_unit_names_follow_the_owner_and_feature_suites_are_explicit(self):
+        self.write('src/frontend/checking/expression_test')
+        self.write('src/frontend/checking/expression_errors_test')
+        self.write('src/tests/strings/execution_test')
+        self.assertEqual(self.errors(), [])
+        self.write('src/frontend/checking/unrelated_test')
+        self.assertIn('unit test must name a colocated production owner', self.errors()[0])
 
     def test_parsed_state_exception_does_not_admit_other_syntax_dependencies(self):
         self.write('src/state/source_state', 'import frontend/syntax/iteration_syntax\n')

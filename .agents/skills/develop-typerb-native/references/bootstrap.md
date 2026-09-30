@@ -53,7 +53,7 @@ also need `TRBN_QBE` when the binary has no adjacent QBE.
 When compiler-module imports change, or a module is added, renamed or removed,
 run `python3 tools/recovery_layout_sync.py --write` and `--check`. It keeps the
 recovery layout, the per-module recovery mutations and the own-frontend module
-list in `compiler/src/compiler_test.trb` equal to the import closure of
+list in `compiler/src/tests/compiler/source_loading_test.trb` equal to the import closure of
 `compiler/src/compiler.trb`, and generates a default mutation for a new module
 or a stale needle. Review generated mutations, then run the focused
 `Compiler recovery source closure` root test before pushing.

@@ -10,7 +10,7 @@ import { acceptance, changedFiles, changedPaths, classify, mainAcceptance, recov
 test('main recovery selects only changed compiler modules and fails closed on unknown inputs', () => {
   const modules = new Set(['compiler', 'lexer', 'parser', 'mir']);
   assert.equal(recoveryModules(['compiler/src/lexer.trb', 'compiler/src/mir.trb',
-    'compiler/src/compiler_test.trb', 'docs/architecture.md'], modules), 'lexer,mir');
+    'compiler/src/tests/compiler/source_loading_test.trb', 'docs/architecture.md'], modules), 'lexer,mir');
   assert.equal(recoveryModules(['compiler/src/compiler.trb', 'compiler/src/parser_test.trb'], modules), 'none');
   for (const paths of [
     ['compiler/src/new_module.trb'], ['recovery/src/tests/compiler/bootstrap_test.trb'],
@@ -600,7 +600,7 @@ test('push comparison includes changes against the actual before revision, not i
 });
 
 test('known compiler test modules retain correctness without unchanged-binary measurements', () => {
-  assert.equal(compilerTestInputs.size, 11);
+  assert.equal(compilerTestInputs.size, 12);
   for (const file of compilerTestInputs) {
     const plan = classify([file], false);
     assert.deepEqual(plan, { code: true, quick: true, compiler_units: true, documentation: false,
