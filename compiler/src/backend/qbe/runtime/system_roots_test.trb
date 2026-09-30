@@ -8,7 +8,7 @@ import { describe, expect, test } from trb/std/test
 import { occurrence_count, output_source } from testing/compiler
 
 describe("Native TypeRB frontend") do
-	test("splits temporary-root push storage from growth") do
+	test("shares validated temporary-root append with fresh allocation") do
 		source := "def keep(value: String): String\n\treturn value\nend\n\ndef main()\n\tputs(keep(\"kept\"))\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
@@ -19,15 +19,18 @@ describe("Native TypeRB frontend") do
 		expect(qbe.include?("function $trbn_gc_temp_push(l %value) {")).to_be_true()
 		expect(
 			qbe.include?(
-				"%full =w ceql %count, %capacity\n\tjnz %full, @grow, @store\n@grow\n\tcall $trbn_gc_temp_grow(l %value, l %count, l %capacity)\n\tret\n@store",
+				"%root_full =w ceql %root_count, %root_capacity\n\tjnz %root_full, @root_grow, @root_store\n@root_grow\n\tcall $trbn_gc_temp_grow(l %value, l %root_count, l %root_capacity)",
 			),
 		).to_be_true()
 		expect(qbe.include?("function $trbn_gc_temp_grow(l %value, l %count, l %capacity) {")).to_be_true()
+		expect(occurrence_count(qbe, "%root_count =l loadl $trbn_gc_temp_count")).to_equal(2)
+		expect(qbe.include?("storel %base, $trbn_gc_heap\n\n\t%root_count =l loadl $trbn_gc_temp_count")).to_be_true()
+		expect(qbe.include?("call $trbn_gc_temp_grow(l %object, l %root_count, l %root_capacity)")).to_be_true()
 		expect(qbe.include?("%new_data =l call $realloc(l %data, l %bytes)")).to_be_true()
-		expect(qbe.include?("%nil =w ceql %value, 0\n\tjnz %nil, @finish, @descriptor")).to_be_true()
+		expect(qbe.include?("%nil =w ceql %value, 0\n\tjnz %nil, @root_finish, @descriptor")).to_be_true()
 		expect(qbe.include?("%descriptor_mark =l loadl %value\n\t%static =w ceql %descriptor_mark, 0")).to_be_true()
-		expect(qbe.include?("%offset =l shl %count, 3")).to_be_true()
-		expect(qbe.include?("storel %value, %slot\n\t%next_count =l add %count, 1")).to_be_true()
+		expect(qbe.include?("%root_offset =l shl %root_count, 3")).to_be_true()
+		expect(qbe.include?("storel %value, %root_slot\n\t%root_next =l add %root_count, 1")).to_be_true()
 	end
 
 	test("reserves the exact peak of live nested Array and String operands") do
@@ -90,9 +93,9 @@ describe("Native TypeRB frontend") do
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
 		qbe := output_source(emit_qbe(state))
-		expect(occurrence_count(qbe, "call $trbn_gc_temp_push")).to_equal(2)
+		expect(occurrence_count(qbe, "call $trbn_gc_temp_push")).to_equal(1)
 		expect(qbe.include?("\tcall $trbn_gc_temp_push(l %t")).to_be_false()
-		expect(qbe.include?("\tcall $trbn_gc_temp_push(l %object)")).to_be_true()
+		expect(qbe.include?("\tcall $trbn_gc_temp_push(l %object)")).to_be_false()
 		expect(qbe.include?("\tcall $trbn_gc_temp_push(l %return_result)")).to_be_true()
 	end
 
