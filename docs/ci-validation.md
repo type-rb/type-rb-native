@@ -202,6 +202,9 @@ ancestor), so a failed or skipped run's changes are planned again until a run
 passes. One push run executes at a time; a newer pending push replaces an older
 pending one, which batches rapid merges without losing their changes. Scheduled
 full runs use a separate concurrency group so a push cannot replace them.
+The reusable CLI workflow also separates events, preserving both Main runs and
+isolating manual CLI runs. Only superseded PR or manual CLI runs cancel active
+CLI work; Main serialization remains with its caller workflow.
 Unknown or invalid revisions fail planning rather than skip checks. Manual
 workflow controls remain available.
 
