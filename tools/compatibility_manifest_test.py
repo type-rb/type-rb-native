@@ -200,7 +200,7 @@ class ReferenceCheckoutTest(unittest.TestCase):
                 self.reject(path, source[:ref.start(1)].rsplit("\n", 1)[0] +
                             source[ref.end(1):])
                 checked += 1
-        self.assertEqual(checked, 9)
+        self.assertEqual(checked, 10)
 
     def test_environment_pins_retain_current_or_historical_identity(self) -> None:
         for name, (mode, _) in REFERENCE_WORKFLOWS.items():
@@ -215,7 +215,9 @@ class ReferenceCheckoutTest(unittest.TestCase):
 
     def test_derived_pins_require_the_canonical_producer_before_checkout(self) -> None:
         producer = 'run: echo "revision=$(cat TYPE_RB_REVISION)" >> "$GITHUB_OUTPUT"'
-        for name in ("daily-performance.yml", "weekly-performance.yml"):
+        for name, (mode, _) in REFERENCE_WORKFLOWS.items():
+            if mode != "derived":
+                continue
             path = self.root / ".github/workflows" / name
             source = self.files[path]
             for old, new in (("id: reference", "id: other"),
