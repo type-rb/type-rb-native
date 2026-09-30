@@ -16,9 +16,9 @@ args = parser.parse_args()
 repo = Path(__file__).resolve().parent.parent
 source = args.source or repo / 'compiler/src/backend/qbe/runtime/system.trb'
 decoded = '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', source.read_text()))
-helpers = source.with_name('qbe_strings.trb')
+helpers = source.parent.parent / 'emit/strings.trb'
 decoded += '\n' + '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', helpers.read_text()))
-queries = source.with_name('qbe_string_queries.trb')
+queries = source.with_name('string_queries.trb')
 decoded += '\n' + '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', queries.read_text()))
 names = ['trbn_string_index', 'trbn_utf8_width', 'trbn_utf8_count', 'trbn_utf8_span',
          'trbn_string_offset', 'trbn_string_from_codepoint', 'trbn_utf8_scalar', 'trbn_source_slice',
