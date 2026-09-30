@@ -73,8 +73,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     probe = cell_source / 'binding_probe.trb'
     probe.write_text('''import { compiler_new } from state/state
 import { callable_type } from frontend/types/callable_types
-import { repl_store, repl_environment, repl_integer, repl_string, repl_value, repl_activate } from repl_model
-import { repl_bind, repl_capture_binding, repl_binding_value, repl_assign_binding, repl_compact } from repl_values
+import { repl_store, repl_environment, repl_integer, repl_string, repl_value, repl_activate } from repl/model
+import { repl_bind, repl_capture_binding, repl_binding_value, repl_assign_binding, repl_compact } from repl/values
 
 def probe(): Boolean
 mut store := repl_store()

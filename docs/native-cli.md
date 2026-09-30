@@ -143,7 +143,7 @@ authored bindings. A declaration that invalidates earlier session input is
 rejected before evaluation and leaves the session usable. Only explicit load or
 reload replays earlier effects.
 
-Project/prelude construction is isolated in `compiler/cli/repl_project.trb`.
+Project/prelude construction is isolated in `compiler/cli/repl/project.trb`.
 The filter uses parsed declarations and preserves hidden prelude line counts;
 comments and strings do not become imports. Reconstructed bindings and type
 labels use visible record aliases, including nested Array/Hash values, while

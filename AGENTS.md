@@ -94,7 +94,7 @@ outward-facing text before publication.
   its PR and issue; do not append per-feature or per-update narratives, dated
   status or hand-counted totals to docs. Regenerate generated views instead.
 - For source organization, follow `docs/repository-organization.md`, including
-  root recovery files and symbols. At accepted optimization checkpoints,
+  recovery sources and symbols. At accepted optimization checkpoints,
   advance a bounded cleanup or record its concrete blocker within the task's
   scope. Preserve applicable recovery/measurement checks and immutable history.
 - Before adopting new syntax in compiler source or changing seeds, follow

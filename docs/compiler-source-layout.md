@@ -52,6 +52,15 @@ move unit tests with their production owner when splitting a directory. A large
 local suite may have concern-specific `<filename>_<concern>_test.trb` companions.
 Do not create tests merely to match every implementation file.
 
+Split a mixed suite by its individual guarantees. Malformed escape rejection
+belongs beside the decoder; literal execution across the pipeline belongs in
+`tests/lexical`. Argument evaluation with source erasure and forced collection
+belongs in `tests/arguments`, while binding identities remain beside the
+resolver. Intrinsic declaration identity remains a resolver unit even when
+execution checks that ordinary sibling declarations are not intercepted.
+Malformed MIR rejection belongs beside the verifier, independently of where
+the test obtains or constructs its MIR fixture.
+
 `testing` contains fixtures, pipeline adapters and execution helpers without
 test-case registration. Dependencies run from tests to helpers to production;
 production cannot import helpers, and helpers cannot import test cases. These
@@ -67,6 +76,7 @@ helpers. CLI and recovery-specific helpers belong with those subsystems.
 | `frontend/checking` | `program` (declarations, generics and submissions), `body` (expressions, calls, members, statements and control), `builtins`, `nominal`, `collections` |
 | `mir` | `model`, `build`, `lowering`, `analysis`, `passes`, `verify` |
 | `backend/qbe` | `emit` for verified-MIR adaptation, `runtime` for emitted support routines and tables; shared context and output stay at the owner root |
+| `compiler/cli` (outside `src`) | `repl` for session orchestration, checking, evaluation, values and terminal interaction; the CLI entry, host adapter and diagnostics stay at the CLI root |
 | `recovery/src` | `snapshot`, `scalar`, `aggregate`, `managed`, `compiler`, `driver`, `support`, plus test-only `testing` and `tests` |
 
 Around 25–30 production files in one directory or more than three directory
