@@ -20,13 +20,20 @@ The harness has four modes:
   output, and checks collector accounting, the 4 MiB managed-heap bound, and
   the sampled internal trace;
 - `formal` runs 60 phases of 120,000 batches on Linux arm64, allocating exactly
-  32,832,000,576 managed bytes after literal-only String concatenation has
-  moved out of the runtime. It samples Native and Go RSS, descriptors, and
+  33,292,800,576 managed bytes. It samples Native and Go RSS, descriptors, and
   threads every 250 ms. Native RSS must remain below 64 MiB, temporal-quartile
   growth below 8 MiB, fitted growth below 1 MiB per minute, and post-warmup
   descriptor and thread counts must not grow;
 - `asan` links a 400-batch Linux arm64 oracle with Clang ASan/LSan; and
 - `valgrind` runs that oracle under Memcheck with every leak class visible.
+
+Every mode checks an exact allocation budget of 576 initial bytes plus 4,624
+bytes per batch. Initial state contains a 40-byte Array handle, 512-byte backing
+and 24-byte record. Each batch contains two 40-byte Array handles, two final
+2,048-byte backings, a 32-byte record and eight 52-byte retry Strings. Original
+payloads are static. Applying this check to smoke and sanitizer modes catches
+allocation drift before the formal run. The formal run also retains its
+independent minimum of 30 GiB allocated.
 
 `TYPE_RB_NATIVE_RUNTIME_TRACE` is an internal evidence switch, read once at
 startup. It does not change normal output or the existing runtime-stats v1
