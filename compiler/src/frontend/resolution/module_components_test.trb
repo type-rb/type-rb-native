@@ -1,0 +1,83 @@
+import { build_module_components, module_is_cyclic } from frontend/resolution/module_components
+import { CompilerState, compiler_new } from state/state
+import { store_integer } from support/storage
+import { describe, expect, test } from trb/std/test
+
+def component_graph(edges: Array<Array<Integer>>, entry: Integer): CompilerState
+	mut capacity := edges.size()
+	mut source := 0
+	while source < edges.size()
+		capacity += edges[source].size()
+		source += 1
+	end
+	mut state := compiler_new(capacity)
+	state.module_graph.module_count[0] = edges.size()
+	state.module_graph.entry_module[0] = entry
+	source = 0
+	mut binding := 0
+	while source < edges.size()
+		expect(store_integer(state.module_graph.module_import_starts, source, binding)).to_be_true()
+		expect(store_integer(state.module_graph.module_import_counts, source, edges[source].size())).to_be_true()
+		mut index := 0
+		while index < edges[source].size()
+			expect(store_integer(state.module_graph.import_targets, binding, edges[source][index])).to_be_true()
+			binding += 1
+			index += 1
+		end
+		source += 1
+	end
+	state.module_graph.import_count[0] = binding
+	return state
+end
+
+def expect_component(state: CompilerState, component: Integer, members: Array<Integer>, cyclic: Boolean)
+	actual := state.global_bindings.component_modules[component]
+	expect(actual.size()).to_equal(members.size())
+	mut index := 0
+	while index < members.size() && index < actual.size()
+		expect(actual[index]).to_equal(members[index])
+		expect(state.global_bindings.module_components[members[index]]).to_equal(component)
+		expect(module_is_cyclic(state, members[index])).to_equal(cyclic)
+		index += 1
+	end
+end
+
+describe("Module component ownership") do
+	test("retains entry-first and disconnected singleton components") do
+		edges: Array<Array<Integer>> := [[], [], []]
+		mut state := component_graph(edges, 1)
+		build_module_components(state)
+		expect(state.global_bindings.component_modules.size()).to_equal(3)
+		expect_component(state, 0, [1], false)
+		expect_component(state, 1, [0], false)
+		expect_component(state, 2, [2], false)
+	end
+
+	test("keeps a singleton self-edge cyclic") do
+		mut state := component_graph([[0]], 0)
+		build_module_components(state)
+		expect(state.global_bindings.component_modules.size()).to_equal(1)
+		expect_component(state, 0, [0], true)
+	end
+
+	test("preserves authored discovery order within a multi-node cycle") do
+		mut state := component_graph([[2, 1], [0], [1]], 0)
+		build_module_components(state)
+		expect(state.global_bindings.component_modules.size()).to_equal(1)
+		expect_component(state, 0, [0, 2, 1], true)
+	end
+
+	test("keeps completed members independent across nested stack reuse") do
+		mut state := component_graph([[1, 2], [1], [3], [2]], 0)
+		build_module_components(state)
+		expect(state.global_bindings.component_modules.size()).to_equal(3)
+		expect_component(state, 0, [1], true)
+		expect_component(state, 1, [2, 3], true)
+		expect_component(state, 2, [0], false)
+		build_module_components(state)
+		expect(state.global_bindings.component_modules.size()).to_equal(3)
+		expect_component(state, 0, [1], true)
+		expect_component(state, 1, [2, 3], true)
+		expect_component(state, 2, [0], false)
+	end
+end
