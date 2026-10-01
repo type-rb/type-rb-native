@@ -1,10 +1,33 @@
 import { mir_loop_aliases } from mir/analysis/array_loops
 import { MirFunction, MirValue, mir_failure_error } from mir/model/module
-import { mir_build_flow, mir_flow_block_index, mir_flow_blocks, mir_flow_graph_error, mir_flow_position, mir_flow_type, mir_value_available } from mir/analysis/flow
+import { mir_build_flow, mir_flow_block_index, mir_flow_blocks, mir_flow_graph_error, mir_flow_order, mir_flow_position, mir_flow_type, mir_value_available } from mir/analysis/flow
 import { mir_test_block_with_cell, mir_test_instruction_with_cell, mir_test_module } from testing/mir/model
 import { verify_mir } from mir/verify/module
 import { describe, expect, test } from trb/std/test
 import { flow_test_module, flow_test_reachable } from testing/mir/flow
+
+describe("MIR traversal order") do
+	test("preserves single-node and odd-length traversal orders") do
+		single: Array<Array<Integer>> := [[]]
+		expect(mir_flow_order(0, single)).to_equal([0])
+		expect(single).to_equal([[]])
+		chain: Array<Array<Integer>> := [[1], [2], []]
+		expect(mir_flow_order(0, chain)).to_equal([0, 1, 2])
+		expect(chain).to_equal([[1], [2], []])
+	end
+
+	test("preserves even-length cyclic traversal from a nonzero entry") do
+		edges: Array<Array<Integer>> := [[1], [2], [3], [0]]
+		expect(mir_flow_order(2, edges)).to_equal([2, 3, 0, 1])
+		expect(edges).to_equal([[1], [2], [3], [0]])
+	end
+
+	test("preserves branch order while excluding unreachable blocks") do
+		edges: Array<Array<Integer>> := [[1, 2], [3], [3], [], [4]]
+		expect(mir_flow_order(0, edges)).to_equal([0, 2, 1, 3])
+		expect(edges).to_equal([[1, 2], [3], [3], [], [4]])
+	end
+end
 
 # Independent oracle: a block dominates a reachable consumer iff deleting that
 # block makes the consumer unreachable. This does not use immediate dominators.
