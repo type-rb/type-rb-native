@@ -109,13 +109,8 @@ def emit_scalar_mir_body(
 		plan: MirNumericPlan,
 		mut context: QbeEmitContext,
 		mut output: QbeOutput,
-		inline: Boolean,
 		safe: Boolean,
 	): QbeValue
-	saved_inline_depth := context.scalar_inline_depth[0]
-	if inline
-		context.scalar_inline_depth[0] = saved_inline_depth + 1
-	end
 	mut operands: Array<String> := []
 	mut types: Array<String> := []
 	mut index := 0
@@ -142,7 +137,6 @@ def emit_scalar_mir_body(
 		operands.push(result.operand)
 		index += 1
 	end
-	context.scalar_inline_depth[0] = saved_inline_depth
 	return emitted_value(operands[block.return_value], types[block.return_value])
 end
 
@@ -158,7 +152,7 @@ def emit_scalar_mir(
 	): QbeValue
 	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, function_index)]
 	if !inline || function.integer_guard == 0
-		return emit_scalar_mir_body(state, function_index, argument_operands, argument_types, plan, context, output, inline, false)
+		return emit_scalar_mir_body(state, function_index, argument_operands, argument_types, plan, context, output, false)
 	end
 	mut combined := argument_operands[0]
 	mut index := 1
@@ -176,7 +170,7 @@ def emit_scalar_mir(
 	qbe_output_line(output, "\t" + valid + " =w cultl " + combined + ", " + integer_string(function.integer_guard))
 	qbe_output_branch(output, valid, fast, slow)
 	qbe_output_line(output, slow)
-	checked := emit_scalar_mir_body(state, function_index, argument_operands, argument_types, plan, context, output, inline, false)
+	checked := emit_scalar_mir_body(state, function_index, argument_operands, argument_types, plan, context, output, false)
 	mut width := "l"
 	if checked.type_name == "Float"
 		width = "d"
@@ -184,7 +178,7 @@ def emit_scalar_mir(
 	qbe_output_line(output, "\t" + result + " =" + width + " copy " + checked.operand)
 	qbe_output_line(output, "\tjmp " + complete)
 	qbe_output_line(output, fast)
-	unchecked := emit_scalar_mir_body(state, function_index, argument_operands, argument_types, plan, context, output, inline, true)
+	unchecked := emit_scalar_mir_body(state, function_index, argument_operands, argument_types, plan, context, output, true)
 	qbe_output_line(output, "\t" + result + " =" + width + " copy " + unchecked.operand)
 	qbe_output_line(output, complete)
 	return emitted_value(result, checked.type_name)
