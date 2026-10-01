@@ -1,14 +1,34 @@
-import { check_lambda_value } from frontend/checking/body/lambdas
+import { check_lambda_value, lambda_names } from frontend/checking/body/lambdas
 import { lex } from frontend/syntax/lexer
 import { parse_module } from frontend/syntax/parser
 import { resolve } from frontend/checking/program/resolution
 import { compiler_new, has_diagnostic, select_checked_body } from state/state
 import { local_bind, locals_new } from state/local_state
-import { load_integer, load_string, sparse_integer_at } from support/storage
+import { resolution_local_bind, resolution_local_find } from state/resolution_locals
+import { load_integer, load_string, sparse_integer_at, store_string } from support/storage
 import { describe, expect, test } from trb/std/test
 import { lambda_analysis_state } from testing/mir/callables
 
 describe("Anonymous lexical body checking") do
+	test("snapshots shadowed names independently of checked lambda bindings") do
+		mut locals := locals_new(3)
+		local_bind(locals, "self", "Outer", 0)
+		local_bind(locals, "self", "Inner", 1)
+		mut names := lambda_names(locals, 3)
+		expect(names.count[0]).to_equal(2)
+		expect(resolution_local_find(names, "self")).to_equal(1)
+		expect(load_string(names.types, 1)).to_equal("Inner")
+		store_string(names.types, 1, "Resolved")
+		expect(load_string(locals.types, 1)).to_equal("Inner")
+		store_string(locals.types, 0, "Changed")
+		expect(load_string(names.types, 0)).to_equal("Outer")
+		resolution_local_bind(names, "temporary", "String")
+		expect(locals.count[0]).to_equal(2)
+		local_bind(locals, "checked", "Integer", 0)
+		expect(resolution_local_find(names, "checked")).to_equal(-1)
+		expect(load_string(locals.names, 2)).to_equal("checked")
+	end
+
 	test("captures only referenced parent identities with their declared capabilities") do
 		source := "def factory(mut counter: Integer, label: String, other: String)\nputs(other)\n_callback := fn(delta: Integer): Integer\nputs(label)\ncounter += delta\nreturn counter\nend\nend\ndef main()\nfactory(1, \"label\", \"other\")\nend\n"
 		mut state := lambda_analysis_state(source)

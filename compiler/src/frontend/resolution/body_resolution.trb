@@ -18,17 +18,16 @@ import { parse_type, token_is } from frontend/syntax/syntax_tokens
 import { nominal_application_end, nominal_application_name } from frontend/syntax/generic_syntax
 import { syntax_loop_transfer_kind } from frontend/syntax/syntax_forms
 import { CompilerState, diagnostic, has_diagnostic, terminal_token } from state/state
-import { CheckedLocals, local_bind, local_find } from state/local_state
+import { ResolutionLocals, resolution_local_bind, resolution_local_find } from state/resolution_locals
 import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from support/storage
 
 def resolution_local_add(
-		mut locals: CheckedLocals,
+		mut locals: ResolutionLocals,
 		name: String,
 		type_name: String,
-		mutable: Integer,
 	)
-	if local_find(locals, name) < 0
-		local_bind(locals, name, type_name, mutable)
+	if resolution_local_find(locals, name) < 0
+		resolution_local_bind(locals, name, type_name)
 	end
 	return
 end
@@ -109,7 +108,7 @@ def is_typed_local_declaration(state: CompilerState, index: Integer): Boolean
 	return false
 end
 
-def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finish: Integer, mut locals: CheckedLocals): Boolean
+def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finish: Integer, mut locals: ResolutionLocals): Boolean
 	module_index := state.module_graph.active_module[0]
 	if !resolve_lambda_headers(state, body_start, body_finish)
 		return false
@@ -118,9 +117,9 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 	while iteration_index < state.parsed.iterations.size()
 		iteration := state.parsed.iterations[iteration_index]
 		if iteration.origin >= body_start && iteration.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, iteration.origin)
-			resolution_local_add(locals, load_string(state.source_tokens.token_texts, iteration.element_origin), "", 1)
+			resolution_local_add(locals, load_string(state.source_tokens.token_texts, iteration.element_origin), "")
 			if iteration.second_origin >= 0
-				resolution_local_add(locals, load_string(state.source_tokens.token_texts, iteration.second_origin), "", 1)
+				resolution_local_add(locals, load_string(state.source_tokens.token_texts, iteration.second_origin), "")
 			end
 		end
 		iteration_index += 1
@@ -128,18 +127,18 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 	state.parsed.transforms.each do |transform|
 		shape := transform.iteration
 		if shape.origin >= body_start && shape.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, shape.origin)
-			resolution_local_add(locals, load_string(state.source_tokens.token_texts, shape.element_origin), "", 1)
+			resolution_local_add(locals, load_string(state.source_tokens.token_texts, shape.element_origin), "")
 			if shape.second_origin >= 0
-				resolution_local_add(locals, load_string(state.source_tokens.token_texts, shape.second_origin), "", 1)
+				resolution_local_add(locals, load_string(state.source_tokens.token_texts, shape.second_origin), "")
 			end
 			if transform.accumulator_origin >= 0
-				resolution_local_add(locals, load_string(state.source_tokens.token_texts, transform.accumulator_origin), "", 1)
+				resolution_local_add(locals, load_string(state.source_tokens.token_texts, transform.accumulator_origin), "")
 			end
 		end
 	end
 	state.parsed.catch_syntax.each do |handler|
 		if handler.origin >= body_start && handler.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, handler.origin)
-			resolution_local_add(locals, load_string(state.source_tokens.token_texts, handler.binding), "", 0)
+			resolution_local_add(locals, load_string(state.source_tokens.token_texts, handler.binding), "")
 		end
 	end
 	mut type_patterns: Hash<String, Integer> := {}
@@ -155,7 +154,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 					mut binding := branch.condition + 2
 					while binding < branch.condition_finish
 						if load_integer(state.source_tokens.token_kinds, binding) == 1
-							resolution_local_add(locals, load_string(state.source_tokens.token_texts, binding), "", 0)
+							resolution_local_add(locals, load_string(state.source_tokens.token_texts, binding), "")
 						end
 						binding += 1
 					end
@@ -168,7 +167,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 					token += 1
 					while token < branch.condition_finish
 						if load_integer(state.source_tokens.token_kinds, token) == 1 && !token_is(state, token + 1, ":")
-							resolution_local_add(locals, load_string(state.source_tokens.token_texts, token), "", 0)
+							resolution_local_add(locals, load_string(state.source_tokens.token_texts, token), "")
 						end
 						token += 1
 					end
@@ -199,7 +198,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 			if kind == 1
 				mut reference_name := text
 				mut reference_position := [index + 1]
-				if local_find(locals, text) < 0 && (find_visible_declaration(state, module_index, text, 6) >= 0 || find_visible_declaration(state, module_index, text, 9) >= 0)
+				if resolution_local_find(locals, text) < 0 && (find_visible_declaration(state, module_index, text, 6) >= 0 || find_visible_declaration(state, module_index, text, 9) >= 0)
 					reference_position[0] = index
 					reference_name = parse_declaration_reference(state, reference_position)
 				end
@@ -208,7 +207,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 					# Receiver methods bind after expression typing. Their explicit type
 					# arguments must not be mistaken for a free generic function.
 					mut receiver_application := false
-					if local_find(locals, text) >= 0 && nominal_application_name(state, index) > index
+					if resolution_local_find(locals, text) >= 0 && nominal_application_name(state, index) > index
 						receiver_application = true
 					end
 					if index > body_start && (token_is(state, index - 1, ".") || token_is(state, index - 1, "&."))
@@ -267,7 +266,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 					index = reference_position[0]
 					next
 				end
-				if local_find(locals, text) < 0 && (token_is(state, index + 1, "::") || token_is(state, index + 1, "."))
+				if resolution_local_find(locals, text) < 0 && (token_is(state, index + 1, "::") || token_is(state, index + 1, "."))
 					alias_index := find_visible_alias(state, module_index, text)
 					if alias_index >= 0 && state.type_resolution.type_aliases[alias_index].parameters.size() == 0
 						resolved := resolve_type_name(state, module_index, text, false)
@@ -301,11 +300,11 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 						end
 					else
 						if token_is(state, index + 1, ":=")
-							resolution_local_add(locals, text, "", 0)
+							resolution_local_add(locals, text, "")
 						else
 							if token_is(state, index + 1, ":")
 								if is_typed_local_declaration(state, index)
-									resolution_local_add(locals, text, "", 0)
+									resolution_local_add(locals, text, "")
 									mut annotation := [index + 2]
 									raw := parse_type(state, annotation)
 									if resolve_type_name(state, module_index, raw, false) == "" && has_diagnostic(state)
@@ -317,8 +316,8 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 								if token_is(state, index + 1, "(")
 									if text != "puts"
 										mut implicit_method := -1
-										self_slot := local_find(locals, "self")
-										if self_slot >= 0 && local_find(locals, text) < 0
+										self_slot := resolution_local_find(locals, "self")
+										if self_slot >= 0 && resolution_local_find(locals, text) < 0
 											receiver := load_string(locals.types, self_slot)
 											declaration := enum_method_declaration_name(state, receiver, text)
 											if declaration != "" && namespace_parent(declaration) == state.global_bindings.declaration_owner[0]
@@ -331,7 +330,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 										if implicit_method >= 0
 											store_integer(state.callables.checked[0].generic_calls, index + 1, implicit_method + 1)
 										end
-										if implicit_method < 0 && !(text == "value" && self_slot >= 0 && find_newtype_type(state, load_string(locals.types, self_slot)) >= 0) && find_visible_function(state, module_index, text) < 0 && local_find(locals, text) < 0 && find_visible_global(state, module_index, text, index) < 0
+										if implicit_method < 0 && !(text == "value" && self_slot >= 0 && find_newtype_type(state, load_string(locals.types, self_slot)) >= 0) && find_visible_function(state, module_index, text) < 0 && resolution_local_find(locals, text) < 0 && find_visible_global(state, module_index, text, index) < 0
 											diagnostic(
 												state,
 												"TRBN4003",
@@ -352,7 +351,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 												)
 											end
 										else
-											if local_find(locals, text) < 0 && find_visible_declaration(state, module_index, text, 9) < 0 && find_visible_newtype(state, module_index, text) < 0 && !(text == "self" && (find_newtype_in_module(state, module_index, state.global_bindings.declaration_owner[0]) >= 0 || object_static_self_type(state) != "")) && find_visible_enum(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0 && find_visible_global(state, module_index, text, index) < 0
+											if resolution_local_find(locals, text) < 0 && find_visible_declaration(state, module_index, text, 9) < 0 && find_visible_newtype(state, module_index, text) < 0 && !(text == "self" && (find_newtype_in_module(state, module_index, state.global_bindings.declaration_owner[0]) >= 0 || object_static_self_type(state) != "")) && find_visible_enum(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0 && find_visible_global(state, module_index, text, index) < 0
 												if find_import_binding(state, module_index, text) < 0
 													diagnostic(
 														state,
@@ -364,7 +363,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 											end
 										end
 									else
-										if local_find(locals, text) < 0 && find_visible_function(state, module_index, text) < 0 && find_visible_generic_function(state, module_index, text) < 0 && find_visible_global(state, module_index, text, index) < 0
+										if resolution_local_find(locals, text) < 0 && find_visible_function(state, module_index, text) < 0 && find_visible_generic_function(state, module_index, text) < 0 && find_visible_global(state, module_index, text, index) < 0
 											diagnostic(
 												state,
 												"TRBN4003",
