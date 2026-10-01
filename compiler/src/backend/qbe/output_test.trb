@@ -48,6 +48,39 @@ describe("QBE output construction") do
 end
 
 describe("QBE output chunks") do
+	test("joins a later uneven chunk across storage blocks without a leading separator") do
+		mut output := qbe_output_new(1, [])
+		mut oversized := ""
+		while oversized.size() < 4097
+			oversized += "x"
+		end
+		qbe_output_line(output, oversized)
+		mut expected := ""
+		mut index := 0
+		while index < 259
+			mut line := "alpha\nbeta"
+			if index % 3 == 0
+				line = ""
+			elsif index % 3 == 1
+				line = "z"
+			end
+			qbe_output_line(output, line)
+			if index > 0
+				expected += "\n"
+			end
+			expected += line
+			index += 1
+		end
+		mut position := [0]
+		mut shared_position := position
+		expect(qbe_output_chunk(output, position)).to_equal(oversized)
+		expect(shared_position[0]).to_equal(1)
+		expect(qbe_output_chunk(output, position)).to_equal(expected)
+		expect(shared_position[0]).to_equal(260)
+		expect(output.lines.used[0]).to_equal(260)
+		expect(load_string(output.lines, 1)).to_equal("")
+	end
+
 	test("preserves empty lines, embedded newlines and the terminal newline") do
 		mut output := qbe_output_new(8, [])
 		lines := ["", "alpha\nbeta", "", "omega", ""]

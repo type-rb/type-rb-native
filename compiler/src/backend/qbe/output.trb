@@ -34,30 +34,33 @@ end
 # Preserve complete lines, including embedded newlines, while bounding copying
 # between stdout writes. A single oversized line is emitted without splitting.
 # Balance concatenation so each line is copied at most once per tree level.
-def qbe_output_join(parts: Array<String>, start: Integer, finish: Integer): String
+def qbe_output_join(lines: StringStorage, start: Integer, finish: Integer, first: Integer): String
 	if finish - start == 1
-		return parts[start]
+		line := load_string(lines, start)
+		if start == first
+			return line
+		end
+		return "\n" + line
 	end
 	middle := start + (finish - start) / 2
-	return qbe_output_join(parts, start, middle) + qbe_output_join(parts, middle, finish)
+	return qbe_output_join(lines, start, middle, first) + qbe_output_join(lines, middle, finish, first)
 end
 
 def qbe_output_chunk(output: QbeOutput, mut position: Array<Integer>): String
+	start := position[0]
 	first := load_string(output.lines, position[0])
-	mut parts: Array<String> := [first]
 	mut length := first.size()
 	# Indexed writes must also fit the snapshot v4 recovery subset.
 	position[0] = position[0] + 1
 	while position[0] < output.lines.used[0]
 		following := load_string(output.lines, position[0])
 		if length + following.size() + 1 > 4096
-			return qbe_output_join(parts, 0, parts.size())
+			return qbe_output_join(output.lines, start, position[0], start)
 		end
-		parts.push("\n" + following)
 		length += following.size() + 1
 		position[0] = position[0] + 1
 	end
-	return qbe_output_join(parts, 0, parts.size())
+	return qbe_output_join(output.lines, start, position[0], start)
 end
 
 def qbe_output_append(mut output: QbeOutput, appended: QbeOutput)
