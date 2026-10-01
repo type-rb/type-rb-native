@@ -9,6 +9,18 @@ import { describe, expect, test } from trb/std/test
 import { output_source } from testing/compiler
 
 describe("Native TypeRB frontend") do
+	test("rejects supplied positional argv arguments") do
+		source := "import trb/std/process\ndef main()\nProcess.argv(1)\nend\n"
+		mut state := compiler_new(source.size() + 1)
+		expect(lex(state, source)).to_be_true()
+		expect(parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
+		expect(resolve(state)).to_be_true()
+		expect(check(state)).to_be_false()
+		expect(load_string(state.diagnostics.codes, 0)).to_equal("TRBN4004")
+		expect(load_integer(state.diagnostics.lines, 0)).to_equal(3)
+		expect(load_string(state.diagnostics.messages, 0).include?("call argument count does not match")).to_be_true()
+	end
+
 	test("preserves receiver diagnostics at the checked MIR boundary") do
 		sources := [
 			"def main()\nputs(\"text\".missing())\nend\n",

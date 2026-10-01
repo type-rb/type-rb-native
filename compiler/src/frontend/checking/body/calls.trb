@@ -24,7 +24,7 @@ import { mir_checked_callable_call } from mir/lowering/callables
 import { mir_binding_read } from mir/build/bindings
 import { advance, expect, skip_newlines, token_is } from frontend/syntax/syntax_tokens
 import { find_enum_type } from frontend/types/enum_types
-import { argument_binding_slot, argument_bindings, function_argument_bindings, record_argument_bindings } from frontend/resolution/argument_binding
+import { ArgumentBindings, argument_binding_slot, argument_bindings, function_argument_bindings, record_argument_bindings } from frontend/resolution/argument_binding
 import { mir_checked_record_new } from mir/lowering/records
 import { mir_checked_array_operation } from mir/lowering/arrays
 import { check_expected, type_diagnostic } from frontend/checking/body/types
@@ -41,6 +41,13 @@ import { load_integer, load_string, sparse_integer_at, sparse_string_at } from s
 import { check_expression } from frontend/checking/body/expressions
 import { checked_hash_call } from frontend/checking/body/collections
 import { check_newtype_member } from frontend/checking/body/members
+
+def checked_call_bindings(state: CompilerState, function: Integer, callee_category: Integer): ArgumentBindings
+	if callee_category == 4
+		return argument_bindings([], [])
+	end
+	return function_argument_bindings(state, function)
+end
 
 def check_call(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, callee_category: Integer, callee_name: String, target: Integer, mut receiver: Integer, bound: Boolean): CheckedValue
 	origin := position[0]
@@ -65,7 +72,7 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 	else
 		return type_diagnostic(state, line, "value is not callable")
 	end
-	mut bindings := function_argument_bindings(state, function)
+	mut bindings := checked_call_bindings(state, function, callee_category)
 	if function >= 0 && sparse_string_at(state.nominal.function_receivers, function) != ""
 		if !bound
 			self_slot := local_find(locals, "self")
@@ -80,7 +87,6 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 		bindings.position[0] = 1
 	end
 	if callee_category == 4
-		bindings = argument_bindings([], [])
 		result_type = "Array<String>"
 	elsif callee_category == 5
 		result_type = "Float"
