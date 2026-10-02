@@ -1,7 +1,8 @@
+import { mir_definition_index } from mir/analysis/identities
 import { MirFunction, MirValue } from mir/model/module
 import { verify_mir } from mir/verify/module
 import { describe, expect, test } from trb/std/test
-import { mir_test_block_with_cell, mir_test_module } from testing/mir/model
+import { mir_test_block_with_cell, mir_test_instruction_with_cell, mir_test_module } from testing/mir/model
 
 describe("Native MIR model and verifier") do
 	test("verifies a checked scalar and Array loop MIR skeleton") do
@@ -43,6 +44,79 @@ describe("Native MIR model and verifier") do
 		mut native_module := mir_test_module(false, false)
 		native_module.values.push(MirValue.new(function_id: 1, id: 0, type_id: 3, source_id: 0, line: 1))
 		expect(verify_mir(native_module, false)).to_equal("MIR value is defined more than once")
+	end
+
+	test("keeps row validation ahead of duplicate detection and later row errors") do
+		rows := [
+			MirValue.new(function_id: 99, id: 0, type_id: 0, source_id: -1, line: 0),
+			MirValue.new(function_id: 1, id: -1, type_id: 0, source_id: -1, line: 0),
+			MirValue.new(function_id: 1, id: 0, type_id: 0, source_id: -1, line: 0),
+			MirValue.new(function_id: 1, id: 0, type_id: 9, source_id: -1, line: 0),
+			MirValue.new(function_id: 1, id: 0, type_id: 3, source_id: 1, line: 1),
+			MirValue.new(function_id: 1, id: 0, type_id: 3, source_id: 0, line: 0),
+			MirValue.new(function_id: 1, id: 0, type_id: 3, source_id: 0, line: 1),
+		]
+		expected := [
+			"MIR value identity is invalid", "MIR value identity is invalid",
+			"MIR value type is invalid", "MIR value type is invalid",
+			"MIR value origin is invalid", "MIR value origin is invalid",
+			"MIR value is defined more than once",
+		]
+		mut index := 0
+		while index < rows.size()
+			mut native_module := mir_test_module(false, false)
+			native_module.values.push(rows[index])
+			native_module.values.push(rows[0])
+			expect(verify_mir(native_module, false)).to_equal(expected[index])
+			expect(verify_mir(native_module, true)).to_equal(expected[index])
+			index += 1
+		end
+	end
+
+	test("keeps missing and repeated definitions ahead of later duplicate rows") do
+		mut missing := mir_test_module(false, false)
+		missing.values[0] = MirValue.new(function_id: 1, id: 99, type_id: 3, source_id: 0, line: 1)
+		missing.values.push(missing.values[0])
+		expect(verify_mir(missing, false)).to_equal("MIR value definition count differs")
+		expect(verify_mir(missing, true)).to_equal("MIR value definition count differs")
+		mut repeated := mir_test_module(false, false)
+		repeated.instructions[0] = mir_test_instruction_with_cell(repeated.instructions[0], 1, 0)
+		repeated.values.push(repeated.values[0])
+		expect(verify_mir(repeated, false)).to_equal("MIR value definition count differs")
+		expect(verify_mir(repeated, true)).to_equal("MIR value definition count differs")
+		repeated.values[0] = MirValue.new(function_id: 1, id: 0, type_id: 0, source_id: 0, line: 1)
+		expect(verify_mir(repeated, false)).to_equal("MIR value type is invalid")
+	end
+
+	test("verifies sparse function-local identities repeatedly without mutating inputs") do
+		mut native_module := mir_test_module(false, false)
+		native_module.arguments[0] = 9007199254740991
+		native_module.values[0] = MirValue.new(function_id: 1, id: 9007199254740991, type_id: 3, source_id: 0, line: 1)
+		native_module.instructions[1] = mir_test_instruction_with_cell(native_module.instructions[1], 2, 9007199254740991)
+		native_module.instructions[3] = mir_test_instruction_with_cell(native_module.instructions[3], 2, 9007199254740991)
+		function := native_module.functions[0]
+		native_module.functions.push(MirFunction.new(kind: function.kind, result_type: function.result_type, integer_guard: function.integer_guard, id: 12, entry_block: function.entry_block, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: function.block_start, block_count: function.block_count))
+		mut index := 0
+		mut original_values: Array<MirValue> := []
+		while index < 9
+			value := native_module.values[index]
+			original_values.push(value)
+			native_module.values.push(MirValue.new(function_id: 12, id: value.id, type_id: value.type_id, source_id: value.source_id, line: value.line))
+			index += 1
+		end
+		definitions := mir_definition_index(native_module)
+		expect(verify_mir(native_module, false)).to_equal("")
+		expect(verify_mir(native_module, false)).to_equal("")
+		expect(mir_definition_index(native_module)).to_equal(definitions)
+		expect(definitions["1:9007199254740991"]).to_equal(1)
+		expect(definitions["12:9007199254740991"]).to_equal(1)
+		expect(native_module.arguments).to_equal([9007199254740991, 1, 2, 2, 5, 8])
+		expect(native_module.values.size()).to_equal(18)
+		index = 0
+		while index < original_values.size()
+			expect(native_module.values[index]).to_equal(original_values[index])
+			index += 1
+		end
 	end
 end
 
