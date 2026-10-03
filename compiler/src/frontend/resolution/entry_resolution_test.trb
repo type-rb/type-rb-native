@@ -139,6 +139,43 @@ describe("Compiler runtime declaration identity") do
 		expect(ordinary.scalar_mir.signatures[ordinary_host].kind).to_equal(0)
 	end
 
+	test("follows the portable literal-data byte owner instead of an unrelated emitter import") do
+		mut state := load_project_sources("/project/trbconfig.jsonc", "/project/src", CompilerProjectSources.new(
+				paths: ["/project/src/main.trb", "/project/src/data.trb", "/project/src/literal_factory.trb", "/project/src/codec.trb", "/project/src/sibling.trb"],
+				sources: [
+					"import { emit_static_strings } from data\nimport { ordinary } from sibling\ndef compiler_main(source: String, _mode: String, _file: Boolean): Integer\nemit_static_strings(source)\nputs(ordinary())\nreturn 0\nend\ndef compiler_file_main(source: String, _path: String, mode: String, file: Boolean): Integer\nreturn compiler_main(source, mode, file)\nend\ndef main()\nend\n",
+					"import { mir_string_literal_data } from literal_factory\nimport { compiler_string_bytes } from sibling\ndef emit_static_strings(text: String)\nputs(mir_string_literal_data(text).bytes[0])\nputs(compiler_string_bytes(text)[0])\nend\n",
+					"import { compiler_string_bytes } from codec\nrecord TextData\nbytes: Array<Integer>\npoints: Integer\nend\ndef mir_string_literal_data(value: String): TextData\nreturn TextData.new(bytes: compiler_string_bytes(value), points: value.size())\nend\n",
+					"def compiler_string_bytes(_text: String): Array<Integer>\nreturn [7]\nend\n",
+					"def compiler_string_bytes(_text: String): Array<Integer>\nreturn [19]\nend\ndef ordinary(): Integer\nreturn compiler_string_bytes(\"ordinary\")[0]\nend\n",
+				], error: ""))
+		expect(resolve(state)).to_be_true()
+		checked := check(state)
+		if !checked
+			puts(load_string(state.diagnostics.messages, 0))
+		end
+		expect(checked).to_be_true()
+		canonical := find_function_in_module(state, find_module(state, "codec"), "compiler_string_bytes")
+		sibling := find_function_in_module(state, find_module(state, "sibling"), "compiler_string_bytes")
+		expect(compiler_runtime_intrinsic(state, canonical)).to_be_true()
+		expect(compiler_runtime_intrinsic(state, sibling)).to_be_false()
+		expect(state.scalar_mir.signatures[canonical].adapter).to_equal(4)
+		expect(state.scalar_mir.signatures[sibling].kind).to_equal(0)
+		before := control_test_output(emit_qbe(state))
+		intrinsic_mir_erase(state)
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe_arguments(qbe, before, ["--source-content", "probe", "abc"])
+			when Result::Ok(output)
+				expect(output).to_equal("97\n19\n19\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("resolves byte and source-validation adapters through their canonical consumers") do
 		mut state := load_project_sources("/project/trbconfig.jsonc", "/project/src",
 			CompilerProjectSources.new(paths: ["/project/src/main.trb", "/project/src/data.trb", "/project/src/lexer.trb"],
