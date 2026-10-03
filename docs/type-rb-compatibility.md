@@ -38,6 +38,31 @@ not update the default branch or rewrite conformance expectations automatically.
 This consumer-owned procedure requires no Native-specific reference API or
 release hook in the TypeRB repository.
 
+## Bundled official sources
+
+[`vendor/type-rb/official`](../vendor/type-rb/official/provenance.json) retains the
+reference's complete `internal/official/packages` tree and license unchanged.
+The provenance record identifies the repository, exact commit, source paths,
+byte lengths and SHA-256 hashes. This is the source input boundary; ordinary
+official-package loading and runtime services remain implementation work in
+[#674](https://github.com/type-rb/type-rb-native/issues/674).
+
+After changing the reference pin, synchronize from a Git checkout containing
+that exact commit:
+
+```sh
+python3 tools/official-sources.py --reference-checkout /path/to/type-rb --write
+python3 tools/official-sources.py --reference-checkout /path/to/type-rb --check
+```
+
+The tool reads pinned Git objects instead of working files or the checkout's
+current HEAD. It requires no network or reference executable. PR quick and Main
+validation compare the complete file inventory and bytes, including provenance,
+with the pinned reference. Modified, missing, additional or symlinked bundle
+files fail validation even if the local hashes were updated to match a change.
+Keep this comparison in the reference-update procedure; never edit vendored
+sources as a separate fork.
+
 ## Current declaration-import mapping
 
 The self-hosted frontend preserves canonical declaration identity for its
