@@ -14,7 +14,7 @@ measurements provide intermediate feedback.
 | Scalar control | Mutable scalar locals and parameters, nested `if`/`elsif`/`else`, `while`, `break`/`next`, early returns and continuing joins publish typed blocks and live-value arguments. Loop transfers carry only the enclosing environment; branch/body locals remain lexical. QBE consumes admitted bodies without rereading their source. |
 | Short-circuit expressions | Scalar `&&` and `||` publish conditional RHS blocks and Boolean result joins, including nested call arguments and loop predicates. Dominance preserves earlier expression temporaries; skipped RHS calls and traps stay unexecuted. |
 | Calls and declarations | Declaration identities, parameter types/mutability and return types are captured before body checking. Ordinary calls with supported scalar and managed arguments/results, including nominal records and Hash/Range carriers, retain explicit arguments. Module-local direct-call summaries propagate local effects over reverse call edges to a fixed point, including recursion. Calls proved to contain only reads, scalar work and control flow need no GC safe point, and stable Array loop proofs can cross them. The standard `Math.sqrt` adapter is pure. Allocating, mutating, I/O, indirect and unknown calls retain conservative effects throughout their callers. The verifier independently rebuilds summaries from current bodies without trusting stored call effects. |
-| Function values and lexical capture | Authored `fn` bodies, supported named function values, structural callback signatures, selected captured environments and indirect calls use verified MIR. Mutable captures share cells; the REPL retains checked code, environments and nominal type identities across submissions. |
+| Function values and lexical capture | Authored `fn` bodies, supported named function values, structural callback signatures, selected captured environments and indirect calls use verified MIR. Module-owned singleton code identities propagate through SSA block arguments and ordinary direct-call parameters, including forwarding cycles. The verifier independently rebuilds call plans before the backend can invoke the ordinary body with the unchanged captured environment. Mixed identities and unsupported producers remain indirect; allocation, effects and roots are unchanged. Mutable captures share cells; the REPL retains checked code, environments and nominal type identities across submissions. |
 | Namespaces and constants | Source-owned lexical declarations resolve before lowering. Exact global types, initializer functions, order, guarded reads and persistent managed roots live in MIR; the adapter consumes the verified catalog. Nullable global facts retain declaration identity across lexical scopes. See [decision 0067](decisions/0067-namespaces-and-constant-mir.md). |
 | Managed Strings and roots | String literals, concatenation, equality, size, indexing, Integer/String/Float conversions and String/Boolean output use typed operations. Integer output explicitly converts first. Managed parameters, rebinding, returns and control joins use the same value/block path. MIR derives live-before roots at allocating operations and ordinary calls; verification recomputes the complete plan. |
 | Managed Arrays | Supported scalar and managed element Arrays, including nominal records and their nesting, retain semantic element identity. Literals, live size, checked indexing, assignment, compound assignment and push use typed operations with allocation/mutation/failure effects. Admitted parameters, returns, rebinding and loop/branch values share managed liveness. Assignment captures its checked logical position before RHS evaluation, then reloads storage for the final store. A verified within-block plan reuses that position for the same Array until an effect can change collection state. |
@@ -195,6 +195,16 @@ nullable proofs. The backend consumes verified capture layouts and exact
 parameter/result types, including Float and Void. The REPL retains checked code,
 environments and originating nominal types across submissions. See
 [decision 0051](decisions/0051-callable-mir-foundation.md).
+
+Singleton callable plans use a finite worklist over verified value identities,
+block arguments and ordinary direct-call parameters. Closure and object adapter
+entry parameters remain unknown. Container/global/return producers and mixed
+identities retain indirect dispatch. Unseeded graph components cannot establish
+proofs. Plans bind an instruction to a declaration and captured parameter prefix;
+verification reconstructs them from the current module without consulting stored
+plans. QBE loads that existing environment prefix and invokes the ordinary body,
+without cloning bodies, changing allocation or narrowing call effects. Internal
+body storage order and erased frontend catalogs do not determine identity.
 
 Shared ordinary-file and REPL probes cover higher-order calls, nested closures,
 managed captures and mutable cells. Internal fixtures add source erasure,

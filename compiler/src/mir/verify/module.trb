@@ -1,3 +1,4 @@
+import { mir_callable_plans, mir_callable_plans_equal } from mir/analysis/callables
 import { mir_call_effect_summaries } from mir/analysis/call_effects
 import { mir_object_dispatch_error } from mir/lowering/object_dispatch
 import { mir_object_initialization_error, mir_object_initializers_error } from mir/verify/object_initialization
@@ -332,6 +333,12 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	if !optimized && native_module.numeric_plans[0].size() != 0
 		return "MIR input cannot supply numeric plans"
 	end
+	if native_module.callable_plans.size() != 1
+		return "MIR callable plan owner differs"
+	end
+	if !optimized && native_module.callable_plans[0].size() != 0
+		return "MIR input cannot supply callable plans"
+	end
 	if native_module.source_count[0] <= 0
 		return "MIR module has no sources"
 	end
@@ -358,6 +365,9 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	mut entry_found := false
 	mut index := 0
 	if native_module.functions.size() == 0
+		if native_module.callable_plans[0].size() != 0
+			return "MIR callable plan differs"
+		end
 		if native_module.numeric_plans[0].size() != 0
 			return "MIR numeric plan differs"
 		end
@@ -480,6 +490,9 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 			end
 			index += 1
 		end
+	end
+	if optimized && !mir_callable_plans_equal(native_module.callable_plans[0], mir_callable_plans(native_module))
+		return "MIR callable plan differs"
 	end
 	if optimized && !mir_numeric_plans_equal(native_module.numeric_plans[0], mir_numeric_plans(native_module))
 		return "MIR numeric plan differs"
