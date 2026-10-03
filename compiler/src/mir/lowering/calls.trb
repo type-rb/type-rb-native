@@ -3,10 +3,10 @@ import { mir_semantic_type_id, mir_semantic_type_name, mir_semantic_value_type }
 import { nullable_capture_call } from frontend/checking/nominal/nullable_flow
 import { MirFlow, mir_flow_type, mir_value_available } from mir/analysis/flow
 import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from frontend/checking/body/values
-import { MirBlock, MirCall, MirFunction, MirInstruction, MirModule, MirSignature, mir_function_index, mir_origin_valid, mir_table_span_valid, mir_type_id, mir_value_type } from mir/model/module
+import { MirBlock, MirCall, MirFunction, MirInstruction, MirModule, MirSignature, mir_origin_valid, mir_table_span_valid, mir_type_id, mir_value_type } from mir/model/module
 import { mir_control_active, mir_control_prepare } from mir/build/control
 import { mir_intrinsic_signature_error, mir_runtime_adapter } from mir/model/intrinsics
-import { mir_instruction_effects } from mir/analysis/roots
+import { mir_call_effects } from mir/analysis/call_effects
 import { compiler_host_intrinsic, compiler_runtime_intrinsic } from frontend/resolution/entry_resolution
 import { CompilerState } from state/state
 import { CheckedLocals } from state/local_state
@@ -77,105 +77,6 @@ def mir_call_value_type(native_module: MirModule, name: String): Boolean
 		end
 	end
 	return false
-end
-
-# Standard math is pure. All other calls start conservative until their
-# verified body can justify a narrower effect at module finalization.
-def mir_call_effects(signature: MirSignature): Integer
-	if signature.kind == 3 && signature.adapter == 11
-		return 0
-	end
-	return 15
-end
-
-# A bounded ordinary body can read managed values or branch without changing
-# caller state. Follow at most two direct calls per body and two levels below
-# the caller; recursive, wide and opaque call chains remain conservative.
-# Derive nested effects from callee bodies, never from a stored call record.
-def mir_direct_call_effects(native_module: MirModule, function: MirFunction, depth: Integer): Integer
-	if function.kind != 3 || function.block_count < 1 || function.block_count > 16 || !mir_table_span_valid(function.block_start, function.block_count, native_module.blocks.size())
-		return 15
-	end
-	mut remaining := 64
-	mut nested_calls := 0
-	mut failure := false
-	mut block_index := function.block_start
-	while block_index < function.block_start + function.block_count
-		block := native_module.blocks[block_index]
-		if block.terminator < 1 || block.terminator > 4 || !mir_table_span_valid(block.instruction_start, block.instruction_count, native_module.instructions.size())
-			return 15
-		end
-		if block.terminator == 4
-			failure = true
-		end
-		mut index := block.instruction_start
-		while index < block.instruction_start + block.instruction_count
-			if remaining == 0
-				return 15
-			end
-			remaining -= 1
-			instruction := native_module.instructions[index]
-			if instruction.kind < 6 || instruction.kind > 72
-				return 15
-			end
-			mut effects := 15
-			if instruction.kind == 11
-				if depth == 0 || nested_calls == 2 || instruction.payload < 0 || instruction.payload >= native_module.calls.size()
-					return 15
-				end
-				nested_calls += 1
-				call := native_module.calls[instruction.payload]
-				if call.callee < 0 || call.callee >= native_module.signatures.size()
-					return 15
-				end
-				effects = mir_verified_call_effects(native_module, native_module.signatures[call.callee], depth - 1)
-			else
-				effects = mir_instruction_effects(native_module, instruction)
-			end
-			if effects != 0 && effects != 8
-				return 15
-			end
-			if effects == 8
-				failure = true
-			end
-			index += 1
-		end
-		block_index += 1
-	end
-	if failure
-		return 8
-	end
-	return 0
-end
-
-# Scalar adapters already have a verified no-allocation/no-mutation contract.
-# Their arithmetic may still fail, so retain that effect.
-def mir_verified_call_effects(native_module: MirModule, signature: MirSignature, depth: Integer): Integer
-	if signature.kind == 0
-		index := mir_function_index(native_module, signature.id)
-		if index >= 0
-			function := native_module.functions[index]
-			if function.kind == 1
-				return 8
-			end
-			return mir_direct_call_effects(native_module, function, depth)
-		end
-	end
-	return mir_call_effects(signature)
-end
-
-def mir_refine_scalar_call_effects(mut native_module: MirModule)
-	mut index := 0
-	while index < native_module.calls.size()
-		call := native_module.calls[index]
-		if call.callee >= 0 && call.callee < native_module.signatures.size()
-			effects := mir_verified_call_effects(native_module, native_module.signatures[call.callee], 2)
-			if effects != call.effects
-				native_module.calls[index] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: effects)
-			end
-		end
-		index += 1
-	end
 end
 
 # The resolver has already bound the package identity, including import aliases.
@@ -331,7 +232,7 @@ def mir_function_signature_error(native_module: MirModule, function: MirFunction
 	return ""
 end
 
-def mir_call_error(flow: MirFlow, native_module: MirModule, function: MirFunction, block: MirBlock, instruction_index: Integer, instruction: MirInstruction): String
+def mir_call_error(flow: MirFlow, native_module: MirModule, function: MirFunction, block: MirBlock, instruction_index: Integer, instruction: MirInstruction, effects: Array<Integer>): String
 	if instruction.payload < 0 || instruction.payload >= native_module.calls.size()
 		return "MIR call record is missing"
 	end
@@ -343,7 +244,7 @@ def mir_call_error(flow: MirFlow, native_module: MirModule, function: MirFunctio
 		return "MIR call declaration is missing"
 	end
 	signature := native_module.signatures[call.callee]
-	if call.effects != mir_verified_call_effects(native_module, signature, 2)
+	if call.effects != effects[call.callee]
 		return "MIR call effects or adapter differ"
 	end
 	if !mir_table_span_valid(call.argument_start, call.argument_count, native_module.arguments.size())
