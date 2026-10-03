@@ -1,0 +1,124 @@
+import { MirCall, MirFunction, MirModule, MirSignature, mir_function_index, mir_table_span_valid } from mir/model/module
+import { mir_instruction_effects } from mir/analysis/roots
+
+# Declarations without an inspected ordinary body stay conservative. Only the
+# independently verified standard math adapter has no effects by contract.
+def mir_call_effects(signature: MirSignature): Integer
+	if signature.kind == 3 && signature.adapter == 11
+		return 0
+	end
+	return 15
+end
+
+# Read local effects once and retain reverse dependencies for direct calls.
+# Reaching the conservative class needs no further traversal of this body.
+def mir_body_call_effects(native_module: MirModule, function: MirFunction, caller: Integer, mut callers: Array<Array<Integer>>): Integer
+	if function.kind == 1
+		# Scalar adapters already have a checked no-allocation contract.
+		return 8
+	end
+	if function.kind != 3 || function.block_count < 1 || !mir_table_span_valid(function.block_start, function.block_count, native_module.blocks.size())
+		return 15
+	end
+	mut local := 0
+	mut block_index := function.block_start
+	while block_index < function.block_start + function.block_count
+		block := native_module.blocks[block_index]
+		if block.terminator < 1 || block.terminator > 4 || !mir_table_span_valid(block.instruction_start, block.instruction_count, native_module.instructions.size())
+			return 15
+		end
+		if block.terminator == 4
+			local = 8
+		end
+		mut position := block.instruction_start
+		while position < block.instruction_start + block.instruction_count
+			instruction := native_module.instructions[position]
+			mut observed := 15
+			if instruction.kind == 11
+				if instruction.payload < 0 || instruction.payload >= native_module.calls.size()
+					return 15
+				end
+				callee := native_module.calls[instruction.payload].callee
+				if callee < 0 || callee >= callers.size()
+					return 15
+				end
+				# Ignore the stored effects, including on recursive edges.
+				mut incoming := callers[callee]
+				incoming.push(caller)
+				observed = 0
+			elsif instruction.kind >= 6 && instruction.kind <= 72
+				observed = mir_instruction_effects(native_module, instruction)
+			end
+			if observed != 0 && observed != 8
+				return 15
+			end
+			if observed == 8
+				local = 8
+			end
+			position += 1
+		end
+		block_index += 1
+	end
+	return local
+end
+
+# This three-element lattice preserves failure while grouping allocation,
+# mutation, I/O and unknown behavior into the existing conservative class.
+# Summaries belong to this invocation, never to caller-supplied MIR metadata.
+def mir_call_effect_summaries(native_module: MirModule): Array<Integer>
+	mut effects: Array<Integer> := []
+	mut callers: Array<Array<Integer>> := []
+	mut index := 0
+	while index < native_module.signatures.size()
+		effects.push(mir_call_effects(native_module.signatures[index]))
+		callers.push([])
+		index += 1
+	end
+	index = 0
+	while index < native_module.signatures.size()
+		signature := native_module.signatures[index]
+		if signature.kind == 0
+			body_index := mir_function_index(native_module, signature.id)
+			if body_index >= 0
+				effects[index] = mir_body_call_effects(native_module, native_module.functions[body_index], index, callers)
+			end
+		end
+		index += 1
+	end
+	# Each summary can increase only twice (0 -> 8 -> 15). Propagating changes
+	# over reverse edges terminates for cycles without a call-depth heuristic.
+	mut pending: Array<Integer> := []
+	index = 0
+	while index < effects.size()
+		if effects[index] > 0
+			pending.push(index)
+		end
+		index += 1
+	end
+	index = 0
+	while index < pending.size()
+		callee := pending[index]
+		callers[callee].each do |caller|
+			if effects[callee] > effects[caller]
+				effects[caller] = effects[callee]
+				pending.push(caller)
+			end
+		end
+		index += 1
+	end
+	return effects
+end
+
+def mir_refine_call_effects(mut native_module: MirModule)
+	effects := mir_call_effect_summaries(native_module)
+	mut index := 0
+	while index < native_module.calls.size()
+		call := native_module.calls[index]
+		if call.callee >= 0 && call.callee < effects.size()
+			if effects[call.callee] != call.effects
+				native_module.calls[index] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: effects[call.callee])
+			end
+		end
+		index += 1
+	end
+end
