@@ -7,6 +7,8 @@
 #
 # Build the pinned reference once from a clean checkout at TYPE_RB_REVISION:
 #   python3 tools/build-reference.py /path/to/type-rb "$TMPDIR/trb"
+# TYPE_RB_CHECKOUT points to a reference Git checkout containing TYPE_RB_REVISION
+# for the authoritative official-source comparison (defaults to .type-rb).
 # --full adds the reference language fixtures and every root and compiler
 # unit. Set TYPE_RB_CHECKOUT to that checkout to also verify the reference AST,
 # and TYPE_RB_NATIVE_QBE to a QBE binary for QBE-backed compiler units.
@@ -71,6 +73,9 @@ step "recovery import boundaries" sh -c '
 step "reference identity" sh -c '
 	python3 -m unittest tools/compatibility_manifest_test.py &&
 	python3 tools/compatibility_manifest.py --reference-trb "$1"' preflight "$reference"
+step "official source controls" python3 tools/official-sources-test.py
+step "pinned official source bytes" python3 tools/official-sources.py \
+	--reference-checkout "${TYPE_RB_CHECKOUT:-$root/.type-rb}" --check
 step "Unicode data" sh -c 'python3 tools/unicode-identifier-data.py --check && python3 tools/unicode-case-data.py --check'
 step "formatting" "$reference" fmt --check recovery compiler corpus tools benchmarks
 step "recovery types" "$reference" check --config recovery/trbconfig.jsonc

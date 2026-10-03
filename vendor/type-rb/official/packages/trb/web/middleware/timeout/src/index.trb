@@ -1,0 +1,47 @@
+import { Context, Next, Response } from trb/web
+import trb/web/middleware
+import trb/internal/runtime
+import trb/internal/web/timeout as native_timeout
+
+record TimeoutOptions
+	milliseconds: Integer
+end
+
+record TimeoutResponse
+	error: String
+end
+
+class TimeoutMiddleware implements Middleware
+	@options: TimeoutOptions
+
+	def initialize(options: TimeoutOptions)
+		@options = options
+		return
+	end
+
+	def call(context: Context, next_handler: Next): Response
+		return _invoke(context, next_handler, @options)
+	end
+end
+
+module Timeout
+	def self.default_options(): TimeoutOptions
+		return TimeoutOptions.new(milliseconds: 30000)
+	end
+
+	def self.middleware(options: TimeoutOptions = Timeout.default_options()): Middleware
+		return TimeoutMiddleware.new(options)
+	end
+
+	def self.call(context: Context, next_handler: Next, options: TimeoutOptions = Timeout.default_options()): Response
+		return _invoke(context, next_handler, options)
+	end
+end
+
+def _invoke(context: Context, next_handler: Next, options: TimeoutOptions): Response
+	if options.milliseconds <= 0
+		return Runtime.fail<Response>("trb/web timeout milliseconds must be greater than zero")
+	end
+	timeout_response := Response.json(TimeoutResponse.new(error: "gateway_timeout"), 504)
+	return native_timeout.call(context, next_handler, options.milliseconds, timeout_response)
+end

@@ -140,6 +140,21 @@ test('compatibility checks remain in quick and standalone validation', () => {
   const checkout = quick.indexOf('repository: type-rb/type-rb');
   const preflight = quick.indexOf('Validate every reference checkout before toolchain setup');
   assert(preflight >= 0 && preflight < checkout && checkout < build);
+  const bundleCheck = 'python3 tools/official-sources.py --reference-checkout .type-rb --check';
+  assert(quick.indexOf(bundleCheck) > checkout && quick.indexOf(bundleCheck) < build,
+    'official source bytes must be compared before building the reference');
+  assert(quick.includes('python3 tools/official-sources-test.py'));
+  assert(standalone.includes(bundleCheck), 'Main must retain authoritative bundle comparison');
+  for (const path of ['tools/official-sources.py', 'vendor/type-rb/official/provenance.json',
+    'vendor/type-rb/official/packages/trb/web/src/index.trb']) {
+    const plan = classify([path], false, 'tiered');
+    assert.equal(plan.code, true);
+    assert.equal(plan.quick, true);
+    assert.equal(plan.complete, true);
+    const needs = results(plan);
+    needs.quick.result = 'failure';
+    assert(acceptance(needs).length > 0, 'bundle comparison failures must reject PR acceptance');
+  }
   for (const command of ['python3 -m unittest tools/compatibility_manifest_test.py',
     'python3 tools/compatibility_manifest.py\n']) {
     const check = quick.indexOf(command, preflight);

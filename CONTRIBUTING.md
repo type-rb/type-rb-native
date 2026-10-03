@@ -129,7 +129,7 @@ Before pushing a code or CLI change, run the local preflight with the pinned
 reference compiler:
 
 ```sh
-tools/preflight.sh /path/to/pinned/trb
+TYPE_RB_CHECKOUT=/path/to/type-rb tools/preflight.sh /path/to/pinned/trb
 ```
 
 It repeats the quick checks that need only that compiler, cheapest first, and
@@ -139,6 +139,8 @@ compiler types, the CLI and core closure, the recovery snapshot subset and the
 project scenarios. A documentation-only change set stops after the generated
 views. `--full` adds the reference language fixtures and the root and compiler
 units. The preflight does not replace the focused checks below or hosted CI.
+The reference checkout must contain the pinned commit for the authoritative
+official-source comparison; when omitted, it defaults to `.type-rb`.
 
 Keep the edit loop local and narrow. For example, after a MIR Array change,
 run its QBE-backed compiler tests with the pinned reference compiler and QBE:
