@@ -1,3 +1,4 @@
+import { mir_call_effect_summaries } from mir/analysis/call_effects
 import { intrinsic_mir_erase } from testing/mir/intrinsics
 import { logical_checked_source } from testing/pipeline
 import { logical_run_qbe_arguments } from testing/qbe_runner
@@ -41,7 +42,7 @@ describe("MIR declaration-bound calls") do
 		expect(mir_function_index(state.scalar_mir, 2) >= 0).to_be_true()
 		expect(state.scalar_mir.calls.size()).to_equal(7)
 		state.scalar_mir.calls.each do |call|
-			if call.callee == 1
+			if call.callee == 1 || call.callee == 3
 				expect(call.effects).to_equal(8)
 			elsif call.callee == 4
 				expect(call.effects).to_equal(8)
@@ -147,7 +148,7 @@ describe("MIR declaration-bound calls") do
 		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR call effects or adapter differ")
 	end
 
-	test("keeps recursive deep and wide call chains conservative") do
+	test("summarizes recursive deep and wide read-only call chains") do
 		source := "def length(values: Array<Integer>): Integer\nreturn values.size()\nend\ndef once(values: Array<Integer>): Integer\nreturn length(values)\nend\ndef twice(values: Array<Integer>): Integer\nreturn once(values)\nend\ndef thrice(values: Array<Integer>): Integer\nreturn twice(values)\nend\ndef cycle(values: Array<Integer>): Integer\nreturn cycle(values)\nend\ndef wide(values: Array<Integer>): Integer\nreturn length(values) + length(values) + length(values)\nend\ndef main()\nputs(twice([1]))\nputs(thrice([1]))\nputs(wide([1]))\nend\n"
 		mut state := logical_checked_source(source)
 		checked := check(state)
@@ -159,7 +160,7 @@ describe("MIR declaration-bound calls") do
 		mut seen := [false, false, false, false, false, false]
 		state.scalar_mir.calls.each do |call|
 			if call.callee < 6
-				expect(call.effects).to_equal([8, 8, 8, 15, 15, 15][call.callee])
+				expect(call.effects).to_equal([8, 8, 8, 8, 8, 8][call.callee])
 				seen[call.callee] = true
 			end
 		end
@@ -170,7 +171,7 @@ describe("MIR declaration-bound calls") do
 		while index < state.scalar_mir.calls.size()
 			call := state.scalar_mir.calls[index]
 			if call.callee == 4
-				state.scalar_mir.calls[index] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: 8)
+				state.scalar_mir.calls[index] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: 15)
 				break
 			end
 			index += 1
@@ -435,4 +436,98 @@ describe("MIR standard package calls") do
 			expect(has_diagnostic(state)).to_be_true()
 		end
 	end
+end
+
+describe("MIR transitive call effects") do
+	test("proves mutual read recursion and rebuilds after callee mutation") do
+		source := "def left(values: Array<Integer>, depth: Integer): Integer\nif depth == 0\nreturn values[0]\nend\nreturn right(values, depth - 1)\nend\ndef right(values: Array<Integer>, depth: Integer): Integer\nif depth == 0\nreturn values[0]\nend\nreturn left(values, depth - 1)\nend\ndef allocating(values: Array<Integer>, depth: Integer): Integer\nextra := [depth]\nreturn values[0] + extra[0]\nend\ndef main()\nputs(left([7], 6))\nend\n"
+		mut state := logical_checked_source(source)
+		expect(check(state)).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(mir_call_effect_summaries(state.scalar_mir)).to_equal([8, 8, 15, 15])
+		[0, 1].each do |id|
+			index := mir_function_index(state.scalar_mir, id)
+			expect(state.scalar_mir.root_plans[index].instructions.size()).to_equal(0)
+		end
+		# Function storage order is not declaration identity.
+		first := state.scalar_mir.functions[0]
+		last := state.scalar_mir.functions[3]
+		state.scalar_mir.functions[0] = last
+		state.scalar_mir.functions[3] = first
+		expect(mir_call_effect_summaries(state.scalar_mir)).to_equal([8, 8, 15, 15])
+		state.scalar_mir.functions[0] = first
+		state.scalar_mir.functions[3] = last
+		before := control_test_output(emit_qbe(state))
+		intrinsic_mir_erase(state)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		# Force collection only at real allocation points. Proven read-only calls
+		# are deliberately not made allocating by the test harness.
+		expect(before.include?("%over =w csgtl %projected, %target")).to_be_true()
+		forced := before.split("%over =w csgtl %projected, %target").join("%over =w ceql 0, 0")
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe_arguments(qbe, forced, [])
+			when Result::Ok(actual)
+				expect(actual).to_equal("7\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+		mut index := 0
+		while index < state.scalar_mir.calls.size()
+			call := state.scalar_mir.calls[index]
+			if call.callee == 1
+				state.scalar_mir.calls[index] = MirCall.new(callee: 2, argument_start: call.argument_start, argument_count: call.argument_count, effects: call.effects)
+			end
+			index += 1
+		end
+		expect(mir_call_effect_summaries(state.scalar_mir)).to_equal([15, 15, 15, 15])
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR call effects or adapter differ")
+	end
+
+	test("propagates mutation and allocation around cycles without trusting stored effects") do
+		source := "def first(mut values: Array<Integer>, depth: Integer): Integer\nif depth == 0\nreturn values.size()\nend\nreturn second(values, depth - 1)\nend\ndef second(mut values: Array<Integer>, depth: Integer): Integer\nvalues.push(depth)\nreturn first(values, depth)\nend\ndef main()\nmut values := [7]\nputs(first(values, 3))\nputs(values.size())\nend\n"
+		mut state := logical_checked_source(source)
+		expect(check(state)).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(mir_call_effect_summaries(state.scalar_mir)).to_equal([15, 15, 15])
+		before := control_test_output(emit_qbe(state))
+		intrinsic_mir_erase(state)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		# Force collection only at real allocation points. Proven read-only calls
+		# are deliberately not made allocating by the test harness.
+		expect(before.include?("%over =w csgtl %projected, %target")).to_be_true()
+		forced := before.split("%over =w csgtl %projected, %target").join("%over =w ceql 0, 0")
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe_arguments(qbe, forced, [])
+			when Result::Ok(actual)
+				expect(actual).to_equal("4\n4\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+		mut index := 0
+		while index < state.scalar_mir.calls.size()
+			call := state.scalar_mir.calls[index]
+			state.scalar_mir.calls[index] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: 8)
+			index += 1
+		end
+		expect(mir_call_effect_summaries(state.scalar_mir)).to_equal([15, 15, 15])
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR call effects or adapter differ")
+	end
+	test("keeps opaque calls conservative throughout a recursive component") do
+		source := "def invoke(callback: (Integer) -> Integer, depth: Integer): Integer\nif depth == 0\nreturn 0\nend\nreturn callback(depth) + delegate(callback, depth - 1)\nend\ndef delegate(callback: (Integer) -> Integer, depth: Integer): Integer\nreturn invoke(callback, depth)\nend\ndef main()\nidentity := fn(value: Integer): Integer\nreturn value\nend\nputs(invoke(identity, 2))\nend\n"
+		mut state := logical_checked_source(source)
+		expect(check(state)).to_be_true()
+		effects := mir_call_effect_summaries(state.scalar_mir)
+		expect(effects[0]).to_equal(15)
+		expect(effects[1]).to_equal(15)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+
 end

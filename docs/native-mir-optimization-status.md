@@ -13,7 +13,7 @@ measurements provide intermediate feedback.
 | Typed scalar values | Integer, Boolean and Float literals, unary/binary operations and numeric conversion have explicit operands, result types, origins and failure edges. Verified numeric plans select bounded operation/call expansion from CFG/SSA facts; straight-line leaves retain verified Integer range guards. |
 | Scalar control | Mutable scalar locals and parameters, nested `if`/`elsif`/`else`, `while`, `break`/`next`, early returns and continuing joins publish typed blocks and live-value arguments. Loop transfers carry only the enclosing environment; branch/body locals remain lexical. QBE consumes admitted bodies without rereading their source. |
 | Short-circuit expressions | Scalar `&&` and `||` publish conditional RHS blocks and Boolean result joins, including nested call arguments and loop predicates. Dominance preserves earlier expression temporaries; skipped RHS calls and traps stay unexecuted. |
-| Calls and declarations | Declaration identities, parameter types/mutability and return types are captured before body checking. Ordinary calls with supported scalar and managed arguments/results, including nominal records and Hash/Range carriers, retain explicit arguments. Verified scalar adapters and bounded bodies containing only reads, scalar work and control flow cannot allocate or mutate caller state; their calls need no GC safe point and stable Array loop proofs can cross them. Up to two direct calls per body and two nested levels can carry the same proof. The standard `Math.sqrt` adapter is pure. Recursive, wider, mutating, allocating and unknown call chains retain conservative effects. The verifier recomputes each accepted call effect from the current bodies. |
+| Calls and declarations | Declaration identities, parameter types/mutability and return types are captured before body checking. Ordinary calls with supported scalar and managed arguments/results, including nominal records and Hash/Range carriers, retain explicit arguments. Module-local direct-call summaries propagate local effects over reverse call edges to a fixed point, including recursion. Calls proved to contain only reads, scalar work and control flow need no GC safe point, and stable Array loop proofs can cross them. The standard `Math.sqrt` adapter is pure. Allocating, mutating, I/O, indirect and unknown calls retain conservative effects throughout their callers. The verifier independently rebuilds summaries from current bodies without trusting stored call effects. |
 | Function values and lexical capture | Authored `fn` bodies, supported named function values, structural callback signatures, selected captured environments and indirect calls use verified MIR. Mutable captures share cells; the REPL retains checked code, environments and nominal type identities across submissions. |
 | Namespaces and constants | Source-owned lexical declarations resolve before lowering. Exact global types, initializer functions, order, guarded reads and persistent managed roots live in MIR; the adapter consumes the verified catalog. Nullable global facts retain declaration identity across lexical scopes. See [decision 0067](decisions/0067-namespaces-and-constant-mir.md). |
 | Managed Strings and roots | String literals, concatenation, equality, size, indexing, Integer/String/Float conversions and String/Boolean output use typed operations. Integer output explicitly converts first. Managed parameters, rebinding, returns and control joins use the same value/block path. MIR derives live-before roots at allocating operations and ordinary calls; verification recomputes the complete plan. |
@@ -79,6 +79,7 @@ not a performance improvement.
 - `compiler/src/mir/lowering/records.trb`, `compiler/src/backend/qbe/emit/records.trb`: nominal construction/projection contracts and their ABI adaptation. Readonly field bindings remain distinct from SSA IDs and mutable projected values.
 - `compiler/src/backend/qbe/emit/arrays.trb`: ABI adaptation of verified Array operations.
 - `compiler/src/mir/lowering/calls.trb`: declaration capture, checked calls and their verification.
+- `compiler/src/mir/analysis/call_effects.trb`: ephemeral direct-call graph and monotone effect summaries, rebuilt independently for verification. Each function is scanned once and each summary increases at most twice.
 - `compiler/src/mir/lowering/strings.trb`: String, conversion and output construction/contracts.
 - `compiler/src/mir/analysis/roots.trb`: operation effects, backward managed-value liveness and exact
   safe-point root plans. Block parameters transfer only demanded values. Instruction
@@ -159,9 +160,9 @@ after validating MIR structure, types and operands. Input MIR cannot supply plan
 The ordinary emission route is unified; this does not establish full TypeRB
 language, standard-library or source-backend coverage. Those gaps remain in the
 [language coverage contract](native-language-coverage.md) and Capabilities.
-General constant/range propagation, unbounded call-effect summaries, broader inlining and
-explicit dead-body elimination still need shared MIR passes. Ordinary call
-effects outside the bounded direct subset and short call chains remain conservative allocation/mutation barriers; managed liveness is
+General constant/range propagation, more precise effect classes, broader inlining and
+explicit dead-body elimination still need shared MIR passes. Indirect and opaque calls
+remain conservative allocation/mutation barriers; managed liveness is
 intraprocedural. Root publication rewrites changed slots from the verified
 live-before plan, republishes at block entries, reloads root-buffer addresses
 across calls and preserves the exact count and managed-return ABI.

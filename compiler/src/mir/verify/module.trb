@@ -1,3 +1,4 @@
+import { mir_call_effect_summaries } from mir/analysis/call_effects
 import { mir_object_dispatch_error } from mir/lowering/object_dispatch
 import { mir_object_initialization_error, mir_object_initializers_error } from mir/verify/object_initialization
 import { mir_global_initialization_error, mir_globals_error } from mir/lowering/globals
@@ -250,7 +251,7 @@ def mir_adapter_error(flow: MirFlow, native_module: MirModule, function: MirFunc
 	return ""
 end
 
-def mir_function_error(native_module: MirModule, function: MirFunction, values: Array<MirValue>): String
+def mir_function_error(native_module: MirModule, function: MirFunction, values: Array<MirValue>, call_effects: Array<Integer>): String
 	if function.kind < 0 || function.kind > 3 || function.kind == 2
 		return "MIR function adapter kind is invalid"
 	end
@@ -302,7 +303,7 @@ def mir_function_error(native_module: MirModule, function: MirFunction, values: 
 		index = block.instruction_start
 		finish = index + block.instruction_count
 		while index < finish
-			error := mir_instruction_error(flow, native_module, function, block, index)
+			error := mir_instruction_error(flow, native_module, function, block, index, call_effects)
 			if error != ""
 				return error
 			end
@@ -429,9 +430,10 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 		definitions[key] = 0
 		index += 1
 	end
+	call_effects := mir_call_effect_summaries(native_module)
 	index = 0
 	while index < native_module.functions.size()
-		error := mir_function_error(native_module, native_module.functions[index], function_values[index])
+		error := mir_function_error(native_module, native_module.functions[index], function_values[index], call_effects)
 		if error != ""
 			return error
 		end
