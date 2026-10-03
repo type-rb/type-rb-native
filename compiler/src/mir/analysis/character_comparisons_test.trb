@@ -1,0 +1,104 @@
+import { check, emit_qbe } from compiler
+import { MirCharacterComparison } from mir/model/module
+import { verify_mir } from mir/verify/module
+import { logical_checked_source } from testing/pipeline
+import { occurrence_count, output_source } from testing/compiler
+import { logical_run_qbe } from testing/qbe_runner
+import { load_integer, store_string } from support/storage
+import { describe, expect, test } from trb/std/test
+import trb/std/process
+import trb/std/result
+
+describe("MIR character comparisons") do
+	test("selects both operand orders and comparisons with dynamic or literal patterns") do
+		source := "def a(text: String, index: Integer, pattern: String): Boolean\nreturn text[index] == pattern\nend\ndef b(text: String, index: Integer, pattern: String): Boolean\nreturn pattern != text[index]\nend\ndef c(text: String): Boolean\nreturn text[-1] == \"z\"\nend\ndef main()\nputs(a(\"abc\", 1, \"b\"))\nputs(b(\"abc\", -1, \"x\"))\nputs(c(\"az\"))\nend\n"
+		mut state := logical_checked_source(source)
+		expect(check(state)).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(state.scalar_mir.character_comparisons[0].size()).to_equal(3)
+		output := output_source(emit_qbe(state))
+		expect(occurrence_count(output, " =l call $trbn_string_index_equal(")).to_equal(3)
+		expect(occurrence_count(output, " =l call $trbn_string_index(")).to_equal(0)
+	end
+
+	test("retains multiple escaping self-comparison and intervening effect uses") do
+		source := "def pattern(): String\nputs(\"effect\")\nreturn \"x\"\nend\ndef many(text: String, index: Integer): Boolean\npart := text[index]\nreturn part == \"x\" && part == \"y\"\nend\ndef escape(text: String, index: Integer): String\nreturn text[index]\nend\ndef same(text: String, index: Integer): Boolean\npart := text[index]\nreturn part == part\nend\ndef effect(text: String, index: Integer): Boolean\nreturn text[index] == pattern()\nend\ndef main()\nputs(many(\"x\", 0))\nputs(escape(\"x\", 0))\nputs(same(\"x\", 0))\nputs(effect(\"x\", 0))\nend\n"
+		mut state := logical_checked_source(source)
+		expect(check(state)).to_be_true()
+		expect(state.scalar_mir.character_comparisons[0].size()).to_equal(0)
+		expect(output_source(emit_qbe(state)).include?("function l $trbn_string_index_equal(")).to_be_false()
+	end
+
+	test("independently rejects stale forged and missing comparison plans") do
+		mut state := logical_checked_source("def equal(text: String, pattern: String): Boolean\nreturn text[0] == pattern\nend\ndef main()\nputs(equal(\"x\", \"x\"))\nend\n")
+		expect(check(state)).to_be_true()
+		expect(state.scalar_mir.character_comparisons[0].size()).to_equal(1)
+		plan := state.scalar_mir.character_comparisons[0][0]
+		state.scalar_mir.character_comparisons[0][0] = MirCharacterComparison.new(producer: plan.producer, comparison: plan.comparison, pattern: plan.pattern, literal: 0)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR character comparison differs")
+		state.scalar_mir.character_comparisons[0][0] = plan
+		state.scalar_mir.character_comparisons[0] = []
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR character comparison differs")
+		state.scalar_mir.character_comparisons[0] = [plan]
+		expect(verify_mir(state.scalar_mir, false)).to_equal("MIR input cannot supply character comparisons")
+	end
+
+	test("never makes the virtual character a managed root") do
+		mut state := logical_checked_source("def equal(text: String, pattern: String): Boolean\nreturn text[0] == pattern\nend\ndef main()\ntext := \"b\" + \"c\"\nputs(equal(text, \"b\"))\nend\n")
+		expect(check(state)).to_be_true()
+		expect(state.scalar_mir.character_comparisons[0].size()).to_equal(1)
+		producer := state.scalar_mir.instructions[state.scalar_mir.character_comparisons[0][0].producer]
+		mut found := false
+		state.scalar_mir.root_plans.each do |plan|
+			plan.roots.each do |roots|
+				roots.each do |root|
+					if plan.function_id == 0 && root == producer.result
+						found = true
+					end
+				end
+			end
+		end
+		expect(found).to_be_false()
+	end
+
+	test("survives source erasure block reorder and forced collection") do
+		source := "def equal(text: String, index: Integer, pattern: String): Boolean\nreturn text[index] == pattern\nend\ndef different(text: String, index: Integer, pattern: String): Boolean\nreturn pattern != text[index]\nend\ndef main()\ntext := \"ab\" + \"cz\"\nputs(equal(text, 0, \"a\"))\nputs(equal(text, 1, \"b\"))\nputs(equal(text, 2, \"c\"))\nputs(equal(text, -1, \"z\"))\nputs(different(text, -2, \"b\"))\nputs(equal(text, 0, \"\"))\nputs(equal(text, 0, \"aa\"))\nend\n"
+		mut state := logical_checked_source(source)
+		expect(check(state)).to_be_true()
+		expect(state.scalar_mir.character_comparisons[0].size()).to_equal(2)
+		before := output_source(emit_qbe(state))
+		state.scalar_mir.functions.each do |function|
+			mut token := load_integer(state.declarations.function_body_starts, function.id)
+			while token < load_integer(state.declarations.function_body_ends, function.id)
+				store_string(state.source_tokens.token_texts, token, "unavailable")
+				token += 1
+			end
+			mut left := function.block_start
+			mut right := left + function.block_count - 1
+			while left < right
+				saved := state.scalar_mir.blocks[left]
+				state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
+				state.scalar_mir.blocks[right] = saved
+				left += 1
+				right -= 1
+			end
+		end
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(output_source(emit_qbe(state)).include?("call $trbn_string_index_equal")).to_be_true()
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			marker := "\t%result =l call $trbn_gc_alloc(l $trbn_desc_string, l %size, l 0)"
+			parts := output_source(emit_qbe(state)).split(marker)
+			expect(parts.size()).to_equal(2)
+			forced := parts[0] + "\tcall $trbn_gc_collect(w 0)\n" + marker + parts[1]
+			case logical_run_qbe(qbe, forced)
+			when Result::Ok(actual)
+				expect(actual).to_equal("true\ntrue\ntrue\ntrue\ntrue\nfalse\nfalse\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+		expect(before.include?("function l $trbn_string_index_equal")).to_be_true()
+	end
+end

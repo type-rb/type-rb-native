@@ -1,3 +1,4 @@
+import { mir_character_comparison_find } from mir/analysis/character_comparisons
 import { integer_string } from support/literals
 import { mir_operand_type, mir_storage_type_name } from mir/model/types
 import { MirInstruction } from mir/model/module
@@ -7,7 +8,8 @@ import { CompilerState } from state/state
 
 # Runtime calls implement the verified operation, with no source inspection or
 # root/effect inference here. The control adapter publishes the MIR root plan.
-def emit_mir_string_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, operands: Array<String>, symbols: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+
+def emit_mir_string_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, instruction_index: Integer, operands: Array<String>, symbols: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	kind := instruction.kind
 	result_type := mir_storage_type_name(state.scalar_mir, mir_operand_type(value_types, instruction.result))
 	if kind == 12
@@ -28,6 +30,31 @@ def emit_mir_string_instruction(state: CompilerState, value_types: Array<Integer
 		return emitted_value("", "Void")
 	end
 	result := emit_temporary(context)
+	if kind == 16
+		selected := mir_character_comparison_find(state.scalar_mir.character_comparisons[0], instruction_index, true)
+		if selected >= 0
+			plan := state.scalar_mir.character_comparisons[0][selected]
+			mut pattern := operands[plan.pattern]
+			if plan.literal >= 0
+				pattern = symbols[plan.literal]
+			end
+			qbe_output_line(output, "\t" + result + " =l call $trbn_string_index_equal(l " + first + ", l " + operands[instruction.second] + ", l " + pattern + ")")
+			# The independently verified sole consumer interprets this virtual
+			# character as the Boolean result. It is never a live managed root.
+			return emitted_value(result, result_type)
+		end
+	elsif kind == 14
+		selected := mir_character_comparison_find(state.scalar_mir.character_comparisons[0], instruction_index, false)
+		if selected >= 0
+			plan := state.scalar_mir.character_comparisons[0][selected]
+			operand := operands[state.scalar_mir.instructions[plan.producer].result]
+			if instruction.payload == 1
+				qbe_output_line(output, "\t" + result + " =l ceql " + operand + ", 0")
+				return emitted_value(result, result_type)
+			end
+			return emitted_value(operand, result_type)
+		end
+	end
 	if kind == 60
 		qbe_output_line(output, "\t" + result + " =l call $trbn_string_split(l " + first + ", l " + operands[instruction.second] + ")")
 	elsif kind == 61

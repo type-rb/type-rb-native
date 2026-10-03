@@ -2,6 +2,7 @@ import { mir_call_effect_summaries } from mir/analysis/call_effects
 import { mir_object_dispatch_error } from mir/lowering/object_dispatch
 import { mir_object_initialization_error, mir_object_initializers_error } from mir/verify/object_initialization
 import { mir_global_initialization_error, mir_globals_error } from mir/lowering/globals
+import { mir_character_comparisons, mir_character_comparisons_equal } from mir/analysis/character_comparisons
 import { mir_numeric_plans, mir_numeric_plans_equal } from mir/analysis/numeric
 import { mir_array_loops_equal, mir_function_array_check_reuse, mir_function_array_loops } from mir/analysis/array_loops
 import { integer_string } from support/literals
@@ -323,6 +324,12 @@ def mir_function_error(native_module: MirModule, function: MirFunction, values: 
 end
 
 def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
+	if native_module.character_comparisons.size() != 1
+		return "MIR character comparison container differs"
+	end
+	if !optimized && native_module.character_comparisons[0].size() != 0
+		return "MIR input cannot supply character comparisons"
+	end
 	if native_module.numeric_plans.size() != 1
 		return "MIR numeric plan container differs"
 	end
@@ -358,6 +365,9 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	mut entry_found := false
 	mut index := 0
 	if native_module.functions.size() == 0
+		if native_module.character_comparisons[0].size() != 0
+			return "MIR character comparison differs"
+		end
 		if native_module.numeric_plans[0].size() != 0
 			return "MIR numeric plan differs"
 		end
@@ -480,6 +490,9 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 			end
 			index += 1
 		end
+	end
+	if optimized && !mir_character_comparisons_equal(native_module.character_comparisons[0], mir_character_comparisons(native_module))
+		return "MIR character comparison differs"
 	end
 	if optimized && !mir_numeric_plans_equal(native_module.numeric_plans[0], mir_numeric_plans(native_module))
 		return "MIR numeric plan differs"

@@ -1,0 +1,166 @@
+import { MirCharacterComparison, MirModule } from mir/model/module
+import { mir_live_before, mir_managed_add } from mir/analysis/roots
+
+def mir_character_value_index(values: Array<Integer>, value: Integer): Integer
+	mut first := 0
+	mut last := values.size()
+	while first < last
+		middle := first + (last - first) / 2
+		if values[middle] == value
+			return middle
+		end
+		if values[middle] < value
+			first = middle + 1
+		else
+			last = middle
+		end
+	end
+	return -1
+end
+
+def mir_character_count_use(values: Array<Integer>, mut uses: Array<Integer>, value: Integer)
+	index := mir_character_value_index(values, value)
+	if index >= 0 && uses[index] < 2
+		uses[index] += 1
+	end
+end
+
+# Only checked semantic operands count as uses. Payloads that identify types,
+# literals or methods are not SSA references. Edge arguments are retained
+# conservatively even when an incoming binding is otherwise undemanded.
+def mir_character_comparisons(native_module: MirModule): Array<MirCharacterComparison>
+	mut plans: Array<MirCharacterComparison> := []
+	native_module.functions.each do |function|
+		if function.kind == 3
+			mut values: Array<Integer> := []
+			mut block_index := function.block_start
+			while block_index < function.block_start + function.block_count
+				block := native_module.blocks[block_index]
+				mut index := block.instruction_start
+				while index < block.instruction_start + block.instruction_count
+					instruction := native_module.instructions[index]
+					if instruction.kind == 16
+						mir_managed_add(values, instruction.result)
+					end
+					index += 1
+				end
+				block_index += 1
+			end
+			if values.size() > 0
+				mut uses: Array<Integer> := []
+				values.each do |_value|
+					uses.push(0)
+				end
+				block_index = function.block_start
+				while block_index < function.block_start + function.block_count
+					block := native_module.blocks[block_index]
+					mut index := block.instruction_start
+					while index < block.instruction_start + block.instruction_count
+						operands := mir_live_before(native_module, values, native_module.instructions[index], [])
+						operands.each do |value|
+							mir_character_count_use(values, uses, value)
+						end
+						index += 1
+					end
+					mir_character_count_use(values, uses, block.return_value)
+					mut edge := 0
+					while edge < block.first_argument_count
+						mir_character_count_use(values, uses, native_module.arguments[block.first_argument_start + edge])
+						edge += 1
+					end
+					edge = 0
+					while edge < block.second_argument_count
+						mir_character_count_use(values, uses, native_module.arguments[block.second_argument_start + edge])
+						edge += 1
+					end
+					block_index += 1
+				end
+				block_index = function.block_start
+				while block_index < function.block_start + function.block_count
+					block := native_module.blocks[block_index]
+					finish := block.instruction_start + block.instruction_count
+					mut index := block.instruction_start
+					while index < finish
+						instruction := native_module.instructions[index]
+						if instruction.kind == 16 && uses[mir_character_value_index(values, instruction.result)] == 1
+							mut comparison := index + 1
+							while comparison < finish && native_module.instructions[comparison].kind == 12
+								comparison += 1
+							end
+							if comparison < finish
+								consumer := native_module.instructions[comparison]
+								if consumer.kind == 14 && consumer.payload <= 1
+									mut pattern := -1
+									if consumer.first == instruction.result
+										pattern = consumer.second
+									elsif consumer.second == instruction.result
+										pattern = consumer.first
+									end
+									if pattern >= 0 && pattern != instruction.result
+										mut literal := -1
+										mut at := index + 1
+										while at < comparison
+											definition := native_module.instructions[at]
+											if definition.result == pattern
+												literal = definition.payload
+											end
+											at += 1
+										end
+										plan := MirCharacterComparison.new(producer: index, comparison: comparison, pattern: pattern, literal: literal)
+										plans.push(plan)
+										# Instruction identities make plans stable under block/function
+										# storage reorder. Ordinary ordered storage appends directly.
+										at = plans.size() - 1
+										while at > 0 && plans[at - 1].producer > index
+											plans[at] = plans[at - 1]
+											at -= 1
+										end
+										plans[at] = plan
+									end
+								end
+							end
+						end
+						index += 1
+					end
+					block_index += 1
+				end
+			end
+		end
+	end
+	return plans
+end
+
+def mir_character_comparisons_equal(left: Array<MirCharacterComparison>, right: Array<MirCharacterComparison>): Boolean
+	if left.size() != right.size()
+		return false
+	end
+	mut index := 0
+	while index < left.size()
+		if left[index].producer != right[index].producer || left[index].comparison != right[index].comparison || left[index].pattern != right[index].pattern || left[index].literal != right[index].literal
+			return false
+		end
+		index += 1
+	end
+	return true
+end
+
+def mir_character_comparison_find(plans: Array<MirCharacterComparison>, instruction: Integer, producer: Boolean): Integer
+	mut first := 0
+	mut last := plans.size()
+	while first < last
+		middle := first + (last - first) / 2
+		mut point := plans[middle].comparison
+		if producer
+			point = plans[middle].producer
+		end
+		if point == instruction
+			return middle
+		end
+		if point < instruction
+			first = middle + 1
+		else
+			last = middle
+		end
+	end
+	return -1
+end
