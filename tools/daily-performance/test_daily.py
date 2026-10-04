@@ -1,6 +1,7 @@
 import csv
 from argparse import Namespace
 import hashlib
+import importlib.util
 import copy
 import io
 import json
@@ -18,6 +19,54 @@ import zipfile
 sys.path.insert(0, str(Path(__file__).parent))
 import state
 import measure
+
+weekly_spec = importlib.util.spec_from_file_location(
+    "weekly_measure", Path(__file__).resolve().parents[1] / "weekly-performance/measure.py")
+weekly = importlib.util.module_from_spec(weekly_spec)
+weekly_spec.loader.exec_module(weekly)
+
+
+class WeeklyContextTests(unittest.TestCase):
+    def registered_sources(self):
+        with open(state.ROOT / "benchmarks/benchmarksgame/context-sources.tsv") as stream:
+            return {(row["case"], "pure-go" if row["language"] == "go" else row["language"]): row
+                    for row in csv.DictReader(stream, delimiter="\t")}
+
+    def test_weekly_cases_follow_the_registered_context_and_daily_order(self):
+        suite = state.read(state.ROOT / "tools/daily-performance/suite.json")
+        before = copy.deepcopy(suite)
+        sources = self.registered_sources()
+        cases = weekly.context_cases(suite, sources)
+        self.assertEqual([case["id"] for case in cases],
+                         ["fannkuch-redux", "n-body", "spectral-norm"])
+        self.assertTrue(any(case["id"] == "string-building" and "pureGoSource" in case
+                            for case in suite["cases"]))
+        self.assertEqual(suite, before)
+        suite["cases"].reverse()
+        self.assertEqual([case["id"] for case in weekly.context_cases(suite, sources)],
+                         ["spectral-norm", "n-body", "fannkuch-redux"])
+
+    def test_incomplete_registered_roles_fail_before_any_observation(self):
+        sources = self.registered_sources()
+        del sources["n-body", "cpp"]
+        with tempfile.TemporaryDirectory() as temporary:
+            args = Namespace(evidence=str(Path(temporary) / "evidence"), archive="unused")
+            with patch.object(weekly.platform, "system", return_value="Linux"), \
+                 patch.object(weekly.platform, "machine", return_value="aarch64"), \
+                 patch.object(weekly, "extract_sources", return_value=sources), \
+                 patch.object(weekly, "observe") as observe:
+                with self.assertRaisesRegex(ValueError, "Missing weekly context roles for n-body: cpp"):
+                    weekly.run(args)
+                observe.assert_not_called()
+
+    def test_unknown_registered_cases_and_empty_contexts_are_rejected(self):
+        suite = state.read(state.ROOT / "tools/daily-performance/suite.json")
+        sources = self.registered_sources()
+        sources["unknown-example", "pure-go"] = {}
+        with self.assertRaisesRegex(ValueError, "Unknown weekly context cases: unknown-example"):
+            weekly.context_cases(suite, sources)
+        with self.assertRaisesRegex(ValueError, "Weekly context has no registered cases"):
+            weekly.context_cases(suite, {})
 
 
 def snapshot(status="measured"):
