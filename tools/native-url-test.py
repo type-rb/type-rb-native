@@ -179,6 +179,24 @@ with tempfile.TemporaryDirectory(prefix='native-url-') as temporary:
     run([binary, 'build', '--compile', main, '--outfile', program])
     assert run([program]).stdout == 'n=v\n'
 
+    # The pinned package exports its root; functions and helpers are members.
+    main.write_text('import { URL as Components } from trb/std/url\n'
+                    'def main()\nputs(Components.encode_component("a b"))\nend\n')
+    assert run([binary, 'run', main]).stdout == 'a%20b\n'
+    for declaration in ('encode_component', 'decode_component', 'parse_query', 'build_query',
+                        '_decode_query_component', '_encode_query_component', '_parse_query_parameter',
+                        'DecodeError', 'DecodeErrorKind', 'QueryParameter'):
+        main.write_text('import { ' + declaration + ' as Imported } from trb/std/url\n'
+                        'def main()\nreturn\nend\n')
+        assert 'URL root declaration' in run([binary, 'check', main], success=False).stderr
+        if reference:
+            run([reference, 'check', main], success=False)
+    (file_root / 'helper.trb').write_text('module URL\nend\n'
+        'def encode_component(value: String): String\nreturn value\nend\n')
+    main.write_text('import { encode_component } from helper\n'
+                    'def main()\nputs(encode_component("authored"))\nend\n')
+    assert run([binary, 'run', main]).stdout == 'authored\n'
+
     for imports in ('import trb/internal/url', 'import trb/internal/./url as hidden',
                     'import { encode_component } from trb/internal/url'):
         main.write_text(imports + '\ndef main()\nreturn\nend\n')
