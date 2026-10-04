@@ -1,5 +1,5 @@
 import { integer_string } from support/literals
-import { MirBlock, MirFunction, MirModule, MirValue, mir_function_index } from mir/model/module
+import { MirBlock, MirFunction, MirModule, MirValue } from mir/model/module
 
 # Derived from checked storage, never accepted as input optimization facts.
 # Compact function-local value and block IDs use bounded arrays; sparse IDs
@@ -30,12 +30,20 @@ end
 # function-local rows together for passes that inspect every function.
 def mir_function_value_groups(native_module: MirModule): Array<Array<MirValue>>
 	mut groups: Array<Array<MirValue>> := []
-	native_module.functions.each do |_function|
+	mut positions: Hash<String, Integer> := {}
+	native_module.functions.each do |function|
+		key := integer_string(function.id)
+		if !positions.key?(key)
+			# Keep the first identity match, as the general lookup does. Invalid
+			# duplicate declarations are diagnosed by the MIR verifier.
+			positions[key] = groups.size()
+		end
 		groups.push([])
 	end
 	native_module.values.each do |value|
-		index := mir_function_index(native_module, value.function_id)
-		if index >= 0
+		key := integer_string(value.function_id)
+		if positions.key?(key)
+			index := positions[key]
 			mut group := groups[index]
 			group.push(value)
 		end

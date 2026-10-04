@@ -12,7 +12,7 @@ import { emit_mir_record_instruction } from backend/qbe/emit/records
 import { emit_mir_array_headers, emit_mir_array_instruction } from backend/qbe/emit/arrays
 import { mir_storage_type_name } from mir/model/types
 import { integer_string } from support/literals
-import { MirFunction, mir_block_index, mir_function_index } from mir/model/module
+import { MirFunction, MirValue, mir_block_index, mir_function_index } from mir/model/module
 import { mir_numeric_find, mir_numeric_operation } from mir/analysis/numeric
 import { QbeEmitContext, emit_label, emit_temporary, emit_typed_store, emitted_value, qbe_type } from backend/qbe/context
 import { emit_mir_scalar_instruction, emit_scalar_mir } from backend/qbe/emit/mir
@@ -43,7 +43,7 @@ def emit_control_mir_edge(state: CompilerState, function: MirFunction, target: I
 	qbe_output_line(output, "\tjmp @mir_" + integer_string(target))
 end
 
-def emit_control_mir(state: CompilerState, function_index: Integer, result_type: String, symbols: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
+def emit_control_mir(state: CompilerState, function_index: Integer, result_type: String, values: Array<MirValue>, symbols: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
 	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, function_index)]
 	roots := state.scalar_mir.root_plans[mir_function_index(state.scalar_mir, function_index)]
 	mut lazy_capacity := 0
@@ -56,17 +56,15 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 	mut operands: Array<String> := []
 	mut types: Array<String> := []
 	mut value_types: Array<Integer> := []
-	state.scalar_mir.values.each do |value|
-		if value.function_id == function_index
-			while operands.size() <= value.id
-				operands.push("")
-				types.push("")
-				value_types.push(0)
-			end
-			operands[value.id] = "%mir_value" + integer_string(value.id)
-			value_types[value.id] = value.type_id
-			types[value.id] = mir_storage_type_name(state.scalar_mir, value.type_id)
+	values.each do |value|
+		while operands.size() <= value.id
+			operands.push("")
+			types.push("")
+			value_types.push(0)
 		end
+		operands[value.id] = "%mir_value" + integer_string(value.id)
+		value_types[value.id] = value.type_id
+		types[value.id] = mir_storage_type_name(state.scalar_mir, value.type_id)
 	end
 	mut index := 0
 	while index < function.parameter_count
