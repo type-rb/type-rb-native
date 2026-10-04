@@ -1,6 +1,6 @@
 import { CompilerState, diagnostic } from state/state
 import { integer_string } from support/literals
-import { load_integer } from support/storage
+import { load_integer, sparse_integer_at } from support/storage
 
 # Tarjan traversal preserves authored import order and entry-first discovery.
 # Component identities are assigned dependency-first; members retain discovery
@@ -100,7 +100,21 @@ end
 
 # Package ownership is independent of the source import graph: even an
 # acyclic sequence of files must not introduce a cycle between units.
-def compilation_unit_owner(source: Integer, owners: Array<Integer>): Integer
+def compilation_unit_owner(state: CompilerState, source: Integer, owners: Array<Integer>): Integer
+	# The public URL source and its loader-owned adapter implement one library.
+	# Module/declaration identities stay distinct; authored units stay separate.
+	owned := sparse_integer_at(state.standard_modules, source)
+	if owned == 4 || owned == 5
+		mut owner := owners.size() + state.module_graph.module_count[0] + 1
+		mut index := 0
+		while index < owners.size()
+			if owners[index] >= owner
+				owner = owners[index] + 1
+			end
+			index += 1
+		end
+		return owner
+	end
 	if source < owners.size()
 		return owners[source]
 	end
@@ -115,13 +129,13 @@ def visit_compilation_unit(mut state: CompilerState, owner: Integer, owners: Arr
 	colors[key] = 1
 	mut source := 0
 	while source < state.module_graph.module_count[0]
-		if compilation_unit_owner(source, owners) == owner
+		if compilation_unit_owner(state, source, owners) == owner
 			mut binding := load_integer(state.module_graph.module_import_starts, source)
 			finish := binding + load_integer(state.module_graph.module_import_counts, source)
 			while binding < finish
 				target := load_integer(state.module_graph.import_targets, binding)
 				if target >= 0
-					target_owner := compilation_unit_owner(target, owners)
+					target_owner := compilation_unit_owner(state, target, owners)
 					if target_owner != owner && !visit_compilation_unit(state, target_owner, owners, colors)
 						state.module_graph.active_module[0] = source
 						diagnostic(state, "TRBN4003", load_integer(state.module_graph.import_lines, binding), "compilation unit dependency cycle")
@@ -141,7 +155,7 @@ def validate_compilation_units(mut state: CompilerState, owners: Array<Integer>)
 	mut colors: Hash<String, Integer> := {}
 	mut source := 0
 	while source < state.module_graph.module_count[0]
-		if !visit_compilation_unit(state, compilation_unit_owner(source, owners), owners, colors)
+		if !visit_compilation_unit(state, compilation_unit_owner(state, source, owners), owners, colors)
 			return false
 		end
 		source += 1

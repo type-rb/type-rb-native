@@ -32,7 +32,7 @@ Each count describes registered probes, not language coverage percentages.
 | Explicit interface conformance | basic | 0 / 21 | Variance and method-specific generic contracts with the reference object specification; Initialized-superclass and override dependencies | InterfaceStatement |
 | Modules and constant lookup | basic | 1 / 38 | Remaining module method and qualified mutable namespace-member boundaries | ModuleStatement |
 | Symbol values | basic | 1 / 36 | Remaining reference operator/control framing and multiline interpolation boundaries | SymbolLiteral |
-| Project imports and declaration identity | basic | 0 / 23 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
+| Project imports and declaration identity | basic | 0 / 24 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
 | Target source interop | toolchain | 0 / 0 | Go/Ruby/TypeScript source emission and platform interop | NativeStatement, NativeBlock, NativeExpression |
 | JSX and web bindings | packages | 0 / 0 | Typed JSX and official web-package boundaries | JSXElement |
 | Package capability activation | packages | 0 / 0 | Package-owned activation and resolution | ActivateStatement |
