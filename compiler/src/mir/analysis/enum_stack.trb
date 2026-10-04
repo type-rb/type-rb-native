@@ -343,6 +343,21 @@ def mir_enum_stack_function_safe(native_module: MirModule, function: MirFunction
 end
 
 def mir_enum_stack_callers_safe(native_module: MirModule, callee: Integer, plans: Array<Integer>): Boolean
+	# Witness tables take implementation addresses using the ordinary return
+	# convention. Those indirect callers cannot supply a caller-owned Enum slot.
+	mut witness_index := 0
+	while witness_index < native_module.object_witnesses.size()
+		witness := native_module.object_witnesses[witness_index]
+		mut slot := 0
+		while slot < witness.methods.size()
+			method := native_module.object_methods[witness.methods[slot]]
+			if method.function == callee
+				return false
+			end
+			slot += 1
+		end
+		witness_index += 1
+	end
 	type_id := mir_enum_stack_result_type(native_module, callee)
 	scalar_payloads := mir_enum_stack_scalar_payloads(native_module, type_id)
 	mut function_index := 0
