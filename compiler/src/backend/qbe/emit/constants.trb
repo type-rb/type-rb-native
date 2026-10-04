@@ -1,5 +1,6 @@
 import { emit_object_descriptors } from backend/qbe/emit/objects
-import { compiler_string_bytes } from support/compiler_bytes
+import { mir_string_literal_data } from mir/analysis/literal_data
+import { MirLiteralData, MirModule } from mir/model/module
 import { emit_union_descriptors } from backend/qbe/emit/unions
 import { emit_enum_descriptors } from backend/qbe/emit/enums
 import { emit_nullable_descriptors } from backend/qbe/emit/nullable
@@ -11,7 +12,16 @@ import { CompilerState, diagnostic, has_diagnostic } from state/state
 import { load_integer, load_string, store_integer } from support/storage
 
 def static_string_bytes(value: String): Array<Integer>
-	return compiler_string_bytes(value)
+	return mir_string_literal_data(value).bytes
+end
+
+def static_string_data(native_module: MirModule, payload: Integer, value: String): MirLiteralData
+	if payload >= 0
+		return native_module.literal_data[payload]
+	end
+	# Declaration metadata still has no ordinary MIR instruction. Its portable
+	# data uses the same owner; symbol selection and target packing stay here.
+	return mir_string_literal_data(value)
 end
 
 def static_bytes_hash(bytes: Array<Integer>, index: Integer): Integer
@@ -216,20 +226,21 @@ def emit_static_strings(
 		if !found
 			canonical_values.push(value)
 			canonical_tokens.push(token_index)
-			bytes := static_string_bytes(value)
-			if bytes.size() == 0 && value.size() > 0
+			data := static_string_data(state.scalar_mir, literals[string_index], value)
+			bytes := data.bytes
+			if bytes.size() == 0 && data.points > 0
 				diagnostic(state, "TRBN4005", origins[string_index], "bootstrap String byte access does not support this literal")
 				return false
 			end
 			mut compressed: Array<Integer> := []
-			if value.size() >= 256
-				if bytes.size() == value.size()
+			if data.points >= 256
+				if bytes.size() == data.points
 					compressed = encode_static_bytes(bytes)
 				end
 			end
 			mut use_compressed := false
 			if compressed.size() > 0
-				if compressed.size() < value.size()
+				if compressed.size() < data.points
 					use_compressed = true
 				end
 			end
@@ -237,18 +248,18 @@ def emit_static_strings(
 				qbe_output_line(
 					output,
 					"data $trbns" + integer_string(token_index) + " = align 8 { z " +
-					integer_string(value.size() + 25) + " }",
+					integer_string(data.points + 25) + " }",
 				)
 				emit_static_byte_data(output, "trbnc" + integer_string(token_index), compressed)
 				compressed_tokens.push(token_index)
 				compressed_sizes.push(compressed.size())
-				decoded_sizes.push(value.size())
+				decoded_sizes.push(data.points)
 				output.runtime_flags[2] = 1
 			else
 				qbe_output_line(
 					output,
 					"data $trbns" + integer_string(token_index) +
-					" = align 8 { l 0, l " + integer_string(bytes.size()) + ", l " + integer_string(value.size()) + ",",
+					" = align 8 { l 0, l " + integer_string(bytes.size()) + ", l " + integer_string(data.points) + ",",
 				)
 				mut line := "\tb"
 				mut line_bytes := 0
