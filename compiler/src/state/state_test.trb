@@ -5,10 +5,27 @@ import { resolve } from frontend/checking/program/resolution
 import { find_function_in_module } from frontend/resolution/declaration_lookup
 import { generic_program_fork } from frontend/checking/program/generic_fork
 import { checked_body_new } from state/checked_body
-import { add_module, compiler_new, find_module, find_name_index, function_index_key } from state/state
+import { add_module, compiler_new, compiler_new_with_mode, find_module, find_name_index, function_index_key } from state/state
 import { DefaultInitializer } from state/source_state
 import { load_integer, load_string, store_integer, store_string } from support/storage
 import { describe, expect, test } from trb/std/test
+
+describe("Compiler checking mode ownership") do
+	test("selects ordinary and interactive modes before publishing state aliases") do
+		ordinary := compiler_new(64)
+		mut interactive := compiler_new_with_mode(64, true)
+		alias_state := interactive
+		expect(ordinary.interactive).to_be_false()
+		expect(interactive.interactive).to_be_true()
+		expect(alias_state.interactive).to_be_true()
+		add_module(interactive, "later", "later.trb")
+		expect(alias_state.interactive).to_be_true()
+		expect(find_module(alias_state, "later")).to_equal(0)
+		fork := generic_program_fork(alias_state)
+		expect(fork.interactive).to_be_false()
+		expect(interactive.interactive).to_be_true()
+	end
+end
 
 describe("Compiler Hash indexes") do
 	test("preserves content equality, latest entries and misses across growth") do

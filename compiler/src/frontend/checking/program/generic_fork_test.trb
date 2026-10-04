@@ -3,7 +3,7 @@ import { CheckedLambda, LambdaSyntax } from frontend/types/callable_types
 import { MirNumericPlan } from mir/model/module
 import { checked_body_new } from state/checked_body
 import { CheckedSubmission } from state/source_state
-import { compiler_new, diagnostic, has_diagnostic } from state/state
+import { compiler_new, compiler_new_with_mode, diagnostic, has_diagnostic } from state/state
 import { integer_storage, load_integer, load_string, store_integer, store_string, string_storage } from support/storage
 import { describe, expect, test } from trb/std/test
 
@@ -31,7 +31,7 @@ describe("Generic fork fresh owners") do
 				expect(program.callables.checked[0].resolved_names.limit[0]).to_equal(capacity)
 				expect(program.type_resolution.alias_expansion_depth[0]).to_equal(0)
 				expect(program.submissions.size()).to_equal(0)
-				expect(program.hash_repl[0]).to_be_false()
+				expect(program.interactive).to_be_false()
 				expect(has_diagnostic(program)).to_be_false()
 				[program.diagnostics.codes, program.diagnostics.messages].each do |storage|
 					expect(storage.origin).to_equal(0)
@@ -107,21 +107,21 @@ describe("Generic fork fresh owners") do
 		expect(load_integer(sibling.callables.lambda_origins, 3)).to_equal(2)
 	end
 
-	test("isolates alias paths, submissions, REPL flags and first errors") do
-		mut parent := compiler_new(64)
+	test("isolates alias paths, submissions, checking mode and first errors") do
+		mut parent := compiler_new_with_mode(64, true)
 		store_integer(parent.type_resolution.alias_expansion_path, 0, 9)
-		parent.hash_repl[0] = true
 		diagnostic(parent, "PARENT", 1, "parent error")
 		mut fork := generic_program_fork(parent)
 		sibling := generic_program_fork(parent)
 		expect(fork.type_resolution.alias_expansion_path.used[0]).to_equal(0)
-		expect(fork.hash_repl[0]).to_be_false()
+		expect(fork.interactive).to_be_false()
 		expect(has_diagnostic(fork)).to_be_false()
 		store_integer(fork.type_resolution.alias_expansion_path, 0, 4)
 		fork.type_resolution.alias_expansion_depth[0] = 1
-		fork.hash_repl[0] = true
 		fork.submissions.push(CheckedSubmission.new(start: 0, finish: 1, before: [], after: [], types: string_storage(1), mutable: integer_storage(1), resets: [], captured: []))
 		mut shared := fork
+		expect(shared.interactive).to_be_false()
+		expect(parent.interactive).to_be_true()
 		diagnostic(shared, "FIRST", 3, "first error")
 		diagnostic(fork, "SECOND", 4, "second error")
 		expect(load_string(fork.diagnostics.codes, 0)).to_equal("FIRST")
@@ -132,7 +132,7 @@ describe("Generic fork fresh owners") do
 		expect(sibling.type_resolution.alias_expansion_path.used[0]).to_equal(0)
 		expect(parent.type_resolution.alias_expansion_depth[0]).to_equal(0)
 		expect(sibling.type_resolution.alias_expansion_depth[0]).to_equal(0)
-		expect(sibling.hash_repl[0]).to_be_false()
+		expect(sibling.interactive).to_be_false()
 		expect(parent.submissions.size()).to_equal(0)
 		expect(sibling.submissions.size()).to_equal(0)
 	end
