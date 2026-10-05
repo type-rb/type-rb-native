@@ -7,9 +7,7 @@ import { emit_nullable_descriptors } from backend/qbe/emit/nullable
 import { mir_managed_type } from mir/model/types
 import { integer_string } from support/literals
 import { QbeOutput, qbe_output_line } from backend/qbe/output
-import { compiler_entry_function } from frontend/resolution/entry_resolution
 import { CompilerState, diagnostic, has_diagnostic } from state/state
-import { load_integer, load_string, store_integer } from support/storage
 
 def static_string_bytes(value: String): Array<Integer>
 	return mir_string_literal_data(value).bytes
@@ -156,7 +154,6 @@ def emit_static_strings(
 		mut state: CompilerState,
 		mut output: QbeOutput,
 	): Boolean
-	deduplicate := compiler_entry_function(state) >= 0
 	mut canonical_values: Array<String> := []
 	mut canonical_tokens: Array<Integer> := []
 	mut compressed_tokens: Array<Integer> := []
@@ -166,30 +163,6 @@ def emit_static_strings(
 	mut tokens: Array<Integer> := []
 	mut literals: Array<Integer> := []
 	mut origins: Array<Integer> := []
-	mut skipped: Hash<String, Integer> := {}
-	state.scalar_mir.functions.each do |function|
-		if function.kind == 1 || function.kind == 3
-			start := load_integer(state.declarations.function_body_starts, function.id)
-			finish := load_integer(state.declarations.function_body_ends, function.id)
-			if finish > start
-				skipped[integer_string(start)] = finish
-			end
-		end
-	end
-	mut token := 0
-	while token < state.source_tokens.token_count[0]
-		if skipped.key?(integer_string(token))
-			token = skipped[integer_string(token)]
-		else
-			if load_integer(state.source_tokens.token_kinds, token) == 3
-				values.push(load_string(state.source_tokens.token_texts, token))
-				tokens.push(token)
-				literals.push(-1)
-				origins.push(load_integer(state.source_tokens.token_lines, token))
-			end
-			token += 1
-		end
-	end
 	state.scalar_mir.literal_texts.each do |_text|
 		output.mir_literal_symbols.push("")
 	end
@@ -200,7 +173,7 @@ def emit_static_strings(
 		end
 		if string_literal
 			values.push(state.scalar_mir.literal_texts[instruction.payload])
-			tokens.push(state.source_tokens.token_count[0] + instruction.payload)
+			tokens.push(instruction.payload)
 			literals.push(instruction.payload)
 			origins.push(instruction.line)
 		end
@@ -212,7 +185,7 @@ def emit_static_strings(
 		mut canonical := token_index
 		mut value_index := 0
 		mut found := false
-		if deduplicate || literals[string_index] >= 0
+		if literals[string_index] >= 0
 			while value_index < canonical_values.size()
 				if canonical_values[value_index] == value
 					canonical = canonical_tokens[value_index]
@@ -282,8 +255,6 @@ def emit_static_strings(
 		end
 		if literals[string_index] >= 0
 			output.mir_literal_symbols[literals[string_index]] = "$trbns" + integer_string(canonical)
-		else
-			store_integer(state.source_tokens.token_lines, token_index, canonical)
 		end
 		string_index += 1
 	end
