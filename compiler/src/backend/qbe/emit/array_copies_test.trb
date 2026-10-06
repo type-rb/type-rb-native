@@ -1,0 +1,58 @@
+import { emit_mir_array_copy } from backend/qbe/emit/array_copies
+import { emit_context_new } from backend/qbe/context
+import { qbe_output_line, qbe_output_new } from backend/qbe/output
+import { MirArrayCopy } from mir/model/module
+import { integer_string } from support/literals
+import { output_source } from testing/compiler
+import { logical_run_qbe } from testing/qbe_runner
+import { describe, expect, test } from trb/std/test
+import trb/std/process
+import trb/std/result
+
+describe("Scalar Array copy guards") do
+	test("leaves overlapping and invalid extents untouched before scalar fallback") do
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			mut context := emit_context_new()
+			mut output := qbe_output_new(256, [0])
+			qbe_output_line(output, "function l $copy(l %source, l %destination, l %count) {\n@start")
+			plan := MirArrayCopy.new(header: 1, preheader: 0, body: 2, exit: 3, induction_slot: 0, bound: 2, source: 0, destination: 1)
+			result := emit_mir_array_copy(plan, ["%source", "%destination", "%count"], context, output)
+			qbe_output_line(output, "\tret " + result + "\n}")
+			qbe_output_line(output, "function l $probe(l %source_offset, l %destination_offset, l %source_length, l %destination_length, l %count) {\n@start\n%cells =l alloc8 64\n%source =l alloc8 32\n%destination =l alloc8 32")
+			mut cell := 0
+			while cell < 8
+				mut value := 11 + cell
+				if cell >= 4
+					value = 67 + cell
+				end
+				name := "%cell" + integer_string(cell)
+				qbe_output_line(output, name + " =l add %cells, " + integer_string(cell * 8))
+				qbe_output_line(output, "storel " + integer_string(value) + ", " + name)
+				cell += 1
+			end
+			qbe_output_line(output, "%source_length_slot =l add %source, 8\nstorel %source_length, %source_length_slot\n%destination_length_slot =l add %destination, 8\nstorel %destination_length, %destination_length_slot\n%source_data =l add %cells, %source_offset\n%destination_data =l add %cells, %destination_offset\n%source_slot =l add %source, 24\n%destination_slot =l add %destination, 24\nstorel %source_data, %source_slot\nstorel %destination_data, %destination_slot\n%index =l call $copy(l %source, l %destination, l %count)\n%after =l loadl %destination_data\n%scaled =l mul %index, 100\n%result =l add %scaled, %after\nret %result\n}")
+			# source offset, destination offset, lengths, count, expected state.
+			cases := [[0, 32, 3, 3, 2, 211], [0, 0, 3, 3, 3, 311], [0, 8, 3, 3, 2, 12], [8, 0, 3, 3, 2, 11], [0, 32, 3, 3, 4, 71], [0, 32, 3, 1, 2, 71], [0, 32, 0, 0, 0, 71], [0, 32, 3, 3, -1, 71], [0, 24, 3, 3, 3, 311], [0, 32, 3, 3, 9007199254740991, 71]]
+			qbe_output_line(output, "export function w $main() {\n@start\njmp @case0")
+			mut index := 0
+			while index < cases.size()
+				row := cases[index]
+				name := integer_string(index)
+				qbe_output_line(output, "@case" + name)
+				qbe_output_line(output, "%actual" + name + " =l call $probe(l " + integer_string(row[0]) + ", l " + integer_string(row[1]) + ", l " + integer_string(row[2]) + ", l " + integer_string(row[3]) + ", l " + integer_string(row[4]) + ")")
+				qbe_output_line(output, "%valid" + name + " =w ceql %actual" + name + ", " + integer_string(row[5]))
+				qbe_output_line(output, "jnz %valid" + name + ", @case" + integer_string(index + 1) + ", @failed")
+				index += 1
+			end
+			qbe_output_line(output, "@case" + integer_string(index) + "\nret 0\n@failed\nret 1\n}")
+			case logical_run_qbe(qbe, output_source(output))
+			when Result::Ok(actual)
+				expect(actual).to_equal("")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+end

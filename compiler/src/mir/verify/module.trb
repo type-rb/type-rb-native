@@ -1,3 +1,4 @@
+import { mir_array_copies_error, mir_function_array_copies } from mir/analysis/array_copies
 import { mir_function_loop_calls, mir_loop_calls_error } from mir/analysis/loop_calls
 import { mir_program_error } from mir/verify/program
 import { mir_literal_data_error } from mir/analysis/literal_data
@@ -329,6 +330,9 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	if native_module.numeric_plans.size() != 1
 		return "MIR numeric plan container differs"
 	end
+	if !optimized && native_module.array_copies.size() != 0
+		return "MIR input cannot supply Array-copy plans"
+	end
 	if !optimized && native_module.enum_stack_functions.size() != 0
 		return "MIR input cannot supply enum stack plans"
 	end
@@ -365,6 +369,9 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	mut entry_found := false
 	mut index := 0
 	if native_module.functions.size() == 0
+		if native_module.array_copies.size() != 0
+			return "MIR Array-copy plan count differs"
+		end
 		if native_module.loop_calls.size() != 0
 			return "MIR loop-call plan count differs"
 		end
@@ -457,6 +464,9 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 		end
 		index += 1
 	end
+	if optimized && native_module.array_copies.size() != native_module.functions.size()
+		return "MIR Array-copy plan count differs"
+	end
 	if !optimized && native_module.loop_calls.size() != 0
 		return "MIR input cannot supply loop-call plans"
 	end
@@ -488,6 +498,10 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 			loop_error := mir_loop_calls_error(native_module.loop_calls[index], mir_function_loop_calls(native_module, native_module.functions[index]))
 			if loop_error != ""
 				return loop_error
+			end
+			copy_error := mir_array_copies_error(native_module.array_copies[index], mir_function_array_copies(native_module, native_module.functions[index]))
+			if copy_error != ""
+				return copy_error
 			end
 			if !mir_array_loops_equal(native_module.array_loops[index], mir_function_array_loops(native_module, native_module.functions[index]))
 				return "MIR Array-loop plan differs"

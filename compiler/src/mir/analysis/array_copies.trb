@@ -1,0 +1,168 @@
+import { MirArrayCopy, MirBlock, MirFunction, MirModule } from mir/model/module
+import { MirFlow, mir_build_flow, mir_flow_block_index, mir_flow_blocks, mir_flow_type, mir_value_available } from mir/analysis/flow
+import { mir_array_loop_candidate, mir_loop_alias, mir_loop_aliases, mir_loop_dominates, mir_loop_literal, mir_loop_parameter } from mir/analysis/array_loops
+import { mir_live_add } from mir/analysis/roots
+
+# A plan only bypasses a complete scalar copy body. The original loop remains
+# the fallback for invalid extents or overlapping storage. In particular, a
+# later bounds failure must still occur after earlier successful writes.
+def mir_no_array_copy(): MirArrayCopy
+	return MirArrayCopy.new(header: -1, preheader: -1, body: -1, exit: -1, induction_slot: -1, bound: -1, source: -1, destination: -1)
+end
+
+def mir_copy_input(native_module: MirModule, flow: MirFlow, header: MirBlock, preheader: MirBlock, aliases: Hash<String, Integer>, value: Integer): Integer
+	identity := mir_loop_alias(aliases, value)
+	if identity < 0
+		return -1
+	end
+	slot := mir_loop_parameter(native_module, header, identity)
+	if slot >= 0
+		return native_module.arguments[preheader.first_argument_start + slot]
+	end
+	if mir_value_available(flow, preheader, preheader.instruction_start + preheader.instruction_count, identity)
+		return identity
+	end
+	return -1
+end
+
+def mir_array_copy_at_header(native_module: MirModule, function: MirFunction, flow: MirFlow, header_index: Integer): MirArrayCopy
+	header := native_module.blocks[function.block_start + header_index]
+	if flow.ranks[header_index] < 0 || !mir_array_loop_candidate(native_module, header) || header.instruction_count != 1
+		return mir_no_array_copy()
+	end
+	if header.first_target == header.id || header.second_target == header.id || header.first_target == header.second_target
+		return mir_no_array_copy()
+	end
+	condition := native_module.instructions[header.instruction_start]
+	index_slot := mir_loop_parameter(native_module, header, condition.first)
+	body_index := mir_flow_block_index(flow, header.first_target)
+	body := native_module.blocks[function.block_start + body_index]
+	if body.terminator != 1 || body.first_target != header.id || !mir_loop_dominates(flow, header_index, body_index)
+		return mir_no_array_copy()
+	end
+	if flow.predecessors[body_index].size() != 1 || flow.predecessors[body_index][0] != header_index || flow.predecessors[header_index].size() != 2
+		return mir_no_array_copy()
+	end
+	mut preheader_index := -1
+	flow.predecessors[header_index].each do |previous|
+		if previous != body_index
+			preheader_index = previous
+		end
+	end
+	if preheader_index < 0 || preheader_index == header_index
+		return mir_no_array_copy()
+	end
+	preheader := native_module.blocks[function.block_start + preheader_index]
+	if preheader.terminator != 1 || preheader.first_target != header.id || !mir_loop_dominates(flow, preheader_index, header_index)
+		return mir_no_array_copy()
+	end
+	if !mir_loop_literal(native_module, flow, native_module.arguments[preheader.first_argument_start + index_slot], "0")
+		return mir_no_array_copy()
+	end
+	# Capture, optional dead target read, source read, store, one, increment.
+	# Every instruction is accounted for; no call, allocation or hidden effect
+	# can move ahead of the copy or disappear from its fallback.
+	if body.instruction_count != 5 && body.instruction_count != 6
+		return mir_no_array_copy()
+	end
+	aliases := mir_loop_aliases(native_module, function, flow, header)
+	capture := native_module.instructions[body.instruction_start]
+	if capture.kind != 21 || mir_loop_alias(aliases, capture.second) != condition.first
+		return mir_no_array_copy()
+	end
+	mut load_index := body.instruction_start + 1
+	if body.instruction_count == 6
+		unused := native_module.instructions[load_index]
+		if unused.kind != 22 || unused.first != capture.first || unused.second != capture.result
+			return mir_no_array_copy()
+		end
+		load_index += 1
+	end
+	load := native_module.instructions[load_index]
+	store := native_module.instructions[load_index + 1]
+	one := native_module.instructions[load_index + 2]
+	update := native_module.instructions[load_index + 3]
+	if load.kind != 22 || mir_loop_alias(aliases, load.second) != condition.first
+		return mir_no_array_copy()
+	end
+	if store.kind != 23 || store.first != capture.first || store.second != capture.result || store.payload != load.result
+		return mir_no_array_copy()
+	end
+	if one.kind != 6 || !mir_loop_literal(native_module, flow, one.result, "1")
+		return mir_no_array_copy()
+	end
+	if update.kind != 7 || (update.payload != 1 && update.payload != 13) || update.failure < 0 || mir_loop_alias(aliases, update.first) != condition.first || update.second != one.result
+		return mir_no_array_copy()
+	end
+	# This also proves that neither element read escapes through a loop-carried
+	# value. A body-local definition cannot dominate the zero-iteration exit.
+	mut slot := 0
+	while slot < header.parameter_count
+		incoming := native_module.arguments[body.first_argument_start + slot]
+		if slot == index_slot
+			if incoming != update.result
+				return mir_no_array_copy()
+			end
+		elsif mir_loop_alias(aliases, incoming) != native_module.arguments[header.parameter_start + slot]
+			return mir_no_array_copy()
+		end
+		slot += 1
+	end
+	bound := mir_copy_input(native_module, flow, header, preheader, aliases, condition.second)
+	source := mir_copy_input(native_module, flow, header, preheader, aliases, load.first)
+	destination := mir_copy_input(native_module, flow, header, preheader, aliases, capture.first)
+	if bound < 0 || source < 0 || destination < 0 || mir_flow_type(flow, bound) != 1
+		return mir_no_array_copy()
+	end
+	# Both admitted scalar representations occupy one cell, contain no managed
+	# references, and are copied bit-for-bit without conversion or safepoints.
+	type_id := mir_flow_type(flow, source)
+	if (type_id != 3 && type_id != 6) || mir_flow_type(flow, destination) != type_id
+		return mir_no_array_copy()
+	end
+	return MirArrayCopy.new(header: header.id, preheader: preheader.id, body: body.id, exit: header.second_target, induction_slot: index_slot, bound: bound, source: source, destination: destination)
+end
+
+def mir_function_array_copies(native_module: MirModule, function: MirFunction): Array<MirArrayCopy>
+	mut plans: Array<MirArrayCopy> := []
+	if function.kind != 3
+		return plans
+	end
+	mut headers: Array<Integer> := []
+	mut index := function.block_start
+	while index < function.block_start + function.block_count
+		block := native_module.blocks[index]
+		if block.instruction_count == 1 && mir_array_loop_candidate(native_module, block)
+			mir_live_add(headers, block.id)
+		end
+		index += 1
+	end
+	if headers.size() == 0
+		return plans
+	end
+	flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
+	headers.each do |id|
+		plan := mir_array_copy_at_header(native_module, function, flow, mir_flow_block_index(flow, id))
+		if plan.header >= 0
+			plans.push(plan)
+		end
+	end
+	return plans
+end
+
+def mir_array_copies_error(left: Array<MirArrayCopy>, right: Array<MirArrayCopy>): String
+	error := "MIR Array-copy plan differs"
+	if left.size() != right.size()
+		return error
+	end
+	mut index := 0
+	while index < left.size()
+		a := left[index]
+		b := right[index]
+		if a.header != b.header || a.preheader != b.preheader || a.body != b.body || a.exit != b.exit || a.induction_slot != b.induction_slot || a.bound != b.bound || a.source != b.source || a.destination != b.destination
+			return error
+		end
+		index += 1
+	end
+	return ""
+end

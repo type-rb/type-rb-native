@@ -1,0 +1,74 @@
+import { MirArrayCopy } from mir/model/module
+import { integer_string } from support/literals
+import { QbeEmitContext, emit_label, emit_temporary } from backend/qbe/context
+import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
+
+# The MIR proof owns the loop, operands and scalar bitwise-copy equivalence.
+# These target guards only instantiate its extent and alias preconditions.
+# On any miss, the returned zero selects the original scalar loop unchanged.
+def emit_mir_array_copy(plan: MirArrayCopy, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): String
+	index := "%mir_copy_index" + integer_string(plan.header)
+	count := operands[plan.bound]
+	finish := emit_label(context)
+	extents := emit_label(context)
+	storage := emit_label(context)
+	overlap_check := emit_label(context)
+	copy := emit_label(context)
+	complete := emit_label(context)
+	positive := emit_temporary(context)
+	qbe_output_line(output, "\t" + index + " =l copy 0")
+	qbe_output_line(output, "\t" + positive + " =w csgtl " + count + ", 0")
+	qbe_output_branch(output, positive, extents, finish)
+	qbe_output_line(output, extents)
+	source_length_slot := emit_temporary(context)
+	destination_length_slot := emit_temporary(context)
+	source_length := emit_temporary(context)
+	destination_length := emit_temporary(context)
+	source_valid := emit_temporary(context)
+	destination_valid := emit_temporary(context)
+	valid := emit_temporary(context)
+	qbe_output_line(output, "\t" + source_length_slot + " =l add " + operands[plan.source] + ", 8")
+	qbe_output_line(output, "\t" + destination_length_slot + " =l add " + operands[plan.destination] + ", 8")
+	qbe_output_line(output, "\t" + source_length + " =l loadl " + source_length_slot)
+	qbe_output_line(output, "\t" + destination_length + " =l loadl " + destination_length_slot)
+	qbe_output_line(output, "\t" + source_valid + " =w culel " + count + ", " + source_length)
+	qbe_output_line(output, "\t" + destination_valid + " =w culel " + count + ", " + destination_length)
+	qbe_output_line(output, "\t" + valid + " =w and " + source_valid + ", " + destination_valid)
+	qbe_output_branch(output, valid, storage, finish)
+	qbe_output_line(output, storage)
+	source_slot := emit_temporary(context)
+	destination_slot := emit_temporary(context)
+	source := emit_temporary(context)
+	destination := emit_temporary(context)
+	equal := emit_temporary(context)
+	bytes := emit_temporary(context)
+	qbe_output_line(output, "\t" + source_slot + " =l add " + operands[plan.source] + ", 24")
+	qbe_output_line(output, "\t" + destination_slot + " =l add " + operands[plan.destination] + ", 24")
+	qbe_output_line(output, "\t" + source + " =l loadl " + source_slot)
+	qbe_output_line(output, "\t" + destination + " =l loadl " + destination_slot)
+	qbe_output_line(output, "\t" + equal + " =w ceql " + source + ", " + destination)
+	# Portable Integer bounds prove count * eight fits the target word. Equal
+	# spans need no writes and must not be passed as overlapping memcpy inputs.
+	qbe_output_line(output, "\t" + bytes + " =l mul " + count + ", 8")
+	qbe_output_branch(output, equal, complete, overlap_check)
+	qbe_output_line(output, overlap_check)
+	forward := emit_temporary(context)
+	backward := emit_temporary(context)
+	forward_valid := emit_temporary(context)
+	backward_valid := emit_temporary(context)
+	disjoint := emit_temporary(context)
+	qbe_output_line(output, "\t" + forward + " =l sub " + destination + ", " + source)
+	qbe_output_line(output, "\t" + backward + " =l sub " + source + ", " + destination)
+	qbe_output_line(output, "\t" + forward_valid + " =w cugel " + forward + ", " + bytes)
+	qbe_output_line(output, "\t" + backward_valid + " =w cugel " + backward + ", " + bytes)
+	qbe_output_line(output, "\t" + disjoint + " =w and " + forward_valid + ", " + backward_valid)
+	qbe_output_branch(output, disjoint, copy, finish)
+	qbe_output_line(output, copy)
+	qbe_output_line(output, "\tcall $memcpy(l " + destination + ", l " + source + ", l " + bytes + ")")
+	qbe_output_line(output, "\tjmp " + complete)
+	qbe_output_line(output, complete)
+	qbe_output_line(output, "\t" + index + " =l copy " + count)
+	qbe_output_line(output, "\tjmp " + finish)
+	qbe_output_line(output, finish)
+	return index
+end

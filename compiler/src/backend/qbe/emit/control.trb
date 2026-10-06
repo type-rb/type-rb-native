@@ -1,3 +1,4 @@
+import { emit_mir_array_copy } from backend/qbe/emit/array_copies
 import { emit_mir_bytes_instruction } from backend/qbe/emit/bytes
 import { emit_object_conversion } from backend/qbe/emit/object_dispatch
 import { emit_mir_object_instruction } from backend/qbe/emit/objects
@@ -23,14 +24,18 @@ import { CompilerState } from state/state
 
 # The adapter consumes block parameters and typed operands. Edge copies are
 # parallel assignments: capture every source before changing a destination.
-def emit_control_mir_edge(state: CompilerState, function: MirFunction, target: Integer, start: Integer, count: Integer, operands: Array<String>, types: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
+def emit_control_mir_edge(state: CompilerState, function: MirFunction, target: Integer, start: Integer, count: Integer, replacement_slot: Integer, replacement: String, operands: Array<String>, types: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
 	block := state.scalar_mir.blocks[mir_block_index(state.scalar_mir, function, target)]
 	mut captured: Array<String> := []
 	mut index := 0
 	while index < count
 		value := state.scalar_mir.arguments[start + index]
 		temporary := emit_temporary(context)
-		qbe_output_line(output, "\t" + temporary + " =" + qbe_type(types[value]) + " copy " + operands[value])
+		mut operand := operands[value]
+		if index == replacement_slot
+			operand = replacement
+		end
+		qbe_output_line(output, "\t" + temporary + " =" + qbe_type(types[value]) + " copy " + operand)
 		captured.push(temporary)
 		index += 1
 	end
@@ -52,6 +57,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 	end
 	numeric := mir_numeric_find(state.scalar_mir.numeric_plans[0], function_index, -1, -1)
 	loop_calls := state.scalar_mir.loop_calls[mir_function_index(state.scalar_mir, function_index)]
+	array_copies := state.scalar_mir.array_copies[mir_function_index(state.scalar_mir, function_index)]
 	array_loops := state.scalar_mir.array_loops[mir_function_index(state.scalar_mir, function_index)]
 	array_check_reuse := state.scalar_mir.array_check_reuse[mir_function_index(state.scalar_mir, function_index)]
 	mut operands: Array<String> := []
@@ -201,16 +207,24 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 			end
 		end
 		emit_mir_array_headers(array_loops, block.id, operands, context, output)
+		mut replacement_slot := -1
+		mut replacement := ""
+		array_copies.each do |plan|
+			if plan.preheader == block.id
+				replacement_slot = plan.induction_slot
+				replacement = emit_mir_array_copy(plan, operands, context, output)
+			end
+		end
 		if block.terminator == 1
-			emit_control_mir_edge(state, function, block.first_target, block.first_argument_start, block.first_argument_count, operands, types, context, output)
+			emit_control_mir_edge(state, function, block.first_target, block.first_argument_start, block.first_argument_count, replacement_slot, replacement, operands, types, context, output)
 		elsif block.terminator == 2
 			first := emit_label(context)
 			second := emit_label(context)
 			qbe_output_branch(output, operands[block.condition], first, second)
 			qbe_output_line(output, first)
-			emit_control_mir_edge(state, function, block.first_target, block.first_argument_start, block.first_argument_count, operands, types, context, output)
+			emit_control_mir_edge(state, function, block.first_target, block.first_argument_start, block.first_argument_count, -1, "", operands, types, context, output)
 			qbe_output_line(output, second)
-			emit_control_mir_edge(state, function, block.second_target, block.second_argument_start, block.second_argument_count, operands, types, context, output)
+			emit_control_mir_edge(state, function, block.second_target, block.second_argument_start, block.second_argument_count, -1, "", operands, types, context, output)
 		elsif block.terminator == 3
 			if result_type != "Void"
 				emit_typed_store(output, result_type, operands[block.return_value], "%return_value")

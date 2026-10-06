@@ -1,0 +1,37 @@
+import { MirArrayCopy, mir_function_index } from mir/model/module
+import { verify_mir } from mir/verify/module
+import { compiler_test_instruction_with_cell } from testing/compiler
+import { array_loop_mir_check } from testing/mir/array_loops
+import { describe, expect, test } from trb/std/test
+
+def copy_verify_source(body: String): String
+	return "def copy_prefix(mut destination: Array<Integer>, source: Array<Integer>, mut count: Integer): Integer\nmut index := 0\nwhile index < count\n" + body + "\nend\nreturn index\nend\ndef main()\nend\n"
+end
+
+describe("Scalar Array copy verification") do
+	test("independently rejects every forged plan cell and a stale store") do
+		mut mode := 0
+		while mode < 9
+			mut state := array_loop_mir_check(copy_verify_source("destination[index] = source[index]\nindex += 1"))
+			index := mir_function_index(state.scalar_mir, 0)
+			old := state.scalar_mir.array_copies[index][0]
+			mut fields := [old.header, old.preheader, old.body, old.exit, old.induction_slot, old.bound, old.source, old.destination]
+			if mode < 8
+				fields[mode] += 1
+			else
+				mut position := 0
+				while position < state.scalar_mir.instructions.size()
+					instruction := state.scalar_mir.instructions[position]
+					if instruction.kind == 23
+						state.scalar_mir.instructions[position] = compiler_test_instruction_with_cell(instruction, 4, instruction.second)
+					end
+					position += 1
+				end
+			end
+			state.scalar_mir.array_copies[index][0] = MirArrayCopy.new(header: fields[0], preheader: fields[1], body: fields[2], exit: fields[3], induction_slot: fields[4], bound: fields[5], source: fields[6], destination: fields[7])
+			expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
+			mode += 1
+		end
+	end
+
+end
