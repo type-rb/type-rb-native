@@ -99,10 +99,20 @@ static void expect(struct string *s, const void *bytes, size_t size, int64_t poi
     assert(s->length == (int64_t)size && s->points == points);
     assert(!memcmp(s->bytes, bytes, size) && s->bytes[size] == 0);
 }
+static void expect_integer(int64_t value) {
+    char buffer[32];
+    int size = snprintf(buffer, sizeof buffer, "%lld", (long long)value);
+    assert(size > 0 && size < (int)sizeof buffer);
+    expect(trbn_integer_to_string(value), buffer, size, size);
+    assert(published == 1 && projected == size + 33);
+    assert(trbn_gc_allocated_bytes == size + 33);
+    clear();
+}
 int main(int argc, char **argv) {
     if (argc > 1) {
         fail_allocation = 1;
-        trbn_gc_alloc(argv[1][0] == 's' ? trbn_desc_string : other_descriptor, atoll(argv[2]), 0);
+        if (argv[1][0] == 'i') trbn_integer_to_string(atoll(argv[2]));
+        else trbn_gc_alloc(argv[1][0] == 's' ? trbn_desc_string : other_descriptor, atoll(argv[2]), 0);
         return 1;
     }
     for (int64_t size = 0; size <= 4096; ++size) {
@@ -188,10 +198,27 @@ int main(int argc, char **argv) {
     expect(trbn_string_concat(a, b), "\xe3\x81\x82\0a", 5, 3);
     assert(trbn_string_concat(empty, a) == a && trbn_string_concat(b, empty) == b);
     clear();
-    int64_t values[] = {-9007199254740991LL, -123, 0, 9, 123, 9007199254740991LL};
+    /* libc is an independent decimal oracle. Check both sides of every
+       decimal width and of the unsigned-32 fast-path boundary, including signs. */
+    for (int64_t value = -10000; value <= 10000; ++value) expect_integer(value);
+    for (int64_t power = 1; power <= 1000000000000000LL; power *= 10) {
+        for (int offset = -1; offset <= 1; ++offset) {
+            expect_integer(power + offset);
+            expect_integer(-power - offset);
+        }
+    }
+    int64_t values[] = {4294967294LL, 4294967295LL, 4294967296LL, 4294967297LL,
+                       9007199254740981LL, 9007199254740990LL, 9007199254740991LL};
     for (unsigned i = 0; i < sizeof values / sizeof *values; ++i) {
-        char buffer[32]; int size = snprintf(buffer, sizeof buffer, "%lld", (long long)values[i]);
-        expect(trbn_integer_to_string(values[i]), buffer, size, size); clear();
+        expect_integer(values[i]); expect_integer(-values[i]);
+    }
+    uint64_t state = 0x123456789abcdef0ULL;
+    for (unsigned i = 0; i < 4096; ++i) {
+        state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+        int64_t narrow = state & 0xffffffffULL;
+        int64_t portable = state % 9007199254740992ULL;
+        expect_integer(narrow); expect_integer(-narrow);
+        expect_integer(portable); expect_integer(-portable);
     }
     expect(trbn_string_from_codepoint(0), "\0", 1, 1);
     expect(trbn_string_from_codepoint(0x7ff), "\xdf\xbf", 2, 1);
@@ -214,9 +241,10 @@ with tempfile.TemporaryDirectory(prefix='native-string-allocation-') as temporar
                     '-o', str(root / 'probe')], check=True, capture_output=True, timeout=30)
     result = subprocess.run([str(root / 'probe')], capture_output=True, timeout=30)
     assert result.returncode == 0 and result.stderr == b'', result
-    for descriptor in ['string', 'other']:
-        for size in ['17', '4096']:
-            failure = subprocess.run([str(root / 'probe'), descriptor, size], capture_output=True, timeout=10)
-            assert failure.returncode == 70 and failure.stdout == b'', failure
-            assert failure.stderr == b'panic: allocation failed\n', failure
+    failures = [(descriptor, size) for descriptor in ['string', 'other'] for size in ['17', '4096']]
+    failures += [('integer', value) for value in ['0', '-4294967295', '4294967296', '-9007199254740991']]
+    for descriptor, size in failures:
+        failure = subprocess.run([str(root / 'probe'), descriptor, size], capture_output=True, timeout=10)
+        assert failure.returncode == 70 and failure.stdout == b'', failure
+        assert failure.stderr == b'panic: allocation failed\n', failure
 print('Managed initialization, poisoned String constructors and allocation failures passed')
