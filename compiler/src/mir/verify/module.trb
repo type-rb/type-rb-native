@@ -1,3 +1,4 @@
+import { mir_function_loop_calls, mir_loop_calls_error } from mir/analysis/loop_calls
 import { mir_program_error } from mir/verify/program
 import { mir_literal_data_error } from mir/analysis/literal_data
 import { mir_call_effect_summaries } from mir/analysis/call_effects
@@ -364,6 +365,9 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	mut entry_found := false
 	mut index := 0
 	if native_module.functions.size() == 0
+		if native_module.loop_calls.size() != 0
+			return "MIR loop-call plan count differs"
+		end
 		if native_module.numeric_plans[0].size() != 0
 			return "MIR numeric plan differs"
 		end
@@ -453,6 +457,12 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 		end
 		index += 1
 	end
+	if !optimized && native_module.loop_calls.size() != 0
+		return "MIR input cannot supply loop-call plans"
+	end
+	if optimized && native_module.loop_calls.size() != native_module.functions.size()
+		return "MIR loop-call plan count differs"
+	end
 	if !optimized && native_module.array_loops.size() != 0
 		return "MIR input cannot supply Array-loop plans"
 	end
@@ -475,6 +485,10 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	if optimized
 		index = 0
 		while index < native_module.functions.size()
+			loop_error := mir_loop_calls_error(native_module.loop_calls[index], mir_function_loop_calls(native_module, native_module.functions[index]))
+			if loop_error != ""
+				return loop_error
+			end
 			if !mir_array_loops_equal(native_module.array_loops[index], mir_function_array_loops(native_module, native_module.functions[index]))
 				return "MIR Array-loop plan differs"
 			end

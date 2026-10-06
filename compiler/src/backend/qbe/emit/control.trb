@@ -51,6 +51,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 		lazy_capacity = roots.capacity
 	end
 	numeric := mir_numeric_find(state.scalar_mir.numeric_plans[0], function_index, -1, -1)
+	loop_calls := state.scalar_mir.loop_calls[mir_function_index(state.scalar_mir, function_index)]
 	array_loops := state.scalar_mir.array_loops[mir_function_index(state.scalar_mir, function_index)]
 	array_check_reuse := state.scalar_mir.array_check_reuse[mir_function_index(state.scalar_mir, function_index)]
 	mut operands: Array<String> := []
@@ -91,6 +92,17 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 				emit_mir_roots(current_roots, prefix, lazy_capacity, operands, context, output)
 				previous_roots = current_roots
 				point += 1
+			end
+			mut cache := ""
+			mut cache_complete := ""
+			loop_calls.each do |plan|
+				if plan.instruction == index
+					cache = "%mir_loop_result" + integer_string(index)
+					cache_complete = emit_label(context)
+					first_call := emit_label(context)
+					qbe_output_branch(output, "%mir_loop_ready" + integer_string(index), cache_complete, first_call)
+					qbe_output_line(output, first_call)
+				end
 			end
 			mut value := emitted_value("", "Void")
 			if instruction.kind >= 67 && instruction.kind <= 72
@@ -163,11 +175,30 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 			else
 				value = emit_mir_scalar_instruction(state, function_index, instruction, operands, types, mir_numeric_operation(numeric, index), context, output, false)
 			end
+			if cache != ""
+				qbe_output_line(output, "\t" + cache + " =" + qbe_type(types[instruction.result]) + " copy " + value.operand)
+				qbe_output_line(output, "\t%mir_loop_ready" + integer_string(index) + " =w copy 1")
+				qbe_output_line(output, "\tjmp " + cache_complete)
+				qbe_output_line(output, cache_complete)
+				value = emitted_value(cache, types[instruction.result])
+			end
 			if instruction.result >= 0
 				# Stable MIR names allow a dominating definition in any storage order.
 				qbe_output_line(output, "\t" + operands[instruction.result] + " =" + qbe_type(types[instruction.result]) + " copy " + value.operand)
 			end
 			index += 1
+		end
+		loop_calls.each do |plan|
+			if plan.preheader == block.id
+				result := state.scalar_mir.instructions[plan.instruction].result
+				mut zero := "0"
+				if types[result] == "Float"
+					zero = "d_0"
+				end
+				name := integer_string(plan.instruction)
+				qbe_output_line(output, "\t%mir_loop_ready" + name + " =w copy 0")
+				qbe_output_line(output, "\t%mir_loop_result" + name + " =" + qbe_type(types[result]) + " copy " + zero)
+			end
 		end
 		emit_mir_array_headers(array_loops, block.id, operands, context, output)
 		if block.terminator == 1
