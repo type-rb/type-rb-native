@@ -4,7 +4,7 @@ import { check, emit_qbe } from compiler
 import { control_test_output } from testing/mir/control
 import { array_mir_test_read } from testing/mir/arrays
 import { mir_hash_operation } from mir/model/hashes
-import { logical_checked_source } from testing/pipeline
+import { expect_compiler_phase, logical_checked_source } from testing/pipeline
 import { logical_run_qbe } from testing/qbe_runner
 import { verify_mir } from mir/verify/module
 import { string_starts_with } from support/path
@@ -16,7 +16,7 @@ import trb/std/result
 
 def hash_value_mir_state(): CompilerState
 	mut state := logical_checked_source("def main()\nmut table := {\"key\" => \"value\"}\ntable[\"key\"] = \"updated\"\nmerged := table.merge({\"next\" => \"other\"})\nputs(merged[\"next\"])\nend\n")
-	expect(check(state)).to_be_true()
+	expect_compiler_phase(state, "check", check(state))
 	expect(state.scalar_mir.functions.size()).to_equal(1)
 	return state
 end
@@ -28,11 +28,7 @@ def managed_mir_test_fixture(name: String, minimum_hooks: Integer)
 		if qbe != nil
 			fixture := root + "/compiler/conformance/valid/" + name
 			mut state := logical_checked_source(array_mir_test_read(fixture + ".trb"))
-			checked := check(state)
-			if !checked
-				puts(name + ": " + load_string(state.diagnostics.messages, 0))
-			end
-			expect(checked).to_be_true()
+			expect_compiler_phase(state, name + ": check", check(state))
 			expect(state.scalar_mir.functions.size()).to_equal(state.declarations.function_count[0])
 			before := control_test_output(emit_qbe(state))
 			if has_diagnostic(state)
