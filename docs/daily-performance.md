@@ -128,6 +128,18 @@ Filesystem caches stay warm, swap is disabled, and measurements do not run
 concurrently on the measurement host. Warmup in a separate process does not
 warm a later process's JIT or heap.
 
+Every successful application build, including the warmup, retains its complete
+output in the evidence artifact before the next build can overwrite it. Raw
+build observations record its SHA-256, byte count and path relative to the
+measurement directory under `artifacts/sha256/`. Identical bytes share a stored
+file; differing outputs remain separate, without normalization. Retention runs
+outside the timed interval and a storage failure aborts snapshot publication.
+Failed builds retain their original logs and status without borrowing an earlier
+build's artifact. Runtime and GC observations identify the final build's
+unstripped executable; `program.stripped` is a separate size-only copy. This
+provenance does not change measurement or classification, and older snapshots
+without these fields remain readable.
+
 After workload measurement, the current Native compiler emits QBE for its
 same-revision compiler source once, recording wall/CPU time, peak RSS, byte size
 and SHA-256. It then builds that source three times (one warmup, two retained)

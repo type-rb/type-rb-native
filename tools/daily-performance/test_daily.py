@@ -78,6 +78,31 @@ def snapshot(status="measured"):
 
 
 class DailyTests(unittest.TestCase):
+    def test_retained_artifacts_survive_overwrite_and_deduplicate_exact_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            program = root / "program"
+            original = b"executable\x00debug source path one\xff"
+            changed = original.replace(b"one", b"two")
+            program.write_bytes(original)
+            first = measure.retain_artifact(program, root)
+            program.write_bytes(changed)
+            second = measure.retain_artifact(program, root)
+            self.assertNotEqual(first["path"], second["path"])
+            self.assertEqual(first["bytes"], second["bytes"])
+            program.unlink()
+            for artifact, data in ((first, original), (second, changed)):
+                self.assertEqual((root / artifact["path"]).read_bytes(), data)
+                self.assertEqual(artifact["sha256"], hashlib.sha256(data).hexdigest())
+                self.assertEqual(artifact["bytes"], len(data))
+                self.assertFalse(Path(artifact["path"]).is_absolute())
+            program.write_bytes(original)
+            self.assertEqual(measure.retain_artifact(program, root), first)
+            self.assertEqual(len(list((root / "artifacts/sha256").iterdir())), 2)
+            (root / first["path"]).write_bytes(b"damaged retained output")
+            with self.assertRaisesRegex(ValueError, "Retained artifact differs"):
+                measure.retain_artifact(program, root)
+
     def preparation_fixture(self, root):
         """Run the real controller against source revisions and executable seeds."""
         repository = root / "repository"
@@ -440,51 +465,97 @@ exec "$@"
                 self.assertTrue(expected.endswith(b"\n"))
                 self.assertTrue((Path(directory) / "src/main.trb").exists())
 
-    def test_simulated_run_produces_a_valid_snapshot_for_every_registered_case(self):
-        suite = state.read(state.ROOT / "tools/daily-performance/suite.json")
+    def simulated_run(self, root, fail_build=None):
+        """Exercise the real recorder without compiling or timing workloads."""
+        root = root.resolve()
         def observe(command, directory, timeout, cwd=None, env=None, core=None):
             directory.mkdir(parents=True, exist_ok=False)
             arguments = list(map(str, command))
+            status = "pass"
             if arguments[1:2] == ["emit-qbe"]:
                 (directory / "stdout").write_bytes(b"function l $main() {}\n")
             elif "--output" in arguments or "--outfile" in arguments or arguments[1:2] == ["build"]:
                 output = arguments[arguments.index("--output" if "--output" in arguments else
                                                    "--outfile" if "--outfile" in arguments else "-o") + 1]
-                Path(output).write_bytes(b"program")
-                (directory / "stdout").write_bytes(b"")
+                self.assertFalse(Path(output).exists(), "A build must not reuse stale output")
+                data = b"program"
+                if directory.parent.name == "typerb-go":
+                    data += directory.name.encode()
+                Path(output).write_bytes(data)
+                # The reference CLI's ordinary success message is permitted.
+                (directory / "stdout").write_bytes(b"Built\n" if "--outfile" in arguments else b"")
+                if directory.relative_to(root / "evidence").as_posix() == fail_build:
+                    status = "nonzero-exit"
             else:
+                data = b"programbuild-3" if directory.parent.name == "typerb-go" else b"program"
+                self.assertEqual(Path(arguments[0]).read_bytes(), data)
+                self.assertFalse(arguments[0].endswith(".stripped"))
                 (directory / "stdout").write_bytes((Path(arguments[0]).parent.parent / "expected").read_bytes())
-            (directory / "stderr").write_bytes(b"")
-            record = {"command": arguments, "timeoutSeconds": timeout, "status": "pass", "wallSeconds": .5,
-                      "exitCode": 0, "cpuSeconds": .4, "memoryBytes": 4096}
+            (directory / "stderr").write_bytes(b"build failed\n" if status != "pass" else b"")
+            record = {"command": arguments, "timeoutSeconds": timeout, "status": status, "wallSeconds": .5,
+                      "exitCode": 1 if status != "pass" else 0, "cpuSeconds": .4, "memoryBytes": 4096}
             state.write(directory / "observation.json", record)
             return record
         def check_output(command, *args, **kwargs):
             return b"go version go1.27 linux/arm64" if command[:2] == ["/usr/bin/go", "version"] or command == ["go", "version"] else b"host"
+        def strip(command, **_kwargs):
+            self.assertEqual(command[:2], ["strip", "--strip-all"])
+            Path(command[2]).write_bytes(b"stripped")
+        compilers = {role: {"revision": "a" * 40, "path": str(root / role)}
+                     for role in ("native", "previous", "baseline", "typerb-go")}
+        for role in [*compilers, "go", "qbe"]:
+            (root / role).write_bytes(role.encode())
+        source = root / ("a" * 40) / "source/compiler/src/compiler.trb"
+        source.parent.mkdir(parents=True)
+        source.write_text("def main()\nend\n")
+        state.write(root / "compilers.json", compilers)
+        arguments = Namespace(compilers=root / "compilers.json", qbe=root / "qbe",
+                              evidence=root / "evidence", output=root / "snapshot.json")
+        with patch.object(measure.platform, "system", return_value="Linux"), \
+             patch.object(measure.platform, "machine", return_value="aarch64"), \
+             patch.object(measure.platform, "platform", return_value="Linux-aarch64"), \
+             patch.object(measure.os, "sched_getaffinity", return_value={0}, create=True), \
+             patch.object(measure.shutil, "which", return_value=str(root / "go")), \
+             patch.object(measure.subprocess, "check_output", side_effect=check_output), \
+             patch.object(measure.subprocess, "run", side_effect=strip), \
+             patch.object(measure, "observe", side_effect=observe), \
+             patch.object(measure, "git", return_value="a" * 40), \
+             patch("builtins.print"):
+            measure.run(arguments)
+        return state.read(root / "snapshot.json")
+
+    def test_simulated_run_produces_a_valid_snapshot_for_every_registered_case(self):
+        suite = state.read(state.ROOT / "tools/daily-performance/suite.json")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            compilers = {role: {"revision": "a" * 40, "path": str(root / role)}
-                         for role in ("native", "previous", "baseline", "typerb-go")}
-            for role in [*compilers, "go", "qbe"]:
-                (root / role).write_bytes(role.encode())
-            source = root / ("a" * 40) / "source/compiler/src/compiler.trb"
-            source.parent.mkdir(parents=True)
-            source.write_text("def main()\nend\n")
-            state.write(root / "compilers.json", compilers)
-            arguments = type("Arguments", (), {"compilers": root / "compilers.json", "qbe": root / "qbe",
-                                               "evidence": root / "evidence", "output": root / "snapshot.json"})
-            with patch.object(measure.platform, "system", return_value="Linux"), \
-                 patch.object(measure.platform, "machine", return_value="aarch64"), \
-                 patch.object(measure.platform, "platform", return_value="Linux-aarch64"), \
-                 patch.object(measure.os, "sched_getaffinity", return_value={0}, create=True), \
-                 patch.object(measure.shutil, "which", return_value=str(root / "go")), \
-                 patch.object(measure.subprocess, "check_output", side_effect=check_output), \
-                 patch.object(measure.subprocess, "run"), \
-                 patch.object(measure, "observe", side_effect=observe), \
-                 patch.object(measure, "git", return_value="a" * 40), \
-                 patch("builtins.print"):
-                measure.run(arguments)
-            result = state.read(root / "snapshot.json")
+            result = self.simulated_run(root)
+            evidence = root / "evidence"
+            raw = state.read(evidence / "raw.json")
+            # Four distinct reference builds and one shared Native/Go output.
+            self.assertEqual(len(list((evidence / "artifacts/sha256").iterdir())), 5)
+            for row in result["rows"]:
+                observations = [item for item in raw if (item.get("case"), item.get("role")) ==
+                                (row["case"], row["role"])]
+                builds = [item for item in observations if item["kind"] == "build"]
+                runtimes = [item for item in observations if item["kind"] == "runtime"]
+                self.assertEqual(len(builds), 4)
+                self.assertEqual(len(runtimes), suite["warmups"] + suite["samples"])
+                self.assertEqual(builds[0]["phase"], "warmup")
+                self.assertEqual(row["runtimeArtifact"], builds[-1]["artifact"])
+                self.assertEqual(row["artifactSha256"], builds[-1]["artifact"]["sha256"])
+                self.assertEqual(row["artifactBytes"], builds[-1]["artifact"]["bytes"])
+                self.assertEqual(row["strippedBytes"], len(b"stripped"))
+                for kind, records in (("build", builds), ("runtime", runtimes)):
+                    for index, record in enumerate(records):
+                        data = (evidence / record["artifact"]["path"]).read_bytes()
+                        expected = b"program"
+                        if row["role"] == "typerb-go":
+                            expected += f"build-{index if kind == 'build' else 3}".encode()
+                        self.assertEqual(data, expected)
+                        self.assertEqual(record["artifact"]["sha256"], hashlib.sha256(data).hexdigest())
+                        self.assertEqual(record["wallSeconds"], .5)
+                        saved = evidence / row["case"] / row["role"] / f"{kind}-{index}" / "observation.json"
+                        self.assertEqual(state.read(saved), record)
         state.validate({**state.empty(), "latest": result})
         self.assertEqual(result["status"], "measured")
         self.assertEqual(result["compilerSelf"]["status"], "pass")
@@ -493,6 +564,43 @@ exec "$@"
         self.assertTrue(kernels)
         self.assertFalse(any(row["role"] == "baseline" and row["case"] in kernels for row in result["rows"]))
         self.assertTrue(all(row.get("family") for row in result["rows"] if row["case"] in kernels))
+
+    def test_failed_build_cannot_borrow_an_earlier_artifact_or_run(self):
+        case = state.read(state.ROOT / "tools/daily-performance/suite.json")["cases"][0]["id"]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = self.simulated_run(root, fail_build=f"{case}/typerb-go/build-1")
+            row = next(row for row in result["rows"] if row["case"] == case and row["role"] == "typerb-go")
+            self.assertEqual(result["status"], "measured-with-failures")
+            self.assertEqual(row["status"], "nonzero-exit")
+            self.assertIsNone(row["build"])
+            self.assertIsNone(row["runtime"])
+            self.assertNotIn("runtimeArtifact", row)
+            evidence = root / "evidence"
+            records = [record for record in state.read(evidence / "raw.json")
+                       if record.get("case") == case and record.get("role") == "typerb-go"]
+            self.assertEqual(len(records), 2)
+            self.assertIn("artifact", records[0])
+            self.assertNotIn("artifact", records[1])
+            self.assertEqual(state.read(evidence / case / "typerb-go/build-1/observation.json"), records[1])
+            self.assertEqual((evidence / case / "typerb-go/build-1/stderr").read_bytes(), b"build failed\n")
+        state.validate({**state.empty(), "latest": result})
+
+    def test_retention_failure_preserves_observation_without_publishing_snapshot(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch.object(measure, "retain_artifact", side_effect=OSError("storage unavailable")):
+                with self.assertRaisesRegex(OSError, "storage unavailable"):
+                    self.simulated_run(root)
+            self.assertFalse((root / "snapshot.json").exists())
+            observations = list((root / "evidence").rglob("observation.json"))
+            self.assertEqual(len(observations), 1)
+            record = state.read(observations[0])
+            self.assertEqual(record["kind"], "build")
+            self.assertEqual(record["phase"], "warmup")
+            self.assertNotIn("artifact", record)
+            self.assertTrue(observations[0].with_name("stdout").exists())
+            self.assertTrue(observations[0].with_name("stderr").exists())
 
     @unittest.skipUnless(platform.system() == "Linux", "GNU time is Linux-specific")
     def test_real_timeout_and_output_mismatch(self):
