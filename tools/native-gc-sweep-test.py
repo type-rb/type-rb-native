@@ -15,15 +15,17 @@ decoded = '\n'.join(json.loads(s) for name in ['system.trb', 'managed_storage.tr
                     for s in re.findall(r'"(?:[^"\\]|\\.)*"', (root / name).read_text()))
 bodies = []
 for name in ['trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert',
-             'trbn_storage_unlink', 'trbn_gc_sweep', 'trbn_gc_mark', 'trbn_gc_scan_fixed', 'trbn_gc_scan_array']:
+             'trbn_storage_unlink', 'trbn_array_buffer_new', 'trbn_array_buffer_free',
+             'trbn_gc_sweep', 'trbn_gc_mark', 'trbn_gc_scan_fixed', 'trbn_gc_scan_array']:
     matches = re.findall(r'^function (?:l )?\$' + name + r'\([^\n]*\) \{.*?^\}', decoded, re.M | re.S)
     assert len(matches) == 1, name
     body = matches[0]
     if name == 'trbn_gc_sweep':
-        body = body.replace('call $free(', 'call $observe_free(')
+        body = body.replace('call $trbn_array_buffer_free(', 'call $observe_buffer_free(')
         body = body.replace('call $trbn_storage_free(', 'call $observe_object_free(')
     else:
         body = body.replace('call $malloc(', 'call $observe_malloc(')
+        body = body.replace('call $calloc(', 'call $observe_calloc(')
         body = body.replace('call $free(', 'call $observe_storage_free(')
     bodies.append('export ' + body)
 storage = re.findall(r'^data \$trbn_storage_available = [^\n]+', decoded, re.M)
@@ -37,6 +39,8 @@ observer = r'''
 #include <string.h>
 extern void *trbn_storage_alloc(int64_t);
 extern void trbn_storage_free(void *, int64_t);
+extern void *trbn_array_buffer_new(int64_t);
+extern void trbn_array_buffer_free(void *, int64_t);
 extern void trbn_gc_sweep(void);
 extern void trbn_gc_mark(void *);
 void *trbn_gc_heap;
@@ -57,6 +61,9 @@ static size_t expected_releases, released, storage_blocks;
 void *observe_malloc(size_t size) {
     void *p = malloc(size); assert(p); ++storage_blocks; return p;
 }
+void *observe_calloc(size_t count, size_t size) {
+    void *p = calloc(count, size); assert(p); ++storage_blocks; return p;
+}
 void observe_storage_free(void *p) { assert(storage_blocks); --storage_blocks; free(p); }
 void observe_object_free(void *pointer, int64_t size) {
     assert(released < expected_releases && pointer == release_order[released++]);
@@ -65,16 +72,16 @@ void observe_object_free(void *pointer, int64_t size) {
 static void *zero_object(size_t size) {
     void *p = trbn_storage_alloc(size); assert(p); memset(p, 0, size); return p;
 }
-void observe_free(void *pointer) {
+void observe_buffer_free(void *pointer, int64_t capacity) {
     assert(released < expected_releases);
     assert(pointer == release_order[released++]);
-    free(pointer);
+    trbn_array_buffer_free(pointer, capacity);
 }
 static void snapshot(struct allocation *a) {
     assert(a->bytes - 16 <= sizeof a->payload);
     memcpy(a->payload, a->base + 2, a->bytes - 16);
 }
-static size_t prepare(int reverse, int references) {
+static size_t prepare(int reverse, int references, int large) {
     size_t total = 0;
     trbn_gc_heap = NULL;
     for (unsigned i = 0; i < 8; ++i) {
@@ -91,11 +98,11 @@ static size_t prepare(int reverse, int references) {
             a->base = zero_object(a->bytes);
             a->base[4] = 0x1234;
         } else {
-            size_t capacity = i == 5 ? 0 : i == 6 ? 3 : 2;
+            size_t capacity = i == 5 ? (large ? 9 : 0) : i == 6 ? (large ? 5 : 3) : 2;
             a->descriptor = i == 7 ? managed_array_descriptor : scalar_array_descriptor;
             a->bytes = 40; a->backing_bytes = capacity * sizeof(uintptr_t);
             a->base = zero_object(a->bytes);
-            if (capacity) { a->backing = calloc(capacity, sizeof(uintptr_t)); assert(a->backing); }
+            if (capacity) { a->backing = trbn_array_buffer_new(capacity); assert(a->backing); }
             a->base[2] = capacity; a->base[3] = capacity;
             a->base[4] = (uintptr_t)a->backing;
         }
@@ -156,8 +163,8 @@ int main(void) {
     trbn_gc_reclaimed_bytes = 8192;
     sweep(0, 0, 0);
     for (int reverse = 0; reverse < 2; ++reverse) {
-        for (unsigned keep = 0; keep < 256; ++keep) {
-            size_t total = prepare(reverse, 0);
+        for (int large = 0; large < 2; ++large) for (unsigned keep = 0; keep < 256; ++keep) {
+            size_t total = prepare(reverse, 0, large);
             trbn_gc_mark(NULL); trbn_gc_mark(literal);
             assert(literal[0] == 0);
             for (unsigned i = 0; i < 8; ++i)
@@ -171,7 +178,7 @@ int main(void) {
             assert(trbn_gc_reclaimed_bytes == 8192 + (int64_t)total);
             sweep(0, 0, reverse);
         }
-        size_t total = prepare(reverse, 1);
+        size_t total = prepare(reverse, 1, 1);
         trbn_gc_mark(objects[3].base + 1);
         trbn_gc_mark(objects[6].base + 1);
         unsigned keep = (1u << 0) | (1u << 3) | (1u << 6) | (1u << 7);

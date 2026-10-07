@@ -19,11 +19,14 @@ decoded = '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', sour
 data = re.findall(r'^data \$trbn_storage_available = [^\n]+', decoded, re.M)
 assert len(data) == 1
 bodies = ['export ' + data[0]]
-for name in ['trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert', 'trbn_storage_unlink']:
+for name in ['trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert', 'trbn_storage_unlink',
+             'trbn_array_buffer_new', 'trbn_array_buffer_free', 'trbn_array_buffer_grow']:
     matches = re.findall(r'^function (?:l )?\$' + name + r'\([^\n]*\) \{.*?^\}', decoded, re.M | re.S)
     assert len(matches) == 1, name
     bodies.append('export ' + matches[0].replace('call $malloc(', 'call $guard_malloc(')
-                  .replace('call $free(', 'call $guard_free('))
+                  .replace('call $free(', 'call $guard_free(')
+                  .replace('call $calloc(', 'call $guard_calloc(')
+                  .replace('call $realloc(', 'call $guard_realloc('))
 observer = r'''
 #include <assert.h>
 #include <stdint.h>
@@ -33,6 +36,9 @@ observer = r'''
 extern void *trbn_storage_alloc(int64_t);
 extern void trbn_storage_free(void *, int64_t);
 extern uintptr_t trbn_storage_available[7];
+extern void *trbn_array_buffer_new(int64_t);
+extern void trbn_array_buffer_free(void *, int64_t);
+extern void *trbn_array_buffer_grow(void *, int64_t, int64_t);
 #define LIMIT 2048
 struct block { unsigned char *base; size_t size; };
 struct object { unsigned char *base; size_t size; unsigned char pattern; };
@@ -67,6 +73,27 @@ void guard_free(void *pointer) {
         return;
     }
     abort(); /* Reject an interior, stale or duplicate system free. */
+}
+static size_t calloc_count, calloc_size, reallocations;
+void *guard_calloc(size_t count, size_t size) {
+    calloc_count = count; calloc_size = size;
+    if (size && count > SIZE_MAX / size) return NULL;
+    void *p = guard_malloc(count * size);
+    if (p) memset(p, 0, count * size);
+    return p;
+}
+void *guard_realloc(void *pointer, size_t size) {
+    ++reallocations;
+    for (unsigned i = 0; i < LIMIT; ++i) if (blocks[i].base == pointer) {
+        size_t old = blocks[i].size;
+        guard(&blocks[i]);
+        void *p = guard_malloc(size);
+        if (!p) return NULL;
+        memcpy(p, pointer, old < size ? old : size);
+        guard_free(pointer);
+        return p;
+    }
+    abort(); /* A pooled interior pointer must never reach system realloc. */
 }
 static void check_object(struct object *o) {
     assert((uintptr_t)o->base % 8 == 0);
@@ -143,6 +170,68 @@ static void empty(void) {
     check(); assert(allocations == releases);
     for (unsigned i = 0; i < 7; ++i) assert(!trbn_storage_available[i]);
 }
+static void array_buffers(void) {
+    for (int64_t capacity = 0; capacity <= 12; ++capacity) {
+        unsigned char *p = trbn_array_buffer_new(capacity); assert(p);
+        for (int64_t i = 0; i < capacity * 8; ++i) assert(p[i] == 0);
+        if (capacity < 2 || capacity > 8) {
+            assert(calloc_count == (size_t)capacity && calloc_size == 8);
+        } else {
+            uintptr_t *page = (uintptr_t *)((uintptr_t *)p)[-1];
+            assert(page[5] == 1 && page[6] == (uintptr_t)(capacity * 8 + 8));
+        }
+        trbn_array_buffer_free(p, capacity); empty();
+    }
+    int64_t invalid[] = {-1, INT64_MIN, INT64_MAX, (INT64_C(1) << 61) + 4};
+    for (unsigned i = 0; i < sizeof invalid / sizeof *invalid; ++i) {
+        assert(!trbn_array_buffer_new(invalid[i]));
+        assert(calloc_count == (size_t)invalid[i] && calloc_size == 8);
+        empty(); /* Overflow must not wrap into a 32-byte pool cell. */
+    }
+    fail_allocation = 1;
+    for (int64_t capacity = 2; capacity <= 8; ++capacity)
+        assert(!trbn_array_buffer_new(capacity));
+    fail_allocation = 0; empty();
+    for (int64_t capacity = 1; capacity <= 12; ++capacity) {
+        for (int factor = 2; factor <= 4; factor += 2) {
+            unsigned char *p = trbn_array_buffer_new(capacity); assert(p);
+            memset(p, 0xb6, capacity * 8);
+            size_t before = allocations, freed = releases, resized = reallocations;
+            fail_allocation = 1;
+            assert(!trbn_array_buffer_grow(p, capacity, capacity * factor));
+            assert(allocations == before && releases == freed);
+            for (int64_t i = 0; i < capacity * 8; ++i) assert(p[i] == 0xb6);
+            fail_allocation = 0;
+            unsigned char *q = trbn_array_buffer_grow(p, capacity, capacity * factor); assert(q);
+            for (int64_t i = 0; i < capacity * 8; ++i) assert(q[i] == 0xb6);
+            memset(q, 0xcd, capacity * factor * 8);
+            int direct = capacity > 8;
+            assert(reallocations - resized == (size_t)(direct ? 2 : 0));
+            trbn_array_buffer_free(q, capacity * factor); empty();
+        }
+    }
+    /* A raw 40-byte buffer and managed 40-byte header can share one page.
+       Releasing either must not invalidate the other, and recycled buffers
+       must clear both stale values and the allocator free-list link. */
+    put(0, 40);
+    unsigned char *p = trbn_array_buffer_new(5); assert(p);
+    assert(((uintptr_t *)p)[-1] == ((uintptr_t *)objects[0].base)[-1]);
+    memset(p, 0xbc, 40); trbn_array_buffer_free(p, 5); check_object(&objects[0]);
+    unsigned char *q = trbn_array_buffer_new(5); assert(p == q);
+    for (unsigned i = 0; i < 40; ++i) assert(q[i] == 0);
+    drop(0); memset(q, 0xab, 40); trbn_array_buffer_free(q, 5); empty();
+    unsigned char *buffers[500];
+    for (unsigned i = 0; i < 500; ++i) {
+        buffers[i] = trbn_array_buffer_new(4); assert(buffers[i]);
+        for (unsigned j = 0; j < 32; ++j) assert(buffers[i][j] == 0);
+        memset(buffers[i], (int)(i % 251 + 1), 32);
+    }
+    for (unsigned i = 0; i < 500; ++i) {
+        for (unsigned j = 0; j < 32; ++j) assert(buffers[i][j] == (unsigned char)(i % 251 + 1));
+        trbn_array_buffer_free(buffers[i], 4);
+    }
+    empty();
+}
 int main(void) {
     /* Every byte-size boundary, three full pages plus a partial page, then
        full-to-available reuse and head/interior/last page removal. */
@@ -189,6 +278,7 @@ int main(void) {
     assert(!trbn_storage_alloc(16)); check();
     drop(73); put(73, 16); check(); /* Reuse needs no system allocation. */
     fail_allocation = 0; empty();
+    array_buffers();
     puts("Managed storage boundaries, guarded reuse, sparse pages and failures passed");
 }
 '''
