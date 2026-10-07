@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Check mixed-object sweep accounting, survivor links and backing-store release."""
 import argparse
-import json
 from pathlib import Path
 import re
 import subprocess
@@ -9,10 +8,16 @@ import tempfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--qbe', type=Path, required=True)
+parser.add_argument('--compiler', type=Path, required=True)
 args = parser.parse_args()
-root = Path(__file__).resolve().parent.parent / 'compiler/src/backend/qbe/runtime'
-decoded = '\n'.join(json.loads(s) for name in ['system.trb', 'managed_storage.trb']
-                    for s in re.findall(r'"(?:[^"\\]|\\.)*"', (root / name).read_text()))
+with tempfile.TemporaryDirectory(prefix='native-storage-emission-') as temporary:
+    source = Path(temporary) / 'main.trb'
+    source.write_text('def main()\nputs("storage")\nend\n')
+    emitted = subprocess.run([str(args.compiler.resolve()), 'emit-qbe', str(source)],
+                             check=True, capture_output=True, timeout=30)
+    assert emitted.stderr == b'', emitted
+    decoded = emitted.stdout.decode()
+
 bodies = []
 for name in ['trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert',
              'trbn_storage_unlink', 'trbn_gc_sweep', 'trbn_gc_mark', 'trbn_gc_scan_fixed', 'trbn_gc_scan_array']:
@@ -20,8 +25,12 @@ for name in ['trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert',
     assert len(matches) == 1, name
     body = matches[0]
     if name == 'trbn_gc_sweep':
-        body = body.replace('call $free(', 'call $observe_free(')
-        body = body.replace('call $trbn_storage_free(', 'call $observe_object_free(')
+        assert 'call $trbn_storage_free(' not in body
+        body = body.replace('call $free(l %data)', 'call $observe_free(l %data)')
+        body = body.replace('call $free(', 'call $observe_storage_free(')
+        marker = '\t%storage_release_base =l copy %current'
+        assert body.count(marker) == 1
+        body = body.replace(marker, 'call $observe_object_release(l %current, l %size)\n' + marker)
     else:
         body = body.replace('call $malloc(', 'call $observe_malloc(')
         body = body.replace('call $free(', 'call $observe_storage_free(')
@@ -54,13 +63,24 @@ struct allocation {
 static struct allocation objects[8];
 static void *release_order[16];
 static size_t expected_releases, released, storage_blocks;
+static int64_t expected_heap, expected_reclaimed;
 void *observe_malloc(size_t size) {
     void *p = malloc(size); assert(p); ++storage_blocks; return p;
 }
 void observe_storage_free(void *p) { assert(storage_blocks); --storage_blocks; free(p); }
-void observe_object_free(void *pointer, int64_t size) {
+void observe_object_release(void *pointer, int64_t size) {
     assert(released < expected_releases && pointer == release_order[released++]);
-    trbn_storage_free(pointer, size);
+    unsigned found = 0;
+    for (unsigned i = 0; i < 8; ++i) if (objects[i].base == pointer) {
+        assert(size == (int64_t)objects[i].bytes); ++found;
+    }
+    assert(found == 1);
+    expected_heap -= size; expected_reclaimed += size;
+    assert(trbn_gc_heap_bytes == expected_heap && trbn_gc_reclaimed_bytes == expected_reclaimed);
+    unsigned traversed = 0;
+    for (uintptr_t *entry = trbn_gc_heap; entry; entry = (uintptr_t *)entry[0]) {
+        assert(++traversed <= 8 && entry != pointer); /* Unlink before storage release. */
+    }
 }
 static void *zero_object(size_t size) {
     void *p = trbn_storage_alloc(size); assert(p); memset(p, 0, size); return p;
@@ -68,6 +88,13 @@ static void *zero_object(size_t size) {
 void observe_free(void *pointer) {
     assert(released < expected_releases);
     assert(pointer == release_order[released++]);
+    unsigned found = 0;
+    for (unsigned i = 0; i < 8; ++i) if (objects[i].backing == pointer) {
+        expected_heap -= (int64_t)objects[i].backing_bytes;
+        expected_reclaimed += (int64_t)objects[i].backing_bytes; ++found;
+    }
+    assert(found == 1);
+    assert(trbn_gc_heap_bytes == expected_heap && trbn_gc_reclaimed_bytes == expected_reclaimed);
     free(pointer);
 }
 static void snapshot(struct allocation *a) {
@@ -135,6 +162,7 @@ static size_t sweep(unsigned present, unsigned keep, int reverse) {
         }
     }
     int64_t before_heap = trbn_gc_heap_bytes, before_reclaimed = trbn_gc_reclaimed_bytes;
+    expected_heap = before_heap; expected_reclaimed = before_reclaimed;
     trbn_gc_sweep();
     assert(released == expected_releases);
     assert(trbn_gc_heap_bytes == before_heap - (int64_t)reclaimed);

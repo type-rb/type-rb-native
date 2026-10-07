@@ -5,7 +5,6 @@ QBE loads/stores are not sanitizer-instrumented. These checks independently
 validate live bytes, owner prefixes, backing bounds and immediate page release.
 """
 import argparse
-import json
 from pathlib import Path
 import re
 import subprocess
@@ -13,9 +12,16 @@ import tempfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--qbe', type=Path, required=True)
+parser.add_argument('--compiler', type=Path, required=True)
 args = parser.parse_args()
-source = Path(__file__).resolve().parent.parent / 'compiler/src/backend/qbe/runtime/managed_storage.trb'
-decoded = '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', source.read_text()))
+with tempfile.TemporaryDirectory(prefix='native-storage-emission-') as temporary:
+    source = Path(temporary) / 'main.trb'
+    source.write_text('def main()\nputs("storage")\nend\n')
+    emitted = subprocess.run([str(args.compiler.resolve()), 'emit-qbe', str(source)],
+                             check=True, capture_output=True, timeout=30)
+    assert emitted.stderr == b'', emitted
+    decoded = emitted.stdout.decode()
+
 data = re.findall(r'^data \$trbn_storage_available = [^\n]+', decoded, re.M)
 assert len(data) == 1
 bodies = ['export ' + data[0]]
@@ -24,6 +30,17 @@ for name in ['trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert', '
     assert len(matches) == 1, name
     bodies.append('export ' + matches[0].replace('call $malloc(', 'call $guard_malloc(')
                   .replace('call $free(', 'call $guard_free('))
+# Exercise the exact sweep expansion through the same guarded byte-size corpus.
+sweep = re.findall(r'^function \$trbn_gc_sweep\(\) \{.*?^\}', decoded, re.M | re.S)
+assert len(sweep) == 1
+release_pattern = r'(\t%storage_release_span =l sub .*?\n@storage_release_done)\n'
+release = re.findall(release_pattern, sweep[0], re.S)
+assert len(release) == 1
+standalone = re.findall(r'^function \$trbn_storage_free\([^\n]*\) \{.*?^\}', decoded, re.M | re.S)[0]
+assert re.findall(release_pattern, standalone, re.S) == release
+release = release[0] + '\n'
+bodies.append('export function $inline_storage_free(l %storage_release_base, l %storage_release_size) {\n@start\n'
+              + release.replace('call $free(', 'call $guard_free(') + '\tret\n}')
 observer = r'''
 #include <assert.h>
 #include <stdint.h>
@@ -32,6 +49,8 @@ observer = r'''
 #include <string.h>
 extern void *trbn_storage_alloc(int64_t);
 extern void trbn_storage_free(void *, int64_t);
+extern void inline_storage_free(void *, int64_t);
+static void (*release_storage)(void *, int64_t);
 extern uintptr_t trbn_storage_available[7];
 #define LIMIT 2048
 struct block { unsigned char *base; size_t size; };
@@ -90,7 +109,7 @@ static void put(unsigned index, size_t size) {
 }
 static void drop(unsigned index) {
     struct object *o = &objects[index]; assert(o->base); check_object(o);
-    trbn_storage_free(o->base, o->size); o->base = NULL;
+    release_storage(o->base, o->size); o->base = NULL;
 }
 static void check(void) {
     unsigned live_blocks = 0;
@@ -143,7 +162,9 @@ static void empty(void) {
     check(); assert(allocations == releases);
     for (unsigned i = 0; i < 7; ++i) assert(!trbn_storage_available[i]);
 }
-int main(void) {
+int main(int argc, char **argv) {
+    (void)argv;
+    release_storage = argc > 1 ? inline_storage_free : trbn_storage_free;
     /* Every byte-size boundary, three full pages plus a partial page, then
        full-to-available reuse and head/interior/last page removal. */
     for (size_t size = 16; size <= 64; ++size) {
@@ -198,7 +219,7 @@ with tempfile.TemporaryDirectory(prefix='native-managed-storage-') as temporary:
     (root / 'observer.c').write_text(observer)
     for command in [[str(args.qbe.resolve()), '-o', str(root / 'runtime.s'), str(root / 'runtime.ssa')],
                     ['/usr/bin/cc', '-O2', str(root / 'runtime.s'), str(root / 'observer.c'), '-o', str(root / 'probe')],
-                    [str(root / 'probe')]]:
+                    [str(root / 'probe')], [str(root / 'probe'), 'inline']]:
         result = subprocess.run(command, capture_output=True, timeout=30)
         assert result.returncode == 0 and result.stderr == b'', result
 print('Managed storage guarded allocation and lifecycle checks passed')
