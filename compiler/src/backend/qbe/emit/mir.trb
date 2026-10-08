@@ -1,9 +1,10 @@
+import { emit_mir_object_instruction } from backend/qbe/emit/objects
 import { emit_mir_call } from backend/qbe/emit/calls
 import { mir_storage_type_name } from mir/model/types
 import { integer_string, number_without_underscores } from support/literals
 import { MirInstruction, MirNumericPlan, mir_block_index, mir_function_index } from mir/model/module
 import { mir_numeric_operation } from mir/analysis/numeric
-import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emitted_value } from backend/qbe/context
+import { QbeEmitContext, QbeValue, emit_address, emit_label, emit_temporary, emitted_value, qbe_type } from backend/qbe/context
 import { emit_checked_integer_operation, lower_binary_operand } from backend/qbe/emit/numeric
 import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
 import { CompilerState } from state/state
@@ -111,30 +112,42 @@ def emit_scalar_mir_body(
 		mut output: QbeOutput,
 		safe: Boolean,
 	): QbeValue
+	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, function_index)]
 	mut operands: Array<String> := []
 	mut types: Array<String> := []
-	mut index := 0
-	while index < argument_operands.size()
-		operands.push(argument_operands[index])
-		types.push(argument_types[index])
-		index += 1
-	end
+	mut value_types: Array<Integer> := []
 	state.scalar_mir.values.each do |value|
-		if value.function_id == function_index && value.id >= argument_types.size()
-			while types.size() <= value.id
+		if value.function_id == function_index
+			while operands.size() <= value.id
+				operands.push("")
 				types.push("")
+				value_types.push(0)
 			end
 			types[value.id] = mir_storage_type_name(state.scalar_mir, value.type_id)
+			value_types[value.id] = value.type_id
 		end
 	end
-	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, function_index)]
+	mut index := 0
+	while index < argument_operands.size()
+		id := state.scalar_mir.arguments[function.parameter_start + index]
+		operands[id] = argument_operands[index]
+		types[id] = argument_types[index]
+		index += 1
+	end
 	block := state.scalar_mir.blocks[mir_block_index(state.scalar_mir, function, function.entry_block)]
 	index = block.instruction_start
 	finish := index + block.instruction_count
 	while index < finish
 		instruction := state.scalar_mir.instructions[index]
-		result := emit_mir_scalar_instruction(state, function_index, instruction, operands, types, mir_numeric_operation(plan, index), context, output, safe)
-		operands.push(result.operand)
+		mut result := emitted_value("", "Void")
+		if instruction.kind == 64 || instruction.kind == 65
+			result = emit_mir_object_instruction(state, value_types, instruction, operands, context, output)
+		else
+			result = emit_mir_scalar_instruction(state, function_index, instruction, operands, types, mir_numeric_operation(plan, index), context, output, safe)
+		end
+		if instruction.result >= 0
+			operands[instruction.result] = result.operand
+		end
 		index += 1
 	end
 	return emitted_value(operands[block.return_value], types[block.return_value])
@@ -182,4 +195,55 @@ def emit_scalar_mir(
 	qbe_output_line(output, "\t" + result + " =" + width + " copy " + unchecked.operand)
 	qbe_output_line(output, complete)
 	return emitted_value(result, checked.type_name)
+end
+
+# Selection and receiver ownership have already been independently verified in
+# MIR. These guards test exact witness tables and preserve the original call.
+def emit_guarded_interface_mir(
+		state: CompilerState,
+		instruction: MirInstruction,
+		operands: Array<String>,
+		types: Array<String>,
+		plans: Array<MirNumericPlan>,
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+	): QbeValue
+	call := state.scalar_mir.calls[instruction.payload]
+	mut arguments: Array<String> := []
+	mut argument_types: Array<String> := []
+	mut argument := 0
+	while argument < call.argument_count
+		id := state.scalar_mir.arguments[call.argument_start + argument]
+		arguments.push(operands[id])
+		argument_types.push(types[id])
+		argument += 1
+	end
+	table_slot := emit_address(context, output, arguments[0], 16)
+	table := emit_temporary(context)
+	qbe_output_line(output, "\t" + table + " =l loadl " + table_slot)
+	receiver_slot := emit_address(context, output, arguments[0], 8)
+	receiver := emit_temporary(context)
+	qbe_output_line(output, "\t" + receiver + " =l loadl " + receiver_slot)
+	arguments[0] = receiver
+	argument_types[0] = "Address"
+	result := emit_temporary(context)
+	complete := emit_label(context)
+	width := qbe_type(types[instruction.result])
+	plans.each do |plan|
+		valid := emit_temporary(context)
+		matched := emit_label(context)
+		next_guard := emit_label(context)
+		qbe_output_line(output, "\t" + valid + " =w ceql " + table + ", $trbn_interface_table_" + integer_string(plan.witness))
+		qbe_output_branch(output, valid, matched, next_guard)
+		qbe_output_line(output, matched)
+		value := emit_scalar_mir_body(state, plan.function_id, arguments, argument_types, plan, context, output, false)
+		qbe_output_line(output, "\t" + result + " =" + width + " copy " + value.operand)
+		qbe_output_line(output, "\tjmp " + complete)
+		qbe_output_line(output, next_guard)
+	end
+	fallback := emit_mir_call(state, instruction, operands, context, output)
+	qbe_output_line(output, "\t" + result + " =" + width + " copy " + fallback.operand)
+	qbe_output_line(output, "\tjmp " + complete)
+	qbe_output_line(output, complete)
+	return emitted_value(result, types[instruction.result])
 end
