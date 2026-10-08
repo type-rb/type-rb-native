@@ -1,4 +1,4 @@
-name: Cumulative String performance qualification
+name: Fixed pooled Array Linux qualification
 
 on:
   workflow_dispatch:
@@ -8,13 +8,13 @@ permissions:
   actions: read
 
 concurrency:
-  group: cumulative-performance
+  group: pooled-array-linux-qualification
   cancel-in-progress: false
 
 jobs:
   measure:
     # A failed cohort is evidence, not an invitation to rerun for a pass.
-    if: github.ref == 'refs/heads/main' && github.run_attempt == 1
+    if: github.ref == 'refs/heads/fix/pooled-array-linux-qualification' && github.run_attempt == 1
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 25
     steps:
@@ -22,10 +22,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Validate the registered accepted sources before preparation
+      - name: Validate the registered fixed sources before preparation
         id: sources
         run: |
-          python3 tools/cumulative-performance/qualify.py select --output "$RUNNER_TEMP/selection.json"
+          python3 tools/pooled-array-qualification/qualify.py select --output "$RUNNER_TEMP/selection.json"
           python3 - "$RUNNER_TEMP/selection.json" >> "$GITHUB_OUTPUT" <<'PY'
           import json, sys
           selection = json.load(open(sys.argv[1]))
@@ -33,7 +33,7 @@ jobs:
           print('comparison=' + selection['roles']['previous'])
           PY
 
-      - name: Check out the exact accepted measurement source
+      - name: Check out the exact fixed candidate source
         env:
           CANDIDATE: ${{ steps.sources.outputs.candidate }}
         run: git worktree add --detach "$RUNNER_TEMP/qualification-source" "$CANDIDATE"
@@ -94,7 +94,7 @@ jobs:
       - name: Assess the registered budget, identities and existing target
         if: always() && steps.sources.outcome == 'success'
         run: |
-          python3 tools/cumulative-performance/qualify.py assess \
+          python3 tools/pooled-array-qualification/qualify.py assess \
             --selection "$RUNNER_TEMP/selection.json" --snapshot "$RUNNER_TEMP/snapshot.json" \
             --raw "$RUNNER_TEMP/measurements/raw.json" --output "$RUNNER_TEMP/qualification.json"
 
@@ -102,7 +102,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: cumulative-performance-evidence
+          name: pooled-array-linux-evidence
           path: |
             ${{ runner.temp }}/selection.json
             ${{ runner.temp }}/qualification.json
