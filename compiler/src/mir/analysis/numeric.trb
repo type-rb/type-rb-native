@@ -1,3 +1,4 @@
+import { mir_numeric_interface_function, mir_numeric_interface_targets } from mir/analysis/numeric_interface
 import { integer_string } from support/literals
 import { MirFunction, MirModule, MirNumericOperation, MirNumericPlan, mir_block_index, mir_function_index, mir_value_type } from mir/model/module
 import { mir_nonnegative_value, mir_nonnegative_values } from mir/analysis/ranges
@@ -5,7 +6,7 @@ import { mir_loop_dominates } from mir/analysis/array_loops
 import { MirFlow, mir_build_flow, mir_flow_block_index, mir_flow_blocks } from mir/analysis/flow
 
 def mir_numeric_empty(): MirNumericPlan
-	return MirNumericPlan.new(function_id: -1, caller: -1, call_instruction: -1, operations: [])
+	return MirNumericPlan.new(witness: -1, function_id: -1, caller: -1, call_instruction: -1, operations: [])
 end
 
 # Storage order does not choose optimization budgets or prove loop membership.
@@ -190,7 +191,7 @@ def mir_numeric_leaf(native_module: MirModule, function: MirFunction, caller: In
 		end
 		index += 1
 	end
-	return MirNumericPlan.new(function_id: function.id, caller: caller, call_instruction: site, operations: operations)
+	return MirNumericPlan.new(witness: -1, function_id: function.id, caller: caller, call_instruction: site, operations: operations)
 end
 
 # Retain the bounded module policy, now selected from verified CFG/SSA facts.
@@ -254,6 +255,27 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 					end
 				elsif instruction.kind == 11 && loop == 0 && budget[2] > 0
 					call := native_module.calls[instruction.payload]
+					if native_module.signatures[call.callee].kind == 4
+						mut arguments: Array<Integer> := []
+						mut argument := 0
+						while argument < call.argument_count
+							mut fact := 0
+							if argument > 0 && small.key?(integer_string(native_module.arguments[call.argument_start + argument]))
+								fact = 1
+							end
+							arguments.push(fact)
+							argument += 1
+						end
+						mir_numeric_interface_targets(native_module, call.callee).each do |witness|
+							if budget[2] > 0
+								target := mir_numeric_interface_function(native_module, call.callee, witness)
+								leaf := native_module.functions[mir_function_index(native_module, target)]
+								budget[2] -= 1
+								plan := mir_numeric_leaf(native_module, leaf, function.id, position, arguments, budget)
+								plans.push(MirNumericPlan.new(witness: witness, function_id: target, caller: function.id, call_instruction: position, operations: plan.operations))
+							end
+						end
+					end
 					callee := mir_function_index(native_module, call.callee)
 					if callee >= 0 && native_module.signatures[call.callee].kind == 0
 						leaf := native_module.functions[callee]
@@ -278,7 +300,7 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 			end
 		end
 		if operations.size() > 0
-			plans.push(MirNumericPlan.new(function_id: function.id, caller: -1, call_instruction: -1, operations: operations))
+			plans.push(MirNumericPlan.new(witness: -1, function_id: function.id, caller: -1, call_instruction: -1, operations: operations))
 		end
 	end
 	return plans
@@ -292,7 +314,7 @@ def mir_numeric_plans_equal(left: Array<MirNumericPlan>, right: Array<MirNumeric
 	while index < left.size()
 		first := left[index]
 		second := right[index]
-		if first.function_id != second.function_id || first.caller != second.caller || first.call_instruction != second.call_instruction || first.operations.size() != second.operations.size()
+		if first.witness != second.witness || first.function_id != second.function_id || first.caller != second.caller || first.call_instruction != second.call_instruction || first.operations.size() != second.operations.size()
 			return false
 		end
 		mut operation := 0
@@ -309,7 +331,7 @@ end
 
 def mir_numeric_find(plans: Array<MirNumericPlan>, function: Integer, caller: Integer, site: Integer): MirNumericPlan
 	plans.each do |plan|
-		if plan.caller == caller && plan.call_instruction == site
+		if plan.witness == -1 && plan.caller == caller && plan.call_instruction == site
 			if caller >= 0 || plan.function_id == function
 				return plan
 			end
@@ -325,4 +347,15 @@ def mir_numeric_operation(plan: MirNumericPlan, instruction: Integer): Integer
 		end
 	end
 	return 0
+end
+
+# The caller retains its original call and root plan for every fallback path.
+def mir_numeric_guarded(plans: Array<MirNumericPlan>, caller: Integer, site: Integer): Array<MirNumericPlan>
+	mut selected: Array<MirNumericPlan> := []
+	plans.each do |plan|
+		if plan.witness >= 0 && plan.caller == caller && plan.call_instruction == site
+			selected.push(plan)
+		end
+	end
+	return selected
 end

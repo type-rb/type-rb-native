@@ -13,9 +13,9 @@ import { emit_mir_array_headers, emit_mir_array_instruction } from backend/qbe/e
 import { mir_storage_type_name } from mir/model/types
 import { integer_string } from support/literals
 import { MirFunction, MirValue, mir_block_index, mir_function_index } from mir/model/module
-import { mir_numeric_find, mir_numeric_operation } from mir/analysis/numeric
+import { mir_numeric_find, mir_numeric_guarded, mir_numeric_operation } from mir/analysis/numeric
 import { QbeEmitContext, emit_label, emit_temporary, emit_typed_store, emitted_value, qbe_type } from backend/qbe/context
-import { emit_mir_scalar_instruction, emit_scalar_mir } from backend/qbe/emit/mir
+import { emit_guarded_interface_mir, emit_mir_scalar_instruction, emit_scalar_mir } from backend/qbe/emit/mir
 import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
 import { emit_mir_roots, qbe_root_common_prefix, qbe_root_plan_start } from backend/qbe/emit/roots
 import { emit_mir_string_instruction } from backend/qbe/emit/strings
@@ -157,7 +157,10 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 				value = emit_mir_string_instruction(state, value_types, instruction, operands, symbols, context, output)
 			elsif instruction.kind == 11
 				call_plan := mir_numeric_find(state.scalar_mir.numeric_plans[0], -1, function.id, index)
-				if call_plan.function_id >= 0
+				guarded := mir_numeric_guarded(state.scalar_mir.numeric_plans[0], function.id, index)
+				if guarded.size() > 0
+					value = emit_guarded_interface_mir(state, instruction, operands, types, guarded, context, output)
+				elsif call_plan.function_id >= 0
 					call := state.scalar_mir.calls[instruction.payload]
 					mut arguments: Array<String> := []
 					mut argument_types: Array<String> := []
