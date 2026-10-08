@@ -156,12 +156,12 @@ end
 # Retain Array owners whose header parameter has exactly the same identity on
 # every backedge. This proves stable length and backing data, but does not
 # equate their lengths to a separate loop guard or scalar bound.
-def mir_array_stable_headers(native_module: MirModule, flow: MirFlow, header: MirBlock, header_index: Integer, preheader_start: Integer, guard_owner: Integer, aliases: Hash<String, Integer>): Array<MirArrayHeader>
+def mir_array_stable_headers(native_module: MirModule, flow: MirFlow, header: MirBlock, header_index: Integer, preheader_start: Integer, aliases: Hash<String, Integer>): Array<MirArrayHeader>
 	mut headers: Array<MirArrayHeader> := []
 	mut slot := 0
 	while slot < header.parameter_count
 		identity := native_module.arguments[header.parameter_start + slot]
-		if identity != guard_owner && mir_element_type(native_module, mir_flow_type(flow, identity)) != 0
+		if mir_element_type(native_module, mir_flow_type(flow, identity)) != 0
 			mut stable := true
 			mut edge := 0
 			while edge < flow.predecessors[header_index].size()
@@ -287,7 +287,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 		return mir_no_array_loop()
 	end
 	mut accesses: Array<Integer> := []
-	mut headers := mir_array_stable_headers(native_module, flow, header, header_index, preheader_start, guard_owner, aliases)
+	mut headers := mir_array_stable_headers(native_module, flow, header, header_index, preheader_start, aliases)
 	body := mir_flow_block_index(flow, header.first_target)
 	members.each do |member|
 		block := native_module.blocks[function.block_start + member]
@@ -324,8 +324,19 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 			end
 			if instruction.kind >= 20 && instruction.kind <= 23
 				identity := mir_loop_alias(aliases, instruction.first)
+				# The guard owner's header is also stable for other indexes.
+				# Keep their checks; omit only accesses already covered by the
+				# separate induction plan, which has its own retained header.
+				mut covered := instruction_index == length_index
+				if identity == guard_owner
+					accesses.each do |access|
+						if access == instruction_index
+							covered = true
+						end
+					end
+				end
 				headers.each do |candidate|
-					if candidate.identity == identity
+					if candidate.identity == identity && !covered
 						mir_live_add(candidate.accesses, instruction_index)
 						if instruction.kind >= 21 && mir_loop_dominates(flow, body, member) && mir_nonnegative_value(nonnegative, instruction.second)
 							mir_live_add(candidate.nonnegative_accesses, instruction_index)
