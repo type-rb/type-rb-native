@@ -1,6 +1,6 @@
 import { native_managed_type } from frontend/types/hash_types
 import { integer_string } from support/literals
-import { MirInstruction } from mir/model/module
+import { MirCallablePlan, MirInstruction } from mir/model/module
 import { mir_callable_id } from mir/lowering/callables
 import { mir_call_symbol } from mir/model/intrinsics
 import { mir_storage_name, mir_storage_type_name } from mir/model/types
@@ -73,7 +73,7 @@ end
 
 # The verifier binds the code, captured parameter prefix and indirect-call ABI.
 # Emission never reads authored names, tokens or frontend function catalogs.
-def emit_mir_callable(state: CompilerState, types: Array<Integer>, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+def emit_mir_callable(state: CompilerState, types: Array<Integer>, instruction: MirInstruction, plan: MirCallablePlan, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	if instruction.kind == 41
 		name := closure_adapter_name(instruction.payload, instruction.second)
 		result := emit_temporary(context)
@@ -92,13 +92,37 @@ def emit_mir_callable(state: CompilerState, types: Array<Integer>, instruction: 
 	end
 	signature := state.scalar_mir.callables[mir_callable_id(state.scalar_mir, types[instruction.first])]
 	owner := operands[instruction.first]
-	address := emit_address(context, output, owner, 8)
-	code := emit_temporary(context)
-	qbe_output_line(output, "\t" + code + " =l loadl " + address)
-	mut arguments := "l " + owner
+	mut code := ""
+	mut arguments := ""
+	if plan.callee >= 0
+		# The MIR verifier proves the declaration and capture prefix. Adapt the
+		# same environment to the ordinary ABI without an extra adapter call.
+		callee := state.scalar_mir.signatures[plan.callee]
+		code = "$" + mir_call_symbol(callee)
+		mut capture := 0
+		while capture < plan.captures
+			if capture > 0
+				arguments += ", "
+			end
+			slot := emit_address(context, output, owner, 16 + capture * 8)
+			value := emit_temporary(context)
+			type_name := mir_storage_name(state.scalar_mir, callee.parameter_types[capture])
+			emit_typed_load(output, value, type_name, slot)
+			arguments += qbe_type(type_name) + " " + value
+			capture += 1
+		end
+	else
+		address := emit_address(context, output, owner, 8)
+		code = emit_temporary(context)
+		qbe_output_line(output, "\t" + code + " =l loadl " + address)
+		arguments = "l " + owner
+	end
 	mut index := 0
 	while index < instruction.second
-		arguments += ", " + qbe_type(mir_storage_type_name(state.scalar_mir, signature.parameters[index])) + " " + operands[state.scalar_mir.arguments[instruction.payload + index]]
+		if arguments != ""
+			arguments += ", "
+		end
+		arguments += qbe_type(mir_storage_type_name(state.scalar_mir, signature.parameters[index])) + " " + operands[state.scalar_mir.arguments[instruction.payload + index]]
 		index += 1
 	end
 	text := "call " + code + "(" + arguments + ")"
