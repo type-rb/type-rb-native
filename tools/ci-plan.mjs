@@ -54,6 +54,8 @@ export const dailyMeasurementInputs = new Set([
   'tools/daily-performance/measure.py',
   'tools/daily-performance/state.py',
   'tools/daily-performance/test_daily.py',
+  'tools/daily-performance/rss_policy.py',
+  'tools/daily-performance/test_rss_policy.py',
 ]);
 // These existing test modules are excluded from ordinary compiler builds.
 // Keep complete correctness validation; only unchanged-binary measurements

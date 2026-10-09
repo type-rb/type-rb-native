@@ -63,6 +63,57 @@ reproducible self-hosting, target/process/cleanup requirements and evidence
 integrity cannot be traded for performance. A diagnostic may stage expensive
 authorities, but must say which remain unrun; acceptance still requires them.
 
+## Runtime RSS and execution-performance trade-offs
+
+New runtime optimization assessments use `go-competitive-runtime-rss-v1`,
+implemented by `tools/daily-performance/rss_policy.py`. Apply this policy only
+through an explicit prospective registration. Historical contracts and their
+failed observations remain unchanged; a later assessment records its own policy
+and sources instead of rewriting an earlier result.
+
+The required application-memory goal is lower runtime peak RSS than the
+same-source optimized TypeRB Go program and every available equivalent Pure Go
+counterpart, measured with the same inputs and environment. Missing Pure Go
+programs remain explicit coverage gaps, not assumed wins. A declared comparator
+that is missing or invalid blocks assessment. A tie is not a memory advantage.
+
+A Native-relative RSS increase is no longer an automatic rejection under this
+policy. Record both absolute bytes and ratios against the immediately preceding
+accepted implementation and the fixed cumulative baseline. An increase exceeding
+both 10% and 256 KiB requires a documented trade-off review: identify the runtime
+benefit, memory cost, implementation necessity and expected workload impact.
+Do not adopt an unexplained increase without a useful compensating benefit.
+These warning thresholds are operational choices, not statistical significance
+or a reusable exemption for memory safety. Do not reset the cumulative baseline
+after each adoption.
+
+An RSS advantage smaller than 10% against either Go comparator also requires
+review of the retained dispersion before calling the advantage reliable. Freeze
+any necessary additional validation and its finite budget before execution;
+do not repeat samples until the comparison passes. A wider measured advantage
+does not require identical Native binaries to reproduce within a separate 5%
+RSS band. A failed historical A/A observation remains valid evidence of that
+protocol's dispersion.
+
+This policy changes runtime RSS acceptance only. Required useful execution-time
+improvements, other-case runtime regression limits, application-build memory,
+artifact size, correctness, exact outputs, GC and lifetime safety, sustained
+memory-growth checks, reproducibility and platform authorities remain binding.
+RSS is a process high-water measurement, not a replacement for those checks.
+Application-build time trades require measured competitive comparisons;
+compiler self-cost remains a separate observation. A promising optimization can
+be adopted while still slower than Go if it demonstrably closes the execution
+gap and passes its registered benefit and regression contract. The intermediate
+goal remains faster execution than same-source TypeRB Go across the public
+runtime suite; the longer-term target remains equivalent Pure Go.
+
+The RSS assessor returns `met`, `review-required` or `unmet`; none independently
+authorizes an optimizer merge. Complete source/raw-data validation and every
+other required authority in the owning assessment. If a review is required,
+retain its explicit case-specific rationale before acceptance. Reconsidering a
+held candidate under this policy needs a new finite validation scope; old repair
+and measurement allowances are not silently renewed.
+
 ## Register a bounded evaluation
 
 Before new measurements, put a public record in the candidate issue or PR with:

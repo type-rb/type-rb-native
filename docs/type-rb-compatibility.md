@@ -41,11 +41,18 @@ release hook in the TypeRB repository.
 ## Bundled official sources
 
 [`vendor/type-rb/official`](../vendor/type-rb/official/provenance.json) retains the
-reference's complete `internal/official/packages` tree and license unchanged.
+reference's complete `internal/official/packages` tree, the URL standard-library
+source wrapper and license unchanged.
 The provenance record identifies the repository, exact commit, source paths,
-byte lengths and SHA-256 hashes. This is the source input boundary; ordinary
-official-package loading and runtime services remain implementation work in
-[#674](https://github.com/type-rb/type-rb-native/issues/674).
+byte lengths and SHA-256 hashes. A generated TypeRB catalog embeds these exact
+sources and canonical names, so ordinary compilers load reachable official
+modules through the same declaration graph without a repository or reference
+checkout at runtime. The complete portable HTTP and URL sources have ordinary
+import coverage. URL component encoding/decoding and ordered query operations
+use a Native-owned TypeRB adapter with the pinned nominal types and errors.
+Packages requiring unimplemented platform or semantic providers fail explicitly;
+JSON and internal Runtime services remain implementation work
+in [#674](https://github.com/type-rb/type-rb-native/issues/674).
 
 After changing the reference pin, synchronize from a Git checkout containing
 that exact commit:
@@ -55,11 +62,17 @@ python3 tools/official-sources.py --reference-checkout /path/to/type-rb --write
 python3 tools/official-sources.py --reference-checkout /path/to/type-rb --check
 ```
 
+The tool also regenerates `compiler/src/project/official_catalog.trb`. Never
+edit embedded source strings separately from the pinned bundle. Internal
+imports remain inaccessible to authored code; an authored path spelling does
+not confer compiler-owned source identity.
+
 The tool reads pinned Git objects instead of working files or the checkout's
 current HEAD. It requires no network or reference executable. PR quick and Main
 validation compare the complete file inventory and bytes, including provenance,
 with the pinned reference. Modified, missing, additional or symlinked bundle
-files fail validation even if the local hashes were updated to match a change.
+files and altered catalogs fail validation even if the local hashes were
+updated to match a change.
 Keep this comparison in the reference-update procedure; never edit vendored
 sources as a separate fork.
 

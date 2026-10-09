@@ -220,17 +220,24 @@ end
 # Resolve one owned lexical region, shared by named and anonymous bodies.
 def resolve(mut state: CompilerState): Boolean
 	if state.nominal.raw_enum_values.size() > 0 || builtin_result_source(state)
-		load_standard_source(state, 1)
-		load_standard_source(state, 3)
+		load_standard_source(state, 1, 1)
+		load_standard_source(state, 3, 1)
 	end
+	previous_module := state.module_graph.active_module[0]
 	mut import_index := 0
 	while import_index < state.module_graph.import_count[0]
 		kind := standard_source_kind(import_path_value(load_string(state.module_graph.import_paths, import_index)))
 		if kind > 0
-			store_integer(state.module_graph.import_targets, import_index, load_standard_source(state, kind))
+			state.module_graph.active_module[0] = load_integer(state.module_graph.import_modules, import_index)
+			store_integer(state.module_graph.import_targets, import_index, load_standard_source(state, kind, load_integer(state.module_graph.import_lines, import_index)))
+			if has_diagnostic(state)
+				state.module_graph.active_module[0] = previous_module
+				return false
+			end
 		end
 		import_index += 1
 	end
+	state.module_graph.active_module[0] = previous_module
 	if !resolve_bare_imports(state)
 		return false
 	end

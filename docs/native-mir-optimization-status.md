@@ -70,6 +70,14 @@ not a performance improvement.
   classification, with unique container identities and predeclared nominal shells for recursive record fields.
 - `compiler/src/mir/lowering/arrays.trb`: typed Array construction, selection, load/store and push
   contracts; no backend address is retained across a right-hand side.
+- `compiler/src/mir/analysis/loop_calls.trb`: independently verified lazy scalar
+  call reuse within a natural loop. Every argument keeps the same SSA identity
+  on all backedges; the whole loop and direct callee must exclude allocation,
+  mutation, I/O and unknown effects. Cache initialization belongs to the single
+  external preheader. The first call stays at its original position, preserving
+  skipped paths, zero-trip behavior and failure order. Managed return values and
+  indirect or external calls remain excluded. The cache stores only a successful
+  Integer, Boolean or Float result and is reset on loop reentry.
 - `compiler/src/mir/analysis/array_loops.trb`: verified loop-header and within-block checked-index
   reuse plans. Stable Arrays retain their own length and storage across pure
   Array-size or scalar-counted loops; only the Array-size guard proves checked
@@ -81,6 +89,16 @@ not a performance improvement.
 - `compiler/src/mir/lowering/calls.trb`: declaration capture, checked calls and their verification.
 - `compiler/src/mir/analysis/call_effects.trb`: ephemeral direct-call graph and monotone effect summaries, rebuilt independently for verification. Each function is scanned once and each summary increases at most twice.
 - `compiler/src/mir/lowering/strings.trb`: String, conversion and output construction/contracts.
+- `compiler/src/mir/analysis/literal_data.trb`: portable bytes and code-point counts
+  for ordinary String literals and String singletons, indexed by MIR payload.
+  Input MIR cannot supply these plans; the optimized verifier independently
+  reconstructs and compares them after instruction verification. Non-String pool
+  entries retain no materialized String data. Static packing/compression consumes
+  the verified facts; remaining declaration metadata uses the same portable
+  constructor. Reference-host byte limitations retain the existing emit-phase
+  diagnostic. Runtime declaration identity follows the bound portable-data
+  constructor to its byte accessor, leaving sibling declarations ordinary. This
+  ownership change does not claim runtime acceleration.
 - `compiler/src/mir/analysis/roots.trb`: operation effects, backward managed-value liveness and exact
   safe-point root plans. Block parameters transfer only demanded values. Instruction
   uses and definitions are summarized once per block; a bounded predecessor worklist solves live-in sets

@@ -1,3 +1,4 @@
+import { MirProgram } from mir/model/program
 import { MirObject, MirObjectMethod, MirObjectWitness } from frontend/types/object_model
 import { MirNewtype } from frontend/types/newtype_model
 import { EnumDefinition, EnumVariant } from frontend/types/enum_model
@@ -109,7 +110,7 @@ record MirValue
 	line: Integer
 end
 
-# A non-guard Array retains its own length and storage across a pure loop.
+# An Array retains its own length and storage across a header-stable loop.
 # Accesses still perform their own bounds checks against that cached length.
 record MirArrayHeader
 	identity: Integer
@@ -128,6 +129,14 @@ record MirArrayLoop
 	length: Integer
 	accesses: Array<Integer>
 	headers: Array<MirArrayHeader>
+end
+
+# One lazy scalar result cache, reset on each entry from its loop preheader.
+# The verifier rederives both invariant operands and the complete effect region.
+record MirLoopCall
+	header: Integer
+	preheader: Integer
+	instruction: Integer
 end
 
 # Derived safe-point plans contain only values demanded by future operations.
@@ -260,7 +269,15 @@ record MirUnion
 	alternatives: Array<Integer>
 end
 
+# Portable String data; target packing and compression are backend choices.
+# points == -1 denotes a literal-table entry with no String materialization.
+record MirLiteralData
+	bytes: Array<Integer>
+	points: Integer
+end
+
 record MirModule
+	program: Array<MirProgram>
 	object_methods: Array<MirObjectMethod>
 	object_witnesses: Array<MirObjectWitness>
 	objects: Array<MirObject>
@@ -281,6 +298,7 @@ record MirModule
 	# One bit per declaration: the verifier re-derives caller-owned enum returns.
 	enum_stack_functions: Array<Integer>
 	array_loops: Array<Array<MirArrayLoop>>
+	loop_calls: Array<Array<MirLoopCall>>
 	# Per-function instruction indexes whose checked position is still valid.
 	array_check_reuse: Array<Array<Integer>>
 	signatures: Array<MirSignature>
@@ -293,10 +311,11 @@ record MirModule
 	instructions: Array<MirInstruction>
 	arguments: Array<Integer>
 	literal_texts: Array<String>
+	literal_data: Array<MirLiteralData>
 end
 
 def mir_module_new(): MirModule
-	return MirModule.new(object_methods: [], object_witnesses: [], objects: [], newtypes: [], unions: [], globals: [], global_initialization: [], callables: [], callable_plans: [[]], enums: [], enum_variants: [], enum_fields: [], numeric_plans: [[]], types: [], records: [], fields: [], root_plans: [], enum_stack_functions: [], array_loops: [], array_check_reuse: [],
+	return MirModule.new(program: [], object_methods: [], object_witnesses: [], objects: [], newtypes: [], unions: [], globals: [], global_initialization: [], callables: [], callable_plans: [[]], enums: [], enum_variants: [], enum_fields: [], numeric_plans: [[]], types: [], records: [], fields: [], root_plans: [], enum_stack_functions: [], array_loops: [], loop_calls: [], array_check_reuse: [],
 		signatures: [], calls: [],
 		source_count: [1],
 		entry_function: [0],
@@ -306,6 +325,7 @@ def mir_module_new(): MirModule
 		instructions: [],
 		arguments: [],
 		literal_texts: [],
+		literal_data: [],
 	)
 end
 

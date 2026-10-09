@@ -38,6 +38,26 @@ def extract_sources(archive_path, destination):
     return records
 
 
+def context_cases(suite, sources):
+    registered = {case for case, _role in sources}
+    known = {case["id"] for case in suite["cases"]}
+    unknown = registered - known
+    if unknown:
+        raise ValueError("Unknown weekly context cases: " + ", ".join(sorted(unknown)))
+    required = set(LANGUAGES) - {"native"}
+    cases = []
+    for case in suite["cases"]:
+        if case["id"] not in registered:
+            continue
+        missing = required - {role for name, role in sources if name == case["id"]}
+        if missing:
+            raise ValueError("Missing weekly context roles for " + case["id"] + ": " + ", ".join(sorted(missing)))
+        cases.append(case)
+    if not cases:
+        raise ValueError("Weekly context has no registered cases")
+    return cases
+
+
 def commands(role, source, program, classes, entry, compiler, qbe, tools, inputs):
     if role == "native":
         return [compiler, "build", source, "--output", program, "--qbe", qbe,
@@ -58,8 +78,9 @@ def run(args):
         raise ValueError("Weekly measurement requires Linux arm64")
     evidence = Path(args.evidence).resolve(); evidence.mkdir(parents=True, exist_ok=False)
     sources = extract_sources(args.archive, evidence / "sources")
-    shutil.copytree(ROOT / "benchmarks/benchmarksgame/licenses", evidence / "licenses")
     suite = read(ROOT / "tools/daily-performance/suite.json")
+    cases = context_cases(suite, sources)
+    shutil.copytree(ROOT / "benchmarks/benchmarksgame/licenses", evidence / "licenses")
     tools = {role: shutil.which(name) for role, name in {"pure-go": "go", "c": "cc", "cpp": "c++", "rust": "rustc", "java": "javac", "jvm": "java"}.items()}
     if not all(tools.values()): raise ValueError("Missing registered language toolchain")
     native = read(args.compilers)["native"]
@@ -71,8 +92,7 @@ def run(args):
     env = {k: v for k, v in os.environ.items() if not k.startswith("TYPE_RB_NATIVE_RUNTIME_")}
     env.update(LC_ALL="C", GOMAXPROCS="1")
     rows, raw = [], []
-    for case in suite["cases"]:
-        if "pureGoSource" not in case: continue
+    for case in cases:
         case_dir = evidence / case["id"]
         expected = source_case(case, case_dir)
         (case_dir / "expected").write_bytes(expected)

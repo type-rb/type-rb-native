@@ -1,4 +1,5 @@
 import { validate_compilation_units } from frontend/resolution/module_components
+import { mir_program_error } from mir/verify/program
 import { package_checksum } from project/package_checksum
 import { emit_bytes_runtime } from backend/qbe/emit/bytes
 import { package_manifest_parse, package_requirement_names, package_requirements_json } from project/package_manifest
@@ -15,6 +16,7 @@ import { emit_closure_adapters } from backend/qbe/emit/callables
 import { load_standard_source, standard_source_kind } from project/standard_library
 import { check_generic_templates } from frontend/checking/program/generics
 import { emit_function } from backend/qbe/emit/functions
+import { mir_function_value_groups } from mir/analysis/flow
 import { analyze_callable_bodies, check_function_body, checked_function_locals, finalize_checked_module } from frontend/checking/program/functions
 import { check_declaration_attributes } from frontend/checking/program/attributes
 import { mir_declare_types } from mir/model/types
@@ -29,10 +31,8 @@ import { emit_record_descriptors, emit_static_strings } from backend/qbe/emit/co
 import { QbeOutput, qbe_output_chunk, qbe_output_line, qbe_output_new } from backend/qbe/output
 import { emit_boolean_puts_runtime, emit_float_array_runtime, emit_float_to_integer_runtime, emit_integer_to_string_runtime, emit_process_runtime, emit_qbe_runtime } from backend/qbe/runtime/system
 import { emit_integer_power_runtime } from backend/qbe/runtime/power
-import { compiler_entry_function } from frontend/resolution/entry_resolution
 import { import_path_value, normalize_import_path, standard_package_target } from frontend/resolution/import_resolution
 import { resolve } from frontend/checking/program/resolution
-import { find_function_in_module } from frontend/resolution/declaration_lookup
 import { CompilerState, add_module, compiler_new, diagnostic, find_module, find_name_index, has_diagnostic } from state/state
 import { load_integer, load_string, sparse_integer_at, store_integer } from support/storage
 
@@ -63,33 +63,6 @@ end
 
 def compiler_eputs(_value: String)
 	return
-end
-
-def compiler_file_entry_function(state: CompilerState): Integer
-	index := find_function_in_module(state, state.module_graph.entry_module[0], "compiler_file_main")
-	if index < 0
-		return -1
-	end
-	if load_integer(state.declarations.function_parameter_counts, index) != 4
-		return -1
-	end
-	start := load_integer(state.declarations.function_parameter_starts, index)
-	if load_string(state.declarations.parameter_types, start) != "String"
-		return -1
-	end
-	if load_string(state.declarations.parameter_types, start + 1) != "String"
-		return -1
-	end
-	if load_string(state.declarations.parameter_types, start + 2) != "String"
-		return -1
-	end
-	if load_string(state.declarations.parameter_types, start + 3) != "Boolean"
-		return -1
-	end
-	if load_string(state.declarations.function_result_types, index) != "Integer"
-		return -1
-	end
-	return index
 end
 
 def emit_process_arguments(mut output: QbeOutput)
@@ -165,9 +138,10 @@ def emit_target_entry(mut output: QbeOutput)
 end
 
 def emit_entry(mut state: CompilerState, mut output: QbeOutput)
-	compiler_entry := compiler_entry_function(state)
+	program := state.scalar_mir.program[0]
+	compiler_entry := program.compiler_function
 	if compiler_entry >= 0
-		compiler_file_entry := compiler_file_entry_function(state)
+		compiler_file_entry := program.compiler_file_function
 		qbe_output_line(output, "function w $trbn_compiler_dispatch(w %argc, l %argv) {")
 		qbe_output_line(output, "@start")
 		qbe_output_line(
@@ -217,28 +191,25 @@ def emit_entry(mut state: CompilerState, mut output: QbeOutput)
 			emit_process_arguments(output)
 		end
 		qbe_output_line(output, "\tcall $trbn_initialize_globals()")
-		main_index := find_function_in_module(state, state.module_graph.entry_module[0], "main")
+		main_index := program.main_function
 		qbe_output_line(output, "\tcall $trbnf" + integer_string(main_index) + "()")
 		qbe_output_line(output, "\tcall $trbn_gc_finish()")
 		qbe_output_line(output, "\tret 0")
 	end
 	qbe_output_line(output, "}")
 	if compiler_entry >= 0
-		cli_entry := find_function_in_module(state, state.module_graph.entry_module[0], "native_cli_main")
+		cli_entry := program.cli_function
 		if cli_entry >= 0
 			output.runtime_flags[1] = 1
-			runtime_module := find_module(state, "host")
-			runtime_function := find_function_in_module(state, runtime_module, "native_cli_runtime_qbe")
-			if runtime_function < 0
+			if program.runtime_error == 1
 				diagnostic(state, "TRBN4005", 1, "Native CLI runtime template is missing")
 				return
 			end
-			runtime_token := load_integer(state.declarations.function_body_starts, runtime_function) + 1
-			if load_integer(state.source_tokens.token_kinds, runtime_token) != 3
+			if program.runtime_error == 2
 				diagnostic(state, "TRBN4005", 1, "Native CLI runtime template must be a literal String")
 				return
 			end
-			qbe_output_line(output, load_string(state.source_tokens.token_texts, runtime_token))
+			qbe_output_line(output, program.runtime_literal)
 			qbe_output_line(output, "export function w $main(w %argc, l %argv) {\n@start\n\tcall $trbn_gc_trace_initialize()")
 			if output.runtime_flags[2] == 1
 				qbe_output_line(output, "\tcall $trbn_static_strings_initialize()")
@@ -254,7 +225,17 @@ def emit_entry(mut state: CompilerState, mut output: QbeOutput)
 end
 
 def emit_qbe(mut state: CompilerState): QbeOutput
-	mut output := qbe_output_new(state.source_tokens.token_count[0] * 24 + 4096, [0, 0, 0, 0, 0, 0, 0, 0])
+	mut output := qbe_output_new(state.scalar_mir.instructions.size() * 24 + 4096, [0, 0, 0, 0, 0, 0, 0, 0])
+	if state.scalar_mir.program.size() != 1
+		diagnostic(state, "TRBN4004", 1, "MIR program metadata is missing")
+		return output
+	end
+	program_error := mir_program_error(state.scalar_mir)
+	if program_error != ""
+		diagnostic(state, "TRBN4004", 1, program_error)
+		return output
+	end
+	program := state.scalar_mir.program[0]
 	emit_static_strings(state, output)
 	if has_diagnostic(state)
 		return output
@@ -263,15 +244,16 @@ def emit_qbe(mut state: CompilerState): QbeOutput
 	emit_record_descriptors(state, output)
 	emit_closure_adapters(state, output)
 	emit_object_dispatch(state.scalar_mir, output)
-	compiler_runtime := compiler_entry_function(state) >= 0
+	compiler_runtime := program.compiler_function >= 0
 	emit_qbe_runtime(output, compiler_runtime)
 	emit_bytes_runtime(state.scalar_mir, output)
-	function_count := state.declarations.function_count[0]
+	function_count := state.scalar_mir.signatures.size()
+	value_groups := mir_function_value_groups(state.scalar_mir)
 	mut function_index := 0
 	# Flat recovery and CLI input retain their source fallbacks. Ordinary compiler
 	# intrinsics are omitted by declaration identity, independent of source order.
 	mut omit_intrinsics := false
-	if compiler_runtime && state.module_graph.module_count[0] > 1 && find_function_in_module(state, state.module_graph.entry_module[0], "native_cli_main") < 0
+	if compiler_runtime && state.scalar_mir.source_count[0] > 1 && program.cli_function < 0
 		omit_intrinsics = true
 	end
 	while function_index < function_count
@@ -280,8 +262,8 @@ def emit_qbe(mut state: CompilerState): QbeOutput
 			signature := state.scalar_mir.signatures[function_index]
 			intrinsic = signature.kind == 1
 		end
-		if !intrinsic && state.scalar_mir.signatures[function_index].kind != 4
-			emit_function(state, function_index, output)
+		if !intrinsic && state.scalar_mir.signatures[function_index].kind < 3
+			emit_function(state, function_index, value_groups, output)
 			compiler_reset_temporary_storage()
 		end
 		function_index += 1
@@ -728,7 +710,10 @@ def resolve_project_imports(mut state: CompilerState, owners: Array<Integer>, pa
 			mut target := standard_package_target(normalized)
 			owned_kind := standard_source_kind(normalized)
 			if owned_kind > 0
-				target = load_standard_source(state, owned_kind)
+				target = load_standard_source(state, owned_kind, line)
+				if has_diagnostic(state)
+					return false
+				end
 			elsif target < -1
 				if load_integer(state.module_graph.import_kinds, import_index) != 1
 					diagnostic(state, "TRBN4003", line, "supported standard packages require a bare import")
@@ -1084,15 +1069,13 @@ def load_file_root(entry_source: String, entry_path: String): CompilerState
 	mut sources := [entry_source]
 	mut module_index := 0
 	while module_index < state.module_graph.module_count[0]
-		if sparse_integer_at(state.standard_modules, module_index) > 0
-			module_index += 1
-			next
-		end
 		state.module_graph.active_module[0] = module_index
-		start := state.source_tokens.token_count[0]
-		lex_module(state, sources[module_index], module_index)
-		if !has_diagnostic(state)
-			parse_module(state, start, module_index)
+		if sparse_integer_at(state.standard_modules, module_index) == 0
+			start := state.source_tokens.token_count[0]
+			lex_module(state, sources[module_index], module_index)
+			if !has_diagnostic(state)
+				parse_module(state, start, module_index)
+			end
 		end
 		if has_diagnostic(state)
 			return state
@@ -1111,9 +1094,12 @@ def load_file_root(entry_source: String, entry_path: String): CompilerState
 			owned_kind := standard_source_kind(normalized)
 			if owned_kind > 0
 				before := state.module_graph.module_count[0]
-				target = load_standard_source(state, owned_kind)
+				target = load_standard_source(state, owned_kind, line)
 				if state.module_graph.module_count[0] > before
 					sources.push("")
+				end
+				if has_diagnostic(state)
+					return state
 				end
 			elsif target < -1
 				if load_integer(state.module_graph.import_kinds, import_index) != 1

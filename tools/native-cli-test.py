@@ -21,6 +21,7 @@ args = parser.parse_args()
 binary = args.binary.resolve()
 repository = Path(__file__).resolve().parent.parent
 subprocess.run([sys.executable, str(repository / "tools/native-package-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-official-import-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-repl-flow-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-enum-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-raw-enum-test.py"), str(binary)], check=True)

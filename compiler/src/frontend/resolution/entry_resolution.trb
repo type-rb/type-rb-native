@@ -62,6 +62,14 @@ def compiler_runtime_intrinsic(state: CompilerState, function_index: Integer): B
 			end
 			emitter := find_visible_function(state, owner, anchor)
 			if emitter >= 0
+				if name == "compiler_string_bytes"
+					# Portable literal data now owns the byte accessor. Follow its
+					# bound declaration, preserving sibling functions as ordinary.
+					data := find_visible_function(state, load_integer(state.declarations.function_modules, emitter), "mir_string_literal_data")
+					if data >= 0
+						return find_visible_function(state, load_integer(state.declarations.function_modules, data), name) == function_index
+					end
+				end
 				if name == "compiler_literal_byte"
 					decoder := find_visible_function(state, load_integer(state.declarations.function_modules, emitter), "decode_escape")
 					if decoder < 0
@@ -91,4 +99,31 @@ def compiler_host_intrinsic(state: CompilerState, function_index: Integer): Bool
 		return false
 	end
 	return load_string(state.module_graph.module_names, load_integer(state.declarations.function_modules, function_index)) == "host"
+end
+
+def compiler_file_entry_function(state: CompilerState): Integer
+	index := find_function_in_module(state, state.module_graph.entry_module[0], "compiler_file_main")
+	if index < 0
+		return -1
+	end
+	if load_integer(state.declarations.function_parameter_counts, index) != 4
+		return -1
+	end
+	start := load_integer(state.declarations.function_parameter_starts, index)
+	if load_string(state.declarations.parameter_types, start) != "String"
+		return -1
+	end
+	if load_string(state.declarations.parameter_types, start + 1) != "String"
+		return -1
+	end
+	if load_string(state.declarations.parameter_types, start + 2) != "String"
+		return -1
+	end
+	if load_string(state.declarations.parameter_types, start + 3) != "Boolean"
+		return -1
+	end
+	if load_string(state.declarations.function_result_types, index) != "Integer"
+		return -1
+	end
+	return index
 end
