@@ -1,0 +1,44 @@
+name: Object dispatch adoption A/A prerequisite
+
+on:
+  push:
+    branches: [fix/object-dispatch-adoption-aa]
+    paths: ['tools/object-dispatch-aa/**', '.github/workflows/object-dispatch-aa.yml']
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: object-dispatch-adoption-aa
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    if: github.ref == 'refs/heads/fix/object-dispatch-adoption-aa' && github.run_attempt == 1
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check the fixed synthetic harness cases
+        run: python3 -m unittest discover -s tools/object-dispatch-aa -p 'test_*.py'
+      - name: Retrieve the immutable public source evidence
+        uses: actions/download-artifact@v5
+        with:
+          github-token: ${{ github.token }}
+          run-id: 37765252069
+          artifact-ids: 11544534599
+          merge-multiple: true
+          path: ${{ runner.temp }}/source-evidence
+      - name: Run the single registered A/A cohort
+        run: |
+          sudo swapoff -a
+          python3 tools/object-dispatch-aa/run.py --archive "$RUNNER_TEMP/source-evidence" --evidence "$RUNNER_TEMP/aa-evidence"
+      - name: Preserve every observation including failures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: object-dispatch-aa-evidence
+          path: ${{ runner.temp }}/aa-evidence
+          retention-days: 90
+          if-no-files-found: warn
