@@ -41,14 +41,17 @@ release hook in the TypeRB repository.
 ## Bundled official sources
 
 [`vendor/type-rb/official`](../vendor/type-rb/official/provenance.json) retains the
-reference's complete `internal/official/packages` tree and license unchanged.
+reference's complete `internal/official/packages` tree, the URL standard-library
+source wrapper and license unchanged.
 The provenance record identifies the repository, exact commit, source paths,
 byte lengths and SHA-256 hashes. A generated TypeRB catalog embeds these exact
 sources and canonical names, so ordinary compilers load reachable official
 modules through the same declaration graph without a repository or reference
-checkout at runtime. The complete portable HTTP source has ordinary import
-coverage. Packages requiring unimplemented platform or semantic providers fail
-explicitly; JSON, URL and internal Runtime services remain implementation work
+checkout at runtime. The complete portable HTTP and URL sources have ordinary
+import coverage. URL component encoding/decoding and ordered query operations
+use a Native-owned TypeRB adapter with the pinned nominal types and errors.
+Packages requiring unimplemented platform or semantic providers fail explicitly;
+JSON and internal Runtime services remain implementation work
 in [#674](https://github.com/type-rb/type-rb-native/issues/674).
 
 After changing the reference pin, synchronize from a Git checkout containing
