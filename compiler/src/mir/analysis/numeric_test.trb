@@ -5,7 +5,9 @@ import { control_test_output } from testing/mir/control
 import { intrinsic_mir_erase } from testing/mir/intrinsics
 import { logical_checked_source } from testing/pipeline
 import { logical_run_qbe } from testing/qbe_runner
-import { MirNumericOperation, MirNumericPlan } from mir/model/module
+import { compiler_test_instruction_with_cell } from testing/compiler
+import { MirFunction, MirNumericOperation, MirNumericPlan, MirValue } from mir/model/module
+import { mir_test_block_with_cell } from testing/mir/model
 import { mir_declare_signatures } from mir/lowering/calls
 import { mir_declare_types } from mir/model/types
 import { mir_numeric_find, mir_numeric_operation, mir_numeric_plans_equal } from mir/analysis/numeric
@@ -29,6 +31,174 @@ def numeric_mir_source(): String
 end
 
 describe("MIR numeric expansion ownership") do
+	test("rejects a successor proof when both branch arms reach the alleged true target") do
+		mut state := numeric_mir_check("def next(value: Integer, limit: Integer): Integer\nif value < limit\nreturn value + 1\nend\nreturn value\nend\ndef main()\nend\n")
+		mut index := 0
+		mut changed := false
+		while index < state.scalar_mir.blocks.size()
+			block := state.scalar_mir.blocks[index]
+			if block.terminator == 2
+				mut replacement := mir_test_block_with_cell(block, 10, block.first_target)
+				replacement = mir_test_block_with_cell(replacement, 13, block.first_argument_start)
+				replacement = mir_test_block_with_cell(replacement, 14, block.first_argument_count)
+				state.scalar_mir.blocks[index] = replacement
+				changed = true
+			end
+			index += 1
+		end
+		expect(changed).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR numeric plan differs")
+	end
+
+	test("preserves successor proofs with sparse function-local SSA and block identities") do
+		mut state := numeric_mir_check("def count(mut value: Integer, limit: Integer): Integer\nwhile value < limit\nvalue += 1\nend\nreturn value\nend\ndef main()\nend\n")
+		plans := state.scalar_mir.numeric_plans[0]
+		mut index := 0
+		while index < state.scalar_mir.values.size()
+			value := state.scalar_mir.values[index]
+			state.scalar_mir.values[index] = MirValue.new(function_id: value.function_id, id: value.id + 1000000, type_id: value.type_id, source_id: value.source_id, line: value.line)
+			index += 1
+		end
+		index = 0
+		while index < state.scalar_mir.arguments.size()
+			state.scalar_mir.arguments[index] += 1000000
+			index += 1
+		end
+		index = 0
+		while index < state.scalar_mir.instructions.size()
+			mut instruction := state.scalar_mir.instructions[index]
+			if instruction.result >= 0
+				instruction = compiler_test_instruction_with_cell(instruction, 1, instruction.result + 1000000)
+			end
+			if instruction.kind == 7
+				instruction = compiler_test_instruction_with_cell(instruction, 2, instruction.first + 1000000)
+				instruction = compiler_test_instruction_with_cell(instruction, 3, instruction.second + 1000000)
+			end
+			if instruction.failure >= 0
+				instruction = compiler_test_instruction_with_cell(instruction, 5, instruction.failure * 17 + 1000000)
+			end
+			state.scalar_mir.instructions[index] = instruction
+			index += 1
+		end
+		index = 0
+		while index < state.scalar_mir.blocks.size()
+			mut block := state.scalar_mir.blocks[index]
+			block = mir_test_block_with_cell(block, 0, block.id * 17 + 1000000)
+			if block.condition >= 0
+				block = mir_test_block_with_cell(block, 8, block.condition + 1000000)
+			end
+			if block.first_target >= 0
+				block = mir_test_block_with_cell(block, 9, block.first_target * 17 + 1000000)
+			end
+			if block.second_target >= 0
+				block = mir_test_block_with_cell(block, 10, block.second_target * 17 + 1000000)
+			end
+			if block.return_value >= 0
+				block = mir_test_block_with_cell(block, 15, block.return_value + 1000000)
+			end
+			state.scalar_mir.blocks[index] = block
+			index += 1
+		end
+		index = 0
+		while index < state.scalar_mir.functions.size()
+			function := state.scalar_mir.functions[index]
+			state.scalar_mir.functions[index] = MirFunction.new(kind: function.kind, result_type: function.result_type, integer_guard: function.integer_guard, id: function.id, entry_block: function.entry_block * 17 + 1000000, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: function.block_start, block_count: function.block_count)
+			index += 1
+		end
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		optimize_verified_mir(state.scalar_mir)
+		expect(mir_numeric_plans_equal(plans, state.scalar_mir.numeric_plans[0])).to_be_true()
+	end
+
+	test("proves guarded Integer successors through branch and loop parameters") do
+		sources := ["def next(value: Integer, limit: Integer): Integer\nif value < limit\nreturn value + 1\nend\nreturn value\nend\ndef main()\nend\n", "def count(mut value: Integer, limit: Integer): Integer\nwhile value < limit\nvalue += 1\nend\nreturn value\nend\ndef main()\nend\n", "def sum(values: Array<Integer>): Integer\nmut index := 0\nmut total := 0\nwhile index < values.size()\ntotal += values[index]\nindex += 1\nend\nreturn total\nend\ndef main()\nend\n"]
+		sources.each do |source|
+			state := numeric_mir_check(source)
+			plan := mir_numeric_find(state.scalar_mir.numeric_plans[0], 0, -1, -1)
+			mut proved := 0
+			plan.operations.each do |operation|
+				if operation.mode == 6
+					proved += 1
+				end
+			end
+			expect(proved).to_equal(1)
+		end
+	end
+
+	test("retains successor checks for false arms joins changed values and wider steps") do
+		bodies := ["if value < limit\nreturn value\nelse\nreturn value + 1\nend", "if value <= limit\nreturn value + 1\nend\nreturn value", "if value < limit\nreturn value + 2\nend\nreturn value", "if limit < value\nreturn value + 1\nend\nreturn value", "if value < limit\n_ignored := value\nend\nreturn value + 1"]
+		bodies.each do |body|
+			state := numeric_mir_check("def next(value: Integer, limit: Integer): Integer\n" + body + "\nend\ndef main()\nend\n")
+			plan := mir_numeric_find(state.scalar_mir.numeric_plans[0], 0, -1, -1)
+			plan.operations.each do |operation|
+				expect(operation.mode == 6).to_be_false()
+			end
+		end
+		state := numeric_mir_check("def count(mut value: Integer, limit: Integer): Integer\nwhile value < limit\nvalue += 1\nvalue += 1\nend\nreturn value\nend\ndef main()\nend\n")
+		plan := mir_numeric_find(state.scalar_mir.numeric_plans[0], 0, -1, -1)
+		expect(plan.operations.size()).to_equal(2)
+		expect(plan.operations[0].mode).to_equal(6)
+		expect(plan.operations[1].mode == 6).to_be_false()
+	end
+
+	test("rejects forged and stale successor plans while preserving failure validation") do
+		mut state := numeric_mir_check("def next(value: Integer): Integer\nreturn value + 1\nend\ndef main()\nend\n")
+		mut plans := state.scalar_mir.numeric_plans[0]
+		original := plans[0]
+		plans[0] = MirNumericPlan.new(witness: original.witness, function_id: original.function_id, caller: original.caller, call_instruction: original.call_instruction, operations: [MirNumericOperation.new(instruction: original.operations[0].instruction, mode: 6)])
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR numeric plan differs")
+		state = numeric_mir_check("def next(value: Integer, limit: Integer): Integer\nif value < limit\nreturn value + 1\nend\nreturn value\nend\ndef main()\nend\n")
+		mut comparison := -1
+		mut index := 0
+		while index < state.scalar_mir.instructions.size()
+			instruction := state.scalar_mir.instructions[index]
+			if instruction.kind == 7 && instruction.payload == 8
+				comparison = index
+			end
+			index += 1
+		end
+		expect(comparison >= 0).to_be_true()
+		state.scalar_mir.instructions[comparison] = compiler_test_instruction_with_cell(state.scalar_mir.instructions[comparison], 4, 9)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR numeric plan differs")
+		plan := mir_numeric_find(state.scalar_mir.numeric_plans[0], 0, -1, -1)
+		position := plan.operations[0].instruction
+		state.scalar_mir.instructions[position] = compiler_test_instruction_with_cell(state.scalar_mir.instructions[position], 5, -1)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR failure target does not exist")
+	end
+
+	test("preserves successor proofs after source erasure and physical block reordering") do
+		mut state := numeric_mir_check("def count(mut value: Integer, limit: Integer): Integer\nwhile value < limit\nvalue += 1\nend\nreturn value\nend\ndef main()\nputs(count(9007199254740990, 9007199254740991))\nputs(count(-9007199254740991, -9007199254740990))\nputs(count(4, 4))\nend\n")
+		before := control_test_output(emit_qbe(state))
+		plans := state.scalar_mir.numeric_plans[0]
+		intrinsic_mir_erase(state)
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		state.scalar_mir.functions.each do |function|
+			mut left := function.block_start
+			mut right := left + function.block_count - 1
+			while left < right
+				saved := state.scalar_mir.blocks[left]
+				state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
+				state.scalar_mir.blocks[right] = saved
+				left += 1
+				right -= 1
+			end
+		end
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		optimize_verified_mir(state.scalar_mir)
+		expect(mir_numeric_plans_equal(plans, state.scalar_mir.numeric_plans[0])).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("9007199254740991\n-9007199254740990\n4\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("uses verified collection lengths for one-sided Integer range checks") do
 		source := "def add_array_size(value: Integer, numbers: Array<Integer>): Integer\nreturn value + numbers.size()\nend\ndef add_string_size(value: Integer, text: String): Integer\nreturn value + text.size()\nend\ndef add_unknown(value: Integer, step: Integer): Integer\nreturn value + step\nend\ndef main()\nputs(add_array_size(4, [1, 2]))\nputs(add_string_size(4, \"xy\"))\nputs(add_unknown(4, -1))\nend\n"
 		mut state := numeric_mir_check(source)

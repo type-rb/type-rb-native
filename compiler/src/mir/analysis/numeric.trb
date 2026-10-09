@@ -1,9 +1,9 @@
 import { mir_numeric_interface_function, mir_numeric_interface_targets } from mir/analysis/numeric_interface
 import { integer_string } from support/literals
-import { MirFunction, MirModule, MirNumericOperation, MirNumericPlan, mir_block_index, mir_function_index, mir_value_type } from mir/model/module
+import { MirFunction, MirInstruction, MirModule, MirNumericOperation, MirNumericPlan, mir_block_index, mir_function_index, mir_value_type } from mir/model/module
 import { mir_nonnegative_value, mir_nonnegative_values } from mir/analysis/ranges
-import { mir_loop_dominates } from mir/analysis/array_loops
-import { MirFlow, mir_build_flow, mir_flow_block_index, mir_flow_blocks } from mir/analysis/flow
+import { mir_loop_alias, mir_loop_aliases, mir_loop_dominates, mir_loop_literal } from mir/analysis/array_loops
+import { MirFlow, mir_build_flow, mir_flow_block_index, mir_flow_blocks, mir_flow_position, mir_flow_type } from mir/analysis/flow
 
 def mir_numeric_empty(): MirNumericPlan
 	return MirNumericPlan.new(witness: -1, function_id: -1, caller: -1, call_instruction: -1, operations: [])
@@ -160,6 +160,40 @@ def mir_numeric_mode(operator: Integer, left_small: Boolean, right_small: Boolea
 	return 0
 end
 
+# For portable Integers, x < bound proves x + 1 cannot exceed the upper bound.
+# A unique true edge must dominate the original operation. Preserve the
+# checked instruction and failure origin; only its verified emission changes.
+def mir_numeric_successor(native_module: MirModule, function: MirFunction, flow: MirFlow, block: Integer, instruction: MirInstruction): Boolean
+	if instruction.payload != 1 && instruction.payload != 13
+		return false
+	end
+	if flow.ranks[block] < 0
+		return false
+	end
+	mut member := block
+	while member != flow.entry
+		if flow.predecessors[member].size() == 1
+			previous := flow.predecessors[member][0]
+			guard := native_module.blocks[function.block_start + previous]
+			body := native_module.blocks[function.block_start + member]
+			if flow.ranks[previous] >= 0 && guard.terminator == 2 && guard.first_target == body.id && guard.second_target != body.id
+				position := mir_flow_position(flow, guard.condition)
+				if position >= guard.instruction_start && position < guard.instruction_start + guard.instruction_count
+					condition := native_module.instructions[position]
+					if condition.kind == 7 && condition.payload == 8 && mir_flow_type(flow, condition.first) == 1 && mir_flow_type(flow, condition.second) == 1
+						aliases := mir_loop_aliases(native_module, function, flow, guard)
+						if mir_loop_alias(aliases, instruction.first) == condition.first && mir_loop_literal(native_module, flow, mir_loop_alias(aliases, instruction.second), "1")
+							return true
+						end
+					end
+				end
+			end
+		end
+		member = flow.dominators[member]
+	end
+	return false
+end
+
 def mir_numeric_leaf(native_module: MirModule, function: MirFunction, caller: Integer, site: Integer, arguments: Array<Integer>, mut budget: Array<Integer>): MirNumericPlan
 	entry := mir_block_index(native_module, function, function.entry_block)
 	if entry < 0
@@ -249,7 +283,10 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 					if !right_nonnegative
 						right_nonnegative = mir_nonnegative_value(nonnegative, instruction.second)
 					end
-					mode := mir_numeric_mode(instruction.payload, left_small, right_small, left_nonnegative, right_nonnegative, false, budget, loop)
+					mut mode := mir_numeric_mode(instruction.payload, left_small, right_small, left_nonnegative, right_nonnegative, false, budget, loop)
+					if mode > 0 && mir_numeric_successor(native_module, function, flow, block_index - function.block_start, instruction)
+						mode = 6
+					end
 					if mode > 0
 						operations.push(MirNumericOperation.new(instruction: position, mode: mode))
 					end
