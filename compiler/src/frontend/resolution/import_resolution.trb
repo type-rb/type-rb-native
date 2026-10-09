@@ -4,7 +4,7 @@ import { find_alias_in_module, find_declaration_in_module, find_function_in_modu
 import { find_enum_in_module } from frontend/types/enum_types
 import { path_basename, path_directory, string_without_suffix } from support/path
 import { CompilerState, diagnostic, has_diagnostic } from state/state
-import { load_integer, load_string, store_integer, store_string } from support/storage
+import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from support/storage
 
 def import_path_value(raw: String): String
 	mut path := string_without_suffix(raw, ".trb")
@@ -324,6 +324,10 @@ def validate_import_bindings(mut state: CompilerState): Boolean
 		declaration := load_string(state.module_graph.import_declarations, import_index)
 		line := load_integer(state.module_graph.import_lines, import_index)
 		target := load_integer(state.module_graph.import_targets, import_index)
+		if target >= 0 && sparse_integer_at(state.standard_modules, target) == 4 && declaration != "URL"
+			diagnostic(state, "TRBN4003", line, "standard URL package exports only the URL root declaration")
+			return false
+		end
 		mut other := load_integer(state.module_graph.module_import_starts, module_index)
 		while other < import_index
 			other_target := load_integer(state.module_graph.import_targets, other)

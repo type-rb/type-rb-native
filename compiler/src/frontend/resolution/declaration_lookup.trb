@@ -208,7 +208,30 @@ def find_visible_declaration(mut state: CompilerState, source: Integer, name: St
 	if target < 0
 		return -1
 	end
-	resolved := find_declaration_in_module(state, target, load_string(state.module_graph.import_declarations, binding) + suffix, kind)
+	mut resolved := find_declaration_in_module(state, target, load_string(state.module_graph.import_declarations, binding) + suffix, kind)
+	# The pinned URL module exports file functions through its owned namespace.
+	# Preserve the function row and source origin; authored names cannot grant it.
+	if resolved < 0 && kind == 0 && load_string(state.module_graph.import_declarations, binding) == "URL"
+		owned := sparse_integer_at(state.standard_modules, target)
+		mut exported := false
+		if suffix == "::encode_component" || suffix == "::decode_component"
+			exported = true
+		end
+		if owned == 4
+			if suffix == "::parse_query" || suffix == "::build_query"
+				exported = true
+			end
+		end
+		if (owned == 4 || owned == 5) && exported
+			mut leaf := ""
+			mut part := 2
+			while part < suffix.size()
+				leaf += suffix[part]
+				part += 1
+			end
+			resolved = find_function_in_module(state, target, leaf)
+		end
+	end
 	if kind == 7 && resolved >= 0 && !state.global_bindings.globals[resolved].constant
 		return -1
 	end

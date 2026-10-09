@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCE_ROOT = "internal/official/packages"
 BUNDLE = Path("vendor/type-rb/official")
 CATALOG = Path("compiler/src/project/official_catalog.trb")
+URL_SOURCE = "internal/stdlib/url.go"
+URL_ADAPTER = Path("compiler/packages/internal/url.trb")
 REPOSITORY = "https://github.com/type-rb/type-rb"
 
 
@@ -54,6 +56,11 @@ def reference_files(root, checkout):
         files["packages/" + relative] = git(checkout, "cat-file", "blob", oid.decode("ascii"))
     if not files or not any(name.endswith("/trbpackage.json") for name in files):
         raise ValidationError("pinned reference has no official package manifests")
+    url_entry = git(checkout, "ls-tree", revision, "--", URL_SOURCE).split()
+    if len(url_entry) != 4 or url_entry[:2] != [b"100644", b"blob"]:
+        raise ValidationError("pinned URL source must be a regular file")
+    files["stdlib/url.go"] = git(checkout, "cat-file", "blob", url_entry[2].decode("ascii"))
+    pinned_url_source(files["stdlib/url.go"])
     license_entry = git(checkout, "ls-tree", revision, "--", "LICENSE").split()
     if len(license_entry) != 4 or license_entry[:2] != [b"100644", b"blob"]:
         raise ValidationError("pinned reference license must be a regular file")
@@ -65,7 +72,8 @@ def reference_files(root, checkout):
         "sourceRoot": SOURCE_ROOT,
         "files": [
             {"path": name,
-             "source": "LICENSE" if name == "LICENSE" else SOURCE_ROOT + "/" + name[len("packages/"):],
+             "source": ("LICENSE" if name == "LICENSE" else URL_SOURCE if name == "stdlib/url.go"
+                        else SOURCE_ROOT + "/" + name[len("packages/"):]),
              "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
             for name, data in sorted(files.items())
         ],
@@ -100,7 +108,24 @@ def typerb_string(value):
     return json.dumps(value, ensure_ascii=False).replace("#{", "\\#{")
 
 
-def catalog_source(files):
+def pinned_url_source(data):
+    match = re.fullmatch(rb"package stdlib\n\nfunc urlSource\(\) string \{\n\treturn `([^`]*)`\n\}\n", data)
+    if match is None:
+        raise ValidationError("unrecognized pinned URL source boundary")
+    return match[1].decode("utf-8")
+
+
+def adapter_source(root):
+    path = root / URL_ADAPTER
+    for parent in (path, *path.parents):
+        if parent == root:
+            break
+        if parent.is_symlink():
+            raise ValidationError("URL adapter contains a symlink")
+    return path.read_text()
+
+
+def catalog_source(files, adapter=""):
     packages = []
     names = set()
     for path, data in sorted(files.items()):
@@ -140,6 +165,9 @@ def catalog_source(files):
             literal = ("true" if value else "false") if isinstance(value, bool) else typerb_string(value)
             lines += ["\tif kind == " + str(index), "\t\treturn " + literal, "\tend"]
         lines += ["\treturn " + default, "end", ""]
+    for name, source in (("pinned_url_source", pinned_url_source(files["stdlib/url.go"])),
+                         ("native_url_source", adapter)):
+        lines += [f"def {name}(): String", "\treturn " + typerb_string(source), "end", ""]
     return "\n".join(lines).encode("utf-8")
 
 
@@ -166,14 +194,14 @@ def check(root, checkout):
         if actual[name] != expected[name]:
             raise ValidationError("official source bundle differs from TYPE_RB_REVISION: " + name)
     catalog = catalog_path(root)
-    if not catalog.is_file() or catalog.read_bytes() != catalog_source(expected):
+    if not catalog.is_file() or catalog.read_bytes() != catalog_source(expected, adapter_source(root)):
         raise ValidationError("official source catalog differs from TYPE_RB_REVISION")
     return len(expected) - 1
 
 
 def sync(root, checkout):
     expected = reference_files(root, checkout)
-    catalog_bytes = catalog_source(expected)
+    catalog_bytes = catalog_source(expected, adapter_source(root))
     catalog = catalog_path(root)
     bundle = root / BUNDLE
     for path in (root / "vendor", root / "vendor/type-rb", bundle):
