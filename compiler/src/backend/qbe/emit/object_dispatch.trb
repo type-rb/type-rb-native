@@ -9,6 +9,19 @@ def object_dispatch_target(witness: Integer, slot: Integer): String
 	return "trbn_interface_target_" + integer_string(witness) + "_" + integer_string(slot)
 end
 
+# MIR already verifies witness arity, receiver ownership and mapped types.
+# The ABI adapter only checks whether that validated mapping needs a shuffle.
+def object_dispatch_identity(arguments: Array<Integer>): Boolean
+	mut index := 0
+	while index < arguments.size()
+		if arguments[index] != index
+			return false
+		end
+		index += 1
+	end
+	return true
+end
+
 def object_dispatch_parameters(native_module: MirModule, signature: MirSignature): String
 	mut text := ""
 	mut index := 0
@@ -45,26 +58,30 @@ def emit_object_dispatch(native_module: MirModule, mut output: QbeOutput)
 				if slot > 0
 					table += ", "
 				end
-				name := object_dispatch_target(witness_index, slot)
-				table += "l $" + name
+				mut name := object_dispatch_target(witness_index, slot)
 				signature := native_module.signatures[method.function]
 				implementation := native_module.object_methods[witness.methods[slot]]
 				callee := native_module.signatures[implementation.function]
-				mut prefix := ""
-				if signature.result_type != "Void"
-					prefix = qbe_type(mir_storage_name(native_module, signature.result_type)) + " "
-				end
-				qbe_output_line(output, "function " + prefix + "$" + name + "(" + object_dispatch_parameters(native_module, signature) + ") {\n@start")
-				mut arguments := ""
-				mut parameter := 0
-				witness.arguments[slot].each do |source|
-					if parameter > 0
-						arguments += ", "
+				if object_dispatch_identity(witness.arguments[slot])
+					name = mir_call_symbol(callee)
+				else
+					mut prefix := ""
+					if signature.result_type != "Void"
+						prefix = qbe_type(mir_storage_name(native_module, signature.result_type)) + " "
 					end
-					arguments += qbe_type(mir_storage_name(native_module, callee.parameter_types[parameter])) + " %p" + integer_string(source)
-					parameter += 1
+					qbe_output_line(output, "function " + prefix + "$" + name + "(" + object_dispatch_parameters(native_module, signature) + ") {\n@start")
+					mut arguments := ""
+					mut parameter := 0
+					witness.arguments[slot].each do |source|
+						if parameter > 0
+							arguments += ", "
+						end
+						arguments += qbe_type(mir_storage_name(native_module, callee.parameter_types[parameter])) + " %p" + integer_string(source)
+						parameter += 1
+					end
+					emit_object_dispatch_return(native_module, signature, "call $" + mir_call_symbol(callee) + "(" + arguments + ")", output)
 				end
-				emit_object_dispatch_return(native_module, signature, "call $" + mir_call_symbol(callee) + "(" + arguments + ")", output)
+				table += "l $" + name
 				slot += 1
 			end
 		end

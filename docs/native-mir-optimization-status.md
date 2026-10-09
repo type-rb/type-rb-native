@@ -70,6 +70,14 @@ not a performance improvement.
   classification, with unique container identities and predeclared nominal shells for recursive record fields.
 - `compiler/src/mir/lowering/arrays.trb`: typed Array construction, selection, load/store and push
   contracts; no backend address is retained across a right-hand side.
+- `compiler/src/mir/analysis/loop_calls.trb`: independently verified lazy scalar
+  call reuse within a natural loop. Every argument keeps the same SSA identity
+  on all backedges; the whole loop and direct callee must exclude allocation,
+  mutation, I/O and unknown effects. Cache initialization belongs to the single
+  external preheader. The first call stays at its original position, preserving
+  skipped paths, zero-trip behavior and failure order. Managed return values and
+  indirect or external calls remain excluded. The cache stores only a successful
+  Integer, Boolean or Float result and is reset on loop reentry.
 - `compiler/src/mir/analysis/array_loops.trb`: verified loop-header and within-block checked-index
   reuse plans. Stable Arrays retain their own length and storage across pure
   Array-size or scalar-counted loops; only the Array-size guard proves checked

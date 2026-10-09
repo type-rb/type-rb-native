@@ -1,5 +1,6 @@
-import { check } from compiler
+import { check, emit_qbe } from compiler
 import { compiler_test_instruction_with_cell } from testing/compiler
+import { control_test_output } from testing/mir/control
 import { logical_checked_source } from testing/pipeline
 import { object_execution_run, object_execution_state } from testing/objects
 import { MirObjectWitness } from frontend/types/object_model
@@ -15,6 +16,9 @@ describe("Object interface dispatch") do
 	test("dispatches distinct implementations and retains managed fields across GC") do
 		mut state := object_execution_state(object_dispatch_source())
 		expect(state.scalar_mir.object_witnesses.size()).to_equal(2)
+		emitted := control_test_output(emit_qbe(state))
+		expect(emitted.include?("$trbn_interface_target_")).to_be_false()
+		expect(emitted.include?("data $trbn_interface_table_0 = align 8 { l $trbnf")).to_be_true()
 		object_execution_run(state, "held!\nsecond\n")
 	end
 
@@ -25,7 +29,17 @@ describe("Object interface dispatch") do
 
 	test("maps reordered named parameters with Float and managed arguments") do
 		mut state := object_execution_state("interface Format\nshow(number: Integer, *, left: String, scale: Float): String\nend\nclass Text implements Format\ndef show(mut value: Integer, *, scale: Float, left: String): String\nvalue += 1\nputs(value)\nputs(scale)\nreturn left + \"!\"\nend\nend\ndef main()\nvalue: Format := Text.new()\nputs(value.show(4, scale: 2.5, left: \"named\"))\nend\n")
+		emitted := control_test_output(emit_qbe(state))
+		expect(emitted.include?("function l $trbn_interface_target_0_0")).to_be_true()
+		expect(emitted.include?("d %p3, l %p2)")).to_be_true()
 		object_execution_run(state, "5\n2.5\nnamed!\n")
+	end
+
+	test("preserves Boolean and Float return ABI for identity witnesses") do
+		mut state := object_execution_state("interface Probe\nready(): Boolean\nratio(): Float\nend\nclass Reading implements Probe\n@ready: Boolean := true\n@ratio: Float := 2.5\ndef ready(): Boolean\nreturn @ready\nend\ndef ratio(): Float\nreturn @ratio\nend\nend\ndef main()\nvalue: Probe := Reading.new()\nputs(value.ready())\nputs(value.ratio())\nend\n")
+		emitted := control_test_output(emit_qbe(state))
+		expect(emitted.include?("$trbn_interface_target_")).to_be_false()
+		object_execution_run(state, "true\n2.5\n")
 	end
 
 	test("inherits field-free methods and interface declarations across two parents") do
