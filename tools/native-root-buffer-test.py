@@ -210,13 +210,14 @@ with tempfile.TemporaryDirectory(prefix='native-root-buffer-') as temporary:
              'trbn_gc_alloc', 'trbn_gc_update_peak', 'trbn_gc_collect', 'trbn_gc_mark_roots',
              'trbn_gc_mark', 'trbn_gc_scan_fixed', 'trbn_gc_scan_array', 'trbn_gc_sweep',
              'trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert', 'trbn_storage_unlink',
+             'trbn_array_backing_release',
              'trbn_string_alloc', 'trbn_string_from_bytes', 'trbn_utf8_count', 'trbn_utf8_width']
     bodies = []
     for name in names:
         matches = re.findall(r'^function (?:l )?\$' + name + r'\([^\n]*\) \{.*?^\}', text, re.M | re.S)
         assert len(matches) == 1, name
         bodies.append('export ' + matches[0].replace('call $realloc(', 'call $observe_realloc('))
-    for name in ('trbn_allocation_error', 'trbn_storage_available'):
+    for name in ('trbn_allocation_error', 'trbn_storage_available', 'trbn_array_backing_cache'):
         matches = re.findall(r'^data \$' + name + r' = [^\n]+', text, re.M)
         assert len(matches) == 1, name
         bodies.append(matches[0])
