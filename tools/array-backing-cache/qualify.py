@@ -112,7 +112,37 @@ def check_summary(summary, records):
             "Summary range differs from retained observations")
 
 
-def assess(selection, snapshot, raw):
+def check_compiler_cost(cost, roles):
+    require(isinstance(cost, dict) and cost.get("status") == "pass",
+            "Matched compiler cost is missing or failed")
+    records = cost["raw"]
+    require(len(records) == 8, "Incomplete matched compiler observations")
+    require([row["role"] for row in records] ==
+            ["previous", "native", "native", "previous", "previous", "native", "native", "previous"],
+            "Matched compiler interleaving differs")
+    require([row["phase"] for row in records] == ["warmup"] * 2 + ["retained"] * 6,
+            "Matched compiler warmup order differs")
+    for role in ("native", "previous"):
+        selected = [row for row in records if row["role"] == role]
+        require(Counter(row["phase"] for row in selected) == Counter(warmup=1, retained=3),
+                "Different matched compiler sample count")
+        for row in selected:
+            require(row["status"] == "pass" and row["exitCode"] == 0 and row["timeoutSeconds"] == 120,
+                    "Failed matched compiler observation")
+            require(row["revision"] == roles[role]["revision"] and
+                    row["binarySha256"] == roles[role]["sha256"] and
+                    row["binaryBytes"] == roles[role]["bytes"], "Matched compiler identity differs")
+            for metric in METRICS:
+                number(row[metric], positive=True)
+        check_summary(cost["summaries"][role], selected)
+    for role in ("native", "previous", "baseline"):
+        require(cost["compilerBytes"][role] == roles[role]["bytes"], "Compiler size identity differs")
+    for metric in METRICS:
+        require(cost["ratios"][metric] == cost["summaries"]["native"][metric] /
+                cost["summaries"]["previous"][metric], "Matched compiler ratio differs")
+
+
+def assess(selection, snapshot, raw, compiler_cost=None):
     registration = selection["registration"]
     require(snapshot["revision"] == registration["candidate"] and snapshot["status"] == "measured",
             "Incomplete or different-source snapshot")
@@ -124,6 +154,7 @@ def assess(selection, snapshot, raw):
         require(identity["revision"] == revision and DIGEST.fullmatch(identity["sha256"]),
                 "Compiler identity mismatch")
         number(identity["bytes"], positive=True)
+    check_compiler_cost(compiler_cost, snapshot["roles"])
     expected = {(row["case"], row["role"]): row for row in selection["rows"]}
     rows = {(row["case"], row["role"]): row for row in snapshot["rows"]}
     require(len(snapshot["rows"]) == len(expected) and rows.keys() == expected.keys(),
@@ -185,7 +216,8 @@ def assess(selection, snapshot, raw):
     return {**result, "registration": registration,
             "workflowRevision": selection["workflowRevision"], "roles": snapshot["roles"],
             "rows": snapshot["rows"], "compilerSelf": compiler,
-            "compilerCostScope": "Current-source self-build here; eight matched candidate/previous observations are retained in the separately required compiler-cost artifact",
+            "compilerCost": compiler_cost,
+            "compilerCostScope": compiler_cost["scope"],
             "adoption": False}
 
 
@@ -285,7 +317,7 @@ def main():
     select.add_argument("--registration", default=ROOT / "tools/array-backing-cache/registration.json", type=Path)
     select.add_argument("--output", required=True)
     assessment = commands.add_parser("assess")
-    for name in ("selection", "snapshot", "raw", "output"):
+    for name in ("selection", "snapshot", "raw", "output", "compiler-cost"):
         assessment.add_argument(f"--{name}", required=True)
     args = parser.parse_args()
     read = lambda path: json.loads(Path(path).read_text())
@@ -293,7 +325,7 @@ def main():
         write(args.output, select_sources(ROOT, read(args.registration)))
         return 0
     try:
-        result = assess(read(args.selection), read(args.snapshot), read(args.raw))
+        result = assess(read(args.selection), read(args.snapshot), read(args.raw), read(args.compiler_cost))
     except (ValueError, KeyError, TypeError, OSError) as error:
         # Preserve failed/missing observations as invalid, never as a passing snapshot.
         write(args.output, {"status": "invalid", "error": str(error)})

@@ -1,3 +1,4 @@
+import copy
 import unittest
 import qualify
 
@@ -88,6 +89,43 @@ class TradeTests(unittest.TestCase):
     def test_incomplete_cohort_is_invalid(self):
         with self.assertRaises((ValueError, KeyError)):
             qualify.assess({'registration': {'candidate': 'a' * 40}}, {'revision': 'a' * 40, 'status': 'measured-with-failures'}, [])
+
+
+class CompilerCostTests(unittest.TestCase):
+    def setUp(self):
+        self.roles = {role: {'revision': code * 40, 'sha256': code * 64, 'bytes': 100}
+                      for role, code in [('native', 'a'), ('previous', 'b'), ('baseline', 'c')]}
+        self.cost = {'status': 'pass', 'raw': [], 'summaries': {}, 'ratios': {},
+                     'compilerBytes': dict.fromkeys(self.roles, 100)}
+        for index in range(4):
+            order = ('previous', 'native') if index % 2 == 0 else ('native', 'previous')
+            for role in order:
+                identity = self.roles[role]
+                self.cost['raw'].append({'role': role, 'phase': 'warmup' if index == 0 else 'retained',
+                    'status': 'pass', 'exitCode': 0, 'timeoutSeconds': 120,
+                    'revision': identity['revision'], 'binarySha256': identity['sha256'],
+                    'binaryBytes': 100, 'wallSeconds': 2, 'cpuSeconds': 1, 'memoryBytes': 100})
+        for role in ('native', 'previous'):
+            self.cost['summaries'][role] = {'wallSeconds': 2, 'cpuSeconds': 1,
+                                           'memoryBytes': 100, 'wallMin': 2, 'wallMax': 2}
+        self.cost['ratios'] = dict.fromkeys(qualify.METRICS, 1)
+
+    def test_complete_matched_cost_is_required(self):
+        qualify.check_compiler_cost(self.cost, self.roles)
+        with self.assertRaises(ValueError):
+            qualify.check_compiler_cost(None, self.roles)
+        for change in ('status', 'count', 'order', 'source', 'binary', 'sample-count', 'summary', 'ratio'):
+            value = copy.deepcopy(self.cost)
+            if change == 'status': value['status'] = 'fail'
+            if change == 'count': value['raw'].pop()
+            if change == 'order': value['raw'].reverse()
+            if change == 'source': value['raw'][0]['revision'] = 'c' * 40
+            if change == 'binary': value['raw'][0]['binarySha256'] = 'c' * 64
+            if change == 'sample-count': value['raw'][0]['phase'] = 'retained'
+            if change == 'summary': value['summaries']['native']['wallSeconds'] = 3
+            if change == 'ratio': value['ratios']['cpuSeconds'] = 2
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                qualify.check_compiler_cost(value, self.roles)
 
 
 if __name__ == '__main__':
