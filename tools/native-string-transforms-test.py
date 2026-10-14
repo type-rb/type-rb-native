@@ -74,7 +74,8 @@ with tempfile.TemporaryDirectory(prefix='native-string-transforms-') as temporar
     expected = hashlib.sha256()
     for point in range(0x110000):
         expected.update(struct.pack('<II', maps['upper'].get(point, point), maps['lower'].get(point, point)))
-    il = emit('def main()\nend\n')
+    # Demand case support through ordinary MIR before probing its table directly.
+    il = emit('def main()\nputs("a".upcase())\nend\n')
     il, renamed = re.subn(rb'(export function w \$)main\(', rb'\1checked_main(', il)
     assert renamed == 1
     il += b'''
