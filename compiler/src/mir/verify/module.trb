@@ -1,3 +1,4 @@
+import { mir_array_value_reuse_equal, mir_function_array_value_reuse } from mir/analysis/array_values
 import { mir_callable_plans, mir_callable_plans_equal } from mir/analysis/callables
 import { mir_function_loop_calls, mir_loop_calls_error } from mir/analysis/loop_calls
 import { mir_program_error } from mir/verify/program
@@ -326,6 +327,17 @@ def mir_function_error(native_module: MirModule, function: MirFunction, values: 
 	return mir_adapter_error(flow, native_module, function)
 end
 
+def mir_array_value_reuse_shape_error(native_module: MirModule, optimized: Boolean): String
+	if optimized
+		if native_module.array_value_reuse.size() != native_module.functions.size()
+			return "MIR Array value-reuse plan count differs"
+		end
+	elsif native_module.array_value_reuse.size() != 0
+		return "MIR input cannot supply Array value-reuse plans"
+	end
+	return ""
+end
+
 def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	if native_module.numeric_plans.size() != 1
 		return "MIR numeric plan container differs"
@@ -387,7 +399,11 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 		if native_module.array_check_reuse.size() != 0
 			return "MIR Array check-reuse plan count differs"
 		end
-		return mir_literal_data_error(native_module, optimized)
+		literal_error := mir_literal_data_error(native_module, optimized)
+		if literal_error != ""
+			return literal_error
+		end
+		return mir_array_value_reuse_shape_error(native_module, optimized)
 	end
 	mut functions: Hash<String, Integer> := {}
 	mut function_values: Array<Array<MirValue>> := []
@@ -492,9 +508,18 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	elsif native_module.root_plans.size() != 0
 		return "MIR input cannot supply root plans"
 	end
+	# Core structures and their established diagnostics precede auxiliary plans.
+	# Check row counts before any plan indexing or semantic reconstruction.
+	value_reuse_error := mir_array_value_reuse_shape_error(native_module, optimized)
+	if value_reuse_error != ""
+		return value_reuse_error
+	end
 	if optimized
 		index = 0
 		while index < native_module.functions.size()
+			if !mir_array_value_reuse_equal(native_module.array_value_reuse[index], mir_function_array_value_reuse(native_module, native_module.functions[index]))
+				return "MIR Array value-reuse plan differs"
+			end
 			loop_error := mir_loop_calls_error(native_module.loop_calls[index], mir_function_loop_calls(native_module, native_module.functions[index]))
 			if loop_error != ""
 				return loop_error

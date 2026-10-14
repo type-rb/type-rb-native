@@ -27,6 +27,9 @@ def program_empty_frontend(native_module: MirModule, include_program: Boolean): 
 	mut fresh := compiler_new(1)
 	fresh.scalar_mir.source_count[0] = native_module.source_count[0]
 	fresh.scalar_mir.entry_function[0] = native_module.entry_function[0]
+	native_module.array_value_reuse.each do |plans|
+		fresh.scalar_mir.array_value_reuse.push(plans)
+	end
 	native_module.loop_calls.each do |plans|
 		fresh.scalar_mir.loop_calls.push(plans)
 	end
@@ -149,6 +152,23 @@ def program_sparse_id(id: Integer): Integer
 end
 
 describe("Canonical MIR whole-program emission") do
+	test("retains guarded Array values with an empty frontend and reordered functions") do
+		mut state := logical_checked_source("def probe(values: Array<Integer>, mut other: Array<Integer>, index: Integer): Integer\nfirst := values[index]\nother[index] = 9\nreturn first + values[index]\nend\ndef main()\nmut a := [7]\nputs(probe(a, a, 0))\nend\n")
+		expect(check(state)).to_be_true()
+		expect(state.scalar_mir.array_value_reuse[0].size()).to_equal(1)
+		before := program_output(emit_qbe(state))
+		mut fresh := program_empty_frontend(state.scalar_mir, true)
+		expect(verify_mir(fresh.scalar_mir, true)).to_equal("")
+		expect(program_output(emit_qbe(fresh))).to_equal(before)
+		first := fresh.scalar_mir.functions[0]
+		fresh.scalar_mir.functions[0] = fresh.scalar_mir.functions[1]
+		fresh.scalar_mir.functions[1] = first
+		optimize_verified_mir(fresh.scalar_mir)
+		expect(fresh.scalar_mir.array_value_reuse[1].size()).to_equal(1)
+		expect(verify_mir(fresh.scalar_mir, true)).to_equal("")
+		expect(program_output(emit_qbe(fresh))).to_equal(before)
+	end
+
 	test("emits the same complete ordinary program with a fresh empty frontend") do
 		mut state := program_probe()
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
@@ -192,14 +212,17 @@ describe("Canonical MIR whole-program emission") do
 			root := native_module.root_plans[i]
 			loop_plan := native_module.array_loops[i]
 			check_plan := native_module.array_check_reuse[i]
+			value_plan := native_module.array_value_reuse[i]
 			native_module.functions[i] = native_module.functions[other]
 			native_module.root_plans[i] = native_module.root_plans[other]
 			native_module.array_loops[i] = native_module.array_loops[other]
 			native_module.array_check_reuse[i] = native_module.array_check_reuse[other]
+			native_module.array_value_reuse[i] = native_module.array_value_reuse[other]
 			native_module.functions[other] = function
 			native_module.root_plans[other] = root
 			native_module.array_loops[other] = loop_plan
 			native_module.array_check_reuse[other] = check_plan
+			native_module.array_value_reuse[other] = value_plan
 			i += 1
 		end
 		expect(verify_mir(native_module, true)).to_equal("")

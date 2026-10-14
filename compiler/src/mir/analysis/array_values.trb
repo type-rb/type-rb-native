@@ -1,0 +1,95 @@
+import { MirArrayValueReuse, MirFunction, MirInstruction, MirModule, mir_value_type } from mir/model/module
+import { mir_live_equal } from mir/analysis/roots
+import { integer_string } from support/literals
+
+# Only scalar cells have an unmanaged cached value. All unlisted operations,
+# including effect-free calls, end the region: no address may cross a call,
+# allocation, collection resize, or an operation with unknown memory effects.
+def mir_array_value_region_instruction(native_module: MirModule, function: MirFunction, instruction: MirInstruction): Boolean
+	if instruction.kind == 22 || instruction.kind == 23
+		type_id := mir_value_type(native_module, function.id, instruction.first)
+		if type_id == 3
+			return true
+		end
+		return type_id == 6
+	end
+	if instruction.kind == 7
+		first := mir_value_type(native_module, function.id, instruction.first)
+		second := mir_value_type(native_module, function.id, instruction.second)
+		if (first == 1 || first == 2 || first == 5) && (second == 1 || second == 2 || second == 5)
+			return true
+		end
+		return false
+	end
+	if instruction.kind == 1 || instruction.kind == 2 || instruction.kind == 3 || instruction.kind == 6 || instruction.kind == 20 || instruction.kind == 21
+		return true
+	end
+	return false
+end
+
+# Exact owner and index SSA identities prove that a previously successful
+# access still names the same cell. They do not prove disjointness from any
+# store. The backend must guard every intervening store's accessed byte range
+# and retain the original checked read on overlap. Plans never span blocks.
+def mir_function_array_value_reuse(native_module: MirModule, function: MirFunction): Array<MirArrayValueReuse>
+	mut plans: Array<MirArrayValueReuse> := []
+	if function.kind != 3
+		return plans
+	end
+	mut block_index := function.block_start
+	while block_index < function.block_start + function.block_count
+		block := native_module.blocks[block_index]
+		mut reads: Hash<String, Integer> := {}
+		mut starts: Hash<String, Integer> := {}
+		mut stores: Array<Integer> := []
+		mut index := block.instruction_start
+		while index < block.instruction_start + block.instruction_count
+			instruction := native_module.instructions[index]
+			if !mir_array_value_region_instruction(native_module, function, instruction)
+				reads = {}
+				starts = {}
+				stores = []
+			elsif instruction.kind == 23
+				stores.push(index)
+			elsif instruction.kind == 22
+				key := integer_string(instruction.first) + ":" + integer_string(instruction.second)
+				if reads.key?(key)
+					start := starts[key]
+					count := stores.size() - start
+					# Bound expansion independently of workload or source spelling.
+					if count > 0 && count <= 4
+						mut intervening: Array<Integer> := []
+						mut position := start
+						while position < stores.size()
+							intervening.push(stores[position])
+							position += 1
+						end
+						plans.push(MirArrayValueReuse.new(instruction: index, previous: reads[key], stores: intervening))
+					end
+				end
+				reads[key] = index
+				starts[key] = stores.size()
+			end
+			index += 1
+		end
+		block_index += 1
+	end
+	return plans
+end
+
+def mir_array_value_reuse_equal(left: Array<MirArrayValueReuse>, right: Array<MirArrayValueReuse>): Boolean
+	if left.size() != right.size()
+		return false
+	end
+	mut index := 0
+	while index < left.size()
+		if left[index].instruction != right[index].instruction || left[index].previous != right[index].previous
+			return false
+		end
+		if !mir_live_equal(left[index].stores, right[index].stores)
+			return false
+		end
+		index += 1
+	end
+	return true
+end
