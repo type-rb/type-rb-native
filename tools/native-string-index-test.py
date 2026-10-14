@@ -249,7 +249,7 @@ int main(int argc, char **argv) {
        the protected page itself. */
     uint32_t random = 1;
     for (unsigned round = 0; round < 4096; ++round) {
-        unsigned char bytes[8];
+        unsigned char bytes[128];
         for (unsigned i = 0; i < sizeof bytes; ++i) {
             random = random * 1664525u + 1013904223u;
             bytes[i] = random >> 24;
@@ -260,6 +260,25 @@ int main(int argc, char **argv) {
             assert(trbn_utf8_count(span.value->bytes + offset, sizeof bytes - offset) ==
                    reference_count(bytes + offset, sizeof bytes - offset));
         assert(munmap(span.region, span.size) == 0);
+    }
+    /* Put valid and malformed sequences across every word boundary. Each
+       suffix also checks short tails and every unaligned address up to a
+       protected page, including the empty span on that page itself. */
+    const unsigned char sequences[][4] = {
+        {0xc2, 0xa2, 0, 'a'}, {0xe3, 0x81, 0x82, 0}, {0xf0, 0x9f, 0x98, 0x80},
+        {0xc0, 0xaf, 0, 'a'}, {0xed, 0xa0, 0x80, 0}, {0xf4, 0x90, 0x80, 0x80},
+        {0xe3, 0x81, 'a', 0}, {0xf0, 0x90, 0x80, 'a'}
+    };
+    for (size_t at = 0; at <= 124; ++at) {
+        for (size_t example = 0; example < sizeof sequences / sizeof *sequences; ++example) {
+            unsigned char bytes[128]; memset(bytes, 'x', sizeof bytes);
+            memcpy(bytes + at, sequences[example], 4);
+            struct guarded span = guard(bytes, sizeof bytes);
+            for (size_t offset = 0; offset <= sizeof bytes; ++offset)
+                assert(trbn_utf8_count(span.value->bytes + offset, sizeof bytes - offset) ==
+                       reference_count(bytes + offset, sizeof bytes - offset));
+            assert(munmap(span.region, span.size) == 0);
+        }
     }
     assert(allocations == before_queries);
     puts("String indexing, Unicode lifetime, allocation-free queries and guarded bounds passed");
@@ -282,7 +301,8 @@ with tempfile.TemporaryDirectory(prefix='native String index ') as directory:
     observations.append({'case': 'short-byte-search', 'singleByteNeedles': 256,
                          'twoByteNeedles': 65536, 'guardedReceiverBytes': 8, 'startPositions': 9})
     observations.append({'case': 'utf8-count-oracle', 'twoByteInputs': 65536,
-                         'guardedInputs': 4096, 'suffixesPerInput': 9})
+                         'guardedInputs': 4096, 'suffixesPerInput': 129,
+                         'boundarySequenceInputs': 1000, 'maximumBytes': 128})
     for length, index in [(0, 0), (0, -1), (128, -129), (128, 128), (128, -9007199254740991), (128, 9007199254740991)]:
         result = subprocess.run([str(root / 'probe'), str(length), str(index)], capture_output=True, timeout=10)
         assert result.returncode == 70 and result.stdout == b'', result
