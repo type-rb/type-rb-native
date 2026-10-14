@@ -12,6 +12,14 @@ sys.path.insert(0, str(ROOT / "tools/daily-performance"))
 from measure import digest, source_case
 
 
+def check_primary(rows):
+    selected = {row["role"]: row["sha256"] for row in rows if row["case"] == "string-building"}
+    if not {"native", "previous"} <= selected.keys():
+        raise ValueError("Primary application is missing")
+    if selected["native"] == selected["previous"]:
+        raise ValueError("Primary application did not change")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--compilers", type=Path, required=True)
@@ -63,10 +71,7 @@ def main():
                 print(f"ready {case['id']} {role}", flush=True)
         if len(rows) != 67:
             raise ValueError("Incomplete readiness matrix")
-        current = next(row for row in rows if row["case"] == "allocation" and row["role"] == "native")
-        previous = next(row for row in rows if row["case"] == "allocation" and row["role"] == "previous")
-        if current["sha256"] == previous["sha256"]:
-            raise ValueError("Primary application did not change")
+        check_primary(rows)
         result = {"status": "pass", "rows": rows, "timingObservations": 0,
                   "goFlags": env["GOFLAGS"], "goVersion": subprocess.check_output(["go", "version"], text=True).strip()}
     except Exception as error:

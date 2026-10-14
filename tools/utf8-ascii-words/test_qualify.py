@@ -1,6 +1,7 @@
 import copy
 import unittest
 import qualify
+import readiness
 
 
 class TradeTests(unittest.TestCase):
@@ -144,3 +145,15 @@ class CompilerCostTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ReadinessTests(unittest.TestCase):
+    def test_only_primary_identity_establishes_applicability(self):
+        rows = [{"case": "allocation", "role": role, "sha256": role} for role in ("native", "previous")]
+        with self.assertRaisesRegex(ValueError, "missing"):
+            readiness.check_primary(rows)
+        rows += [{"case": "string-building", "role": role, "sha256": "same"} for role in ("native", "previous")]
+        with self.assertRaisesRegex(ValueError, "did not change"):
+            readiness.check_primary(rows)
+        rows[-1]["sha256"] = "different"
+        readiness.check_primary(rows)
