@@ -14,6 +14,11 @@ FRONTEND = (
 
 
 class RecoveryInventorySyncTest(unittest.TestCase):
+    def test_default_mutation_uses_unique_numeric_bound_outside_strings_and_comments(self):
+        source = '# bound > 2\ndef small(count: Integer): Boolean\nreturn count <= 24\nend\n'
+        self.assertEqual(default_mutation("small", source), ["small", "<= 24", "<= 25"])
+        self.assertIsNone(default_mutation("small", 'def f(): Boolean\nreturn 1 < 2 || 0 < 2\nend\n'))
+
     def test_default_mutation_does_not_treat_code_between_strings_as_a_literal(self):
         source = ('# "comment literal" is not emitted\n'
                   'record Output\n\tlines: String\n\tflags: Integer\nend\n'
