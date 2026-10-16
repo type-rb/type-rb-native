@@ -63,11 +63,12 @@ not a performance improvement.
 - `compiler/src/mir/analysis/ranges.trb`, `compiler/src/mir/analysis/numeric.trb`, `compiler/src/mir/analysis/flow.trb`, `compiler/src/mir/passes/optimize.trb`: portable numeric proofs, expansion selection, CFG/dominance
   and rewrites. `compiler/src/mir/verify/module.trb` checks structure/edges; `compiler/src/mir/verify/instructions.trb`
   checks typed instruction contracts.
-- Constant Integer remainders retain their literal divisor and exact reciprocal
+- Constant Integer remainders retain their literal divisor, exact reciprocal and shift
   in the verified numeric selection. Existing expansion budgets select positive
   non-power divisors below `2^32`; QBE consumes those facts with an unsigned
-  numerator guard, exact wide multiplication and at most one correction.
-  Negative or larger numerators keep signed remainder. Zero, negative, dynamic,
+  numerator guard. Numerators below twice the divisor use quotient-zero/one
+  paths; other nonnegative 31-bit numerators use an exact wide product and shift
+  without correction. Remaining numerators keep signed remainder. Zero, negative, dynamic,
   oversized and power-of-two divisors retain the ordinary selection. Verification
   rederives the complete selection rather than trusting stored reciprocal facts.
 - `compiler/src/frontend/checking/body/values.trb`, `compiler/src/mir/build/blocks.trb`, `compiler/src/mir/build/functions.trb`, `compiler/src/mir/build/control.trb`:

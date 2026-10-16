@@ -160,14 +160,34 @@ def mir_numeric_mode(operator: Integer, left_small: Boolean, right_small: Boolea
 	return 0
 end
 
-# Refine only an already budgeted remainder selection. The reciprocal proof
-# belongs to MIR: for 0 <= n < B=2^32 and m=ceil(B/d), floor(n*m/B)
-# overestimates floor(n/d) by at most one. Non-power divisors d>=3 bound
-# n*m below 2^63 and q*d below 2^33. Negative/large n retain signed remainder.
+# Divide a power of two without constructing it outside portable Integer range.
+# The quotient stays below 2^32 and the doubled remainder below 2^33.
+def mir_numeric_reciprocal(divisor: Integer, shift: Integer): Integer
+	mut quotient := 0
+	mut remainder := 1
+	mut position := 0
+	while position < shift
+		quotient *= 2
+		remainder *= 2
+		if remainder >= divisor
+			quotient += 1
+			remainder -= divisor
+		end
+		position += 1
+	end
+	return quotient + 1
+end
+
+# Refine only an already budgeted remainder selection. Let s=31+ceil(log2(d))
+# and m=ceil(2^s/d). For 0<=n<2^31, e=m*d-2^s<d<=2^(s-31), so n*e<2^s.
+# Even at a remainder of d-1, that error cannot raise floor(n*m/2^s).
+# Thus the quotient is exact without correction, and n*m<2^63 because m<2^32.
+# Independently, 0<=n<2d has quotient zero or one. Other n retain signed rem.
 def mir_numeric_selection(native_module: MirModule, function: MirFunction, flow: MirFlow, index: Integer, mode: Integer): MirNumericOperation
 	mut selected := mode
 	mut divisor := 0
 	mut reciprocal := 0
+	mut shift := 0
 	instruction := native_module.instructions[index]
 	if mode == 1 && instruction.kind == 7 && instruction.payload == 5 && instruction.failure >= 0
 		position := mir_flow_position(flow, instruction.second)
@@ -177,19 +197,22 @@ def mir_numeric_selection(native_module: MirModule, function: MirFunction, flow:
 				value := mir_scalar_literal(native_module.literal_texts[literal.payload])
 				if value >= 3 && value <= 4294967295
 					mut power := 1
+					mut bits := 0
 					while power < value
 						power *= 2
+						bits += 1
 					end
 					if power != value
 						selected = 6
 						divisor = value
-						reciprocal = (4294967296 + value - 1) / value
+						shift = 31 + bits
+						reciprocal = mir_numeric_reciprocal(value, shift)
 					end
 				end
 			end
 		end
 	end
-	return MirNumericOperation.new(instruction: index, mode: selected, divisor: divisor, reciprocal: reciprocal)
+	return MirNumericOperation.new(instruction: index, mode: selected, divisor: divisor, reciprocal: reciprocal, shift: shift)
 end
 
 def mir_numeric_leaf(native_module: MirModule, function: MirFunction, caller: Integer, site: Integer, arguments: Array<Integer>, mut budget: Array<Integer>): MirNumericPlan
@@ -351,7 +374,7 @@ def mir_numeric_plans_equal(left: Array<MirNumericPlan>, right: Array<MirNumeric
 		end
 		mut operation := 0
 		while operation < first.operations.size()
-			if first.operations[operation].instruction != second.operations[operation].instruction || first.operations[operation].mode != second.operations[operation].mode || first.operations[operation].divisor != second.operations[operation].divisor || first.operations[operation].reciprocal != second.operations[operation].reciprocal
+			if first.operations[operation].instruction != second.operations[operation].instruction || first.operations[operation].mode != second.operations[operation].mode || first.operations[operation].divisor != second.operations[operation].divisor || first.operations[operation].reciprocal != second.operations[operation].reciprocal || first.operations[operation].shift != second.operations[operation].shift
 				return false
 			end
 			operation += 1
