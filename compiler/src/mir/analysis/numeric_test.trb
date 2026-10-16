@@ -13,7 +13,9 @@ import { optimize_verified_mir } from mir/passes/optimize
 import { verify_mir } from mir/verify/module
 import { CompilerState } from state/state
 import { load_string } from support/storage
+import { integer_string } from support/literals
 import { describe, expect, test } from trb/std/test
+import { array_loop_mir_check } from testing/mir/array_loops
 import trb/std/process
 import trb/std/result
 
@@ -120,7 +122,7 @@ describe("MIR numeric expansion ownership") do
 				else
 					selection = 5
 				end
-				plans[0] = MirNumericPlan.new(witness: -1, function_id: original.function_id, caller: original.caller, call_instruction: original.call_instruction, operations: [MirNumericOperation.new(instruction: instruction, mode: selection)])
+				plans[0] = MirNumericPlan.new(witness: -1, function_id: original.function_id, caller: original.caller, call_instruction: original.call_instruction, operations: [MirNumericOperation.new(instruction: instruction, mode: selection, divisor: operation.divisor, reciprocal: operation.reciprocal, shift: operation.shift)])
 			end
 			expect(verify_mir(state.scalar_mir, true)).to_equal("MIR numeric plan differs")
 			mode += 1
@@ -158,5 +160,163 @@ describe("MIR numeric expansion ownership") do
 		scalar_mir_disable(locals)
 		expect(check_function_body(state, 0, locals)).to_be_false()
 		expect(load_string(state.diagnostics.messages, 0)).to_equal("checked function has no MIR body")
+	end
+end
+
+def constant_remainder_source(divisor: String): String
+	return "def reduce(value: Integer, other: Integer): Integer\nreturn value % " + divisor + "\nend\ndef main()\nputs(reduce(19, 7))\nend\n"
+end
+
+def constant_remainder_count(source: String): Integer
+	state := array_loop_mir_check(source)
+	mut count := 0
+	state.scalar_mir.numeric_plans[0].each do |plan|
+		plan.operations.each do |operation|
+			if operation.mode == 6
+				count += 1
+			end
+		end
+	end
+	return count
+end
+
+describe("MIR constant remainders") do
+	test("selects general non-power divisors with explicit exact reciprocal facts") do
+		multipliers := [2863311531, 2454267027, 2432547850, 4294901761, 2147483650, 2147483649]
+		shifts := [33, 34, 38, 48, 62, 63]
+		mut position := 0
+		["3", "7", "113", "65_537", "2147483647", "4294967295"].each do |divisor|
+			source := constant_remainder_source(divisor)
+			expect(constant_remainder_count(source)).to_equal(1)
+			state := array_loop_mir_check(source)
+			plan := mir_numeric_find(state.scalar_mir.numeric_plans[0], 0, -1, -1)
+			expect(plan.operations.size()).to_equal(1)
+			operation := plan.operations[0]
+			expect(operation.divisor >= 3).to_be_true()
+			expect(operation.reciprocal).to_equal(multipliers[position])
+			expect(operation.shift).to_equal(shifts[position])
+			qbe := control_test_output(emit_qbe(state))
+			expect(qbe.include?(", 2147483648")).to_be_true()
+			expect(qbe.include?(" =l shr ")).to_be_true()
+			expect(qbe.include?(" =l rem ")).to_be_true()
+			expect(qbe.include?(" =l sar ")).to_be_false()
+			position += 1
+		end
+	end
+
+	test("retains zero negative dynamic oversized and power-of-two divisors") do
+		["0", "1", "2", "4", "256", "4294967296", "9007199254740991", "-3", "other"].each do |divisor|
+			expect(constant_remainder_count(constant_remainder_source(divisor))).to_equal(0)
+		end
+	end
+
+	test("independently rejects forged divisor reciprocal shift and mode facts") do
+		mut mutation := 0
+		while mutation < 4
+			mut state := array_loop_mir_check(constant_remainder_source("7"))
+			mut plan := mir_numeric_find(state.scalar_mir.numeric_plans[0], 0, -1, -1)
+			original := plan.operations[0]
+			mut divisor := original.divisor
+			mut reciprocal := original.reciprocal
+			mut mode := original.mode
+			mut shift := original.shift
+			if mutation == 0
+				divisor = 9
+			elsif mutation == 1
+				reciprocal -= 1
+			elsif mutation == 2
+				shift -= 1
+			else
+				mode = 1
+			end
+			plan.operations[0] = MirNumericOperation.new(instruction: original.instruction, mode: mode, divisor: divisor, reciprocal: reciprocal, shift: shift)
+			expect(verify_mir(state.scalar_mir, true)).to_equal("MIR numeric plan differs")
+			mutation += 1
+		end
+	end
+
+	test("rejects missing selections and stale literal-derived proofs") do
+		mut missing := array_loop_mir_check(constant_remainder_source("7"))
+		mut plans := missing.scalar_mir.numeric_plans[0]
+		original := plans[0]
+		plans[0] = MirNumericPlan.new(witness: -1, function_id: original.function_id, caller: original.caller, call_instruction: original.call_instruction, operations: [])
+		expect(verify_mir(missing.scalar_mir, true)).to_equal("MIR numeric plan differs")
+		mut stale := array_loop_mir_check(constant_remainder_source("7"))
+		mut index := 0
+		while index < stale.scalar_mir.literal_texts.size()
+			if stale.scalar_mir.literal_texts[index] == "7"
+				stale.scalar_mir.literal_texts[index] = "9"
+			end
+			index += 1
+		end
+		expect(verify_mir(stale.scalar_mir, true)).to_equal("MIR numeric plan differs")
+	end
+
+	test("retains independent proof after erasure physical reordering and reoptimization") do
+		mut state := array_loop_mir_check(constant_remainder_source("113"))
+		before := control_test_output(emit_qbe(state))
+		plans := state.scalar_mir.numeric_plans[0]
+		intrinsic_mir_erase(state)
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		state.scalar_mir.functions.each do |function|
+			mut left := function.block_start
+			mut right := left + function.block_count - 1
+			while left < right
+				saved := state.scalar_mir.blocks[left]
+				state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
+				state.scalar_mir.blocks[right] = saved
+				left += 1
+				right -= 1
+			end
+		end
+		last := state.scalar_mir.functions.size() - 1
+		saved_function := state.scalar_mir.functions[0]
+		state.scalar_mir.functions[0] = state.scalar_mir.functions[last]
+		state.scalar_mir.functions[last] = saved_function
+		mut left_value := 0
+		mut right_value := state.scalar_mir.values.size() - 1
+		while left_value < right_value
+			saved_value := state.scalar_mir.values[left_value]
+			state.scalar_mir.values[left_value] = state.scalar_mir.values[right_value]
+			state.scalar_mir.values[right_value] = saved_value
+			left_value += 1
+			right_value -= 1
+		end
+		# Root-plan storage follows physical function order and must be rebuilt.
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR live root plan differs")
+		optimize_verified_mir(state.scalar_mir)
+		expect(mir_numeric_plans_equal(plans, state.scalar_mir.numeric_plans[0])).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+
+	test("preserves signed endpoints reciprocal guard and quotient-zero-one boundaries") do
+		values := [-9007199254740991, -4294967297, -4294967296, -4294967295, -9973, -113, -11, -7, -1, 0, 1, 2, 6, 7, 8, 11, 113, 9973, 2147483647, 2147483648, 2863311529, 4294967293, 4294967294, 4294967295, 4294967296, 4294967297, 9007199254740991]
+		[3, 7, 9, 11, 113, 1000, 9973, 65537, 1000003, 1000000007, 2147483647, 4294967295].each do |divisor|
+			mut source := "def reduce(value: Integer): Integer\nreturn value % " + integer_string(divisor) + "\nend\ndef main()\n"
+			mut expected := ""
+			mut boundaries: Array<Integer> := []
+			values.each do |value|
+				boundaries.push(value)
+			end
+			[divisor - 1, divisor, divisor + 1, divisor * 2 - 1, divisor * 2, divisor * 2 + 1, 2147483646, 2147483649].each do |value|
+				boundaries.push(value)
+			end
+			boundaries.each do |value|
+				source += "puts(reduce(" + integer_string(value) + "))\n"
+				expected += integer_string(value % divisor) + "\n"
+			end
+			source += "end\n"
+			state := array_loop_mir_check(source)
+			qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+			if qbe != nil
+				case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+				when Result::Ok(actual)
+					expect(actual).to_equal(expected)
+				when Result::Err(error)
+					puts(error)
+					expect(false).to_be_true()
+				end
+			end
+		end
 	end
 end
