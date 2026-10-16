@@ -63,6 +63,10 @@ snapshot-v4 compatibility check, not a check of the Native decoder's byte bound
 or a replacement for recovery-enabled suites. If a larger compiler snapshot
 reaches that bound, measure the emitted bytes and retain exact-limit tests when
 adjusting the compiler-only limit.
+When introducing compiler-source constructs or data structures, run this short
+check before expensive unit suites and ordinary regeneration. Repeat it after
+compatibility repairs so a successful ordinary build does not postpone discovery
+of recovery-subset restrictions.
 Bootstrap and recovery-execution changes run the complete lanes before merge
 through the planner's `complete` output; full local recovery is for diagnosing
 recovery or platform failures, including a red `Main validation`. For a full run,
