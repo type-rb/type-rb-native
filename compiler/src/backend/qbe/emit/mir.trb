@@ -3,9 +3,9 @@ import { emit_mir_call } from backend/qbe/emit/calls
 import { mir_storage_type_name } from mir/model/types
 import { integer_string, number_without_underscores } from support/literals
 import { MirInstruction, MirNumericPlan, mir_block_index, mir_function_index } from mir/model/module
-import { mir_numeric_operation } from mir/analysis/numeric
+import { mir_numeric_position } from mir/analysis/numeric
 import { QbeEmitContext, QbeValue, emit_address, emit_label, emit_temporary, emitted_value, qbe_type } from backend/qbe/context
-import { emit_checked_integer_operation, lower_binary_operand } from backend/qbe/emit/numeric
+import { emit_checked_integer_operation, emit_constant_integer_remainder, lower_binary_operand } from backend/qbe/emit/numeric
 import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
 import { CompilerState } from state/state
 
@@ -15,13 +15,23 @@ def emit_mir_scalar_instruction(
 		instruction: MirInstruction,
 		operands: Array<String>,
 		types: Array<String>,
-		mode: Integer,
+		plan: MirNumericPlan,
+		position: Integer,
 		mut context: QbeEmitContext,
 		mut output: QbeOutput,
 		safe: Boolean,
 	): QbeValue
 	if instruction.kind == 11
 		return emit_mir_call(state, instruction, operands, context, output)
+	end
+	mut mode := 0
+	mut divisor := 0
+	mut reciprocal := 0
+	if position >= 0
+		selection := plan.operations[position]
+		mode = selection.mode
+		divisor = selection.divisor
+		reciprocal = selection.reciprocal
 	end
 	result_type := types[instruction.result]
 	mut result := emitted_value("", result_type)
@@ -50,7 +60,9 @@ def emit_mir_scalar_instruction(
 				operator_id = 1
 			end
 			mut operand := ""
-			if safe && result_type == "Integer"
+			if mode == 6
+				operand = emit_constant_integer_remainder(context, output, operands[left_id], divisor, reciprocal)
+			elsif safe && result_type == "Integer"
 				operand = emit_temporary(context)
 				mut operation := "add"
 				if operator_id == 3
@@ -143,7 +155,7 @@ def emit_scalar_mir_body(
 		if instruction.kind == 64 || instruction.kind == 65
 			result = emit_mir_object_instruction(state, value_types, instruction, operands, context, output)
 		else
-			result = emit_mir_scalar_instruction(state, function_index, instruction, operands, types, mir_numeric_operation(plan, index), context, output, safe)
+			result = emit_mir_scalar_instruction(state, function_index, instruction, operands, types, plan, mir_numeric_position(plan, index), context, output, safe)
 		end
 		if instruction.result >= 0
 			operands[instruction.result] = result.operand
