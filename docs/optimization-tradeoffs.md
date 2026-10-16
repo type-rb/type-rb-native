@@ -177,6 +177,20 @@ another semantic owner, an unbounded optimizer, or premature LLVM expansion.
 
 ## Avoid both missed opportunities and budget drift
 
+An attempt's stopping condition and an optimization idea's value are separate.
+Distinguish implementation or validation incomplete, measured benefit absent,
+measured benefit with an acceptance blocker, and adopted. A setup failure,
+unsupported compiler-source construct or exhausted repair allowance does not
+establish absent runtime benefit. Keep unfinished work pending with its concrete
+blocker and next check rather than closing it as not planned for that reason.
+
+Reconsider earlier ideas when a corrected implementation, resolved prerequisite,
+changed policy or improved measurement method answers a stated open question.
+Reuse their source and evidence, including unfavorable results, in the existing
+task. Historical budget exhaustion prevents silently continuing that attempt;
+it is not a permanent exclusion of the mechanism. Register any new comparative
+cohort prospectively and do not resample unchanged candidates until they pass.
+
 At each coherent checkpoint, record the next action and why. After two bounded
 size-only attempts without a current runtime-benefit assessment, explicitly
 choose a bounded benefit measurement, a cost/benefit review, or deferral with a
