@@ -45,6 +45,11 @@ def main():
                 record["binarySha256"] = digest(output)
                 record["binaryBytes"] = output.stat().st_size
                 output.unlink()
+            pair = {row["role"]: row for row in raw[-2:]}
+            for metric in ("wallSeconds", "cpuSeconds", "memoryBytes"):
+                previous, current = pair["previous"][metric], pair["native"][metric]
+                if previous > 0 and current > 2 * previous:
+                    raise ValueError(f"Paired compiler catastrophe: {index}/{metric}")
         summaries = {role: summarize([row for row in raw if row["role"] == role], 3) for role in ("native", "previous")}
         result = {"status": "pass", "raw": raw, "summaries": summaries,
                   "ratios": {metric: summaries["native"][metric] / summaries["previous"][metric]
