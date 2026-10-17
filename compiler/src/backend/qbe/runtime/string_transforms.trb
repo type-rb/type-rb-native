@@ -1,4 +1,96 @@
 import { QbeOutput, qbe_output_line } from backend/qbe/output
+import { integer_string } from support/literals
+
+# Binary and three-fragment concatenation share one static constructor emitter.
+# The only callers supply arity two or three. Empty operands reuse the binary
+# contract; nonempty operands need neither a scratch table nor runtime loops.
+def emit_fixed_string_concat_runtime(name: String, count: Integer, mut output: QbeOutput)
+	mut arguments := ""
+	mut index := 0
+	while index < count
+		if index > 0
+			arguments += ", "
+		end
+		arguments += "l %v" + integer_string(index)
+		index += 1
+	end
+	qbe_output_line(output, "\nfunction l $" + name + "(" + arguments + ") {\n@start")
+	index = 0
+	while index < count
+		i := integer_string(index)
+		qbe_output_line(output, " %length_address" + i + " =l add %v" + i + ", 8\n %length" + i + " =l loadl %length_address" + i)
+		index += 1
+	end
+	index = count - 1
+	while index >= 0
+		i := integer_string(index)
+		qbe_output_line(output, " %empty" + i + " =w ceql %length" + i + ", 0\n jnz %empty" + i + ", @empty" + i + ", @next" + i + "\n@empty" + i)
+		mut remaining: Array<String> := []
+		mut other := 0
+		while other < count
+			if other != index
+				remaining.push("%v" + integer_string(other))
+			end
+			other += 1
+		end
+		if count == 2
+			qbe_output_line(output, " ret " + remaining[0])
+		else
+			qbe_output_line(output, " %remaining" + i + " =l call $trbn_string_concat(l " + remaining[0] + ", l " + remaining[1] + ")\n ret %remaining" + i)
+		end
+		qbe_output_line(output, "@next" + i)
+		index -= 1
+	end
+	mut length := "%length0"
+	index = 1
+	while index < count
+		i := integer_string(index)
+		qbe_output_line(output, " %total" + i + " =l add " + length + ", %length" + i)
+		length = "%total" + i
+		index += 1
+	end
+	qbe_output_line(output, " %size =l add " + length + ", 17\n %result =l call $trbn_string_alloc(l %size)\n %result_length =l add %result, 8\n storel " + length + ", %result_length\n %data =l add %result, 24")
+	index = 0
+	while index < count
+		i := integer_string(index)
+		qbe_output_line(output, " %data" + i + " =l add %v" + i + ", 24")
+		mut target := "%data"
+		if index > 0
+			mut offset := "%length0"
+			if index > 1
+				offset = "%total" + integer_string(index - 1)
+			end
+			target = "%target" + i
+			qbe_output_line(output, " " + target + " =l add %data, " + offset)
+		end
+		qbe_output_line(output, " call $memcpy(l " + target + ", l %data" + i + ", l %length" + i + ")")
+		index += 1
+	end
+	qbe_output_line(output, " %end =l add %data, " + length + "\n storeb 0, %end")
+	# Recount only when a join can complete a multibyte sequence. All operands
+	# here are nonempty, so both boundary-byte reads stay inside their String.
+	index = 1
+	while index < count
+		i := integer_string(index)
+		previous := integer_string(index - 1)
+		qbe_output_line(output, " %first" + i + " =w loadub %data" + i + "\n %low" + i + " =w cultw %first" + i + ", 128\n %high" + i + " =w cugtw %first" + i + ", 191\n %not_continuation" + i + " =w or %low" + i + ", %high" + i + "\n jnz %not_continuation" + i + ", @boundary" + i + ", @last" + i + "\n@last" + i)
+		qbe_output_line(output, " %last_offset" + i + " =l sub %length" + previous + ", 1\n %last_address" + i + " =l add %data" + previous + ", %last_offset" + i + "\n %last" + i + " =w loadub %last_address" + i + "\n %ascii" + i + " =w cultw %last" + i + ", 128\n jnz %ascii" + i + ", @boundary" + i + ", @recount\n@boundary" + i)
+		index += 1
+	end
+	qbe_output_line(output, " jmp @sum\n@recount\n %decoded =l call $trbn_utf8_count(l %data, l " + length + ")\n jmp @store\n@sum")
+	mut points := "%points0"
+	index = 0
+	while index < count
+		i := integer_string(index)
+		qbe_output_line(output, " %points_address" + i + " =l add %v" + i + ", 16\n %points" + i + " =l loadl %points_address" + i)
+		if index > 0
+			qbe_output_line(output, " %point_sum" + i + " =l add " + points + ", %points" + i)
+			points = "%point_sum" + i
+		end
+		index += 1
+	end
+	qbe_output_line(output, " jmp @store\n@store\n %points =l phi @sum " + points + ", @recount %decoded\n %result_points =l add %result, 16\n storel %points, %result_points\n ret %result\n}\n")
+end
 
 # Literal transforms preserve bytes, including NUL and malformed UTF-8.
 # Searches are bounded; split releases temporary roots after each managed append.
