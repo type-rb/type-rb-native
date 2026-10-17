@@ -15,11 +15,12 @@ import { mir_storage_type_name } from mir/model/types
 import { integer_string } from support/literals
 import { MirFunction, MirValue, mir_block_index, mir_function_index } from mir/model/module
 import { mir_numeric_find, mir_numeric_guarded, mir_numeric_position } from mir/analysis/numeric
+import { mir_string_concat_index } from mir/analysis/string_concats
 import { QbeEmitContext, emit_label, emit_temporary, emit_typed_store, emitted_value, qbe_type } from backend/qbe/context
 import { emit_guarded_interface_mir, emit_mir_scalar_instruction, emit_scalar_mir } from backend/qbe/emit/mir
 import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
 import { emit_mir_roots, qbe_root_common_prefix, qbe_root_plan_start } from backend/qbe/emit/roots
-import { emit_mir_string_instruction } from backend/qbe/emit/strings
+import { emit_mir_string_concat, emit_mir_string_instruction } from backend/qbe/emit/strings
 import { CompilerState } from state/state
 
 # The adapter consumes block parameters and typed operands. Edge copies are
@@ -55,6 +56,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 	loop_calls := state.scalar_mir.loop_calls[mir_function_index(state.scalar_mir, function_index)]
 	array_loops := state.scalar_mir.array_loops[mir_function_index(state.scalar_mir, function_index)]
 	array_check_reuse := state.scalar_mir.array_check_reuse[mir_function_index(state.scalar_mir, function_index)]
+	concats := state.scalar_mir.string_concats[mir_function_index(state.scalar_mir, function_index)]
 	mut operands: Array<String> := []
 	mut types: Array<String> := []
 	mut value_types: Array<Integer> := []
@@ -84,6 +86,11 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 		mut previous_roots: Array<Integer> := []
 		while index < block.instruction_start + block.instruction_count
 			instruction := state.scalar_mir.instructions[index]
+			concat := mir_string_concat_index(concats, index)
+			if concat >= 0 && concats[concat].fragments.size() == 0
+				index += 1
+				next
+			end
 			while point < roots.instructions.size()
 				if roots.instructions[point] != index
 					break
@@ -106,7 +113,9 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 				end
 			end
 			mut value := emitted_value("", "Void")
-			if instruction.kind >= 67 && instruction.kind <= 72
+			if concat >= 0
+				value = emit_mir_string_concat(concats[concat], operands, context, output)
+			elsif instruction.kind >= 67 && instruction.kind <= 72
 				value = emit_mir_bytes_instruction(state, value_types, instruction, operands, context, output)
 			elsif instruction.kind == 66
 				value = emit_object_conversion(state.scalar_mir, instruction, operands, context, output)

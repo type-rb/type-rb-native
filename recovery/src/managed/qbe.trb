@@ -750,6 +750,7 @@ def _recovery_managed_qbe_context(
 		end
 		alias_pass += 1
 	end
+	root_count := _recovery_managed_qbe_compact_roots(root_slots)
 	return Result<RecoveryManagedQbeContext, Diagnostic>::Ok(
 		RecoveryManagedQbeContext.new(
 			values: values,
@@ -759,9 +760,28 @@ def _recovery_managed_qbe_context(
 			storage_slots: storage_slots,
 			root_slots: root_slots,
 			aliased_parameters: aliased_parameters,
-			root_count: next_root,
+			root_count: root_count,
 		)
 	)
+end
+
+# Aliases already share their original definition's root. Remove the holes left
+# by their discarded slots before allocating and initializing the root frame.
+# Rewrite from a separate map so a new dense name cannot redirect another root.
+def _recovery_managed_qbe_compact_roots(mut root_slots: Hash<String, String>): Integer
+	mut compacted: Hash<String, String> := {}
+	keys := root_slots.keys().sort()
+	mut index := 0
+	while index < keys.size()
+		key := keys[index]
+		previous := root_slots.fetch(key)
+		if !compacted.key?(previous)
+			compacted[previous] = "%root" + compacted.size().to_s()
+		end
+		root_slots[key] = compacted.fetch(previous)
+		index += 1
+	end
+	return compacted.size()
 end
 
 # Operand strings are shared by earlier aliases. Replacing only the current

@@ -2,6 +2,7 @@ import { mir_callable_plans, mir_callable_plans_equal } from mir/analysis/callab
 import { mir_function_loop_calls, mir_loop_calls_error } from mir/analysis/loop_calls
 import { mir_program_error } from mir/verify/program
 import { mir_literal_data_error } from mir/analysis/literal_data
+import { mir_function_string_concats, mir_string_concats_equal } from mir/analysis/string_concats
 import { mir_call_effect_summaries } from mir/analysis/call_effects
 import { mir_object_dispatch_error } from mir/lowering/object_dispatch
 import { mir_object_initialization_error, mir_object_initializers_error } from mir/verify/object_initialization
@@ -336,6 +337,9 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	if !optimized && native_module.numeric_plans[0].size() != 0
 		return "MIR input cannot supply numeric plans"
 	end
+	if !optimized && native_module.string_concats.size() != 0
+		return "MIR input cannot supply String concat plans"
+	end
 	if native_module.callable_plans.size() != 1
 		return "MIR callable plan owner differs"
 	end
@@ -372,6 +376,9 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	mut entry_found := false
 	mut index := 0
 	if native_module.functions.size() == 0
+		if native_module.string_concats.size() != 0
+			return "MIR String concat plan count differs"
+		end
 		if native_module.callable_plans[0].size() != 0
 			return "MIR callable plan differs"
 		end
@@ -467,6 +474,9 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 		end
 		index += 1
 	end
+	if optimized && native_module.string_concats.size() != native_module.functions.size()
+		return "MIR String concat plan count differs"
+	end
 	if !optimized && native_module.loop_calls.size() != 0
 		return "MIR input cannot supply loop-call plans"
 	end
@@ -495,6 +505,9 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	if optimized
 		index = 0
 		while index < native_module.functions.size()
+			if !mir_string_concats_equal(native_module.string_concats[index], mir_function_string_concats(native_module, native_module.functions[index]))
+				return "MIR String concat plan differs"
+			end
 			loop_error := mir_loop_calls_error(native_module.loop_calls[index], mir_function_loop_calls(native_module, native_module.functions[index]))
 			if loop_error != ""
 				return loop_error
