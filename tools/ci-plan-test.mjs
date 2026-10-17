@@ -746,7 +746,7 @@ test('PR workflows pass the tiered scope while main runs every complete lane', (
   const main = readFileSync(new URL('../.github/workflows/push-validation.yml', import.meta.url), 'utf8');
   const cli = readFileSync(new URL('../.github/workflows/native-cli.yml', import.meta.url), 'utf8');
   const targets = readFileSync(new URL('../.github/workflows/linux-amd64-targets.yml', import.meta.url), 'utf8');
-  assert.match(entry, /^env:\n[\s\S]*?  NATIVE_CI_GATE: tiered$/m);
+  assert.match(entry, /^env:\n[\s\S]*?  NATIVE_CI_GATE: complete$/m);
   assert(!main.includes('NATIVE_CI_GATE'), 'main always plans the complete lanes');
   assert(entry.includes('complete: ${{ steps.plan.outputs.complete }}'));
   const scope = "scope: ${{ needs.plan.outputs.complete == 'true' && 'complete' || 'pull-request' }}";
