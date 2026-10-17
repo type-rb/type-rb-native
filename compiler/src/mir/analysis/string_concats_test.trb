@@ -13,15 +13,17 @@ import trb/std/process
 import trb/std/result
 
 describe("Verified MIR String concat chains") do
-	test("reuses an entry-block fragment table across high-allocation loop iterations") do
+	test("passes three fragments directly across high-allocation loop iterations") do
 		source := "def main()\nmut index := 0\nmut total := 0\nwhile index < 400000\ntext := index.to_s()\nlabel := \"[\" + text + \"]\"\ntotal += label.size()\nindex += 1\nend\nputs(total)\nend\n"
 		mut state := logical_checked_source(source)
 		expect(check(state)).to_be_true()
 		qbe := output_source(emit_qbe(state))
 		body := qbe.split("function $trbnf0() {")[1].split("\n}")[0]
 		entry := body.split("\tjmp @mir_")[0]
-		expect(entry.include?("%string_fragments =l alloc8 24")).to_be_true()
-		expect(occurrence_count(body, " =l alloc8 ")).to_equal(1)
+		expect(entry.include?("%string_fragments")).to_be_false()
+		expect(body.include?("call $trbn_string_concat_three(l ")).to_be_true()
+		expect(qbe.include?("function l $trbn_string_concat_many(")).to_be_false()
+		expect(occurrence_count(body, " =l alloc8 ")).to_equal(0)
 		binary := Process.environment("TYPE_RB_NATIVE_QBE")
 		if binary != nil
 			case logical_run_qbe(binary, qbe)

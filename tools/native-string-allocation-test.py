@@ -13,14 +13,15 @@ args = parser.parse_args()
 with tempfile.TemporaryDirectory(prefix='native-string-emission-') as temporary:
     source = Path(temporary) / 'main.trb'
     source.write_text('def main()\nnumber := 123\nputs(number.to_s())\n'
-                      'puts("[" + number.to_s() + "]")\nputs("raw".to_bytes().to_s())\nend\n')
+                      'text := number.to_s()\nputs("[" + text + "]")\n'
+                      'puts("<" + text + "|" + text + ">")\nputs("raw".to_bytes().to_s())\nend\n')
     emitted = subprocess.run([str(args.compiler.resolve()), 'emit-qbe', str(source)],
                              check=True, capture_output=True, timeout=30)
     assert not emitted.stderr, emitted
     decoded = emitted.stdout.decode()
 names = ['trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert',
          'trbn_storage_unlink', 'trbn_gc_alloc', 'trbn_string_alloc', 'trbn_string_from_bytes',
-         'trbn_string_concat', 'trbn_string_concat_many', 'trbn_integer_to_string', 'trbn_string_from_codepoint',
+         'trbn_string_concat', 'trbn_string_concat_three', 'trbn_string_concat_many', 'trbn_integer_to_string', 'trbn_string_from_codepoint',
          'trbn_utf8_width', 'trbn_utf8_count', 'trbn_bytes_utf8_span', 'trbn_bytes_to_string',
          'trbn_gc_temp_push', 'trbn_gc_temp_grow']
 bodies = []
@@ -51,6 +52,7 @@ extern void *trbn_gc_alloc(void *, int64_t, int64_t);
 extern struct string *trbn_string_from_bytes(const void *, int64_t);
 extern struct string *trbn_bytes_to_string(struct string *);
 extern struct string *trbn_string_concat(struct string *, struct string *);
+extern struct string *trbn_string_concat_three(struct string *, struct string *, struct string *);
 extern struct string *trbn_string_concat_many(struct string **, int64_t);
 extern int64_t trbn_utf8_count(const void *, int64_t);
 extern struct string *trbn_integer_to_string(int64_t);
@@ -179,6 +181,10 @@ int main(int argc, char **argv) {
         int64_t points = trbn_utf8_count(expected, length);
         expect(binary, expected, length, points);
         expect(fused, expected, length, points);
+        assert(trbn_gc_allocated_bytes - before == (nonempty > 1 ? length + 33 : 0));
+        before = trbn_gc_allocated_bytes;
+        struct string *direct = trbn_string_concat_three(fragments[0], fragments[1], fragments[2]);
+        expect(direct, expected, length, points);
         assert(trbn_gc_allocated_bytes - before == (nonempty > 1 ? length + 33 : 0));
         clear();
     }

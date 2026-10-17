@@ -116,9 +116,10 @@ not a performance improvement.
   optimized verification re-derives them from current instructions before roots
   or adaptation. Original SSA, type and origin records remain intact. The
   runtime handles empty fragments and UTF-8 sequences spanning joins without
-  mutating an observable String. A function-entry fragment table is sized to the
-  largest verified chain and reused across loop iterations; recursive calls own
-  separate frames. The optional runtime helper is emitted only when required.
+  mutating an observable String. Three-fragment chains pass arguments directly to a static constructor
+  whose emitter is shared with binary concatenation. Longer chains use a
+  function-entry fragment table sized to the largest verified chain and reused
+  across loop iterations; recursive calls own separate frames. The optional runtime helper is emitted only when required.
   This ownership does not establish a measured
   performance qualification.
 - `compiler/src/mir/analysis/roots.trb`: operation effects, backward managed-value liveness and exact
