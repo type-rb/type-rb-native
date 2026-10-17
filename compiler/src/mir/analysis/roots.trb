@@ -1,7 +1,8 @@
 import { mir_managed_type } from mir/model/types
 import { integer_string } from support/literals
-import { MirBlock, MirFunction, MirInstruction, MirModule, MirRootPlan, MirValue } from mir/model/module
+import { MirBlock, MirFunction, MirInstruction, MirModule, MirRootPlan, MirStringConcat, MirValue, mir_function_index } from mir/model/module
 import { mir_flow_blocks } from mir/analysis/flow
+import { mir_string_concat_index } from mir/analysis/string_concats
 
 # Effects are allocation, mutation, I/O and failure bits. Runtime-internal
 # terminal failures stay with their operation; they never resume a MIR edge.
@@ -212,6 +213,26 @@ def mir_live_edge(native_module: MirModule, function: MirFunction, blocks: Hash<
 	end
 end
 
+def mir_concat_live_before(native_module: MirModule, plans: Array<MirStringConcat>, managed: Array<Integer>, index: Integer, after: Array<Integer>): Array<Integer>
+	plan := mir_string_concat_index(plans, index)
+	if plan == -1
+		return mir_live_before(native_module, managed, native_module.instructions[index], after)
+	end
+	if plans[plan].fragments.size() == 0
+		return after
+	end
+	mut live: Array<Integer> := []
+	after.each do |value|
+		if value != native_module.instructions[index].result
+			live.push(value)
+		end
+	end
+	plans[plan].fragments.each do |value|
+		mir_live_operand(managed, live, value)
+	end
+	return live
+end
+
 def mir_live_exit(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>, managed: Array<Integer>, block: MirBlock, incoming: Array<Array<Integer>>): Array<Integer>
 	mut live: Array<Integer> := []
 	if block.terminator == 1 || block.terminator == 2
@@ -234,13 +255,13 @@ record MirLiveTransfer
 	definitions: Array<Integer>
 end
 
-def mir_live_transfer(native_module: MirModule, managed: Array<Integer>, block: MirBlock): MirLiveTransfer
+def mir_live_transfer(native_module: MirModule, plans: Array<MirStringConcat>, managed: Array<Integer>, block: MirBlock): MirLiveTransfer
 	mut uses: Array<Integer> := []
 	mut definitions: Array<Integer> := []
 	mut cursor := block.instruction_start + block.instruction_count - 1
 	while cursor >= block.instruction_start
 		instruction := native_module.instructions[cursor]
-		uses = mir_live_before(native_module, managed, instruction, uses)
+		uses = mir_concat_live_before(native_module, plans, managed, cursor, uses)
 		mir_live_operand(managed, definitions, instruction.result)
 		cursor -= 1
 	end
@@ -268,6 +289,11 @@ end
 # schedules only predecessors, with both branch edges retained by mir_live_exit.
 # Queue storage is bounded by the block count, independent of sparse value IDs.
 def mir_live_incoming(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>, managed: Array<Integer>): Array<Array<Integer>>
+	mut plans: Array<MirStringConcat> := []
+	function_index := mir_function_index(native_module, function.id)
+	if function_index >= 0 && function_index < native_module.string_concats.size()
+		plans = native_module.string_concats[function_index]
+	end
 	mut incoming: Array<Array<Integer>> := []
 	mut predecessors: Array<Array<Integer>> := []
 	mut transfers: Array<MirLiveTransfer> := []
@@ -279,7 +305,7 @@ def mir_live_incoming(native_module: MirModule, function: MirFunction, blocks: H
 		predecessors.push([])
 		pending.push(index)
 		queued.push(true)
-		transfers.push(mir_live_transfer(native_module, managed, native_module.blocks[function.block_start + index]))
+		transfers.push(mir_live_transfer(native_module, plans, managed, native_module.blocks[function.block_start + index]))
 		index += 1
 	end
 	index = 0
@@ -323,6 +349,11 @@ def mir_function_roots_with_values(native_module: MirModule, function: MirFuncti
 		return MirRootPlan.new(function_id: function.id, instructions: points, roots: roots, capacity: 0)
 	end
 	blocks := mir_flow_blocks(native_module, function)
+	mut concats: Array<MirStringConcat> := []
+	function_index := mir_function_index(native_module, function.id)
+	if function_index >= 0 && function_index < native_module.string_concats.size()
+		concats = native_module.string_concats[function_index]
+	end
 	mut managed: Array<Integer> := []
 	mut managed_count := 0
 	values.each do |value|
@@ -350,9 +381,14 @@ def mir_function_roots_with_values(native_module: MirModule, function: MirFuncti
 		while cursor >= block.instruction_start
 			instruction := native_module.instructions[cursor]
 			if managed_count > 0
-				live = mir_live_before(native_module, managed, instruction, live)
+				live = mir_concat_live_before(native_module, concats, managed, cursor, live)
 			end
-			if mir_instruction_effects(native_module, instruction) % 2 == 1
+			concat := mir_string_concat_index(concats, cursor)
+			mut skipped := false
+			if concat >= 0
+				skipped = concats[concat].fragments.size() == 0
+			end
+			if !skipped && mir_instruction_effects(native_module, instruction) % 2 == 1
 				if managed_count == 0
 					# Retained empty root lists must remain independent between points.
 					live = []

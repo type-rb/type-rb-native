@@ -17,6 +17,7 @@ measurements provide intermediate feedback.
 | Function values and lexical capture | Authored `fn` bodies, supported named function values, structural callback signatures, selected captured environments and indirect calls use verified MIR. Module-owned singleton code identities propagate through SSA block arguments and ordinary direct-call parameters, including forwarding cycles. The verifier independently rebuilds call plans before the backend can invoke the ordinary body with the unchanged captured environment. Mixed identities and unsupported producers remain indirect; allocation, effects and roots are unchanged. Mutable captures share cells; the REPL retains checked code, environments and nominal type identities across submissions. |
 | Namespaces and constants | Source-owned lexical declarations resolve before lowering. Exact global types, initializer functions, order, guarded reads and persistent managed roots live in MIR; the adapter consumes the verified catalog. Nullable global facts retain declaration identity across lexical scopes. See [decision 0067](decisions/0067-namespaces-and-constant-mir.md). |
 | Managed Strings and roots | String literals, concatenation, equality, size, indexing, Integer/String/Float conversions and String/Boolean output use typed operations. Integer output explicitly converts first. Managed parameters, rebinding, returns and control joins use the same value/block path. MIR derives live-before roots at allocating operations and ordinary calls; verification recomputes the complete plan. |
+| String concatenation chains | Same-block, single-use concatenations separated only by literal materialization have verified ordered fragment and intermediate-elision plans. Root liveness retains every original fragment through the final allocation. The adapter copies each byte once without changing observable String values or crossing calls, allocation, mutation, I/O, failure or CFG edges. |
 | Managed Arrays | Supported scalar and managed element Arrays, including nominal records and their nesting, retain semantic element identity. Literals, live size, checked indexing, assignment, compound assignment and push use typed operations with allocation/mutation/failure effects. Admitted parameters, returns, rebinding and loop/branch values share managed liveness. Assignment captures its checked logical position before RHS evaluation, then reloads storage for the final store. A verified within-block plan reuses that position for the same Array until an effect can change collection state. |
 | Nominal records | Declaration identity, authored names/origins and ordered field types live in MIR. Construction consumes an ordered operand span with allocating/failing effects; projections verify nominal owner and result type. Recursive records through containers retain their shells and field references. GC descriptors consume this verified table. |
 | Numeric Array induction | Selected zero-based traversal and Integer/Float reductions retain verified induction, address and accumulator relationships. The adapter consumes the established plan. |
@@ -107,11 +108,26 @@ not a performance improvement.
   diagnostic. Runtime declaration identity follows the bound portable-data
   constructor to its byte accessor, leaving sibling declarations ordinary. This
   ownership change does not claim runtime acceleration.
+- `compiler/src/mir/analysis/string_concats.trb`: function-local operand occurrence
+  counts include call/constructor/capture arguments, mutation operands and both
+  CFG edges and returns. Exact single-use concat results may join a same-block
+  chain only across literal instructions. Derived plans retain ordered original
+  fragments and elided intermediate indexes; input MIR cannot supply them, and
+  optimized verification re-derives them from current instructions before roots
+  or adaptation. Original SSA, type and origin records remain intact. The
+  runtime handles empty fragments and UTF-8 sequences spanning joins without
+  mutating an observable String. A function-entry fragment table is sized to the
+  largest verified chain and reused across loop iterations; recursive calls own
+  separate frames. The optional runtime helper is emitted only when required.
+  This ownership does not establish a measured
+  performance qualification.
 - `compiler/src/mir/analysis/roots.trb`: operation effects, backward managed-value liveness and exact
   safe-point root plans. Block parameters transfer only demanded values. Instruction
   uses and definitions are summarized once per block; a bounded predecessor worklist solves live-in sets
   before the exact safe-point walk. These summaries are rebuilt from verified MIR
   and are never input optimization facts.
+  Verified String chains use their original fragments at the surviving safe
+  point and omit the elided intermediate safe points.
 - `compiler/src/backend/qbe/emit/strings.trb`, `compiler/src/backend/qbe/emit/roots.trb`: runtime adaptation of those operations and
   publication of the verified root lists. The adapter reuses unchanged leading
   slots within one MIR block and resets the exact root count at every safe point;

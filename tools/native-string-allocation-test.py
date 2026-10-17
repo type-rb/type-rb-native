@@ -13,14 +13,14 @@ args = parser.parse_args()
 with tempfile.TemporaryDirectory(prefix='native-string-emission-') as temporary:
     source = Path(temporary) / 'main.trb'
     source.write_text('def main()\nnumber := 123\nputs(number.to_s())\n'
-                      'puts("raw".to_bytes().to_s())\nend\n')
+                      'puts("[" + number.to_s() + "]")\nputs("raw".to_bytes().to_s())\nend\n')
     emitted = subprocess.run([str(args.compiler.resolve()), 'emit-qbe', str(source)],
                              check=True, capture_output=True, timeout=30)
     assert not emitted.stderr, emitted
     decoded = emitted.stdout.decode()
 names = ['trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert',
          'trbn_storage_unlink', 'trbn_gc_alloc', 'trbn_string_alloc', 'trbn_string_from_bytes',
-         'trbn_string_concat', 'trbn_integer_to_string', 'trbn_string_from_codepoint',
+         'trbn_string_concat', 'trbn_string_concat_many', 'trbn_integer_to_string', 'trbn_string_from_codepoint',
          'trbn_utf8_width', 'trbn_utf8_count', 'trbn_bytes_utf8_span', 'trbn_bytes_to_string',
          'trbn_gc_temp_push', 'trbn_gc_temp_grow']
 bodies = []
@@ -51,6 +51,8 @@ extern void *trbn_gc_alloc(void *, int64_t, int64_t);
 extern struct string *trbn_string_from_bytes(const void *, int64_t);
 extern struct string *trbn_bytes_to_string(struct string *);
 extern struct string *trbn_string_concat(struct string *, struct string *);
+extern struct string *trbn_string_concat_many(struct string **, int64_t);
+extern int64_t trbn_utf8_count(const void *, int64_t);
 extern struct string *trbn_integer_to_string(int64_t);
 extern struct string *trbn_string_from_codepoint(int64_t);
 int64_t trbn_desc_string[3], other_descriptor[3];
@@ -145,6 +147,40 @@ int main(int argc, char **argv) {
         assert((void *)s == (unsigned char *)old + 8);
         expect(s, input, length, length);
         clear(); trbn_storage_free(keeper, total);
+    }
+    /* Exhaustive fragment triples compare the fused constructor with the
+       existing binary contract and an independently decoded whole byte span.
+       Empty and NUL fragments, malformed bytes, and split UTF-8 sequences
+       exercise joins that cannot blindly sum cached point counts. */
+    static const unsigned char atoms[][4] = {
+        {0}, {'a'}, {'b'}, {0}, {0xc3, 0xa9}, {0xc3}, {0xa9},
+        {0xf0}, {0x9f, 0x99}, {0x82}, {0xff}, {0xe0, 0xa0}, {0x80}
+    };
+    static const int64_t lengths[] = {0, 1, 1, 1, 2, 1, 1, 1, 2, 1, 1, 2, 1};
+    for (unsigned a = 0; a < 13; ++a)
+    for (unsigned b = 0; b < 13; ++b)
+    for (unsigned c = 0; c < 13; ++c) {
+        struct string *fragments[] = {
+            trbn_string_from_bytes(atoms[a], lengths[a]),
+            trbn_string_from_bytes(atoms[b], lengths[b]),
+            trbn_string_from_bytes(atoms[c], lengths[c])
+        };
+        unsigned char expected[12]; int64_t length = 0;
+        unsigned indexes[] = {a, b, c}; int nonempty = 0;
+        for (int i = 0; i < 3; ++i) {
+            memcpy(expected + length, atoms[indexes[i]], lengths[indexes[i]]);
+            length += lengths[indexes[i]];
+            nonempty += lengths[indexes[i]] != 0;
+        }
+        struct string *binary = trbn_string_concat(
+            trbn_string_concat(fragments[0], fragments[1]), fragments[2]);
+        int64_t before = trbn_gc_allocated_bytes;
+        struct string *fused = trbn_string_concat_many(fragments, 3);
+        int64_t points = trbn_utf8_count(expected, length);
+        expect(binary, expected, length, points);
+        expect(fused, expected, length, points);
+        assert(trbn_gc_allocated_bytes - before == (nonempty > 1 ? length + 33 : 0));
+        clear();
     }
     unsigned char bytes[256];
     for (unsigned i = 0; i < 256; ++i) bytes[i] = i;

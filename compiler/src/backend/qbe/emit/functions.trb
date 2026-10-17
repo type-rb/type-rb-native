@@ -80,6 +80,17 @@ def emit_function(mut state: CompilerState, function_index: Integer, value_group
 	if result_type != "Void"
 		qbe_output_line(output, "\t%return_value =l alloc8 8")
 	end
+	# All fused calls finish using this table before the next call. Allocate it
+	# once in the entry block so loop iterations reuse a fixed stack frame.
+	mut fragment_capacity := 0
+	state.scalar_mir.string_concats[mir_index].each do |plan|
+		if plan.fragments.size() > fragment_capacity
+			fragment_capacity = plan.fragments.size()
+		end
+	end
+	if fragment_capacity > 0
+		qbe_output_line(output, "\t%string_fragments =l alloc8 " + integer_string(fragment_capacity * 8))
+	end
 	if function.kind == 3
 		mut block_index := function.block_start
 		while block_index < function.block_start + function.block_count
