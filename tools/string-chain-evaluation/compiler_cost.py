@@ -24,6 +24,10 @@ def main():
     core = min(os.sched_getaffinity(0))
     source_revision = roles["previous"]["revision"]
     source = args.compilers.parent / source_revision / "source/compiler/src/compiler.trb"
+    # Preparation supplies paths and revisions; snapshot digests are a separate
+    # output schema. Capture the real accepted binary before any observations.
+    accepted_binary = Path(roles["previous"]["path"])
+    accepted_identity = {"sha256": digest(accepted_binary), "bytes": accepted_binary.stat().st_size}
     raw = []
     identities = {}
     try:
@@ -45,7 +49,7 @@ def main():
                 record["binarySha256"] = digest(output)
                 record["binaryBytes"] = output.stat().st_size
                 identity = {"sha256": record["binarySha256"], "bytes": record["binaryBytes"]}
-                if role == "previous" and identity != {"sha256": roles["previous"]["sha256"], "bytes": Path(roles["previous"]["path"]).stat().st_size}:
+                if role == "previous" and identity != accepted_identity:
                     raise ValueError("Accepted compiler did not reproduce its fixed point")
                 if role in identities and identities[role] != identity:
                     raise ValueError("Same-role matched compiler build identity differs")

@@ -6,11 +6,10 @@ import readiness
 class ReadinessTests(unittest.TestCase):
     def setUp(self):
         self.ir = {case: {role: dict(binaryCalls=3 if case == 'string-building' else 1,
-                                    fusedCalls=0, scratchAllocations=0, entryScratchBytes=[])
+                                    fusedCalls=0, directCalls=0, scratchAllocations=0, entryScratchBytes=[])
                           for role in ('previous', 'native')}
                    for case in readiness.CASES}
-        self.ir['string-building']['native'].update(binaryCalls=1, fusedCalls=1,
-                                                    scratchAllocations=1, entryScratchBytes=['24'])
+        self.ir['string-building']['native'].update(binaryCalls=1, directCalls=1)
 
     def test_expected_fusion_and_unchanged_hash(self):
         readiness.validate_ir(self.ir)
@@ -18,22 +17,25 @@ class ReadinessTests(unittest.TestCase):
     def test_missing_fusion_or_loop_scratch_stops_before_timing(self):
         for case in readiness.CASES:
             for role in ('previous', 'native'):
-                for field in ('binaryCalls', 'fusedCalls', 'scratchAllocations'):
+                for field in ('binaryCalls', 'fusedCalls', 'directCalls', 'scratchAllocations'):
                     changed = copy.deepcopy(self.ir)
                     changed[case][role][field] += 1
                     with self.assertRaises(ValueError):
                         readiness.validate_ir(changed)
         changed = copy.deepcopy(self.ir)
-        changed['string-building']['native']['entryScratchBytes'] = []
+        changed['string-building']['native']['entryScratchBytes'] = ['24']
         with self.assertRaises(ValueError):
             readiness.validate_ir(changed)
 
     def test_inspection_separates_entry_from_loop_and_other_functions(self):
-        body = 'function l $trbnf0() {\n@start\n %string_fragments =l alloc8 24\n jmp @mir_0\n@mir_0\n call $trbn_string_concat_many(l %string_fragments, l 3)\n call $trbn_string_concat(l %a, l %b)\n ret 0\n}\n'
+        body = 'function l $trbnf0() {\n@start\n jmp @mir_0\n@mir_0\n call $trbn_string_concat_three(l %a, l %b, l %c)\n call $trbn_string_concat(l %a, l %b)\n ret 0\n}\n'
         other = 'function l $trbnf9() {\n call $trbn_string_concat(l %a, l %b)\n}\n'
         self.assertEqual(readiness.inspect_ir(body + other, 'string-building'), self.ir['string-building']['native'])
-        moved = body.replace(' %string_fragments =l alloc8 24\n', '').replace('@mir_0\n', '@mir_0\n %string_fragments =l alloc8 24\n')
+        entry = body.replace('@start\n', '@start\n %string_fragments =l alloc8 24\n')
+        self.assertEqual(readiness.inspect_ir(entry, 'string-building')['entryScratchBytes'], ['24'])
+        moved = body.replace('\n@mir_0\n', '\n@mir_0\n %string_fragments =l alloc8 24\n')
         self.assertEqual(readiness.inspect_ir(moved, 'string-building')['entryScratchBytes'], [])
+        self.assertEqual(readiness.inspect_ir(moved, 'string-building')['scratchAllocations'], 1)
         with self.assertRaises(ValueError):
             readiness.inspect_ir(other, 'string-building')
 

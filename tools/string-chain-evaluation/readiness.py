@@ -23,6 +23,7 @@ def inspect_ir(text, case):
     entry = body.split("jmp @mir_", 1)[0]
     return {"binaryCalls": body.count("call $trbn_string_concat(l "),
             "fusedCalls": body.count("call $trbn_string_concat_many(l "),
+            "directCalls": body.count("call $trbn_string_concat_three(l "),
             "scratchAllocations": len(re.findall(r"%string_fragments =l alloc8 ", body)),
             "entryScratchBytes": re.findall(r"%string_fragments =l alloc8 (\d+)", entry)}
 
@@ -32,8 +33,8 @@ def validate_ir(ir):
         for role in ("previous", "native"):
             fused = case == "string-building" and role == "native"
             expected = {"binaryCalls": 1 if fused or case == "hash-string-keys" else 3,
-                        "fusedCalls": int(fused), "scratchAllocations": int(fused),
-                        "entryScratchBytes": ["24"] if fused else []}
+                        "fusedCalls": 0, "directCalls": int(fused),
+                        "scratchAllocations": 0, "entryScratchBytes": []}
             if ir[case][role] != expected:
                 raise ValueError(f"{case}/{role}: registered chain lowering or entry scratch differs")
 
