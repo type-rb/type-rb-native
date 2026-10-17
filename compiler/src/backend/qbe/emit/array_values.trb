@@ -1,0 +1,72 @@
+import { integer_string } from support/literals
+import { MirArrayLoop, MirArrayValueReuse, MirInstruction } from mir/model/module
+import { mir_operand_type, mir_storage_type_name } from mir/model/types
+import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emitted_value, qbe_type } from backend/qbe/context
+import { emit_mir_array_access } from backend/qbe/emit/arrays
+import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
+import { CompilerState } from state/state
+
+# Addresses are captured only for verified same-block regions without calls,
+# allocation or resize. Scalar values need no managed roots. The plan supplies
+# all dependencies; this adapter does not discover aliases or memory effects.
+def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, instruction_index: Integer, loops: Array<MirArrayLoop>, check_reuse: Array<Integer>, plans: Array<MirArrayValueReuse>, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+	mut selected := -1
+	mut capture := false
+	mut index := 0
+	while index < plans.size()
+		plan := plans[index]
+		if plan.instruction == instruction_index
+			selected = index
+		end
+		if plan.previous == instruction_index
+			capture = true
+		end
+		plan.stores.each do |store|
+			if store == instruction_index
+				capture = true
+			end
+		end
+		index += 1
+	end
+	if selected < 0
+		return emit_mir_array_access(state, value_types, instruction, instruction_index, loops, check_reuse, capture, operands, context, output)
+	end
+	plan := plans[selected]
+	address := "%mir_array_address" + integer_string(plan.previous)
+	mut disjoint := "1"
+	plan.stores.each do |store|
+		distance := emit_temporary(context)
+		biased := emit_temporary(context)
+		separate := emit_temporary(context)
+		combined := emit_temporary(context)
+		# Every primitive Array cell occupies eight bytes. Under machine-word
+		# arithmetic, overlap means distance in [-7, 7]; adding seven maps that
+		# interval to [0, 14]. This also conservatively handles address wrap.
+		qbe_output_line(output, "\t" + distance + " =l sub %mir_array_address" + integer_string(store) + ", " + address)
+		qbe_output_line(output, "\t" + biased + " =l add " + distance + ", 7")
+		qbe_output_line(output, "\t" + separate + " =w cugel " + biased + ", 15")
+		qbe_output_line(output, "\t" + combined + " =w and " + disjoint + ", " + separate)
+		disjoint = combined
+	end
+	fast := emit_label(context)
+	slow := emit_label(context)
+	slow_exit := emit_label(context)
+	join := emit_label(context)
+	result := emit_temporary(context)
+	type_name := mir_storage_type_name(state.scalar_mir, mir_operand_type(value_types, instruction.result))
+	qbe_output_branch(output, disjoint, fast, slow)
+	qbe_output_line(output, fast)
+	qbe_output_line(output, "\tjmp " + join)
+	qbe_output_line(output, slow)
+	fallback := emit_mir_array_access(state, value_types, instruction, instruction_index, loops, check_reuse, false, operands, context, output)
+	qbe_output_line(output, "\tjmp " + slow_exit)
+	qbe_output_line(output, slow_exit)
+	qbe_output_line(output, "\tjmp " + join)
+	qbe_output_line(output, join)
+	previous := operands[state.scalar_mir.instructions[plan.previous].result]
+	qbe_output_line(output, "\t" + result + " =" + qbe_type(type_name) + " phi " + fast + " " + previous + ", " + slow_exit + " " + fallback.operand)
+	if capture
+		qbe_output_line(output, "\t%mir_array_address" + integer_string(instruction_index) + " =l copy " + address)
+	end
+	return emitted_value(result, type_name)
+end

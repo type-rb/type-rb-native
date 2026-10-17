@@ -96,7 +96,7 @@ end
 # No source analysis or implicit roots: each allocation/push has its own MIR
 # safe point. Only verified non-allocating loop plans retain storage addresses
 # across operations; other accesses obtain an address for that operation.
-def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, instruction_index: Integer, plans: Array<MirArrayLoop>, check_reuse: Array<Integer>, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+def emit_mir_array_access(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, instruction_index: Integer, plans: Array<MirArrayLoop>, check_reuse: Array<Integer>, capture_address: Boolean, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	kind := instruction.kind
 	type_id := mir_operand_type(value_types, instruction.result)
 	type_name := mir_storage_type_name(state.scalar_mir, type_id)
@@ -195,6 +195,9 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		address := emit_temporary(context)
 		qbe_output_line(output, "\t" + offset + " =l mul " + second + ", 8")
 		qbe_output_line(output, "\t" + address + " =l add %mir_array_data" + integer_string(selected) + ", " + offset)
+		if capture_address
+			qbe_output_line(output, "\t%mir_array_address" + integer_string(instruction_index) + " =l copy " + address)
+		end
 		if kind == 22
 			emit_typed_load(output, result, type_name, address)
 			return emitted_value(result, type_name)
@@ -225,6 +228,9 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		qbe_output_line(output, "\t" + address + " =l add " + data + ", " + offset)
 	else
 		address = emit_checked_array_access(owner, second, kind == 21, nonnegative, cached_length, cached_data, context, output)
+	end
+	if capture_address
+		qbe_output_line(output, "\t%mir_array_address" + integer_string(instruction_index) + " =l copy " + address)
 	end
 	if kind == 21
 		return emitted_value(address, type_name)
