@@ -1,9 +1,27 @@
 import { integer_string } from support/literals
-import { MirArrayLoop, MirInstruction } from mir/model/module
+import { MirArrayLoop, MirArrayReadGuard, MirInstruction } from mir/model/module
 import { mir_element_type, mir_managed_type, mir_operand_type, mir_storage_type_name } from mir/model/types
 import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emit_typed_load, emit_typed_store, emitted_value } from backend/qbe/context
 import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
 import { CompilerState } from state/state
+
+def array_read_guard_source(guards: Array<MirArrayReadGuard>, instruction: Integer): Integer
+	guards.each do |guard|
+		if guard.instruction == instruction
+			return guard.source
+		end
+	end
+	return -1
+end
+
+def array_read_guard_used(guards: Array<MirArrayReadGuard>, instruction: Integer): Boolean
+	guards.each do |guard|
+		if guard.source == instruction
+			return true
+		end
+	end
+	return false
+end
 
 def array_check_reusable(indexes: Array<Integer>, index: Integer): Boolean
 	mut first := 0
@@ -27,7 +45,7 @@ end
 # indexes; all other values reach a terminal failure. The verifier owns the
 # Array operation; hot-path values are not live across the failure call.
 # A captured assignment target needs only its checked logical index before RHS.
-def emit_checked_array_access(owner: String, requested: String, capture_index: Boolean, nonnegative: Boolean, cached_length: String, cached_data: String, mut context: QbeEmitContext, mut output: QbeOutput): String
+def emit_checked_array_access(owner: String, requested: String, capture_index: Boolean, nonnegative: Boolean, cached_length: String, cached_data: String, checked_name: String, mut context: QbeEmitContext, mut output: QbeOutput): String
 	mut length := cached_length
 	if length == ""
 		length_slot := emit_temporary(context)
@@ -76,6 +94,9 @@ def emit_checked_array_access(owner: String, requested: String, capture_index: B
 		index = emit_temporary(context)
 		qbe_output_line(output, "\t" + index + " =l phi " + positive + " " + positive_index + ", " + negative_accepted + " " + negative_index)
 	end
+	if checked_name != ""
+		qbe_output_line(output, "\t" + checked_name + " =l copy " + index)
+	end
 	if capture_index
 		return index
 	end
@@ -96,7 +117,7 @@ end
 # No source analysis or implicit roots: each allocation/push has its own MIR
 # safe point. Only verified non-allocating loop plans retain storage addresses
 # across operations; other accesses obtain an address for that operation.
-def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, instruction_index: Integer, plans: Array<MirArrayLoop>, check_reuse: Array<Integer>, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, instruction_index: Integer, plans: Array<MirArrayLoop>, check_reuse: Array<Integer>, read_guards: Array<MirArrayReadGuard>, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	kind := instruction.kind
 	type_id := mir_operand_type(value_types, instruction.result)
 	type_name := mir_storage_type_name(state.scalar_mir, type_id)
@@ -179,7 +200,23 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		qbe_output_line(output, "\t" + result + " =l loadl " + address)
 		return emitted_value(result, "Integer")
 	end
-	second := operands[instruction.second]
+	mut second := operands[instruction.second]
+	mut checked_name := ""
+	if kind == 22 && array_read_guard_used(read_guards, instruction_index)
+		checked_name = "%mir_array_checked_index" + integer_string(instruction_index)
+	end
+	guard_source := array_read_guard_source(read_guards, instruction_index)
+	if guard_source >= 0
+		guard := state.scalar_mir.instructions[guard_source]
+		if guard.kind == 21
+			second = operands[guard.result]
+		else
+			second = "%mir_array_checked_index" + integer_string(guard_source)
+		end
+		if kind == 21
+			return emitted_value(second, "Integer")
+		end
+	end
 	if kind == 24
 		element := mir_element_type(state.scalar_mir, mir_operand_type(value_types, instruction.first))
 		if mir_storage_type_name(state.scalar_mir, element) == "Float"
@@ -191,6 +228,9 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		return emitted_value("", "Void")
 	end
 	if (kind == 22 || kind == 23) && selected >= 0
+		if checked_name != ""
+			qbe_output_line(output, "\t" + checked_name + " =l copy " + second)
+		end
 		offset := emit_temporary(context)
 		address := emit_temporary(context)
 		qbe_output_line(output, "\t" + offset + " =l mul " + second + ", 8")
@@ -209,9 +249,12 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		return emitted_value(second, "Integer")
 	end
 	mut address := ""
-	if (kind == 22 || kind == 23) && array_check_reusable(check_reuse, instruction_index)
+	if (kind == 22 || kind == 23) && (guard_source >= 0 || array_check_reusable(check_reuse, instruction_index))
 		# The verified plan proves `second` is a checked logical index for this
-		# exact owner with no intervening mutation. Reload storage after RHS.
+		# exact owner with no intervening length change. Reload storage after RHS.
+		if checked_name != ""
+			qbe_output_line(output, "\t" + checked_name + " =l copy " + second)
+		end
 		mut data := cached_data
 		if data == ""
 			data_slot := emit_temporary(context)
@@ -224,7 +267,7 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		qbe_output_line(output, "\t" + offset + " =l mul " + second + ", 8")
 		qbe_output_line(output, "\t" + address + " =l add " + data + ", " + offset)
 	else
-		address = emit_checked_array_access(owner, second, kind == 21, nonnegative, cached_length, cached_data, context, output)
+		address = emit_checked_array_access(owner, second, kind == 21, nonnegative, cached_length, cached_data, checked_name, context, output)
 	end
 	if kind == 21
 		return emitted_value(address, type_name)
