@@ -1,3 +1,4 @@
+import { emit_literal_split_runtime } from backend/qbe/runtime/string_transforms
 import { emit_object_descriptors } from backend/qbe/emit/objects
 import { mir_string_literal_data } from mir/analysis/literal_data
 import { MirLiteralData, MirModule } from mir/model/module
@@ -229,28 +230,7 @@ def emit_static_strings(
 				decoded_sizes.push(data.points)
 				output.runtime_flags[2] = 1
 			else
-				qbe_output_line(
-					output,
-					"data $trbns" + integer_string(token_index) +
-					" = align 8 { l 0, l " + integer_string(bytes.size()) + ", l " + integer_string(data.points) + ",",
-				)
-				mut line := "\tb"
-				mut line_bytes := 0
-				mut character_index := 0
-				while character_index < bytes.size()
-					line += " " + integer_string(bytes[character_index])
-					line_bytes += 1
-					if line_bytes == 16
-						qbe_output_line(output, line + ",")
-						line = "\tb"
-						line_bytes = 0
-					end
-					character_index += 1
-				end
-				if line_bytes > 0
-					qbe_output_line(output, line + ",")
-				end
-				qbe_output_line(output, "\tb 0 }")
+				emit_flat_string_data("trbns" + integer_string(token_index), data, output)
 			end
 		end
 		if literals[string_index] >= 0
@@ -258,6 +238,7 @@ def emit_static_strings(
 		end
 		string_index += 1
 	end
+	emit_static_split_fragments(state.scalar_mir, output)
 	if compressed_tokens.size() > 0
 		emit_static_string_decoder(output, compressed_tokens, compressed_sizes, decoded_sizes)
 	end
@@ -304,4 +285,48 @@ def emit_record_descriptors(state: CompilerState, mut output: QbeOutput)
 	end
 	qbe_output_line(output, "")
 	return
+end
+
+# Immortal fragments share the ordinary literal representation. Tables contain
+# only immutable String pointers; the runtime constructs each Array afresh.
+def emit_flat_string_data(name: String, data: MirLiteralData, mut output: QbeOutput)
+	qbe_output_line(output, "data $" + name + " = align 8 { l 0, l " + integer_string(data.bytes.size()) + ", l " + integer_string(data.points) + ",")
+	mut line := "\tb"
+	mut line_bytes := 0
+	data.bytes.each do |byte|
+		line += " " + integer_string(byte)
+		line_bytes += 1
+		if line_bytes == 16
+			qbe_output_line(output, line + ",")
+			line = "\tb"
+			line_bytes = 0
+		end
+	end
+	if line_bytes > 0
+		qbe_output_line(output, line + ",")
+	end
+	qbe_output_line(output, "\tb 0 }")
+end
+
+def emit_static_split_fragments(native_module: MirModule, mut output: QbeOutput)
+	mut used := false
+	native_module.string_splits.each.with_index do |plans, function|
+		plans.each do |plan|
+			used = true
+			name := "trbn_split_" + integer_string(native_module.functions[function].id) + "_" + integer_string(plan.instruction)
+			mut table := "data $" + name + " = align 8 {"
+			plan.fragments.each.with_index do |fragment, index|
+				part := name + "_" + integer_string(index)
+				emit_flat_string_data(part, fragment, output)
+				if index > 0
+					table += ","
+				end
+				table += " l $" + part
+			end
+			qbe_output_line(output, table + " }")
+		end
+	end
+	if used
+		emit_literal_split_runtime(output)
+	end
 end
