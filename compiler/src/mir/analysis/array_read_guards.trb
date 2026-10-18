@@ -1,0 +1,81 @@
+import { integer_string } from support/literals
+import { MirArrayReadGuard, MirFunction, MirModule, MirValue } from mir/model/module
+import { mir_instruction_effects, mir_live_add } from mir/analysis/roots
+
+# Successful guards establish a normalized logical position, not a cell value
+# or storage address. Same-block primitive overwrites cannot resize an Array;
+# all other mutation, allocation and calls end the proof even through aliases.
+def mir_function_array_read_guards(native_module: MirModule, function: MirFunction, values: Array<MirValue>): Array<MirArrayReadGuard>
+	mut guards: Array<MirArrayReadGuard> := []
+	if function.kind != 3
+		return guards
+	end
+	mut accesses := 0
+	mut block_index := function.block_start
+	while block_index < function.block_start + function.block_count
+		block := native_module.blocks[block_index]
+		mut index := block.instruction_start
+		while index < block.instruction_start + block.instruction_count
+			kind := native_module.instructions[index].kind
+			if kind == 21 || kind == 22
+				accesses += 1
+			end
+			index += 1
+		end
+		block_index += 1
+	end
+	if accesses < 2
+		return guards
+	end
+	mut primitive: Hash<String, Integer> := {}
+	values.each do |value|
+		if value.type_id == 1 || value.type_id == 2 || value.type_id == 5
+			primitive[integer_string(value.id)] = 1
+		end
+	end
+	mut positions: Array<Integer> := []
+	mut sources: Hash<String, Integer> := {}
+	block_index = function.block_start
+	while block_index < function.block_start + function.block_count
+		block := native_module.blocks[block_index]
+		mut checked: Hash<String, Integer> := {}
+		mut index := block.instruction_start
+		while index < block.instruction_start + block.instruction_count
+			instruction := native_module.instructions[index]
+			if instruction.kind == 21 || instruction.kind == 22
+				key := integer_string(instruction.first) + ":" + integer_string(instruction.second)
+				if checked.key?(key)
+					mir_live_add(positions, index)
+					sources[integer_string(index)] = checked[key]
+				else
+					checked[key] = index
+				end
+			end
+			effects := mir_instruction_effects(native_module, instruction)
+			if instruction.kind == 11 || (effects != 0 && effects != 8 && !(instruction.kind == 23 && primitive.key?(integer_string(instruction.payload))))
+				checked = {}
+			end
+			index += 1
+		end
+		block_index += 1
+	end
+	# Canonical instruction order keeps verification independent of block storage.
+	positions.each do |position|
+		guards.push(MirArrayReadGuard.new(instruction: position, source: sources[integer_string(position)]))
+	end
+	return guards
+end
+
+def mir_array_read_guards_equal(left: Array<MirArrayReadGuard>, right: Array<MirArrayReadGuard>): Boolean
+	if left.size() != right.size()
+		return false
+	end
+	mut index := 0
+	while index < left.size()
+		if left[index].instruction != right[index].instruction || left[index].source != right[index].source
+			return false
+		end
+		index += 1
+	end
+	return true
+end
