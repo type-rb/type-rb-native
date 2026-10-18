@@ -171,6 +171,7 @@ REFERENCE_WORKFLOWS = {
     "daily-performance.yml": ("derived", 1),
     "cumulative-performance.yml": ("derived", 1),
     "weekly-performance.yml": ("derived", 1),
+    "nbody-sqrt-evaluation.yml": ("derived", 1),
 }
 
 
@@ -246,7 +247,7 @@ def validate_reference_checkouts(root: Path, revision: str) -> dict[str, str]:
             prefix = ".native-target-candidate/" if name == "linux-amd64-targets.yml" else ""
             command = f'python3 {prefix}tools/build-reference.py .type-rb "$RUNNER_TEMP/trb"'
             if name in ("benchmarksgame-formal.yml", "benchmarksgame-build-formal.yml",
-                        "daily-performance.yml", "weekly-performance.yml", "cumulative-performance.yml"):
+                        "daily-performance.yml", "weekly-performance.yml", "cumulative-performance.yml", "nbody-sqrt-evaluation.yml"):
                 command += " --trimpath"
             if _command_count(source, command) != count:
                 raise ValidationError(f"reference checkout {name}: canonical versioned build differs")
