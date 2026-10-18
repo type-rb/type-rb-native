@@ -67,7 +67,7 @@ stage=$(mktemp -d "$cache/build.XXXXXX")
 # part of the manifest; timestamps and Git revision do not determine freshness.
 (
 	cd "$repository_root"
-	set -- tools/build-native.sh "$cc"
+	set -- tools/build-native.sh tools/qbe_toolchain.py tools/qbe/backend.json tools/qbe/sqrt.patch "$cc"
 	if test -n "${TRBN_QBE:-}"; then set -- "$@" "$TRBN_QBE"; fi
 	if test -n "${TRBN_BOOTSTRAP_SEED:-}"; then set -- "$@" "$TRBN_BOOTSTRAP_SEED"; fi
 	sha256_files "$@"
@@ -101,19 +101,10 @@ if test "$decision" = cached; then
 fi
 printf '%s\n' 'trbn: bootstrapping the native compiler' >&2
 qbe=${TRBN_QBE:-$cache/qbe-1.3/qbe}
-if test ! -x "$qbe"; then
-	test -z "${TRBN_QBE:-}" || fail "QBE is not executable: $qbe"
-	archive="$cache/qbe-1.3.tar.xz"
-	if test ! -f "$archive"; then
-		curl --fail --location --retry 3 https://c9x.me/compile/release/qbe-1.3.tar.xz -o "$stage/qbe.tar.xz"
-		verify "$stage/qbe.tar.xz" d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320
-		mv "$stage/qbe.tar.xz" "$archive"
-	fi
-	verify "$archive" d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320
-	tar -xf "$archive" -C "$stage"
-	make -C "$stage/qbe-1.3" >&2
-	mkdir -p "$cache/qbe-1.3"
-	cp "$stage/qbe-1.3/qbe" "$qbe"
+if test -n "${TRBN_QBE:-}"; then
+	python3 "$repository_root/tools/qbe_toolchain.py" --check "$qbe"
+else
+	qbe=$(CC="$cc" python3 "$repository_root/tools/qbe_toolchain.py" "$cache/qbe-1.3")
 fi
 seed=${TRBN_BOOTSTRAP_SEED:-$cache/$seed_release/$asset}
 if test ! -f "$seed"; then
@@ -156,7 +147,9 @@ if test "$core" = "$stage/core/compiler"; then
 fi
 revision=$(git -C "$repository_root" rev-parse HEAD 2>/dev/null || printf 'source-archive')
 printf '%s\n' "profile=$profile" "revision=$revision" "inputs_sha256=$(sha256 "$stage/inputs")" "compiler_sha256=$(sha256 "$stage/trbn")" "qbe_sha256=$(sha256 "$stage/qbe")" > "$stage/build-info.txt"
+python3 "$repository_root/tools/qbe_toolchain.py" --identity > "$stage/qbe-backend.json"
 rm -f "$cache/inputs"
+mv "$stage/qbe-backend.json" "$output/qbe-backend.json"
 mv "$stage/trbn" "$output/trbn"
 mv "$stage/qbe" "$output/qbe"
 mv "$stage/build-info.txt" "$output/build-info.txt"

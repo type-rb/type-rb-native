@@ -14,10 +14,10 @@ The canonical inputs are:
   source and semantic oracle;
 - [`compatibility/current.json`](../compatibility/current.json), declaring the
   exact verified combination; and
-- [`compatibility/schema-v2.json`](../compatibility/schema-v2.json), defining
+- [`compatibility/schema-v3.json`](../compatibility/schema-v3.json), defining
   the strict machine-readable shape.
 
-The compatibility record is descriptive, not a dependency resolver. Version 2
+The compatibility record is descriptive, not a dependency resolver. Version 3
 allows only `supportMode: "exact"`. A TypeRB version or revision absent from the
 record is not claimed to work, even if it happens to compile.
 
@@ -28,6 +28,11 @@ revision, result path, workflow run, and profile identity. This prevents a
 newly verified target from being mislabeled as an asset in an older immutable
 seed release. Schema version 1 remains retained for historical records but
 cannot express recovered target-chain evidence.
+
+Schema version 3 additionally records the current backend variant and patch
+digests. The upstream identity is verified against the retained seed provenance;
+the current patch identity is verified against `tools/qbe/backend.json` and the
+patch bytes. Historical seed manifests and schemas remain unchanged.
 
 ## Independent identities
 
