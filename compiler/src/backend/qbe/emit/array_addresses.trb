@@ -1,0 +1,34 @@
+import { integer_string } from support/literals
+import { MirArrayAddressReuse, MirArrayLoop, MirInstruction } from mir/model/module
+import { mir_operand_type, mir_storage_type_name } from mir/model/types
+import { QbeEmitContext, QbeValue, emit_temporary, emit_typed_load, emitted_value } from backend/qbe/context
+import { emit_mir_array_access } from backend/qbe/emit/arrays
+import { QbeOutput, qbe_output_line } from backend/qbe/output
+import { CompilerState } from state/state
+
+# The verified same-block plan retains only a successful access address.
+# Reload after stores so aliases always observe the current element value.
+# No address crosses a call, allocation, resize or collection.
+def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, instruction_index: Integer, loops: Array<MirArrayLoop>, check_reuse: Array<Integer>, plans: Array<MirArrayAddressReuse>, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+	mut previous := -1
+	mut capture := false
+	plans.each do |plan|
+		if plan.instruction == instruction_index
+			previous = plan.previous
+		end
+		if plan.previous == instruction_index
+			capture = true
+		end
+	end
+	if previous < 0
+		return emit_mir_array_access(state, value_types, instruction, instruction_index, loops, check_reuse, capture, operands, context, output)
+	end
+	address := "%mir_array_address" + integer_string(previous)
+	result := emit_temporary(context)
+	type_name := mir_storage_type_name(state.scalar_mir, mir_operand_type(value_types, instruction.result))
+	emit_typed_load(output, result, type_name, address)
+	if capture
+		qbe_output_line(output, "\t%mir_array_address" + integer_string(instruction_index) + " =l copy " + address)
+	end
+	return emitted_value(result, type_name)
+end

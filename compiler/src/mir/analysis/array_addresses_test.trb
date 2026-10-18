@@ -1,0 +1,122 @@
+import { emit_qbe } from compiler
+import { array_loop_mir_check } from testing/mir/array_loops
+import { control_test_output } from testing/mir/control
+import { intrinsic_mir_erase } from testing/mir/intrinsics
+import { logical_run_qbe } from testing/qbe_runner
+import { MirArrayAddressReuse, mir_function_index, mir_module_new } from mir/model/module
+import { optimize_verified_mir } from mir/passes/optimize
+import { verify_mir } from mir/verify/module
+import { mir_test_instruction_with_cell, mir_test_module } from testing/mir/model
+import { describe, expect, test } from trb/std/test
+import trb/std/process
+import trb/std/result
+
+def array_address_source(middle: String, tail: String): String
+	return "def opaque(values: Array<Integer>): Integer\nreturn values.size()\nend\ndef probe(values: Array<Integer>, mut other: Array<Integer>, index: Integer, position: Integer): Integer\nfirst := values[index]\n" + middle + "\nreturn first + values[index]\nend\ndef main()\n" + tail + "\nend\n"
+end
+
+def array_address_execute(source: String, expected: String)
+	state := array_loop_mir_check(source)
+	qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+	if qbe != nil
+		case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+		when Result::Ok(actual)
+			expect(actual).to_equal(expected)
+		when Result::Err(error)
+			puts(error)
+			expect(false).to_be_true()
+		end
+	end
+end
+
+describe("MIR checked scalar Array addresses") do
+	test("reuses a checked address and reloads after an intervening store") do
+		state := array_loop_mir_check(array_address_source("other[position] = 9", ""))
+		plans := state.scalar_mir.array_address_reuse[mir_function_index(state.scalar_mir, 1)]
+		expect(plans.size()).to_equal(1)
+		expect(plans[0].previous < plans[0].instruction).to_be_true()
+		qbe := control_test_output(emit_qbe(state))
+		expect(qbe.include?("%mir_array_address")).to_be_true()
+		body := qbe.split("function l $trbnf1(")[1].split("\n}")[0]
+		expect(body.include?("cugel")).to_be_false()
+		expect(body.include?("loadl %mir_array_address")).to_be_true()
+	end
+
+	test("preserves identical and distinct owners and normalized negative indexes") do
+		array_address_execute(array_address_source("other[position] = 9", "mut a := [7, 11]\nmut b := [2, 3]\nputs(probe(a, b, 0, 0))\nputs(probe(a, a, 0, 0))\nmut c := [7, 11]\nputs(probe(c, c, 0, 1))\nmut d := [7, 11]\nputs(probe(d, d, -1, 1))\nmut e := [7, 11]\nputs(probe(e, e, -1, 0))"), "14\n16\n14\n20\n22\n")
+	end
+
+	test("reloads after every store and chains from the most recent read") do
+		source := array_address_source("other[position] = 4\nother[index] = 5\nsecond := values[index]\nother[position] = second + 4", "mut a := [7, 11]\nputs(probe(a, a, 0, 1))")
+		state := array_loop_mir_check(source)
+		plans := state.scalar_mir.array_address_reuse[mir_function_index(state.scalar_mir, 1)]
+		expect(plans.size()).to_equal(2)
+		expect(plans[1].previous).to_equal(plans[0].instruction)
+		array_address_execute(source, "12\n")
+	end
+
+	test("keeps reloaded Float cells typed") do
+		source := "def probe(values: Array<Float>, mut other: Array<Float>, index: Integer): Float\nfirst := values[index]\nother[index] = 9.0\nreturn first + values[index]\nend\ndef main()\nmut a := [7.0]\nmut b := [2.0]\nputs(probe(a, b, 0))\nputs(probe(a, a, 0))\nend\n"
+		state := array_loop_mir_check(source)
+		expect(state.scalar_mir.array_address_reuse[mir_function_index(state.scalar_mir, 0)].size()).to_equal(1)
+		array_address_execute(source, "14.0\n16.0\n")
+	end
+
+	test("ends regions at calls allocation resizing and block boundaries") do
+		[
+			"other[position] = 9\nopaque(values)",
+			"other[position] = 9\ntext := index.to_s()\nother[position] = text.size()",
+			"other[position] = 9\nother.push(3)",
+			"other[position] = 9\nother.pop()",
+			"other[position] = 9\nif index == position\nother[position] = 4\nend",
+		].each do |middle|
+			state := array_loop_mir_check(array_address_source(middle, ""))
+			expect(state.scalar_mir.array_address_reuse[mir_function_index(state.scalar_mir, 1)].size()).to_equal(0)
+		end
+	end
+
+	test("does not add guards per store or equate different index SSA values") do
+		state := array_loop_mir_check(array_address_source("other[position] = 1\nother[position] = 2\nother[position] = 3\nother[position] = 4\nother[position] = 5", ""))
+		expect(state.scalar_mir.array_address_reuse[mir_function_index(state.scalar_mir, 1)].size()).to_equal(1)
+		different := "def probe(values: Array<Integer>, mut other: Array<Integer>, left: Integer, right: Integer): Integer\nfirst := values[left]\nother[left] = 9\nreturn first + values[right]\nend\ndef main()\nend\n"
+		changed := array_loop_mir_check(different)
+		expect(changed.scalar_mir.array_address_reuse[mir_function_index(changed.scalar_mir, 0)].size()).to_equal(0)
+	end
+
+	test("rejects missing and forged dependencies and rederives idempotently") do
+		mut state := array_loop_mir_check(array_address_source("other[position] = 9", ""))
+		index := mir_function_index(state.scalar_mir, 1)
+		old := state.scalar_mir.array_address_reuse[index][0]
+		state.scalar_mir.array_address_reuse[index][0] = MirArrayAddressReuse.new(instruction: old.previous, previous: old.previous)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR Array address-reuse plan differs")
+		state.scalar_mir.array_address_reuse[index][0] = MirArrayAddressReuse.new(instruction: old.instruction, previous: -1)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR Array address-reuse plan differs")
+		state.scalar_mir.array_address_reuse[index] = []
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR Array address-reuse plan differs")
+		optimize_verified_mir(state.scalar_mir)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		optimize_verified_mir(state.scalar_mir)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+
+	test("rejects supplied plans in raw and empty modules") do
+		mut raw := mir_module_new()
+		raw.array_address_reuse.push([MirArrayAddressReuse.new(instruction: 0, previous: 0)])
+		expect(verify_mir(raw, false)).to_equal("MIR input cannot supply Array address-reuse plans")
+		expect(verify_mir(raw, true)).to_equal("MIR Array address-reuse plan count differs")
+	end
+
+	test("keeps structural errors ahead of missing derived plan rows") do
+		mut native_module := mir_test_module(false, false)
+		native_module.instructions[0] = mir_test_instruction_with_cell(native_module.instructions[0], 0, 999)
+		expect(native_module.array_address_reuse.size()).to_equal(0)
+		expect(verify_mir(native_module, true)).to_equal("MIR instruction kind is unsupported")
+	end
+
+	test("consumes canonical plans after frontend erasure") do
+		mut state := array_loop_mir_check(array_address_source("other[position] = 9", ""))
+		before := control_test_output(emit_qbe(state))
+		intrinsic_mir_erase(state)
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+	end
+end

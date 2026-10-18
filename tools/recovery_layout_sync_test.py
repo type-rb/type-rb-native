@@ -19,6 +19,13 @@ class RecoveryInventorySyncTest(unittest.TestCase):
         self.assertEqual(default_mutation("small", source), ["small", "<= 24", "<= 25"])
         self.assertIsNone(default_mutation("small", 'def f(): Boolean\nreturn 1 < 2 || 0 < 2\nend\n'))
 
+    def test_default_mutation_handles_equality_only_analysis(self):
+        source = '# kind == 22\ndef scalar(kind: Integer): Boolean\nreturn kind == 3 || kind != 6\nend\n'
+        self.assertEqual(default_mutation("scalar", source), ["scalar", "== 3", "== 4"])
+        self.assertEqual(default_mutation("other", 'def f(n: Integer): Boolean\nreturn n != 6\nend\n'),
+                         ["other", "!= 6", "!= 7"])
+        self.assertIsNone(default_mutation("duplicate", 'def f(n: Integer): Boolean\nreturn n == 3 || n == 3\nend\n'))
+
     def test_default_mutation_does_not_treat_code_between_strings_as_a_literal(self):
         source = ('# "comment literal" is not emitted\n'
                   'record Output\n\tlines: String\n\tflags: Integer\nend\n'
