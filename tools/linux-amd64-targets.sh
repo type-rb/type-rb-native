@@ -200,7 +200,7 @@ x86_64 | amd64) ;;
 *) fail "Linux amd64 is required" ;;
 esac
 
-for command_name in as awk cmp cp cut file find git grep jq ld.lld ldd nm python3 readelf sed sha256sum strace strings strip; do
+for command_name in as awk cmp cp cut file find git grep jq ld.lld ldd nm objdump python3 readelf sed sha256sum strace strings strip; do
 	command -v "$command_name" > /dev/null 2>&1 || fail "$command_name is required"
 done
 python_command=$(command -v python3)
@@ -250,10 +250,11 @@ record_native_elf() {
 
 record_native_elf compiler "$output_compiler"
 record_native_elf portable-entry "$native_application"
-grep -Eq 'Shared library: \[libm\.so' "$evidence/elf/portable-entry/dependencies.txt" ||
-	fail "Native portable-entry executable does not declare libm"
-grep -Eq '(^|[[:space:]])sqrt(@|$)' "$evidence/elf/portable-entry/undefined-symbols.txt" ||
-	fail "Native portable-entry executable does not retain the external sqrt boundary"
+grep -Eq '=d sqrt ' "$evidence/applications/portable-entry-first.ssa" ||
+	fail "Native portable-entry QBE does not contain the sqrt operation"
+objdump -d "$native_application" > "$evidence/elf/portable-entry/disassembly.txt"
+grep -Eq '[[:space:]]sqrtsd[[:space:]]' "$evidence/elf/portable-entry/disassembly.txt" ||
+	fail "Native portable-entry executable does not contain scalar square root"
 
 mkdir -p "$evidence/go-elf"
 file "$go_application" > "$evidence/go-elf/file.txt"
