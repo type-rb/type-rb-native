@@ -64,6 +64,7 @@ if [ "$plan" = documentation ]; then
 	exit 0
 fi
 
+step "QBE dependency identity" python3 tools/qbe_toolchain_test.py
 step "compiler source staging" python3 tools/compiler_sources_test.py
 step "compiler ownership and migration" sh -c 'python3 tools/compiler_layout_test.py && python3 tools/migrate_compiler_layout_test.py && python3 tools/compiler_layout.py'
 step "CI planner" node --test tools/ci-plan-test.mjs tools/ci-run-suites-test.mjs tools/recovery-workspace-test.mjs

@@ -27,8 +27,9 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
     for directory in ['compiler', 'bin', '.trb/bootstrap']:
         shutil.copytree(repository / directory, root / directory)
     (root / 'tools').mkdir()
-    for file in ['trbn', 'tools/build-native.sh', 'tools/compiler_sources.py']:
+    for file in ['trbn', 'tools/build-native.sh', 'tools/compiler_sources.py', 'tools/qbe_toolchain.py']:
         shutil.copy2(repository / file, root / file)
+    shutil.copytree(repository / 'tools/qbe', root / 'tools/qbe')
     env = {key: value for key, value in os.environ.items()
            if key not in ['TRBN_CC', 'TRBN_QBE', 'TRBN_BOOTSTRAP_SEED']}
 
@@ -152,7 +153,8 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
     # Each input change selects the rebuild scope that a build would take.
     # Restoring the content returns to the published cache without a rebuild.
     for file, scope in [('compiler/cli/main.trb', 'cli'), ('compiler/src/compiler.trb', 'core'),
-                        ('tools/compiler_sources.py', 'cli')]:
+                        ('tools/compiler_sources.py', 'cli'), ('tools/qbe_toolchain.py', 'core'),
+                        ('tools/qbe/backend.json', 'core'), ('tools/qbe/sqrt.patch', 'core')]:
         original = (root / file).read_text()
         edit(file, '\n# Content-only edit\n')
         expect_plan(scope, f'{file} edit')
@@ -183,8 +185,9 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
         empty = Path(temporary_empty)
         shutil.copytree(root / 'compiler', empty / 'compiler')
         (empty / 'tools').mkdir()
-        for file in ['trbn', 'tools/build-native.sh', 'tools/compiler_sources.py']:
+        for file in ['trbn', 'tools/build-native.sh', 'tools/compiler_sources.py', 'tools/qbe_toolchain.py']:
             shutil.copy2(repository / file, empty / file)
+        shutil.copytree(repository / 'tools/qbe', empty / 'tools/qbe')
         assert plan(empty) == 'core'
         assert not (empty / 'bin').exists() or not any((empty / 'bin').iterdir())
 

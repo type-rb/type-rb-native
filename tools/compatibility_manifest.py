@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from qbe_toolchain import backend_identity
+
 
 class ValidationError(Exception):
     pass
@@ -337,8 +339,15 @@ def validate_repository_values(
         "sourceURL": seed_manifest["backend"]["sourceUrl"],
         "sourceSHA256": seed_manifest["backend"]["sourceSha256"],
     }
-    if manifest["backend"] != expected_backend:
+    if {key: manifest["backend"][key] for key in expected_backend} != expected_backend:
         raise ValidationError("backend identity disagrees with the retained release manifest")
+
+    try:
+        current_backend = backend_identity(root)
+    except (ValueError, OSError) as error:
+        raise ValidationError(f"backend identity: {error}") from error
+    if manifest["backend"] != current_backend:
+        raise ValidationError("backend identity disagrees with the current patched backend")
 
     seed_targets = _expected_targets(seed_manifest)
     current_targets = manifest["targets"]
@@ -457,7 +466,7 @@ def main() -> int:
     arguments = parse_arguments()
     root = arguments.root.resolve()
     manifest_path = arguments.manifest or root / "compatibility/current.json"
-    schema_path = arguments.schema or root / "compatibility/schema-v2.json"
+    schema_path = arguments.schema or root / "compatibility/schema-v3.json"
     try:
         manifest = load_json_strict(manifest_path)
         schema = load_json_strict(schema_path)
