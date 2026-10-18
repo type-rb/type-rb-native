@@ -161,12 +161,13 @@ describe("MIR literal String split") do
 		expect(check(state)).to_be_true()
 		expect(state.scalar_mir.string_splits[0].size()).to_equal(2)
 		output := output_source(emit_qbe(state))
-		marker := "function l $trbn_array_new(l %descriptor) {\n@start"
+		marker := "function l $trbn_gc_alloc(l %descriptor, l %payload_size, l %reserved_size) {\n@start"
 		parts := output.split(marker)
 		expect(parts.size()).to_equal(2)
 		mut forced := parts[0] + marker + "\n call $trbn_gc_collect(w 0)" + parts[1]
-		push := " call $trbn_array_push_paced(l %result, l %text)"
-		forced = forced.split(push).join(" call $trbn_gc_collect(w 0)\n" + push)
+		copy := " call $memcpy(l %data, l %fragments, l %copy_bytes)"
+		expect(forced.split(copy).size()).to_equal(2)
+		forced = forced.split(copy).join(" call $trbn_gc_collect(w 0)\n" + copy + "\n call $trbn_gc_collect(w 0)")
 		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
 		if qbe != nil
 			case logical_run_qbe(qbe, forced)
