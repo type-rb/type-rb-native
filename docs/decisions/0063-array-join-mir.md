@@ -32,6 +32,21 @@ count plus output bytes. No user callback runs between sizing and copying in
 the current single-mutator, nonmoving runtime; future mutation/GC models must
 revisit that assumption explicitly.
 
+A verified single-use String Array plan may omit the container and its initial
+backing storage. It admits at most four already available fragments, one
+same-block join and complete uses consisting only of the construction appends
+and that join. Additional uses, escaping containers, mutation, unrelated effects
+and allocating separators retain ordinary materialization. The canonical MIR
+and its conservative effects stay intact; verification independently derives
+both the plan and the corresponding fragment roots.
+
+The adapter reserves the bounded pointer workspace once in the function prologue
+and passes it to the same byte-joining runtime used by ordinary Arrays. The
+workspace is not a managed object or a GC root. Exact root plans directly retain
+each String owner and the separator across result allocation, including repeated
+fragment aliases. Only eliminated operations lose their internal allocation
+safepoints; every remaining failure and full-result UTF-8 scan stays unchanged.
+
 The retained REPL gathers its stored String values and uses ordinary `join` for
 assembly. This is verified CLI self-use: the current Native core compiles the
 CLI after its immutable-seed fixed point. The core implementation itself remains
