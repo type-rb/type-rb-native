@@ -1,3 +1,4 @@
+import { mir_array_join_elides } from mir/analysis/array_joins
 import { emit_mir_bytes_instruction } from backend/qbe/emit/bytes
 import { emit_object_conversion } from backend/qbe/emit/object_dispatch
 import { emit_mir_object_instruction } from backend/qbe/emit/objects
@@ -20,7 +21,7 @@ import { QbeEmitContext, emit_label, emit_temporary, emit_typed_store, emitted_v
 import { emit_guarded_interface_mir, emit_mir_scalar_instruction, emit_scalar_mir } from backend/qbe/emit/mir
 import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
 import { emit_mir_roots, qbe_root_common_prefix, qbe_root_plan_start } from backend/qbe/emit/roots
-import { emit_mir_string_concat, emit_mir_string_instruction } from backend/qbe/emit/strings
+import { emit_mir_array_join, emit_mir_string_concat, emit_mir_string_instruction } from backend/qbe/emit/strings
 import { CompilerState } from state/state
 
 # The adapter consumes block parameters and typed operands. Edge copies are
@@ -57,6 +58,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 	array_loops := state.scalar_mir.array_loops[mir_function_index(state.scalar_mir, function_index)]
 	array_check_reuse := state.scalar_mir.array_check_reuse[mir_function_index(state.scalar_mir, function_index)]
 	concats := state.scalar_mir.string_concats[mir_function_index(state.scalar_mir, function_index)]
+	joins := state.scalar_mir.array_joins[mir_function_index(state.scalar_mir, function_index)]
 	mut operands: Array<String> := []
 	mut types: Array<String> := []
 	mut value_types: Array<Integer> := []
@@ -112,8 +114,22 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 					qbe_output_line(output, first_call)
 				end
 			end
+			mut elided := false
+			mut selected_join := -1
+			joins.each.with_index do |plan, slot|
+				if mir_array_join_elides(plan, index)
+					elided = true
+				end
+				if index == plan.join
+					selected_join = slot
+				end
+			end
 			mut value := emitted_value("", "Void")
-			if concat >= 0
+			if elided
+				# No managed Array object or SSA pointer is materialized.
+			elsif selected_join >= 0
+				value = emit_mir_array_join(joins[selected_join], operands[instruction.second], operands, context, output)
+			elsif concat >= 0
 				value = emit_mir_string_concat(concats[concat], operands, context, output)
 			elsif instruction.kind >= 67 && instruction.kind <= 72
 				value = emit_mir_bytes_instruction(state, value_types, instruction, operands, context, output)
@@ -199,7 +215,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 				qbe_output_line(output, cache_complete)
 				value = emitted_value(cache, types[instruction.result])
 			end
-			if instruction.result >= 0
+			if instruction.result >= 0 && !elided
 				# Stable MIR names allow a dominating definition in any storage order.
 				qbe_output_line(output, "\t" + operands[instruction.result] + " =" + qbe_type(types[instruction.result]) + " copy " + value.operand)
 			end

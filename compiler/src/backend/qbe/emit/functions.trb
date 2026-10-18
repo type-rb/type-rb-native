@@ -92,6 +92,20 @@ def emit_function(mut state: CompilerState, function_index: Integer, value_group
 		qbe_output_line(output, "\t%string_fragments =l alloc8 " + integer_string(fragment_capacity * 8))
 	end
 	if function.kind == 3
+		# Every join finishes before the next one. Reuse one bounded pointer table.
+		mut join_capacity := 0
+		state.scalar_mir.array_joins[mir_index].each do |plan|
+			mut capacity := plan.elements.size()
+			if capacity == 0
+				capacity = 1
+			end
+			if capacity > join_capacity
+				join_capacity = capacity
+			end
+		end
+		if join_capacity > 0
+			qbe_output_line(output, "\t%join_fragments =l alloc8 " + integer_string(join_capacity * 8))
+		end
 		mut block_index := function.block_start
 		while block_index < function.block_start + function.block_count
 			block := state.scalar_mir.blocks[block_index]
