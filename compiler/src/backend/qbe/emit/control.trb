@@ -21,7 +21,7 @@ import { QbeEmitContext, emit_label, emit_temporary, emit_typed_store, emitted_v
 import { emit_guarded_interface_mir, emit_mir_scalar_instruction, emit_scalar_mir } from backend/qbe/emit/mir
 import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
 import { emit_mir_roots, qbe_root_common_prefix, qbe_root_plan_start } from backend/qbe/emit/roots
-import { emit_mir_array_join, emit_mir_string_concat, emit_mir_string_instruction } from backend/qbe/emit/strings
+import { emit_mir_array_join, emit_mir_string_concat, emit_mir_string_instruction, emit_mir_string_split } from backend/qbe/emit/strings
 import { CompilerState } from state/state
 
 # The adapter consumes block parameters and typed operands. Edge copies are
@@ -59,6 +59,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 	array_check_reuse := state.scalar_mir.array_check_reuse[mir_function_index(state.scalar_mir, function_index)]
 	concats := state.scalar_mir.string_concats[mir_function_index(state.scalar_mir, function_index)]
 	joins := state.scalar_mir.array_joins[mir_function_index(state.scalar_mir, function_index)]
+	splits := state.scalar_mir.string_splits[mir_function_index(state.scalar_mir, function_index)]
 	mut operands: Array<String> := []
 	mut types: Array<String> := []
 	mut value_types: Array<Integer> := []
@@ -124,9 +125,17 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 					selected_join = slot
 				end
 			end
+			mut selected_split := -1
+			splits.each.with_index do |plan, slot|
+				if plan.instruction == index
+					selected_split = slot
+				end
+			end
 			mut value := emitted_value("", "Void")
 			if elided
 				# No managed Array object or SSA pointer is materialized.
+			elsif selected_split >= 0
+				value = emit_mir_string_split(function.id, splits[selected_split], context, output)
 			elsif selected_join >= 0
 				value = emit_mir_array_join(joins[selected_join], operands[instruction.second], operands, context, output)
 			elsif concat >= 0
