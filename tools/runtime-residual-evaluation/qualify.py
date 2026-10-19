@@ -37,6 +37,8 @@ def git(root, *args):
 
 
 def select_sources(root, registration):
+    require(registration.get("pairedWallPolicy", "stop") in ("stop", "record-and-assess"),
+            "Unknown paired wall policy")
     require(registration.get("status") == "registered" and registration.get("task") == 1104 and registration.get("runs") == 1 and
             registration.get("primaries") == list(PRIMARIES) and
             registration.get("jointControls") == ["array-sorting"] and
@@ -268,6 +270,13 @@ def assess(selection, snapshot, raw, compiler_cost=None):
         require(all(record["artifact"]["sha256"] == row["artifactSha256"]
                     for record in groups[(*key, "runtime")]), "Runtime artifact differs")
     result = evaluate_trade(rows, groups)
+    # A complete cohort can retain a delay without accepting it. Derive the
+    # unchanged twofold alarm from raw pairs, independently of the live guard.
+    wall_alarms = paired_wall_alarms(raw)
+    result["pairedWallAlarms"] = wall_alarms
+    result["failures"].extend(wall_alarms)
+    if wall_alarms:
+        result["status"] = "unmet"
     compiler_failures = compiler_cost_failures(compiler_cost)
     result["failures"].extend(compiler_failures)
     if compiler_failures:
@@ -284,6 +293,24 @@ def assess(selection, snapshot, raw, compiler_cost=None):
             "compilerCost": compiler_cost,
             "compilerCostScope": compiler_cost["scope"],
             "adoption": False}
+
+
+def paired_wall_alarms(raw):
+    counters, pairs = Counter(), defaultdict(dict)
+    for record in raw:
+        role, kind = record.get("role"), record.get("kind")
+        if role not in ("native", "previous") or kind not in ("build", "runtime"):
+            continue
+        key = (record["case"], role, kind)
+        index = counters[key]
+        counters[key] += 1
+        pairs[record["case"], kind, index][role] = record["wallSeconds"]
+    alarms = []
+    for (case, kind, index), pair in pairs.items():
+        require(set(pair) == {"native", "previous"}, "Incomplete paired wall observation")
+        if pair["previous"] > 0 and pair["native"] > 2 * pair["previous"]:
+            alarms.append(f"{case}/{kind}-{index}/paired-wall-over-twofold")
+    return alarms
 
 
 def evaluate_trade(rows, groups):

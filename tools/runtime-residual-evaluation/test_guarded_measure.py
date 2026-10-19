@@ -28,6 +28,34 @@ class GuardTests(unittest.TestCase):
                             g.check(Path("case") / role / "runtime-0", r)
                     else: g.check(Path("case") / role / "runtime-0", r)
 
+    def test_opt_in_wall_alarm_is_retained_in_both_orders_and_phases(self):
+        for phase in ("build-0", "runtime-0"):
+            for order in [("native", "previous"), ("previous", "native")]:
+                g = Guard("record-and-assess")
+                for role in order:
+                    r = dict(self.record, wallSeconds=3. if role == "native" else 1.)
+                    g.check(Path("case") / role / phase, r)
+                self.assertEqual(g.wall_alarms, [dict(case="case", observation=phase,
+                                                    native=3., previous=1., ratio=3.)])
+
+    def test_recording_wall_does_not_relax_resource_stops(self):
+        for metric in ("cpuSeconds", "memoryBytes"):
+            g = Guard("record-and-assess")
+            g.check("case/previous/runtime-0", self.record)
+            r = dict(self.record, wallSeconds=3.)
+            r[metric] *= 2.01
+            with self.assertRaisesRegex(ValueError, "catastrophe"):
+                g.check("case/native/runtime-0", r)
+        g = Guard("record-and-assess")
+        g.check("case/previous/build-0", self.record)
+        r = copy.deepcopy(self.record); r["artifact"]["bytes"] = 201
+        with self.assertRaisesRegex(ValueError, "artifact catastrophe"):
+            g.check("case/native/build-0", r)
+
+    def test_unknown_wall_policy_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "wall policy"):
+            Guard("ignore")
+
     def test_failed_output_or_timeout_stops(self):
         for status in ("timeout", "wrong-output", "build-failure"):
             r = dict(self.record, status=status)

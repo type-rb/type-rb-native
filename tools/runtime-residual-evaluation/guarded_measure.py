@@ -1,4 +1,4 @@
-"""Run the unchanged suite with immediate failure and paired catastrophe stops."""
+"""Run the unchanged suite with registered failure and paired-cost handling."""
 import argparse
 import importlib.util
 import json
@@ -8,7 +8,11 @@ from backends import BackendRoles
 
 
 class Guard:
-    def __init__(self):
+    def __init__(self, wall_policy="stop"):
+        if wall_policy not in ("stop", "record-and-assess"):
+            raise ValueError("Unknown paired wall policy")
+        self.wall_policy = wall_policy
+        self.wall_alarms = []
         self.pairs = {}
         self.artifacts = {}
 
@@ -53,6 +57,11 @@ class Guard:
         for metric in ("wallSeconds", "cpuSeconds", "memoryBytes"):
             current, previous = pair["native"][metric], pair["previous"][metric]
             if previous > 0 and current > 2 * previous:
+                if metric == "wallSeconds" and self.wall_policy == "record-and-assess":
+                    self.wall_alarms.append(dict(case=case, observation=name,
+                                                native=current, previous=previous,
+                                                ratio=current / previous))
+                    continue
                 raise ValueError(f"Paired catastrophe: {case}/{name}/{metric}")
         if name.startswith("build-") and pair["native"]["artifact"]["bytes"] > 2 * pair["previous"]["artifact"]["bytes"]:
             raise ValueError(f"Paired artifact catastrophe: {case}/{name}")
@@ -75,7 +84,7 @@ def main():
     registration = json.loads(Path(__file__).with_name("registration.json").read_text())
     roles = json.loads(Path(args.compilers).read_text())
     backends = BackendRoles(roles, args.qbe, args.previous_qbe, registration["backends"])
-    guard = Guard()
+    guard = Guard(registration.get("pairedWallPolicy", "stop"))
     original_write = measure.write
 
     def write(path, data):
@@ -103,6 +112,7 @@ def main():
         status.update(status="fail", error=str(error))
         raise
     finally:
+        status.update(pairedWallPolicy=guard.wall_policy, pairedWallAlarms=guard.wall_alarms)
         Path(args.evidence).mkdir(parents=True, exist_ok=True)
         (Path(args.evidence) / "guard-status.json").write_text(json.dumps(status, indent=2) + "\n")
 

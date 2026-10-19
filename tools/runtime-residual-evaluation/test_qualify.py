@@ -6,6 +6,23 @@ import qualify
 
 
 class IntegrationAssessmentTests(unittest.TestCase):
+    def test_paired_wall_alarm_survives_normal_retained_median(self):
+        raw = []
+        for turn, native in enumerate((1., 1., 13., 1.)):
+            for role in (("native", "previous") if turn % 2 == 0 else ("previous", "native")):
+                raw.append(dict(case="synthetic", role=role, kind="build",
+                                phase="warmup" if turn == 0 else "retained",
+                                wallSeconds=native if role == "native" else 1.))
+        self.assertEqual(qualify.paired_wall_alarms(raw),
+                         ["synthetic/build-2/paired-wall-over-twofold"])
+
+    def test_paired_wall_requires_complete_pairs_and_keeps_twofold_boundary(self):
+        raw = [dict(case="synthetic", role="native", kind="runtime", wallSeconds=2.),
+               dict(case="synthetic", role="previous", kind="runtime", wallSeconds=1.)]
+        self.assertEqual(qualify.paired_wall_alarms(raw), [])
+        with self.assertRaisesRegex(ValueError, "Incomplete paired"):
+            qualify.paired_wall_alarms(raw[:1])
+
     def test_fixed_runtime_role_order_fails_even_with_complete_counts(self):
         rows = [dict(case="synthetic", role=role) for role in ("native", "previous")]
         raw = []
