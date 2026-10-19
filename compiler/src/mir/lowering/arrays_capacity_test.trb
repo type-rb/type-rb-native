@@ -27,8 +27,8 @@ def array_capacity_index(instructions: Array<MirInstruction>): Integer
 	return -1
 end
 
-describe("Array map capacity") do
-	test("uses an Array length hint only for map while preserving other transforms") do
+describe("Array transform capacity") do
+	test("uses Array length hints for map and select while preserving Range transforms") do
 		state := array_loop_mir_check(array_capacity_source())
 		mut count := 0
 		state.scalar_mir.instructions.each do |instruction|
@@ -36,7 +36,7 @@ describe("Array map capacity") do
 				count += 1
 			end
 		end
-		expect(count).to_equal(1)
+		expect(count).to_equal(2)
 		qbe := control_test_output(emit_qbe(state))
 		expect(qbe.include?("call $trbn_array_new_reserved(l ")).to_be_true()
 	end
@@ -74,13 +74,13 @@ describe("Array map capacity") do
 		expect(rewritten.first).to_equal(12345)
 	end
 
-	test("keeps empty maps and binary64 elements correct") do
-		state := array_loop_mir_check("def main()\nempty: Array<Integer> := []\nmapped := empty.map { |value| value + 1 }\nputs(mapped.size())\nvalues := [0.5, 1.5]\nfloats := values.map { |value| value + 0.25 }\nputs(floats[0])\nputs(floats[1])\nend\n")
+	test("keeps empty transforms and binary64 elements correct") do
+		state := array_loop_mir_check("def main()\nempty: Array<Integer> := []\nmapped := empty.map { |value| value + 1 }\nputs(mapped.size())\nselected := empty.select { |value| value > 0 }\nputs(selected.size())\nvalues := [0.5, 1.5]\nfloats := values.map { |value| value + 0.25 }\nputs(floats[0])\nputs(floats[1])\nselected_floats := values.select { |value| value > 1.0 }\nputs(selected_floats[0])\nend\n")
 		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
 		if qbe != nil
 			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
 			when Result::Ok(actual)
-				expect(actual).to_equal("0\n0.75\n1.75\n")
+				expect(actual).to_equal("0\n0\n0.75\n1.75\n1.5\n")
 			when Result::Err(error)
 				puts(error)
 				expect(false).to_be_true()
