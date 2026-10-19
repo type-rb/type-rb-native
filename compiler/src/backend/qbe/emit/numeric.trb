@@ -306,11 +306,16 @@ end
 
 # For d=2^k, arithmetic shift rounds negative dividends down. Adding d-1 only
 # when x<0 instead preserves truncation toward zero. The adjusted value stays
-# within machine width for every portable Integer. MIR proves d and k; this
-# adapter does not infer nonnegativity or remove a dynamic zero-divisor check.
-def emit_power_integer_division(mut context: QbeEmitContext, mut output: QbeOutput, left: String, divisor: Integer, shift: Integer): String
+# within machine width for every portable Integer. MIR proves d and k. A
+# verified scalar guard can also prove nonnegativity, making the bias unnecessary.
+def emit_power_integer_division(mut context: QbeEmitContext, mut output: QbeOutput, left: String, divisor: Integer, shift: Integer, nonnegative: Boolean): String
 	if shift == 0
 		return left
+	end
+	if nonnegative
+		result := emit_temporary(context)
+		qbe_output_line(output, "\t" + result + " =l shr " + left + ", " + integer_string(shift))
+		return result
 	end
 	sign := emit_temporary(context)
 	bias := emit_temporary(context)
