@@ -13,6 +13,7 @@ class Guard:
             raise ValueError("Unknown paired wall policy")
         self.wall_policy = wall_policy
         self.wall_alarms = []
+        self.wall_alarm_keys = set()
         self.pairs = {}
         self.artifacts = {}
 
@@ -58,9 +59,13 @@ class Guard:
             current, previous = pair["native"][metric], pair["previous"][metric]
             if previous > 0 and current > 2 * previous:
                 if metric == "wallSeconds" and self.wall_policy == "record-and-assess":
-                    self.wall_alarms.append(dict(case=case, observation=name,
-                                                native=current, previous=previous,
-                                                ratio=current / previous))
+                    # Output validation and metadata rewrite the same observation.
+                    key = (case, name)
+                    if key not in self.wall_alarm_keys:
+                        self.wall_alarms.append(dict(case=case, observation=name,
+                                                    native=current, previous=previous,
+                                                    ratio=current / previous))
+                        self.wall_alarm_keys.add(key)
                     continue
                 raise ValueError(f"Paired catastrophe: {case}/{name}/{metric}")
         if name.startswith("build-") and pair["native"]["artifact"]["bytes"] > 2 * pair["previous"]["artifact"]["bytes"]:

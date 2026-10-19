@@ -38,6 +38,21 @@ class GuardTests(unittest.TestCase):
                 self.assertEqual(g.wall_alarms, [dict(case="case", observation=phase,
                                                     native=3., previous=1., ratio=3.)])
 
+    def test_observation_rewrites_do_not_duplicate_wall_alarms(self):
+        for order in [("native", "previous"), ("previous", "native")]:
+            g = Guard("record-and-assess")
+            for role in order:
+                record = dict(self.record, wallSeconds=3. if role == "native" else 1.)
+                for metadata in ({}, {"outputSHA256": "c" * 64}, {"phase": "measured"}):
+                    record.update(metadata)
+                    g.check(Path("case") / role / "runtime-0", record)
+            self.assertEqual(g.wall_alarms, [dict(case="case", observation="runtime-0",
+                                                native=3., previous=1., ratio=3.)])
+            # A later independent observation must still produce its own alarm.
+            g.check("case/previous/runtime-1", self.record)
+            g.check("case/native/runtime-1", dict(self.record, wallSeconds=3.))
+            self.assertEqual(len(g.wall_alarms), 2)
+
     def test_recording_wall_does_not_relax_resource_stops(self):
         for metric in ("cpuSeconds", "memoryBytes"):
             g = Guard("record-and-assess")
