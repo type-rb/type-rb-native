@@ -98,4 +98,14 @@ class IntegrationAssessmentTests(unittest.TestCase):
             with self.assertRaises(ValueError):qualify.validate_ci(changed,registration)
 
 
+    def test_one_full_exact_source_run_can_supply_both_ci_authorities(self):
+        registration = dict(candidate='a'*40,requiredValidationRun=1,validationRevision='a'*40,requiredCompleteRun=1,requiredCompleteJobs=['native / verify','Native CI acceptance'])
+        run = dict(id=1,head_sha='a'*40,event='pull_request',name='Pull request validation',status='completed',conclusion='success')
+        jobs = [dict(name=name,status='completed',conclusion='success') for name in registration['requiredCompleteJobs']]
+        evidence = dict(production=run,complete=run,completeJobs=dict(jobs=jobs))
+        qualify.validate_ci(evidence,registration)
+        evidence['completeJobs']['jobs'][0]['conclusion'] = 'skipped'
+        with self.assertRaises(ValueError):qualify.validate_ci(evidence,registration)
+
+
 if __name__ == '__main__': unittest.main()
