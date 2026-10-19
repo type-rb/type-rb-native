@@ -1,8 +1,27 @@
-import { qbe_output_append, qbe_output_branch, qbe_output_chunk, qbe_output_line, qbe_output_new } from backend/qbe/output
+import { qbe_hash_integer_reads, qbe_hash_string_reads, qbe_output_append, qbe_output_branch, qbe_output_chunk, qbe_output_line, qbe_output_new, qbe_require_hash } from backend/qbe/output
 import { load_string } from support/storage
 import { describe, expect, test } from trb/std/test
 
 describe("QBE output construction") do
+	test("retains requested Hash key families across aliases and emitter order") do
+		["integer", "string"].each do |first|
+			mut output := qbe_output_new(1, [0, 0, 0, 0, 0, 0])
+			mut shared := output
+			expect(qbe_hash_integer_reads(output)).to_be_false()
+			expect(qbe_hash_string_reads(output)).to_be_false()
+			qbe_require_hash(shared, first)
+			expect(qbe_hash_integer_reads(output)).to_equal(first == "integer")
+			expect(qbe_hash_string_reads(output)).to_equal(first == "string")
+			qbe_require_hash(output, "generic")
+			qbe_require_hash(output, "integer")
+			qbe_require_hash(output, "string")
+			qbe_require_hash(shared, "generic")
+			qbe_require_hash(shared, first)
+			expect(qbe_hash_integer_reads(output)).to_be_true()
+			expect(qbe_hash_string_reads(output)).to_be_true()
+		end
+	end
+
 	test("shares appended lines and growth through output aliases") do
 		mut output := qbe_output_new(1, [])
 		mut shared := output

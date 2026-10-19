@@ -1,10 +1,11 @@
-import { mir_hash_integer_key, mir_hash_key_flags } from mir/lowering/hashes
+import { hash_read_suffix } from backend/qbe/runtime/hash_runtime
+import { mir_hash_integer_key, mir_hash_key_flags, mir_hash_string_key } from mir/lowering/hashes
 import { mir_hash_lookup_find } from mir/analysis/hash_lookup
 import { integer_string } from support/literals
 import { MirInstruction } from mir/model/module
 import { mir_hash_value_type, mir_managed_type, mir_operand_type, mir_storage_type_name } from mir/model/types
 import { QbeEmitContext, QbeValue, emit_address, emit_temporary, emitted_value } from backend/qbe/context
-import { QbeOutput, qbe_output_line } from backend/qbe/output
+import { QbeOutput, qbe_output_line, qbe_require_hash } from backend/qbe/output
 import { CompilerState } from state/state
 
 # All types, operands, capacity hints and allocating root points are verified.
@@ -12,9 +13,7 @@ import { CompilerState } from state/state
 def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>, index: Integer, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	native_module := state.scalar_mir
 	result_type := mir_storage_type_name(native_module, mir_operand_type(value_types, instruction.result))
-	if output.runtime_flags[5] == 0
-		output.runtime_flags[5] = 1
-	end
+	qbe_require_hash(output, "generic")
 	result := emit_temporary(context)
 	if instruction.kind == 27
 		type_id := mir_operand_type(value_types, instruction.result)
@@ -30,11 +29,17 @@ def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>,
 	if instruction.second >= 0
 		argument = operands[instruction.second]
 	end
-	mut suffix := ""
-	if (instruction.kind == 28 || (instruction.kind == 30 && instruction.payload == 5)) && mir_hash_integer_key(native_module, mir_operand_type(value_types, instruction.first))
-		suffix = "_integer"
-		output.runtime_flags[5] = 2
+	mut key_mode := "generic"
+	if instruction.kind == 28 || (instruction.kind == 30 && instruction.payload == 5)
+		owner_type := mir_operand_type(value_types, instruction.first)
+		if mir_hash_integer_key(native_module, owner_type)
+			key_mode = "integer"
+		elsif mir_hash_string_key(native_module, owner_type)
+			key_mode = "string"
+		end
+		qbe_require_hash(output, key_mode)
 	end
+	suffix := hash_read_suffix(key_mode)
 	if instruction.kind == 29
 		value_type := mir_storage_type_name(native_module, mir_operand_type(value_types, instruction.payload))
 		bits := emit_hash_bits(context, output, operands[instruction.payload], value_type)

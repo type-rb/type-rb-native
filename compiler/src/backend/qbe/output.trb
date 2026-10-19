@@ -4,7 +4,7 @@ record QbeOutput
 	mir_literal_symbols: Array<String>
 	# Zero-origin append-only lines own the single alias-visible length.
 	lines: StringStorage
-	# Hash emission (index5): 0 absent,1 generic,2 also verified Integer reads.
+	# Hash emission mode lives behind the named helpers below; aliases share it.
 	runtime_flags: Array<Integer>
 end
 
@@ -71,4 +71,39 @@ def qbe_output_append(mut output: QbeOutput, appended: QbeOutput)
 		index += 1
 	end
 	return
+end
+
+# The shared legacy flag cell stores absent/generic/Integer/String/both as 0..4.
+# Keep this encoding here so call sites express the key representation they need.
+def qbe_require_hash(mut output: QbeOutput, key_mode: String)
+	current := output.runtime_flags[5]
+	if key_mode == "integer"
+		if current == 3
+			output.runtime_flags[5] = 4
+		elsif current < 2
+			output.runtime_flags[5] = 2
+		end
+	elsif key_mode == "string"
+		if current == 2
+			output.runtime_flags[5] = 4
+		elsif current < 2
+			output.runtime_flags[5] = 3
+		end
+	elsif current == 0
+		output.runtime_flags[5] = 1
+	end
+end
+
+def qbe_hash_integer_reads(output: QbeOutput): Boolean
+	if output.runtime_flags[5] == 2
+		return true
+	end
+	return output.runtime_flags[5] == 4
+end
+
+def qbe_hash_string_reads(output: QbeOutput): Boolean
+	if output.runtime_flags[5] == 3
+		return true
+	end
+	return output.runtime_flags[5] == 4
 end
