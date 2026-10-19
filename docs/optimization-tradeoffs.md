@@ -27,7 +27,7 @@ There are two routes:
 | Route | Purpose | Outcome |
 | --- | --- | --- |
 | Ordinary acceptance | Detect regressions against the registered Native baseline using existing limits and all correctness authorities | Eligible for normal review only when the complete contract passes |
-| Bounded trade-off evaluation | Learn a promising candidate's runtime benefit even when an ordinary cost limit fails | Diagnostic evidence and an explicit decision, never automatic acceptance |
+| Bounded trade-off evaluation | Learn a promising candidate's runtime benefit even when an ordinary cost limit fails | Diagnostic evidence for a documented candidate-specific adoption decision |
 
 The ordinary 1.05 ratios and absolute limits of the retired
 [transition policy](https://github.com/type-rb/type-rb-native/blob/d1c151d02e051c6557acb479a9e9d7c713226858/tools/native-mir-transition-policy.sh)
@@ -208,14 +208,26 @@ dispatched, not added to every PR's CI.
 
 ## Acceptance after evaluation
 
-If ordinary bounds still fail, a successful diagnostic is insufficient to merge
-the optimization. Propose a separate, candidate-scoped acceptance decision with
-the measured benefit, justified budget, cumulative limits, review/retirement
-conditions, and all remaining authorities. Implement any approved enforcement
-change through a reviewed PR with fail-closed tests before relying on it.
-Do not use an admin bypass or a diagnostic exit status to turn failed acceptance
-green. Full correctness and the registered performance contract must pass under
-the approved policy. Preserve the original failure and the later decision.
+Within authorized performance or maintenance work, agents may adopt and merge a
+candidate with unmet numerical targets without another maintainer confirmation
+when the evidence supports an overall improvement. Judge application runtime
+and build costs, compiler costs, RSS, generated artifacts, code quality and
+maintenance burden together. Small or absent speed gains can justify simpler
+code; extra complexity needs a useful compensating benefit. If the evidence
+does not support that judgment, revise or defer within the authorized scope.
+
+Before merging, record a candidate-specific decision with the benefit,
+incremental and cumulative costs, every unmet or unknown metric, maintenance
+trade-offs and any review or retirement conditions. All required correctness,
+safety, reproducibility and CI authorities must pass. A diagnostic result alone
+does not supply missing validation. Retain the registered assessment's actual
+result: adoption does not turn an unmet measurement into a pass, change numerical
+thresholds, renew an expired experiment budget, or complete an unmet initiative.
+
+Do not use an admin bypass or weaken required CI to adopt a candidate. Changes
+to enforced limits or project goals still require a separate maintainer decision
+and the applicable reviewed implementation and checks. A later review-only
+instruction or narrower task endpoint overrides standing merge authorization.
 
 The detailed cross-language Pages comparison changes only with complete
 accepted formal evidence. The separate [daily performance page](daily-performance.md)

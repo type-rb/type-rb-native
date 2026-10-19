@@ -12,6 +12,11 @@ Documentation-only edits do not start a new measurement cohort.
   contract. Explicit standalone experiments retain exact identities, controls,
   run budgets and observations. A diagnostic is not final qualification; do not
   reuse historical source-specific exceptions or relabel a failed observation.
+- Distinguish the assessment result from the adoption decision. A candidate with
+  unmet numerical targets may be adopted without another confirmation when its
+  overall benefit justifies the measured costs and maintenance burden under
+  `docs/optimization-tradeoffs.md`. Record the rationale and every remaining
+  miss or unknown; all required correctness and CI authorities still apply.
 - Preserve all earlier failed results. Compare actual application build/size and
   runtime separately from compiler self-build/text/QBE/distribution costs; old
   Go measurements do not establish current or general-purpose spare capacity.

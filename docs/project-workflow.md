@@ -172,13 +172,20 @@ a merged child PR. Set a newly added initiative to Proposed during triage.
 
 ## Authority
 
-Work that preserves specified behavior and the approved scope and targets
+Work that preserves specified behavior and the approved scope
 proceeds without further approval, from task creation through merge and cleanup.
 This includes reference conformance, MIR and performance improvements, and
 maintenance. The maintainer decides what TypeRB is, including specification
 changes and any Native behavior that differs from the pinned reference. The
 maintainer also decides direction, publication, irreversible actions and
 security-sensitive settings.
+
+Agents may adopt performance or maintenance candidates with unmet numerical
+targets when the evidence supports an overall improvement under
+[the trade-off policy](optimization-tradeoffs.md#acceptance-after-evaluation).
+Record the benefit, costs and remaining misses before merging; another
+confirmation is not required solely because a target is unmet. Candidate
+adoption does not change an initiative's target or establish its completion.
 
 | Agents act without asking | The maintainer decides; agents set Needs decision |
 | --- | --- |
@@ -188,7 +195,7 @@ security-sensitive settings.
 | Update the pinned reference revision through the release integration procedure | Remove or weaken required CI checks |
 | Update documentation, fixtures and generated views within the task's scope | Change secrets, permissions, organization or project settings |
 | File, reproduce and triage bugs, and file specification proposals | Post to other repositories or external services |
-| Record current evidence and complete an initiative whose recorded criteria are met | Accept an unmet target or a different outcome; stop or reopen an initiative |
+| Record current evidence and complete an initiative whose recorded criteria are met | Change an initiative's target or accept a different completion outcome; stop or reopen an initiative |
 
 Waiting for a decision blocks only the affected item. Agents continue with other
 eligible work in the meantime.
@@ -215,9 +222,11 @@ claim success. Incomplete or ambiguous evidence leaves the initiative Active;
 continue measuring or request a decision on the unresolved criterion while
 other eligible work proceeds.
 
-Accepting an unmet target or a different outcome requires the maintainer's
-explicit decision with the reason recorded. To stop an initiative, record that
-decision, set Done and close as not planned. Reopening requires an explicit
+Closing an initiative with an unmet target or a different outcome requires the
+maintainer's explicit decision with the reason recorded. Adopting an improving
+candidate under the trade-off policy leaves an unmet initiative Active.
+To stop an initiative, record that decision, set Done and close as not planned.
+Reopening requires an explicit
 lifecycle decision and must respect the five-Active limit; it does not resume
 work by itself.
 

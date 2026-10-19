@@ -125,15 +125,23 @@ without introducing a new approval checkpoint. If a skill instruction requires
 a pause, identify the exact file and instruction, and explain the unresolved
 decision; do not turn an optional recommendation into a mandatory approval.
 
-Board work that preserves specified behavior and the approved scope and targets
+Board work that preserves specified behavior and the approved scope
 needs no confirmation for routine steps. This includes reference conformance,
 MIR and performance improvements, and maintenance. Merge green PRs, clean up,
 update the reference pin through its procedure, mark an initiative Done when
 current evidence meets its recorded completion criteria, activate the next
 Approved initiative in a free slot, and continue. Follow
 `docs/project-workflow.md` for evidence and lifecycle rules. Stop only for its
-listed maintainer decisions, such as a specification change or accepting an
-unmet target.
+listed maintainer decisions, such as a specification change or retargeting an
+initiative.
+
+For performance and maintenance candidates, assess measured benefit, code quality
+and maintenance cost together. When the evidence supports an overall improvement
+and required correctness and CI pass, record the trade-off and merge without
+another confirmation even if numerical targets remain unmet. Simpler code can
+justify little or no speed gain; added complexity needs a useful compensating
+benefit. Follow `docs/optimization-tradeoffs.md` for the adoption record. Preserve
+misses, unknowns, thresholds and initiative completion criteria.
 
 When the user has authorized continued development, pursue the active milestone
 through cohesive ownership changes within that authorization and budget. Avoid

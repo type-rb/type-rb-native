@@ -17,8 +17,10 @@ the project board continues through merge, cleanup and the next eligible task
 without further approval, and stops only for the maintainer decisions in the
 workflow's authority table. This includes reference conformance, MIR and
 performance improvements, and maintenance that preserve specified behavior and
-the approved scope and targets. When an initiative meets its recorded completion
-criteria, record current evidence and mark it Done under the project workflow.
+the approved scope. Use the development skill's trade-off guidance to adopt
+overall improvements even when numerical performance targets remain unmet.
+When an initiative meets its recorded completion criteria, record current
+evidence and mark it Done under the project workflow.
 A request to prepare a PR for review ends with an open PR; it does not authorize
 a merge or another development slice. Later task and budget limits narrow
 earlier standing direction to continue.
