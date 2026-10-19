@@ -1,4 +1,4 @@
-import { mir_hash_key_flags } from mir/lowering/hashes
+import { mir_hash_integer_key, mir_hash_key_flags } from mir/lowering/hashes
 import { mir_hash_lookup_find } from mir/analysis/hash_lookup
 import { integer_string } from support/literals
 import { MirInstruction } from mir/model/module
@@ -12,7 +12,9 @@ import { CompilerState } from state/state
 def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>, index: Integer, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	native_module := state.scalar_mir
 	result_type := mir_storage_type_name(native_module, mir_operand_type(value_types, instruction.result))
-	output.runtime_flags[5] = 1
+	if output.runtime_flags[5] == 0
+		output.runtime_flags[5] = 1
+	end
 	result := emit_temporary(context)
 	if instruction.kind == 27
 		type_id := mir_operand_type(value_types, instruction.result)
@@ -27,6 +29,11 @@ def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>,
 	mut argument := ""
 	if instruction.second >= 0
 		argument = operands[instruction.second]
+	end
+	mut suffix := ""
+	if (instruction.kind == 28 || (instruction.kind == 30 && instruction.payload == 5)) && mir_hash_integer_key(native_module, mir_operand_type(value_types, instruction.first))
+		suffix = "_integer"
+		output.runtime_flags[5] = 2
 	end
 	if instruction.kind == 29
 		value_type := mir_storage_type_name(native_module, mir_operand_type(value_types, instruction.payload))
@@ -43,7 +50,7 @@ def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>,
 	end
 	if instruction.kind == 28 && mir_hash_lookup_find(native_module.hash_lookup_reuse[0], index, true) >= 0
 		slot := "%hash_slot_" + integer_string(index)
-		qbe_output_line(output, "\t" + slot + " =l call $trbn_hash_existing_slot(l " + owner + ", l " + argument + ")")
+		qbe_output_line(output, "\t" + slot + " =l call $trbn_hash_existing_slot" + suffix + "(l " + owner + ", l " + argument + ")")
 		address := emit_temporary(context)
 		qbe_output_line(output, "\t" + address + " =l call $trbn_hash_value_address(l " + owner + ", l " + slot + ")")
 		qbe_output_line(output, "\t" + result + " =l loadl " + address)
@@ -80,7 +87,7 @@ def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>,
 		elsif instruction.kind == 30 && method == 6
 			operation = "delete"
 		end
-		qbe_output_line(output, "\t" + result + " =l call $trbn_hash_" + operation + "(l " + owner + ", l " + argument + ")")
+		qbe_output_line(output, "\t" + result + " =l call $trbn_hash_" + operation + suffix + "(l " + owner + ", l " + argument + ")")
 		if result_type == "Float"
 			value := emit_temporary(context)
 			qbe_output_line(output, "\t" + value + " =d cast " + result)
