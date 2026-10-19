@@ -1,11 +1,11 @@
 # Native QBE variant
 
-`backend.json` pins the QBE 1.3 release archive and the digest of `sqrt.patch`.
-`python3 tools/qbe_toolchain.py /path/to/qbe-1.3` verifies both, applies the
-patch without fuzz, builds QBE and checks supported-target instruction emission.
+`backend.json` pins the QBE 1.3 release archive and both patch digests.
+`python3 tools/qbe_toolchain.py /path/to/qbe-1.3` verifies them, applies the
+patches without fuzz, builds QBE and checks supported-target instruction emission.
 The binary's receipt records upstream, patch, builder and C compiler identities.
 Checkout builds include those tracked inputs in their content cache. An explicit
-`TRBN_QBE` override must support the same operation.
+`TRBN_QBE` override must support the same operations and ARM64 immediate selection.
 
 The six added upstream lines define a unary single/double floating-point `sqrt`
 and select `fsqrt`, `sqrtss` or `sqrtsd`. Native uses the double form only for
@@ -21,8 +21,20 @@ signed zero, subnormals, infinities, NaNs and deterministic random bit patterns.
 Run `python3 tools/qbe_sqrt_test.py --qbe /path/to/qbe` on arm64 and amd64.
 RV64 and Windows emission are checked; those are not supported Native runtimes.
 
-Maintenance is one pinned patch, one acquisition helper and target/edge tests.
-A QBE upgrade must rebase the patch, run upstream tests, run these controls on
+`arm64-immediates.patch` retains encodable integer constants in the second
+operand of addition, subtraction, bitwise operations and shifts. It reuses QBE's
+immediate classifiers, normalizes word constants and reduces shift counts modulo
+the result width as required by the IL. Unsupported constants, variable operands,
+addresses and floating-point operations keep ordinary register selection. Logical
+masks use their own printing rule instead of the arithmetic `lsl #12` suffix.
+Run `python3 tools/qbe_integer_test.py --qbe /path/to/qbe` for an independent
+fixed-width arithmetic oracle, signed and unsigned boundaries, oversized shift
+counts and fallback controls. `--baseline /path/to/previous/qbe` also compares
+unchanged AMD64 emission. The patch adds no target-independent optimization or
+runtime helper.
+
+Maintenance is two small pinned patches, one acquisition helper and target/edge tests.
+A QBE upgrade must rebase both patches, run upstream tests, run these controls on
 each supported host, and repeat ordinary compiler validation. Historical seed
 manifests and their replay workflows retain their original stock QBE identity;
 the current compatibility schema records this variant separately. No patched

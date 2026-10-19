@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Acquire the pinned external QBE source and the reviewed Native IL extension."""
+"""Acquire pinned QBE with the reviewed IL extension and ARM64 selector fixes."""
 import argparse
 import hashlib
 import json
@@ -22,14 +22,15 @@ def backend_identity(root=ROOT):
     backend = json.loads((root / "tools/qbe/backend.json").read_text())
     if set(backend) != {"name", "version", "sourceURL", "sourceSHA256", "variant", "patches"}:
         raise ValueError("invalid QBE identity shape")
-    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-sqrt-v1":
+    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-arm64-immediates-v1":
         raise ValueError("unsupported QBE identity")
     if not backend["sourceURL"].startswith("https://") or not re.fullmatch(r"[0-9a-f]{64}", backend["sourceSHA256"]):
         raise ValueError("invalid QBE source identity")
-    if len(backend["patches"]) != 1:
+    paths = ["tools/qbe/sqrt.patch", "tools/qbe/arm64-immediates.patch"]
+    if len(backend["patches"]) != len(paths):
         raise ValueError("invalid QBE patch set")
-    for patch in backend["patches"]:
-        if set(patch) != {"path", "sha256"} or patch["path"] != "tools/qbe/sqrt.patch":
+    for patch, path in zip(backend["patches"], paths):
+        if set(patch) != {"path", "sha256"} or patch["path"] != path:
             raise ValueError("invalid QBE patch identity")
         if digest(root / patch["path"]) != patch["sha256"]:
             raise ValueError("QBE patch digest differs")
@@ -37,12 +38,18 @@ def backend_identity(root=ROOT):
 
 
 def check_capability(binary):
-    source = "export function d $probe(d %x) {\n@start\n %y =d sqrt %x\n ret %y\n}\n"
+    source = ("export function d $probe(d %x) {\n@start\n %y =d sqrt %x\n ret %y\n}\n"
+              "export function l $integer(l %x) {\n@start\n %a =l add %x, 7\n"
+              " %b =l and %a, 65535\n %c =l sar %b, 65\n ret %c\n}\n")
     for target, instruction in (("arm64_apple", "fsqrt"), ("arm64", "fsqrt"), ("amd64_sysv", "sqrtsd")):
         result = subprocess.run([str(binary), "-t", target], input=source, text=True,
                                 capture_output=True, timeout=30)
         if result.returncode or instruction not in result.stdout:
             raise ValueError(f"QBE lacks the required {target} sqrt operation: {result.stderr.strip()}")
+        if target.startswith("arm64"):
+            for operation, constant in (("add", "7"), ("and", "65535"), ("asr", "1")):
+                if not re.search(rf"\b{operation}\s+[^\n]*, #{constant}\s*$", result.stdout, re.MULTILINE):
+                    raise ValueError(f"QBE lacks the required {target} integer immediate selection")
 
 
 def build(output, archive=None):
