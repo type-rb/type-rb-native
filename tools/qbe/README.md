@@ -29,7 +29,10 @@ addresses and floating-point operations keep ordinary register selection. Logica
 masks use their own printing rule instead of the arithmetic `lsl #12` suffix.
 Run `python3 tools/qbe_integer_test.py --qbe /path/to/qbe` for an independent
 fixed-width arithmetic oracle, signed and unsigned boundaries, oversized shift
-counts and fallback controls. `--baseline /path/to/previous/qbe` also compares
+counts and fallback controls. AMD64 tests pass negative and oversized shift
+counts through registers because its upstream emitter does not normalize them
+to assembler immediates; ARM64 tests retain these immediate cases.
+`--baseline /path/to/previous/qbe` also compares
 unchanged AMD64 emission. The patch adds no target-independent optimization or
 runtime helper.
 

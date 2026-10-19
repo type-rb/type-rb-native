@@ -37,7 +37,7 @@ def expected(operation, value, operand, width):
     return result % modulus
 
 
-def fixture():
+def fixture(*, wide_shift_immediates=True):
     rng = random.Random(43129)
     il = []
     declarations = []
@@ -62,13 +62,24 @@ def fixture():
                             2 ** 32 + 1, 2 ** 63 - 1]
             for operand in operands:
                 name = f"integer_{count}"
-                il.append(f"export function {cls} ${name}({cls} %x) {{\n@start\n"
-                          f" %r ={cls} {operation} %x, {operand}\n ret %r\n}}\n")
-                declarations.append(f"extern uint{width}_t {name}(uint{width}_t);")
+                # Upstream AMD64 prints immediate shifts verbatim; its assembler
+                # accepts only an unsigned byte. Exercise wider counts through
+                # a register there, retaining the full ARM64 immediate corpus.
+                register_shift = (operation in ("shl", "shr", "sar")
+                                  and not wide_shift_immediates and not 0 <= operand <= 255)
+                parameters = f"{cls} %x" + (", w %shift" if register_shift else "")
+                shift_operand = "%shift" if register_shift else str(operand)
+                il.append(f"export function {cls} ${name}({parameters}) {{\n@start\n"
+                          f" %r ={cls} {operation} %x, {shift_operand}\n ret %r\n}}\n")
+                c_parameters = f"uint{width}_t" + (", uint32_t" if register_shift else "")
+                declarations.append(f"extern uint{width}_t {name}({c_parameters});")
                 for value in values:
                     value %= 2 ** width
                     result = expected(operation, value, operand, width)
-                    checks.append(f"if ((uint64_t){name}(UINT{width}_C({value})) != UINT64_C({result})) "
+                    arguments = f"UINT{width}_C({value})"
+                    if register_shift:
+                        arguments += f", UINT32_C({operand % 2 ** 32})"
+                    checks.append(f"if ((uint64_t){name}({arguments}) != UINT64_C({result})) "
                                   f'{{ fprintf(stderr, "{name} input {value} failed\\n"); return 1; }}')
                 count += 1
             # A variable operand must retain register selection and the same semantics.
@@ -106,12 +117,11 @@ def main():
     check_capability(qbe)
     with tempfile.TemporaryDirectory(prefix="qbe-integer-") as temporary:
         root = Path(temporary)
-        il, c = fixture()
-        source = root / "integers.ssa"
-        source.write_text(il)
-        driver = root / "driver.c"
-        driver.write_text(c)
         for target in ("arm64", "arm64_apple", "amd64_sysv", "amd64_apple"):
+            il, c = fixture(wide_shift_immediates=target.startswith("arm64"))
+            source = root / (target + ".ssa")
+            source.write_text(il)
+            (root / (target + ".c")).write_text(c)
             assembly = root / (target + ".s")
             subprocess.run([str(qbe), "-t", target, "-o", str(assembly), str(source)], check=True)
             if args.baseline and target.startswith("amd64"):
@@ -121,6 +131,7 @@ def main():
         architecture = "arm64" if machine in ("aarch64", "arm64") else "amd64"
         assert machine in ("aarch64", "arm64", "x86_64", "AMD64"), machine
         target = architecture + ("_apple" if platform.system() == "Darwin" else "_sysv" if architecture == "amd64" else "")
+        driver = root / (target + ".c")
         binary = root / "integers"
         subprocess.run(["cc", "-std=c11", "-O0", str(driver), str(root / (target + ".s")), "-o", str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
