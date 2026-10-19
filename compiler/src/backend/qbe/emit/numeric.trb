@@ -35,37 +35,26 @@ def emit_checked_integer_operation(
 	return complete
 end
 
-def emit_guarded_integer_operation(
+def emit_guarded_integer_multiply(
 		mut context: QbeEmitContext,
 		mut output: QbeOutput,
 		result: String,
 		left: String,
 		right: String,
-		operation: String,
-		limit: String,
-		guarded: Integer,
 	)
 	combined := emit_temporary(context)
 	small := emit_temporary(context)
 	slow := emit_label(context)
 	fast := emit_label(context)
 	complete := emit_label(context)
-	if guarded == 13
-		qbe_output_line(output, "\t" + combined + " =l add " + left + ", " + right)
-	else
-		qbe_output_line(output, "\t" + combined + " =l or " + left + ", " + right)
-	end
-	qbe_output_line(output, "\t" + small + " =w cultl " + combined + ", " + limit)
+	qbe_output_line(output, "\t" + combined + " =l or " + left + ", " + right)
+	qbe_output_line(output, "\t" + small + " =w cultl " + combined + ", 67108864")
 	qbe_output_branch(output, small, fast, slow)
 	qbe_output_line(output, slow)
-	emit_integer_call(output, result, operation, left, right)
+	emit_integer_call(output, result, "mul", left, right)
 	qbe_output_line(output, "\tjmp " + complete)
 	qbe_output_line(output, fast)
-	if guarded == 13
-		qbe_output_line(output, "\t" + result + " =l copy " + combined)
-	else
-		qbe_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
-	end
+	qbe_output_line(output, "\t" + result + " =l mul " + left + ", " + right)
 	qbe_output_line(output, complete)
 	return
 end
@@ -201,11 +190,11 @@ def lower_binary_operand(
 		qbe_output_line(output, "\t" + result + " =d " + operation + " " + left_operand + ", " + right_operand)
 		return result
 	end
+	# Portable Integer operands also fit a signed64 sum after scalar expansion.
+	# Share the exact range check instead of adding a returning slow-call edge.
 	if operator_id == 1
 		if mode == 7
 			qbe_output_line(output, "\t" + result + " =l add " + left_operand + ", " + right_operand)
-		elsif mode == 4
-			emit_guarded_integer_operation(context, output, result, left_operand, right_operand, "add", "9007199254740992", 13)
 		elsif mode > 0
 			if mode == 3
 				left_operand = right.operand
@@ -233,7 +222,7 @@ def lower_binary_operand(
 		if mode == 1
 			emit_checked_integer_operation(context, output, result, left_operand, right_operand, "mul", false)
 		elsif mode == 5
-			emit_guarded_integer_operation(context, output, result, left_operand, right_operand, "mul", "67108864", 12)
+			emit_guarded_integer_multiply(context, output, result, left_operand, right_operand)
 		else
 			emit_integer_call(output, result, "mul", left_operand, right_operand)
 		end
