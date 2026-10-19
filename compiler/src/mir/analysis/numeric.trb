@@ -1,9 +1,8 @@
 import { mir_numeric_interface_function, mir_numeric_interface_targets } from mir/analysis/numeric_interface
 import { integer_string } from support/literals
 import { MirFunction, MirModule, MirNumericOperation, MirNumericPlan, mir_block_index, mir_function_index, mir_value_type } from mir/model/module
-import { mir_nonnegative_value, mir_nonnegative_values, mir_scalar_literal } from mir/analysis/ranges
-import { mir_loop_dominates } from mir/analysis/array_loops
-import { MirFlow, mir_build_flow, mir_flow_block_index, mir_flow_blocks, mir_flow_position } from mir/analysis/flow
+import { mir_nonnegative_value, mir_nonnegative_values, mir_parameter_subtraction_proven, mir_scalar_literal } from mir/analysis/ranges
+import { MirFlow, MirFlowAliases, mir_build_flow, mir_flow_aliases, mir_flow_block_index, mir_flow_blocks, mir_flow_dominates, mir_flow_position } from mir/analysis/flow
 
 def mir_numeric_empty(): MirNumericPlan
 	return MirNumericPlan.new(witness: -1, function_id: -1, caller: -1, call_instruction: -1, operations: [])
@@ -61,7 +60,7 @@ def mir_numeric_loops(native_module: MirModule, function: MirFunction, flow: Mir
 	mut header := 0
 	while header < function.block_count
 		predecessors[header].each do |latch|
-			if mir_loop_dominates(flow, header, latch)
+			if mir_flow_dominates(flow, header, latch)
 				mut seen: Array<Integer> := []
 				members.each do |_member|
 					seen.push(0)
@@ -284,6 +283,8 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 		small := mir_numeric_small(native_module, function, [])
 		nonnegative := mir_nonnegative_values(native_module, function, flow)
 		mut operations: Array<MirNumericOperation> := []
+		mut aliases := MirFlowAliases.new(dense: [], sparse: {})
+		mut aliases_ready := false
 		mir_numeric_blocks(native_module, function).each do |block_index|
 			block := native_module.blocks[block_index]
 			mut loop := 1
@@ -304,7 +305,16 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 					if !right_nonnegative
 						right_nonnegative = mir_nonnegative_value(nonnegative, instruction.second)
 					end
-					mode := mir_numeric_mode(instruction.payload, left_small, right_small, left_nonnegative, right_nonnegative, false, budget, loop)
+					mut mode := mir_numeric_mode(instruction.payload, left_small, right_small, left_nonnegative, right_nonnegative, false, budget, loop)
+					if mode == 1 && instruction.payload == 2
+						if !aliases_ready
+							aliases = mir_flow_aliases(native_module, function, flow, native_module.blocks[function.block_start + flow.entry])
+							aliases_ready = true
+						end
+						if mir_parameter_subtraction_proven(native_module, function, flow, aliases, block_index - function.block_start, instruction)
+							mode = 7
+						end
+					end
 					if mode > 0
 						operations.push(mir_numeric_selection(native_module, function, flow, position, mode))
 					end

@@ -1,120 +1,9 @@
 import { integer_string } from support/literals
 import { MirArrayHeader, MirArrayLoop, MirBlock, MirFunction, MirModule } from mir/model/module
 import { MirNonnegative, mir_exact_integer_literal, mir_nonnegative_value, mir_nonnegative_values } from mir/analysis/ranges
-import { MirFlow, mir_build_flow, mir_flow_block_index, mir_flow_blocks, mir_flow_position, mir_flow_type } from mir/analysis/flow
+import { MirFlow, MirFlowAliases, mir_build_flow, mir_flow_alias, mir_flow_aliases, mir_flow_block_index, mir_flow_blocks, mir_flow_dominates, mir_flow_position, mir_flow_type } from mir/analysis/flow
 import { mir_live_add, mir_live_equal } from mir/analysis/roots
 import { mir_element_type } from mir/model/types
-
-# Plans name verified blocks and values, never source positions or a fixed
-# block layout. Unknown aliases, effects and induction updates keep checks.
-def mir_loop_dominates(flow: MirFlow, owner: Integer, mut block: Integer): Boolean
-	if flow.ranks[block] < 0
-		return false
-	end
-	while block != owner && block != flow.entry
-		block = flow.dominators[block]
-	end
-	return block == owner
-end
-
-record MirLoopAliases
-	dense: Array<Integer>
-	sparse: Hash<String, Integer>
-end
-
-def mir_loop_alias_table(flow: MirFlow): MirLoopAliases
-	mut dense: Array<Integer> := []
-	# Reuse the flow owner's bounded compact-ID decision. Sparse identities must
-	# never make this allocation proportional to an arbitrary maximum value ID.
-	while dense.size() < flow.dense_types.size()
-		dense.push(-2)
-	end
-	return MirLoopAliases.new(dense: dense, sparse: {})
-end
-
-def mir_loop_alias(aliases: MirLoopAliases, value: Integer): Integer
-	if value >= 0 && value < aliases.dense.size()
-		return aliases.dense[value]
-	end
-	key := integer_string(value)
-	if aliases.sparse.key?(key)
-		return aliases.sparse[key]
-	end
-	return -2
-end
-
-def mir_loop_alias_store(mut aliases: MirLoopAliases, value: Integer, identity: Integer)
-	if value >= 0 && value < aliases.dense.size()
-		aliases.dense[value] = identity
-	else
-		aliases.sparse[integer_string(value)] = identity
-	end
-end
-
-# Hold the candidate header's parameters fixed while forwarding identities
-# through other block parameters. Bottom (-2), one value, and conflict (-1)
-# form a finite lattice; cycles with no incoming definition remain unknown.
-def mir_loop_aliases(native_module: MirModule, function: MirFunction, flow: MirFlow, header: MirBlock): MirLoopAliases
-	mut aliases := mir_loop_alias_table(flow)
-	mut index := function.parameter_start
-	while index < function.parameter_start + function.parameter_count
-		value := native_module.arguments[index]
-		mir_loop_alias_store(aliases, value, value)
-		index += 1
-	end
-	index = header.parameter_start
-	while index < header.parameter_start + header.parameter_count
-		value := native_module.arguments[index]
-		mir_loop_alias_store(aliases, value, value)
-		index += 1
-	end
-	index = function.block_start
-	while index < function.block_start + function.block_count
-		block := native_module.blocks[index]
-		mut instruction := block.instruction_start
-		while instruction < block.instruction_start + block.instruction_count
-			value := native_module.instructions[instruction].result
-			if value >= 0
-				mir_loop_alias_store(aliases, value, value)
-			end
-			instruction += 1
-		end
-		index += 1
-	end
-	mut changed := true
-	while changed
-		changed = false
-		index = function.block_start
-		while index < function.block_start + function.block_count
-			block := native_module.blocks[index]
-			if block.id != header.id
-				mut slot := 0
-				while slot < block.parameter_count
-					value := native_module.arguments[block.parameter_start + slot]
-					old := mir_loop_alias(aliases, value)
-					mut merged := old
-					flow.incoming_starts[index - function.block_start].each do |start|
-						incoming := mir_loop_alias(aliases, native_module.arguments[start + slot])
-						if incoming != -2
-							if merged == -2
-								merged = incoming
-							elsif merged != incoming
-								merged = -1
-							end
-						end
-					end
-					if old != merged
-						mir_loop_alias_store(aliases, value, merged)
-						changed = true
-					end
-					slot += 1
-				end
-			end
-			index += 1
-		end
-	end
-	return aliases
-end
 
 def mir_loop_definition(flow: MirFlow, value: Integer): Integer
 	return mir_flow_position(flow, value)
@@ -146,7 +35,7 @@ end
 # Retain Array owners whose header parameter has exactly the same identity on
 # every backedge. This proves stable length and backing data, but does not
 # equate their lengths to a separate loop guard or scalar bound.
-def mir_array_stable_headers(native_module: MirModule, flow: MirFlow, header: MirBlock, header_index: Integer, preheader_start: Integer, aliases: MirLoopAliases): Array<MirArrayHeader>
+def mir_array_stable_headers(native_module: MirModule, flow: MirFlow, header: MirBlock, header_index: Integer, preheader_start: Integer, aliases: MirFlowAliases): Array<MirArrayHeader>
 	mut headers: Array<MirArrayHeader> := []
 	mut slot := 0
 	while slot < header.parameter_count
@@ -156,9 +45,9 @@ def mir_array_stable_headers(native_module: MirModule, flow: MirFlow, header: Mi
 			mut edge := 0
 			while edge < flow.predecessors[header_index].size()
 				previous := flow.predecessors[header_index][edge]
-				if mir_loop_dominates(flow, header_index, previous)
+				if mir_flow_dominates(flow, header_index, previous)
 					start := flow.incoming_starts[header_index][edge]
-					if mir_loop_alias(aliases, native_module.arguments[start + slot]) != identity
+					if mir_flow_alias(aliases, native_module.arguments[start + slot]) != identity
 						stable = false
 					end
 				end
@@ -206,7 +95,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 	if index_slot < 0 || (guard_owner >= 0 && owner_slot < 0)
 		return mir_no_array_loop()
 	end
-	aliases := mir_loop_aliases(native_module, function, flow, header)
+	aliases := mir_flow_aliases(native_module, function, flow, header)
 	mut preheader := -1
 	mut preheader_start := -1
 	mut owner := -1
@@ -219,12 +108,12 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 		block_index := flow.predecessors[header_index][edge]
 		block := native_module.blocks[function.block_start + block_index]
 		start := flow.incoming_starts[header_index][edge]
-		index_value := mir_loop_alias(aliases, native_module.arguments[start + index_slot])
+		index_value := mir_flow_alias(aliases, native_module.arguments[start + index_slot])
 		mut owner_value := -1
 		if owner_slot >= 0
-			owner_value = mir_loop_alias(aliases, native_module.arguments[start + owner_slot])
+			owner_value = mir_flow_alias(aliases, native_module.arguments[start + owner_slot])
 		end
-		if mir_loop_dominates(flow, header_index, block_index)
+		if mir_flow_dominates(flow, header_index, block_index)
 			if guard_owner >= 0 && owner_value != guard_owner
 				return mir_no_array_loop()
 			end
@@ -237,7 +126,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 				if update.kind != 7 || (update.payload != 1 && update.payload != 13) || update.failure < 0
 					return mir_no_array_loop()
 				end
-				if mir_loop_alias(aliases, update.first) != condition.first || !mir_loop_literal(native_module, flow, mir_loop_alias(aliases, update.second), "1")
+				if mir_flow_alias(aliases, update.first) != condition.first || !mir_loop_literal(native_module, flow, mir_flow_alias(aliases, update.second), "1")
 					return mir_no_array_loop()
 				end
 			end
@@ -263,7 +152,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 		current := pending[cursor]
 		cursor += 1
 		if !visited.key?(integer_string(current))
-			if !mir_loop_dominates(flow, header_index, current)
+			if !mir_flow_dominates(flow, header_index, current)
 				return mir_no_array_loop()
 			end
 			visited[integer_string(current)] = 1
@@ -298,9 +187,9 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 			if (instruction.kind < 6 || instruction.kind > 9) && (instruction.kind < 20 || instruction.kind > 23) && !pure_call
 				return mir_no_array_loop()
 			end
-			if guard_owner >= 0 && instruction.kind >= 21 && instruction.kind <= 23 && mir_loop_dominates(flow, body, member)
-				if mir_loop_alias(aliases, instruction.first) == guard_owner
-					mut guarded := mir_loop_alias(aliases, instruction.second) == condition.first
+			if guard_owner >= 0 && instruction.kind >= 21 && instruction.kind <= 23 && mir_flow_dominates(flow, body, member)
+				if mir_flow_alias(aliases, instruction.first) == guard_owner
+					mut guarded := mir_flow_alias(aliases, instruction.second) == condition.first
 					if !guarded && captured.key?(integer_string(instruction.second))
 						guarded = captured[integer_string(instruction.second)] == guard_owner
 					end
@@ -313,7 +202,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 				end
 			end
 			if instruction.kind >= 20 && instruction.kind <= 23
-				identity := mir_loop_alias(aliases, instruction.first)
+				identity := mir_flow_alias(aliases, instruction.first)
 				# The guard owner's header is also stable for other indexes.
 				# Keep their checks; omit only accesses already covered by the
 				# separate induction plan, which has its own retained header.
@@ -328,7 +217,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 				headers.each do |candidate|
 					if candidate.identity == identity && !covered
 						mir_live_add(candidate.accesses, instruction_index)
-						if instruction.kind >= 21 && mir_loop_dominates(flow, body, member) && mir_nonnegative_value(nonnegative, instruction.second)
+						if instruction.kind >= 21 && mir_flow_dominates(flow, body, member) && mir_nonnegative_value(nonnegative, instruction.second)
 							mir_live_add(candidate.nonnegative_accesses, instruction_index)
 						end
 					end

@@ -1,5 +1,4 @@
-import { mir_loop_alias, mir_loop_alias_store, mir_loop_alias_table, mir_loop_aliases } from mir/analysis/array_loops
-import { mir_build_flow, mir_flow_blocks } from mir/analysis/flow
+import { mir_build_flow, mir_flow_alias, mir_flow_alias_store, mir_flow_alias_table, mir_flow_aliases, mir_flow_blocks } from mir/analysis/flow
 import { MirFunction, MirValue } from mir/model/module
 import { flow_test_module } from testing/mir/flow
 import { verify_mir } from mir/verify/module
@@ -11,20 +10,20 @@ describe("MIR loop alias storage") do
 		native_module := mir_test_module(false, false)
 		function := native_module.functions[0]
 		flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
-		mut aliases := mir_loop_alias_table(flow)
+		mut aliases := mir_flow_alias_table(flow)
 		expect(aliases.dense.size()).to_equal(9)
-		expect(mir_loop_alias(aliases, 0)).to_equal(-2)
-		expect(mir_loop_alias(aliases, 8)).to_equal(-2)
-		expect(mir_loop_alias(aliases, 9)).to_equal(-2)
-		expect(mir_loop_alias(aliases, -1)).to_equal(-2)
-		mir_loop_alias_store(aliases, 0, 0)
-		mir_loop_alias_store(aliases, 8, -1)
-		mir_loop_alias_store(aliases, 9007199254740991, 8)
-		mir_loop_alias_store(aliases, -1, 0)
-		expect(mir_loop_alias(aliases, 0)).to_equal(0)
-		expect(mir_loop_alias(aliases, 8)).to_equal(-1)
-		expect(mir_loop_alias(aliases, 9007199254740991)).to_equal(8)
-		expect(mir_loop_alias(aliases, -1)).to_equal(0)
+		expect(mir_flow_alias(aliases, 0)).to_equal(-2)
+		expect(mir_flow_alias(aliases, 8)).to_equal(-2)
+		expect(mir_flow_alias(aliases, 9)).to_equal(-2)
+		expect(mir_flow_alias(aliases, -1)).to_equal(-2)
+		mir_flow_alias_store(aliases, 0, 0)
+		mir_flow_alias_store(aliases, 8, -1)
+		mir_flow_alias_store(aliases, 9007199254740991, 8)
+		mir_flow_alias_store(aliases, -1, 0)
+		expect(mir_flow_alias(aliases, 0)).to_equal(0)
+		expect(mir_flow_alias(aliases, 8)).to_equal(-1)
+		expect(mir_flow_alias(aliases, 9007199254740991)).to_equal(8)
+		expect(mir_flow_alias(aliases, -1)).to_equal(0)
 		expect(aliases.dense.size()).to_equal(9)
 		expect(aliases.sparse.size()).to_equal(2)
 		expect(flow.dense_types[8]).to_equal(1)
@@ -68,16 +67,16 @@ describe("MIR loop alias storage") do
 					header_index = 2
 				end
 				flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
-				aliases := mir_loop_aliases(native_module, function, flow, native_module.blocks[header_index])
+				aliases := mir_flow_aliases(native_module, function, flow, native_module.blocks[header_index])
 				expect(aliases.dense.size() == 0).to_equal(offset != 0)
 				# Header parameter 2 stays itself despite incoming 1 and 8. The
 				# body's parameter 5 forwards that identity across the loop edge.
 				mut value := 0
 				[0, 1, 2, 3, 4, 2, 6, 7, 8].each do |identity|
-					expect(mir_loop_alias(aliases, offset + value)).to_equal(offset + identity)
+					expect(mir_flow_alias(aliases, offset + value)).to_equal(offset + identity)
 					value += 1
 				end
-				expect(mir_loop_alias(aliases, offset + 9)).to_equal(-2)
+				expect(mir_flow_alias(aliases, offset + 9)).to_equal(-2)
 			end
 		end
 	end
@@ -113,14 +112,37 @@ describe("MIR loop alias storage") do
 				expect(verify_mir(native_module, false)).to_equal("")
 				function := native_module.functions[0]
 				flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
-				aliases := mir_loop_aliases(native_module, function, flow, native_module.blocks[2])
+				aliases := mir_flow_aliases(native_module, function, flow, native_module.blocks[2])
 				expect(aliases.dense.size() == 0).to_equal(sparse)
 				mut expected := -1
 				if same
 					expected = 1
 				end
-				expect(mir_loop_alias(aliases, 3)).to_equal(expected)
+				expect(mir_flow_alias(aliases, 3)).to_equal(expected)
 			end
 		end
+	end
+	test("leaves an unreachable forwarding cycle without a definition unknown") do
+		mut native_module := flow_test_module([[], [2], [1]])
+		[1, 2].each do |value|
+			native_module.values.push(MirValue.new(function_id: 7, id: value, type_id: 1, source_id: 0, line: 1))
+			native_module.arguments.push(value)
+		end
+		native_module.arguments.push(1)
+		native_module.arguments.push(2)
+		[1, 2].each do |index|
+			mut block := native_module.blocks[index]
+			block = mir_test_block_with_cell(block, 3, index)
+			block = mir_test_block_with_cell(block, 4, 1)
+			block = mir_test_block_with_cell(block, 11, index + 2)
+			block = mir_test_block_with_cell(block, 12, 1)
+			native_module.blocks[index] = block
+		end
+		expect(verify_mir(native_module, false)).to_equal("")
+		function := native_module.functions[0]
+		flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
+		aliases := mir_flow_aliases(native_module, function, flow, native_module.blocks[0])
+		expect(mir_flow_alias(aliases, 1)).to_equal(-2)
+		expect(mir_flow_alias(aliases, 2)).to_equal(-2)
 	end
 end

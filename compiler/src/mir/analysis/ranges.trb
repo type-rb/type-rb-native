@@ -1,6 +1,6 @@
 import { ascii_code, integer_string } from support/literals
 import { MirFunction, MirInstruction, MirModule, mir_block_index, mir_value_type } from mir/model/module
-import { MirFlow, mir_flow_definition_block, mir_flow_position } from mir/analysis/flow
+import { MirFlow, MirFlowAliases, mir_flow_alias, mir_flow_block_index, mir_flow_definition_block, mir_flow_dominates, mir_flow_position, mir_flow_type } from mir/analysis/flow
 
 def mir_exact_integer_literal(
 		native_module: MirModule,
@@ -277,4 +277,123 @@ def mir_scalar_guard(native_module: MirModule, function: MirFunction): Integer
 		limit = limit / 2
 	end
 	return 0
+end
+
+# Normalize a comparison of the exact parameter and a portable nonnegative
+# literal. Unsupported polarity and strict maximum bounds remain unknown.
+def mir_comparison_lower_bound(native_module: MirModule, flow: MirFlow, aliases: MirFlowAliases, comparison: MirInstruction, parameter: Integer, taken: Boolean): Integer
+	if comparison.kind != 7 || comparison.failure != -1 || mir_flow_type(flow, comparison.result) != 2
+		return -1
+	end
+	mut operator := comparison.payload
+	mut literal := comparison.second
+	if mir_flow_alias(aliases, comparison.first) != parameter
+		if mir_flow_alias(aliases, comparison.second) != parameter
+			return -1
+		end
+		literal = comparison.first
+		if operator == 8
+			operator = 10
+		elsif operator == 9
+			operator = 11
+		elsif operator == 10
+			operator = 8
+		elsif operator == 11
+			operator = 9
+		end
+	end
+	if mir_flow_type(flow, literal) != 1
+		return -1
+	end
+	position := mir_flow_position(flow, literal)
+	if position < 0
+		return -1
+	end
+	instruction := native_module.instructions[position]
+	if instruction.kind != 6
+		return -1
+	end
+	bound := mir_scalar_literal(native_module.literal_texts[instruction.payload])
+	if bound < 0
+		return -1
+	end
+	mut strict := false
+	if taken
+		if operator == 10
+			strict = true
+		elsif operator != 11
+			return -1
+		end
+	else
+		if operator == 9
+			strict = true
+		elsif operator != 8
+			return -1
+		end
+	end
+	if strict
+		if bound == 9007199254740991
+			return -1
+		end
+		return bound + 1
+	end
+	return bound
+end
+
+# A function parameter has one immutable scalar identity throughout a call.
+# A sole incoming edge to a dominating successor makes its predicate hold at
+# this use. Unanimous aliases transport identity, never a changed value.
+def mir_parameter_subtraction_proven(native_module: MirModule, function: MirFunction, flow: MirFlow, aliases: MirFlowAliases, block: Integer, instruction: MirInstruction): Boolean
+	if instruction.kind != 7 || instruction.payload != 2 || instruction.failure < 0
+		return false
+	end
+	if mir_flow_type(flow, instruction.first) != 1 || mir_flow_type(flow, instruction.second) != 1 || mir_flow_type(flow, instruction.result) != 1
+		return false
+	end
+	parameter := mir_flow_alias(aliases, instruction.first)
+	if parameter < 0 || mir_flow_definition_block(flow, parameter) != -1 || flow.ranks[block] < 0
+		return false
+	end
+	position := mir_flow_position(flow, instruction.second)
+	if position < 0
+		return false
+	end
+	right := native_module.instructions[position]
+	if right.kind != 6
+		return false
+	end
+	amount := mir_scalar_literal(native_module.literal_texts[right.payload])
+	if amount < 0
+		return false
+	end
+	mut index := 0
+	while index < function.block_count
+		guard := native_module.blocks[function.block_start + index]
+		if flow.ranks[index] >= 0 && guard.terminator == 2 && guard.first_target != guard.second_target
+			condition := mir_flow_position(flow, guard.condition)
+			if condition >= guard.instruction_start && condition < guard.instruction_start + guard.instruction_count
+				comparison := native_module.instructions[condition]
+				mut arm := 0
+				while arm < 2
+					mut target := guard.first_target
+					if arm == 1
+						target = guard.second_target
+					end
+					successor := mir_flow_block_index(flow, target)
+					if successor != flow.entry && flow.predecessors[successor].size() == 1 && flow.predecessors[successor][0] == index
+						if mir_flow_dominates(flow, successor, block)
+							lower := mir_comparison_lower_bound(native_module, flow, aliases, comparison, parameter, arm == 0)
+							# 0 <= amount <= lower <= parameter <= portable maximum.
+							if lower >= amount
+								return true
+							end
+						end
+					end
+					arm += 1
+				end
+			end
+		end
+		index += 1
+	end
+	return false
 end
