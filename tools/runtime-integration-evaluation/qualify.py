@@ -379,6 +379,53 @@ def validate_ci(evidence, registration):
                 matching[0].get("conclusion") == "success", "Required complete authority did not pass: " + name)
 
 
+def validate_measurement_ci(evidence, registration, native_log):
+    """Allow timing after proven correctness; strict CI still gates adoption."""
+    policy = registration["measurementPrerequisite"]
+    require(policy["kind"] == "successful-correctness-with-frozen-upload-dns-failure" and
+            policy["runAttempt"] == 1 and policy["adoptionRequiresStrictCI"] is True,
+            "Different prospective measurement prerequisite")
+    require(digest(native_log) == policy["nativeLogSHA256"] and
+            b"Failed to CreateArtifact: Unable to make request: ENOTFOUND" in native_log,
+            "The exact artifact DNS failure log is missing or changed")
+    for key, run_id, revision in (("production", "requiredValidationRun", "candidate"),
+                                  ("complete", "requiredCompleteRun", "validationRevision")):
+        run = evidence[key]
+        require(run.get("id") == registration[run_id] and
+                run.get("head_sha") == registration[revision] and
+                run.get("run_attempt") == policy["runAttempt"] and
+                run.get("event") == "pull_request" and run.get("name") == "Pull request validation" and
+                run.get("status") == "completed" and run.get("conclusion") == "failure",
+                "Different frozen validation attempt")
+    jobs = evidence["completeJobs"]["jobs"]
+    expected_failures = {"native / verify", "Native CI acceptance"}
+    require({job["name"] for job in jobs if job["conclusion"] == "failure"} == expected_failures,
+            "An additional validation job failed")
+    selected = {}
+    for name in registration["requiredCompleteJobs"]:
+        matches = [job for job in jobs if job["name"] == name]
+        expected = "failure" if name in expected_failures else "success"
+        require(len(matches) == 1 and matches[0]["status"] == "completed" and
+                matches[0]["conclusion"] == expected, "Incomplete correctness authority: " + name)
+        selected[name] = matches[0]
+    native = selected["native / verify"]
+    require(native["id"] == policy["nativeJob"], "Different Native validation job")
+    required_steps = policy["requiredNativeSteps"]
+    require(len(required_steps) == len(set(required_steps)) == 21,
+            "Incomplete Native correctness, bootstrap and cleanup step inventory")
+    for name in required_steps:
+        matches = [step for step in native["steps"] if step["name"] == name]
+        require(len(matches) == 1 and matches[0]["status"] == "completed" and
+                matches[0]["conclusion"] == "success", "Native correctness step did not pass: " + name)
+    failed = lambda job: [step["name"] for step in job["steps"] if step["conclusion"] == "failure"]
+    require(failed(native) == ["Upload joined suite logs, ownership receipt and cleanup outcome"],
+            "Native failure is not confined to the frozen artifact upload")
+    acceptance = selected["Native CI acceptance"]
+    require(acceptance["id"] == policy["acceptanceJob"] and failed(acceptance) ==
+            ["Require all applicable authorities, not skipped-job success"],
+            "Different dependent acceptance failure")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -388,6 +435,10 @@ def main():
     validation = commands.add_parser("validate-ci")
     validation.add_argument("--registration", default=ROOT / "tools/runtime-integration-evaluation/registration.json", type=Path)
     validation.add_argument("--run", required=True)
+    prerequisite = commands.add_parser("validate-measurement-ci")
+    prerequisite.add_argument("--registration", default=ROOT / "tools/runtime-integration-evaluation/registration.json", type=Path)
+    prerequisite.add_argument("--run", required=True)
+    prerequisite.add_argument("--native-log", required=True, type=Path)
     assessment = commands.add_parser("assess")
     for name in ("selection", "snapshot", "raw", "output", "compiler-cost", "readiness"):
         assessment.add_argument(f"--{name}", required=True)
@@ -395,6 +446,9 @@ def main():
     read = lambda path: json.loads(Path(path).read_text())
     if args.command == "validate-ci":
         validate_ci(read(args.run), read(args.registration))
+        return 0
+    if args.command == "validate-measurement-ci":
+        validate_measurement_ci(read(args.run), read(args.registration), args.native_log.read_bytes())
         return 0
     if args.command == "select":
         write(args.output, select_sources(ROOT, read(args.registration)))
