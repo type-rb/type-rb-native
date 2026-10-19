@@ -114,6 +114,44 @@ def emit_checked_array_access(owner: String, requested: String, capture_index: B
 	return result
 end
 
+# Only the non-growing Integer path is expanded. The MIR push keeps its
+# allocation effect and roots; the existing slow path owns GC and accounting.
+def emit_integer_array_push(owner: String, value: String, mut context: QbeEmitContext, mut output: QbeOutput)
+	length_slot := emit_temporary(context)
+	length := emit_temporary(context)
+	capacity_slot := emit_temporary(context)
+	capacity := emit_temporary(context)
+	full := emit_temporary(context)
+	grow := emit_label(context)
+	store := emit_label(context)
+	finish := emit_label(context)
+	qbe_output_line(output, "\t" + length_slot + " =l add " + owner + ", 8")
+	qbe_output_line(output, "\t" + length + " =l loadl " + length_slot)
+	qbe_output_line(output, "\t" + capacity_slot + " =l add " + owner + ", 16")
+	qbe_output_line(output, "\t" + capacity + " =l loadl " + capacity_slot)
+	qbe_output_line(output, "\t" + full + " =w ceql " + length + ", " + capacity)
+	qbe_output_branch(output, full, grow, store)
+	qbe_output_line(output, grow)
+	qbe_output_line(output, "\tcall $trbn_array_grow_paced(l " + owner + ", l " + value + ", l " + length + ", l " + capacity + ")")
+	qbe_output_line(output, "\tjmp " + finish)
+	qbe_output_line(output, store)
+	new_length := emit_temporary(context)
+	data_slot := emit_temporary(context)
+	data := emit_temporary(context)
+	offset := emit_temporary(context)
+	target := emit_temporary(context)
+	qbe_output_line(output, "\t" + new_length + " =l add " + length + ", 1")
+	qbe_output_line(output, "\tstorel " + new_length + ", " + length_slot)
+	qbe_output_line(output, "\t" + data_slot + " =l add " + owner + ", 24")
+	qbe_output_line(output, "\t" + data + " =l loadl " + data_slot)
+	qbe_output_line(output, "\t" + offset + " =l shl " + length + ", 3")
+	qbe_output_line(output, "\t" + target + " =l add " + data + ", " + offset)
+	qbe_output_line(output, "\tstorel " + value + ", " + target)
+	qbe_output_line(output, "\tjmp " + finish)
+	qbe_output_line(output, finish)
+	return
+end
+
 # No source analysis or implicit roots: each allocation/push has its own MIR
 # safe point. Only verified non-allocating loop plans retain storage addresses
 # across operations; other accesses obtain an address for that operation.
@@ -230,6 +268,8 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		if mir_storage_type_name(state.scalar_mir, element) == "Float"
 			output.runtime_flags[0] = 1
 			qbe_output_line(output, "\tcall $trbn_array_push_d(l " + owner + ", d " + second + ")")
+		elsif mir_storage_type_name(state.scalar_mir, element) == "Integer"
+			emit_integer_array_push(owner, second, context, output)
 		else
 			qbe_output_line(output, "\tcall $trbn_array_push_paced(l " + owner + ", l " + second + ")")
 		end
