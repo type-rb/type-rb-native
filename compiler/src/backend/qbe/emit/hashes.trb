@@ -1,3 +1,4 @@
+import { mir_hash_membership_find } from mir/analysis/hash_membership
 import { hash_read_suffix } from backend/qbe/runtime/hash_runtime
 import { mir_hash_integer_key, mir_hash_key_flags, mir_hash_string_key } from mir/lowering/hashes
 import { mir_hash_lookup_find } from mir/analysis/hash_lookup
@@ -45,19 +46,28 @@ def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>,
 		bits := emit_hash_bits(context, output, operands[instruction.payload], value_type)
 		producer := mir_hash_lookup_find(native_module.hash_lookup_reuse[0], index, false)
 		if producer >= 0
-			address := emit_temporary(context)
-			qbe_output_line(output, "\t" + address + " =l call $trbn_hash_value_address(l " + owner + ", l %hash_slot_" + integer_string(producer) + ")")
+			address := emit_hash_slot_address(owner, "%hash_slot_" + integer_string(producer), context, output)
 			qbe_output_line(output, "\tstorel " + bits + ", " + address)
 		else
 			qbe_output_line(output, "\tcall $trbn_hash_set(l " + owner + ", l " + argument + ", l " + bits + ")")
 		end
 		return emitted_value("", "Void")
 	end
-	if instruction.kind == 28 && mir_hash_lookup_find(native_module.hash_lookup_reuse[0], index, true) >= 0
+	if instruction.kind == 30 && instruction.payload == 5 && mir_hash_membership_find(native_module.hash_membership_reuse[0], index, true) >= 0
+		slot := "%hash_membership_" + integer_string(index)
+		qbe_output_line(output, "\t" + slot + " =l call $trbn_hash_slot" + suffix + "(l " + owner + ", l " + argument + ")")
+		qbe_output_line(output, "\t" + result + " =l csgel " + slot + ", 0")
+		return emitted_value(result, result_type)
+	end
+	membership := mir_hash_membership_find(native_module.hash_membership_reuse[0], index, false)
+	if instruction.kind == 28 && (membership >= 0 || mir_hash_lookup_find(native_module.hash_lookup_reuse[0], index, true) >= 0)
 		slot := "%hash_slot_" + integer_string(index)
-		qbe_output_line(output, "\t" + slot + " =l call $trbn_hash_existing_slot" + suffix + "(l " + owner + ", l " + argument + ")")
-		address := emit_temporary(context)
-		qbe_output_line(output, "\t" + address + " =l call $trbn_hash_value_address(l " + owner + ", l " + slot + ")")
+		if membership >= 0
+			qbe_output_line(output, "\t" + slot + " =l copy %hash_membership_" + integer_string(membership))
+		else
+			qbe_output_line(output, "\t" + slot + " =l call $trbn_hash_existing_slot" + suffix + "(l " + owner + ", l " + argument + ")")
+		end
+		address := emit_hash_slot_address(owner, slot, context, output)
 		qbe_output_line(output, "\t" + result + " =l loadl " + address)
 		if result_type == "Float"
 			value := emit_temporary(context)
@@ -109,4 +119,20 @@ def emit_hash_bits(mut context: QbeEmitContext, mut output: QbeOutput, operand: 
 	bits := emit_temporary(context)
 	qbe_output_line(output, "\t" + bits + " =l cast " + operand)
 	return bits
+end
+
+# Reload storage at each operation. MIR retains only the bucket number across
+# intervening work, so this spelling cannot keep a stale backing-array address.
+def emit_hash_slot_address(owner: String, slot: String, mut context: QbeEmitContext, mut output: QbeOutput): String
+	values_slot := emit_address(context, output, owner, 32)
+	values := emit_temporary(context)
+	qbe_output_line(output, "\t" + values + " =l loadl " + values_slot)
+	data_slot := emit_address(context, output, values, 24)
+	data := emit_temporary(context)
+	qbe_output_line(output, "\t" + data + " =l loadl " + data_slot)
+	offset := emit_temporary(context)
+	address := emit_temporary(context)
+	qbe_output_line(output, "\t" + offset + " =l shl " + slot + ", 3")
+	qbe_output_line(output, "\t" + address + " =l add " + data + ", " + offset)
+	return address
 end
