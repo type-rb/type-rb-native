@@ -35,6 +35,31 @@ def emit_checked_integer_operation(
 	return complete
 end
 
+# Portable operands fit a signed64 sum. The first unsigned comparison accepts
+# 0..MAX; the second accepts -MAX..-1 and rejects every other remaining sum.
+# Keep the common nonnegative path short without a returning runtime call.
+def emit_expanded_integer_add(
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		result: String,
+		left: String,
+		right: String,
+	)
+	nonnegative := emit_temporary(context)
+	outside := emit_temporary(context)
+	remaining := emit_label(context)
+	complete := emit_label(context)
+	failure := integer_range_failure_label(context)
+	qbe_output_line(output, "\t" + result + " =l add " + left + ", " + right)
+	qbe_output_line(output, "\t" + nonnegative + " =w cultl " + result + ", 9007199254740992")
+	qbe_output_branch(output, nonnegative, complete, remaining)
+	qbe_output_line(output, remaining)
+	qbe_output_line(output, "\t" + outside + " =w cultl " + result + ", -9007199254740991")
+	qbe_output_branch(output, outside, failure, complete)
+	qbe_output_line(output, complete)
+	return
+end
+
 def emit_guarded_integer_multiply(
 		mut context: QbeEmitContext,
 		mut output: QbeOutput,
@@ -190,11 +215,11 @@ def lower_binary_operand(
 		qbe_output_line(output, "\t" + result + " =d " + operation + " " + left_operand + ", " + right_operand)
 		return result
 	end
-	# Portable Integer operands also fit a signed64 sum after scalar expansion.
-	# Share the exact range check instead of adding a returning slow-call edge.
 	if operator_id == 1
 		if mode == 7
 			qbe_output_line(output, "\t" + result + " =l add " + left_operand + ", " + right_operand)
+		elsif mode == 4
+			emit_expanded_integer_add(context, output, result, left_operand, right_operand)
 		elsif mode > 0
 			if mode == 3
 				left_operand = right.operand
