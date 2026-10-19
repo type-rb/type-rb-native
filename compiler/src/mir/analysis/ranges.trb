@@ -1,6 +1,6 @@
 import { ascii_code, integer_string } from support/literals
 import { MirFunction, MirInstruction, MirModule, mir_block_index, mir_value_type } from mir/model/module
-import { MirFlow, MirFlowAliases, mir_flow_alias, mir_flow_block_index, mir_flow_definition_block, mir_flow_dominates, mir_flow_position, mir_flow_type } from mir/analysis/flow
+import { MirFlow, MirFlowAliases, mir_flow_alias, mir_flow_aliases, mir_flow_block_index, mir_flow_definition_block, mir_flow_dominates, mir_flow_position, mir_flow_type } from mir/analysis/flow
 
 def mir_exact_integer_literal(
 		native_module: MirModule,
@@ -385,6 +385,92 @@ def mir_parameter_subtraction_proven(native_module: MirModule, function: MirFunc
 							lower := mir_comparison_lower_bound(native_module, flow, aliases, comparison, parameter, arm == 0)
 							# 0 <= amount <= lower <= parameter <= portable maximum.
 							if lower >= amount
+								return true
+							end
+						end
+					end
+					arm += 1
+				end
+			end
+		end
+		index += 1
+	end
+	return false
+end
+
+# Return the unchanged operand of an Integer increment, with no inferred facts
+# about transformed values. Both addend orders retain the same checked meaning.
+def mir_increment_operand(native_module: MirModule, flow: MirFlow, instruction: MirInstruction): Integer
+	if instruction.kind != 7 || (instruction.payload != 1 && instruction.payload != 13) || instruction.failure < 0
+		return -1
+	end
+	if mir_flow_type(flow, instruction.first) != 1 || mir_flow_type(flow, instruction.second) != 1 || mir_flow_type(flow, instruction.result) != 1
+		return -1
+	end
+	mut position := mir_flow_position(flow, instruction.second)
+	if position >= 0 && mir_exact_integer_literal(native_module, native_module.instructions[position], "1")
+		return instruction.first
+	end
+	position = mir_flow_position(flow, instruction.first)
+	if position >= 0 && mir_exact_integer_literal(native_module, native_module.instructions[position], "1")
+		return instruction.second
+	end
+	return -1
+end
+
+# On the selected edge, return the operand strictly below another portable
+# Integer. The upper operand need not be a constant: its type supplies the cap.
+def mir_comparison_strictly_smaller(flow: MirFlow, comparison: MirInstruction, taken: Boolean): Integer
+	if comparison.kind != 7 || comparison.failure != -1 || mir_flow_type(flow, comparison.result) != 2
+		return -1
+	end
+	if mir_flow_type(flow, comparison.first) != 1 || mir_flow_type(flow, comparison.second) != 1
+		return -1
+	end
+	if taken
+		if comparison.payload == 8
+			return comparison.first
+		elsif comparison.payload == 10
+			return comparison.second
+		end
+	else
+		if comparison.payload == 9
+			return comparison.second
+		elsif comparison.payload == 11
+			return comparison.first
+		end
+	end
+	return -1
+end
+
+# If value < bound <= portable maximum, value + 1 cannot overflow. Adding one
+# also cannot cross the lower bound. A unique incoming edge establishes the
+# predicate; SSA aliases anchored at that guard retain the exact loop iteration.
+def mir_guarded_increment_proven(native_module: MirModule, function: MirFunction, flow: MirFlow, block: Integer, instruction: MirInstruction): Boolean
+	value := mir_increment_operand(native_module, flow, instruction)
+	if value < 0 || flow.ranks[block] < 0
+		return false
+	end
+	mut index := 0
+	while index < function.block_count
+		guard := native_module.blocks[function.block_start + index]
+		if flow.ranks[index] >= 0 && guard.terminator == 2 && guard.first_target != guard.second_target
+			condition := mir_flow_position(flow, guard.condition)
+			if condition >= guard.instruction_start && condition < guard.instruction_start + guard.instruction_count
+				comparison := native_module.instructions[condition]
+				mut arm := 0
+				while arm < 2
+					mut target := guard.first_target
+					if arm == 1
+						target = guard.second_target
+					end
+					successor := mir_flow_block_index(flow, target)
+					smaller := mir_comparison_strictly_smaller(flow, comparison, arm == 0)
+					if smaller >= 0 && successor != flow.entry && flow.predecessors[successor].size() == 1 && flow.predecessors[successor][0] == index
+						if mir_flow_dominates(flow, successor, block)
+							aliases := mir_flow_aliases(native_module, function, flow, guard)
+							identity := mir_flow_alias(aliases, value)
+							if identity >= 0 && identity == mir_flow_alias(aliases, smaller)
 								return true
 							end
 						end
