@@ -3,6 +3,7 @@ import { MirArrayLoop, MirArrayReadGuard, MirInstruction } from mir/model/module
 import { mir_element_type, mir_managed_type, mir_operand_type, mir_storage_type_name } from mir/model/types
 import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emit_typed_load, emit_typed_store, emitted_value } from backend/qbe/context
 import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
+import { emit_mir_roots } from backend/qbe/emit/roots
 import { CompilerState } from state/state
 
 def array_read_guard_source(guards: Array<MirArrayReadGuard>, instruction: Integer): Integer
@@ -114,9 +115,9 @@ def emit_checked_array_access(owner: String, requested: String, capture_index: B
 	return result
 end
 
-# Only the non-growing Integer path is expanded. The MIR push keeps its
-# allocation effect and roots; the existing slow path owns GC and accounting.
-def emit_integer_array_push(owner: String, value: String, mut context: QbeEmitContext, mut output: QbeOutput)
+# The direct store cannot collect. Publish the verified live-before roots only
+# on growth, before the existing slow path performs GC and backing accounting.
+def emit_integer_array_push(owner: String, value: String, roots: Array<Integer>, root_prefix: Integer, root_capacity: Integer, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
 	length_slot := emit_temporary(context)
 	length := emit_temporary(context)
 	capacity_slot := emit_temporary(context)
@@ -132,6 +133,7 @@ def emit_integer_array_push(owner: String, value: String, mut context: QbeEmitCo
 	qbe_output_line(output, "\t" + full + " =w ceql " + length + ", " + capacity)
 	qbe_output_branch(output, full, grow, store)
 	qbe_output_line(output, grow)
+	emit_mir_roots(roots, root_prefix, root_capacity, operands, context, output)
 	qbe_output_line(output, "\tcall $trbn_array_grow_paced(l " + owner + ", l " + value + ", l " + length + ", l " + capacity + ")")
 	qbe_output_line(output, "\tjmp " + finish)
 	qbe_output_line(output, store)
@@ -170,7 +172,22 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 			length := emit_temporary(context)
 			qbe_output_line(output, "\t" + length_slot + " =l add " + operands[instruction.first] + ", 8")
 			qbe_output_line(output, "\t" + length + " =l loadl " + length_slot)
-			qbe_output_line(output, "\t" + result + " =l call $trbn_array_new_reserved(l " + descriptor + ", l " + length + ")")
+			mut capacity := length
+			if instruction.payload > 0
+				capacity = emit_temporary(context)
+				limited := emit_temporary(context)
+				limit := integer_string(instruction.payload)
+				capped := emit_label(context)
+				exact := emit_label(context)
+				allocate := emit_label(context)
+				qbe_output_line(output, "\t" + limited + " =w csgtl " + length + ", " + limit)
+				qbe_output_branch(output, limited, capped, exact)
+				qbe_output_line(output, capped + "\n\tjmp " + allocate)
+				qbe_output_line(output, exact + "\n\tjmp " + allocate)
+				qbe_output_line(output, allocate)
+				qbe_output_line(output, "\t" + capacity + " =l phi " + capped + " " + limit + ", " + exact + " " + length)
+			end
+			qbe_output_line(output, "\t" + result + " =l call $trbn_array_new_reserved(l " + descriptor + ", l " + capacity + ")")
 		else
 			qbe_output_line(output, "\t" + result + " =l call $trbn_array_new(l " + descriptor + ")")
 		end
@@ -268,8 +285,6 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		if mir_storage_type_name(state.scalar_mir, element) == "Float"
 			output.runtime_flags[0] = 1
 			qbe_output_line(output, "\tcall $trbn_array_push_d(l " + owner + ", d " + second + ")")
-		elsif mir_storage_type_name(state.scalar_mir, element) == "Integer"
-			emit_integer_array_push(owner, second, context, output)
 		else
 			qbe_output_line(output, "\tcall $trbn_array_push_paced(l " + owner + ", l " + second + ")")
 		end

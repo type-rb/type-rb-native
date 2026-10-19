@@ -11,7 +11,7 @@ import { emit_mir_nullable_instruction } from backend/qbe/emit/nullable
 import { emit_mir_range_instruction } from backend/qbe/emit/ranges
 import { emit_mir_hash_instruction } from backend/qbe/emit/hashes
 import { emit_mir_record_instruction } from backend/qbe/emit/records
-import { emit_mir_array_headers, emit_mir_array_instruction } from backend/qbe/emit/arrays
+import { emit_integer_array_push, emit_mir_array_headers, emit_mir_array_instruction } from backend/qbe/emit/arrays
 import { mir_storage_type_name } from mir/model/types
 import { integer_string } from support/literals
 import { MirFunction, MirValue, mir_block_index, mir_function_index } from mir/model/module
@@ -90,6 +90,12 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 		mut previous_roots: Array<Integer> := []
 		while index < block.instruction_start + block.instruction_count
 			instruction := state.scalar_mir.instructions[index]
+			mut expanded_push := false
+			if instruction.kind == 24
+				expanded_push = types[instruction.second] == "Integer"
+			end
+			mut push_roots: Array<Integer> := []
+			mut push_root_prefix := 0
 			concat := mir_string_concat_index(concats, index)
 			if concat >= 0 && concats[concat].fragments.size() == 0
 				index += 1
@@ -101,8 +107,16 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 				end
 				current_roots := roots.roots[point]
 				prefix := qbe_root_common_prefix(previous_roots, current_roots)
-				emit_mir_roots(current_roots, prefix, lazy_capacity, operands, context, output)
-				previous_roots = current_roots
+				if expanded_push
+					push_roots = current_roots
+					push_root_prefix = prefix
+					# Only one branch publishes these slots. The next safe point
+					# must establish its own prefix on either path.
+					previous_roots = []
+				else
+					emit_mir_roots(current_roots, prefix, lazy_capacity, operands, context, output)
+					previous_roots = current_roots
+				end
 				point += 1
 			end
 			mut cache := ""
@@ -135,6 +149,8 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 			mut value := emitted_value("", "Void")
 			if elided
 				# No managed Array object or SSA pointer is materialized.
+			elsif expanded_push
+				emit_integer_array_push(operands[instruction.first], operands[instruction.second], push_roots, push_root_prefix, lazy_capacity, operands, context, output)
 			elsif selected_split >= 0
 				value = emit_mir_string_split(function.id, splits[selected_split], context, output)
 			elsif selected_join >= 0

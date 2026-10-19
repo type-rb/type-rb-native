@@ -9,6 +9,7 @@ import { CheckedLocals } from state/local_state
 import { load_integer } from support/storage
 
 # 19: empty Array, optionally borrowing an Array length as a capacity hint;
+# its payload caps the hint when positive, and zero leaves it uncapped.
 # 20: live size; 21: checked logical position; 22: load;
 # 23: store (payload is the value); 24: push. Position selection precedes RHS
 # evaluation. Loads/stores keep the owner and logical index, never an address.
@@ -88,10 +89,13 @@ end
 def mir_array_instruction_error(flow: MirFlow, native_module: MirModule, function: MirFunction, block: MirBlock, index: Integer, instruction: MirInstruction): String
 	kind := instruction.kind
 	result := mir_flow_type(flow, instruction.result)
-	if instruction.failure != -1 || (kind != 23 && kind != 47 && kind != 48 && instruction.payload != 0)
+	if instruction.failure != -1 || (kind != 19 && kind != 23 && kind != 47 && kind != 48 && instruction.payload != 0)
 		return "MIR Array operation shape differs"
 	end
 	if kind == 19
+		if instruction.payload != 0 && (instruction.first < 0 || instruction.payload < 4 || instruction.payload > 9007199254740991)
+			return "MIR Array capacity limit differs"
+		end
 		if mir_element_type(native_module, result) == 0 || instruction.first < -1 || instruction.second != -1
 			return "MIR Array construction type differs"
 		end

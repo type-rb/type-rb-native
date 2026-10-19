@@ -31,14 +31,39 @@ describe("Array transform capacity") do
 	test("uses Array length hints for map and select while preserving Range transforms") do
 		state := array_loop_mir_check(array_capacity_source())
 		mut count := 0
+		mut capped := 0
 		state.scalar_mir.instructions.each do |instruction|
 			if instruction.kind == 19 && instruction.first >= 0
 				count += 1
+				if instruction.payload > 0
+					capped += 1
+				end
 			end
 		end
 		expect(count).to_equal(2)
+		expect(capped).to_equal(1)
 		qbe := control_test_output(emit_qbe(state))
 		expect(qbe.include?("call $trbn_array_new_reserved(l ")).to_be_true()
+	end
+
+	test("rejects a capacity limit without an owner or below minimum capacity") do
+		mut mutation := 0
+		while mutation < 3
+			mut state := array_loop_mir_check(array_capacity_source())
+			index := array_capacity_index(state.scalar_mir.instructions)
+			instruction := state.scalar_mir.instructions[index]
+			mut owner := instruction.first
+			mut limit := -1
+			if mutation == 1
+				limit = 3
+			elsif mutation == 2
+				owner = -1
+				limit = 256
+			end
+			state.scalar_mir.instructions[index] = MirInstruction.new(kind: instruction.kind, result: instruction.result, first: owner, second: instruction.second, payload: limit, failure: instruction.failure, source_id: instruction.source_id, line: instruction.line)
+			expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
+			mutation += 1
+		end
 	end
 
 	test("rejects unavailable non-Array and malformed capacity owners") do
@@ -91,5 +116,6 @@ describe("Array transform capacity") do
 	test("preserves live receiver mutation and managed captures through forced collection") do
 		managed_mir_test_fixture("array-transforms-live", 4)
 		managed_mir_test_fixture("array-transforms-managed", 4)
+		managed_mir_test_fixture("array-selection-capacity", 4)
 	end
 end
