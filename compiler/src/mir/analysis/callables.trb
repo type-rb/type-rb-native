@@ -1,6 +1,7 @@
+import { mir_call_effect_summaries, mir_instruction_effects } from mir/analysis/call_effects
 import { integer_string } from support/literals
 import { mir_identity_key } from mir/analysis/identities
-import { MirCallablePlan, MirModule, mir_block_index } from mir/model/module
+import { MirCallablePlan, MirInstruction, MirModule, mir_block_index } from mir/model/module
 
 # Only callable SSA values need vertices. Edges represent ordinary argument
 # forwarding; -1 is unresolved and -2 is unknown. A vertex increases at most
@@ -192,12 +193,16 @@ def mir_callable_plans(native_module: MirModule): Array<MirCallablePlan>
 			block_index += 1
 		end
 	end
+	mut effects: Array<Integer> := []
 	index = 0
 	while index < native_module.instructions.size()
 		key := integer_string(index)
 		if plans.key?(key)
+			if effects.size() == 0
+				effects = mir_call_effect_summaries(native_module)
+			end
 			vertex := plans[key]
-			result.push(MirCallablePlan.new(instruction: index, callee: flow.callees[vertex], captures: flow.captures[vertex]))
+			result.push(MirCallablePlan.new(instruction: index, callee: flow.callees[vertex], captures: flow.captures[vertex], effects: effects[flow.callees[vertex]]))
 		end
 		index += 1
 	end
@@ -210,7 +215,7 @@ def mir_callable_plans_equal(left: Array<MirCallablePlan>, right: Array<MirCalla
 	end
 	mut index := 0
 	while index < left.size()
-		if left[index].instruction != right[index].instruction || left[index].callee != right[index].callee || left[index].captures != right[index].captures
+		if left[index].instruction != right[index].instruction || left[index].callee != right[index].callee || left[index].captures != right[index].captures || left[index].effects != right[index].effects
 			return false
 		end
 		index += 1
@@ -232,5 +237,14 @@ def mir_callable_plan_at(plans: Array<MirCallablePlan>, instruction: Integer): M
 	if lower < plans.size() && plans[lower].instruction == instruction
 		return plans[lower]
 	end
-	return MirCallablePlan.new(instruction: instruction, callee: -1, captures: 0)
+	return MirCallablePlan.new(instruction: instruction, callee: -1, captures: 0, effects: 15)
+end
+
+# Consumers run after canonical plan verification or fresh plan construction.
+# Keep unknown invocation and primitive operation effects with their owner.
+def mir_planned_instruction_effects(native_module: MirModule, instruction: MirInstruction, position: Integer): Integer
+	if instruction.kind == 42 && native_module.callable_plans.size() == 1
+		return mir_callable_plan_at(native_module.callable_plans[0], position).effects
+	end
+	return mir_instruction_effects(native_module, instruction)
 end

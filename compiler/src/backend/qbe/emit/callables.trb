@@ -1,6 +1,7 @@
+import { emit_scalar_mir } from backend/qbe/emit/mir
 import { native_managed_type } from frontend/types/hash_types
 import { integer_string } from support/literals
-import { MirCallablePlan, MirInstruction } from mir/model/module
+import { MirCallablePlan, MirInstruction, MirNumericPlan } from mir/model/module
 import { mir_callable_id } from mir/lowering/callables
 import { mir_call_symbol } from mir/model/intrinsics
 import { mir_storage_name, mir_storage_type_name } from mir/model/types
@@ -73,7 +74,7 @@ end
 
 # The verifier binds the code, captured parameter prefix and indirect-call ABI.
 # Emission never reads authored names, tokens or frontend function catalogs.
-def emit_mir_callable(state: CompilerState, types: Array<Integer>, instruction: MirInstruction, plan: MirCallablePlan, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+def emit_mir_callable(state: CompilerState, types: Array<Integer>, instruction: MirInstruction, plan: MirCallablePlan, numeric: MirNumericPlan, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	if instruction.kind == 41
 		name := closure_adapter_name(instruction.payload, instruction.second)
 		result := emit_temporary(context)
@@ -94,6 +95,8 @@ def emit_mir_callable(state: CompilerState, types: Array<Integer>, instruction: 
 	owner := operands[instruction.first]
 	mut code := ""
 	mut arguments := ""
+	mut inline_values: Array<String> := []
+	mut inline_types: Array<String> := []
 	if plan.callee >= 0
 		# The MIR verifier proves the declaration and capture prefix. Adapt the
 		# same environment to the ordinary ABI without an extra adapter call.
@@ -109,6 +112,8 @@ def emit_mir_callable(state: CompilerState, types: Array<Integer>, instruction: 
 			type_name := mir_storage_name(state.scalar_mir, callee.parameter_types[capture])
 			emit_typed_load(output, value, type_name, slot)
 			arguments += qbe_type(type_name) + " " + value
+			inline_values.push(value)
+			inline_types.push(type_name)
 			capture += 1
 		end
 	else
@@ -122,8 +127,15 @@ def emit_mir_callable(state: CompilerState, types: Array<Integer>, instruction: 
 		if arguments != ""
 			arguments += ", "
 		end
-		arguments += qbe_type(mir_storage_type_name(state.scalar_mir, signature.parameters[index])) + " " + operands[state.scalar_mir.arguments[instruction.payload + index]]
+		type_name := mir_storage_type_name(state.scalar_mir, signature.parameters[index])
+		value := operands[state.scalar_mir.arguments[instruction.payload + index]]
+		arguments += qbe_type(type_name) + " " + value
+		inline_values.push(value)
+		inline_types.push(type_name)
 		index += 1
+	end
+	if numeric.function_id >= 0
+		return emit_scalar_mir(state, numeric.function_id, inline_values, inline_types, numeric, context, output, true)
 	end
 	text := "call " + code + "(" + arguments + ")"
 	if signature.result == 0

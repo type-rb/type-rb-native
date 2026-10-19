@@ -405,3 +405,137 @@ def mir_flow_type(flow: MirFlow, value: Integer): Integer
 	end
 	return 0
 end
+
+# Dominance and unanimous aliases are derived only from verified CFG/SSA.
+# Unknown or conflicting identities never establish an optimization proof.
+def mir_flow_dominates(flow: MirFlow, owner: Integer, mut block: Integer): Boolean
+	if flow.ranks[block] < 0
+		return false
+	end
+	while block != owner && block != flow.entry
+		block = flow.dominators[block]
+	end
+	return block == owner
+end
+
+record MirFlowAliases
+	dense: Array<Integer>
+	sparse: Hash<String, Integer>
+end
+
+def mir_flow_alias_table(flow: MirFlow): MirFlowAliases
+	mut dense: Array<Integer> := []
+	# Reuse the flow owner's bounded compact-ID decision. Sparse identities must
+	# never make this allocation proportional to an arbitrary maximum value ID.
+	while dense.size() < flow.dense_types.size()
+		dense.push(-2)
+	end
+	return MirFlowAliases.new(dense: dense, sparse: {})
+end
+
+def mir_flow_alias(aliases: MirFlowAliases, value: Integer): Integer
+	if value >= 0 && value < aliases.dense.size()
+		return aliases.dense[value]
+	end
+	key := integer_string(value)
+	if aliases.sparse.key?(key)
+		return aliases.sparse[key]
+	end
+	return -2
+end
+
+def mir_flow_alias_store(mut aliases: MirFlowAliases, value: Integer, identity: Integer)
+	if value >= 0 && value < aliases.dense.size()
+		aliases.dense[value] = identity
+	else
+		aliases.sparse[integer_string(value)] = identity
+	end
+end
+
+# Hold the candidate header's parameters fixed while forwarding identities
+# through other block parameters. Bottom (-2), one value, and conflict (-1)
+# form a finite lattice; cycles with no incoming definition remain unknown.
+def mir_flow_aliases(native_module: MirModule, function: MirFunction, flow: MirFlow, header: MirBlock): MirFlowAliases
+	mut aliases := mir_flow_alias_table(flow)
+	mut index := function.parameter_start
+	while index < function.parameter_start + function.parameter_count
+		value := native_module.arguments[index]
+		mir_flow_alias_store(aliases, value, value)
+		index += 1
+	end
+	index = header.parameter_start
+	while index < header.parameter_start + header.parameter_count
+		value := native_module.arguments[index]
+		mir_flow_alias_store(aliases, value, value)
+		index += 1
+	end
+	index = function.block_start
+	while index < function.block_start + function.block_count
+		block := native_module.blocks[index]
+		mut instruction := block.instruction_start
+		while instruction < block.instruction_start + block.instruction_count
+			value := native_module.instructions[instruction].result
+			if value >= 0
+				mir_flow_alias_store(aliases, value, value)
+			end
+			instruction += 1
+		end
+		index += 1
+	end
+	mut changed := true
+	while changed
+		changed = false
+		index = function.block_start
+		while index < function.block_start + function.block_count
+			block := native_module.blocks[index]
+			if block.id != header.id
+				mut slot := 0
+				while slot < block.parameter_count
+					value := native_module.arguments[block.parameter_start + slot]
+					old := mir_flow_alias(aliases, value)
+					mut merged := old
+					flow.incoming_starts[index - function.block_start].each do |start|
+						incoming := mir_flow_alias(aliases, native_module.arguments[start + slot])
+						if incoming != -2
+							if merged == -2
+								merged = incoming
+							elsif merged != incoming
+								merged = -1
+							end
+						end
+					end
+					if old != merged
+						mir_flow_alias_store(aliases, value, merged)
+						changed = true
+					end
+					slot += 1
+				end
+			end
+			index += 1
+		end
+	end
+	return aliases
+end
+
+# Count physical instruction ownership, including spans shared by logical functions.
+def mir_instruction_occurrences(native_module: MirModule): Array<Integer>
+	mut occurrences: Array<Integer> := []
+	mut cursor := 0
+	while cursor < native_module.instructions.size()
+		occurrences.push(0)
+		cursor += 1
+	end
+	native_module.functions.each do |function|
+		mut at := function.block_start
+		while at < function.block_start + function.block_count
+			block := native_module.blocks[at]
+			cursor = block.instruction_start
+			while cursor < block.instruction_start + block.instruction_count
+				occurrences[cursor] += 1
+				cursor += 1
+			end
+			at += 1
+		end
+	end
+	return occurrences
+end

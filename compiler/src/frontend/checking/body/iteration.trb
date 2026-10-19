@@ -234,7 +234,19 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 		end
 		initial = scalar_mir_literal(state, locals, "Boolean", origin, empty)
 	elsif syntax.kind != 3
-		initial = mir_checked_array_operation(state, locals, 19, -1, -1, 0, output, origin)
+		# Map and select emit at most one result per visited element. This initial
+		# hint preserves live traversal and growth when callbacks change the input.
+		mut capacity_owner := -1
+		mut capacity_limit := 0
+		if (syntax.kind == 1 || syntax.kind == 2) && source_kind == 1
+			capacity_owner = checked_mir_value(receiver)
+			if syntax.kind == 2
+				# Selection can be sparse. Bound speculative backing to 2 KiB;
+				# ordinary geometric growth handles larger results.
+				capacity_limit = 256
+			end
+		end
+		initial = mir_checked_array_operation(state, locals, 19, capacity_owner, -1, capacity_limit, output, origin)
 	end
 	mir_binding_initialize(state, locals, outer, initial, origin)
 	if syntax.kind >= 9

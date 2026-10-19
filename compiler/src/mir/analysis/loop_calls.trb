@@ -1,8 +1,9 @@
 import { integer_string } from support/literals
 import { MirBlock, MirFunction, MirLoopCall, MirModule, mir_function_index } from mir/model/module
-import { MirFlow, mir_build_flow, mir_flow_blocks, mir_flow_definition_block, mir_flow_type } from mir/analysis/flow
-import { MirLoopAliases, mir_loop_alias, mir_loop_aliases, mir_loop_dominates, mir_loop_parameter } from mir/analysis/array_loops
-import { mir_instruction_effects, mir_live_add } from mir/analysis/roots
+import { MirFlow, MirFlowAliases, mir_build_flow, mir_flow_alias, mir_flow_aliases, mir_flow_blocks, mir_flow_definition_block, mir_flow_dominates, mir_flow_type } from mir/analysis/flow
+import { mir_loop_parameter } from mir/analysis/array_loops
+import { mir_instruction_effects } from mir/analysis/call_effects
+import { mir_live_add } from mir/analysis/roots
 import { mir_numeric_blocks } from mir/analysis/numeric
 
 # The first successful call stays at its original position. Only scalar results
@@ -27,8 +28,8 @@ def mir_loop_call_candidate(native_module: MirModule, position: Integer, flow: M
 	return mir_function_index(native_module, call.callee) >= 0
 end
 
-def mir_loop_call_invariant(native_module: MirModule, function: MirFunction, flow: MirFlow, header: MirBlock, header_index: Integer, preheader: Integer, members: Hash<String, Integer>, aliases: MirLoopAliases, argument: Integer): Boolean
-	identity := mir_loop_alias(aliases, argument)
+def mir_loop_call_invariant(native_module: MirModule, function: MirFunction, flow: MirFlow, header: MirBlock, header_index: Integer, preheader: Integer, members: Hash<String, Integer>, aliases: MirFlowAliases, argument: Integer): Boolean
+	identity := mir_flow_alias(aliases, argument)
 	if identity < 0
 		return false
 	end
@@ -37,9 +38,9 @@ def mir_loop_call_invariant(native_module: MirModule, function: MirFunction, flo
 		mut edge := 0
 		while edge < flow.predecessors[header_index].size()
 			previous := flow.predecessors[header_index][edge]
-			if mir_loop_dominates(flow, header_index, previous)
+			if mir_flow_dominates(flow, header_index, previous)
 				start := flow.incoming_starts[header_index][edge]
-				if mir_loop_alias(aliases, native_module.arguments[start + slot]) != identity
+				if mir_flow_alias(aliases, native_module.arguments[start + slot]) != identity
 					return false
 				end
 			end
@@ -58,7 +59,7 @@ def mir_loop_call_invariant(native_module: MirModule, function: MirFunction, flo
 	if owner < 0 || members.key?(integer_string(owner))
 		return false
 	end
-	return mir_loop_dominates(flow, owner, preheader)
+	return mir_flow_dominates(flow, owner, preheader)
 end
 
 def mir_loop_calls_at_header(native_module: MirModule, function: MirFunction, flow: MirFlow, header_index: Integer): Array<MirLoopCall>
@@ -70,7 +71,7 @@ def mir_loop_calls_at_header(native_module: MirModule, function: MirFunction, fl
 	mut preheader := -1
 	mut pending: Array<Integer> := []
 	flow.predecessors[header_index].each do |previous|
-		if mir_loop_dominates(flow, header_index, previous)
+		if mir_flow_dominates(flow, header_index, previous)
 			pending.push(previous)
 		else
 			if preheader != -1 || native_module.blocks[function.block_start + previous].terminator != 1
@@ -91,7 +92,7 @@ def mir_loop_calls_at_header(native_module: MirModule, function: MirFunction, fl
 		current := pending[cursor]
 		cursor += 1
 		if !members.key?(integer_string(current))
-			if !mir_loop_dominates(flow, header_index, current)
+			if !mir_flow_dominates(flow, header_index, current)
 				return plans
 			end
 			members[integer_string(current)] = 1
@@ -123,7 +124,7 @@ def mir_loop_calls_at_header(native_module: MirModule, function: MirFunction, fl
 	if candidates.size() == 0
 		return plans
 	end
-	aliases := mir_loop_aliases(native_module, function, flow, header)
+	aliases := mir_flow_aliases(native_module, function, flow, header)
 	candidates.each do |position|
 		call := native_module.calls[native_module.instructions[position].payload]
 		mut invariant := true

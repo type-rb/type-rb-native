@@ -202,7 +202,9 @@ def lower_binary_operand(
 		return result
 	end
 	if operator_id == 1
-		if mode == 4
+		if mode == 7
+			qbe_output_line(output, "\t" + result + " =l add " + left_operand + ", " + right_operand)
+		elsif mode == 4
 			emit_guarded_integer_operation(context, output, result, left_operand, right_operand, "add", "9007199254740992", 13)
 		elsif mode > 0
 			if mode == 3
@@ -220,8 +222,8 @@ def lower_binary_operand(
 		return result
 	end
 	if operator_id == 2
-		if mode == 1
-			emit_checked_integer_operation(context, output, result, left_operand, right_operand, "sub", false)
+		if mode == 7
+			qbe_output_line(output, "\t" + result + " =l sub " + left_operand + ", " + right_operand)
 		else
 			emit_checked_integer_operation(context, output, result, left_operand, right_operand, "sub", false)
 		end
@@ -285,5 +287,23 @@ def lower_binary_operand(
 		output,
 		"\t" + result + " =l " + comparison + " " + left_operand + ", " + right_operand,
 	)
+	return result
+end
+
+# For d=2^k, bias is d-1 exactly when x<0. Masking x+bias and subtracting
+# bias implements truncation toward zero, including negative portable endpoints.
+# MIR supplies a verified positive power of two; zero division is impossible.
+def emit_power_integer_remainder(mut context: QbeEmitContext, mut output: QbeOutput, left: String, divisor: Integer): String
+	sign := emit_temporary(context)
+	bias := emit_temporary(context)
+	adjusted := emit_temporary(context)
+	masked := emit_temporary(context)
+	result := emit_temporary(context)
+	mask := integer_string(divisor - 1)
+	qbe_output_line(output, "\t" + sign + " =l sar " + left + ", 63")
+	qbe_output_line(output, "\t" + bias + " =l and " + sign + ", " + mask)
+	qbe_output_line(output, "\t" + adjusted + " =l add " + left + ", " + bias)
+	qbe_output_line(output, "\t" + masked + " =l and " + adjusted + ", " + mask)
+	qbe_output_line(output, "\t" + result + " =l sub " + masked + ", " + bias)
 	return result
 end

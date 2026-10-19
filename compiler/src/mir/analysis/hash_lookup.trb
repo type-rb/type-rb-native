@@ -1,3 +1,4 @@
+import { mir_instruction_occurrences } from mir/analysis/flow
 import { MirHashLookupReuse, MirInstruction, MirModule, mir_value_type } from mir/model/module
 import { mir_hash_key_type } from mir/model/types
 
@@ -19,26 +20,7 @@ end
 
 def mir_hash_lookup_plans(native_module: MirModule): Array<MirHashLookupReuse>
 	mut plans: Array<MirHashLookupReuse> := []
-	# Physical instruction spans can be shared by distinct logical functions.
-	# Such storage cannot own a module-wide lookup fact. Count all occurrences.
-	mut occurrences: Array<Integer> := []
-	mut cursor := 0
-	while cursor < native_module.instructions.size()
-		occurrences.push(0)
-		cursor += 1
-	end
-	native_module.functions.each do |function|
-		mut at := function.block_start
-		while at < function.block_start + function.block_count
-			block := native_module.blocks[at]
-			cursor = block.instruction_start
-			while cursor < block.instruction_start + block.instruction_count
-				occurrences[cursor] += 1
-				cursor += 1
-			end
-			at += 1
-		end
-	end
+	occurrences := mir_instruction_occurrences(native_module)
 	native_module.functions.each do |function|
 		mut block_index := function.block_start
 		while block_index < function.block_start + function.block_count

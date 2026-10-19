@@ -92,7 +92,7 @@ end
         for name in ('hash-lookup-reuse', 'hash-lookup-alias-barriers'):
             source = root / (name + '.trb')
             emitted = run('--internal-driver', 'emit-qbe', source)
-            assert 'call $trbn_hash_existing_slot(' in emitted.stdout, name
+            assert 'call $trbn_hash_existing_slot_string(' in emitted.stdout, name
             forced, ordinary, hooks = [], False, 0
             for line in emitted.stdout.splitlines():
                 if line.startswith('function '):
@@ -100,7 +100,8 @@ end
                 if line == '}':
                     ordinary = False
                 if ordinary and any(marker in line for marker in (
-                        'call $trbn_array_new(', 'call $trbn_array_push_',
+                        'call $trbn_array_new(', 'call $trbn_array_new_reserved(',
+                        'call $trbn_array_push_', 'call $trbn_array_grow_paced(',
                         'call $trbn_gc_alloc(', 'call $trbn_string_concat',
                         'call $trbn_integer_to_string(', 'call $trbn_hash_new(',
                         'call $trbn_hash_set(', 'call $trbn_hash_delete(',
