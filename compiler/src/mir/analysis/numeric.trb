@@ -1,3 +1,4 @@
+import { mir_callable_plan_at } from mir/analysis/callables
 import { mir_numeric_interface_function, mir_numeric_interface_targets } from mir/analysis/numeric_interface
 import { integer_string } from support/literals
 import { MirFunction, MirModule, MirNumericOperation, MirNumericPlan, mir_block_index, mir_function_index, mir_value_type } from mir/model/module
@@ -248,6 +249,52 @@ def mir_numeric_leaf(native_module: MirModule, function: MirFunction, caller: In
 	return MirNumericPlan.new(witness: -1, function_id: function.id, caller: caller, call_instruction: site, operations: operations)
 end
 
+# Share the ordinary scalar leaf and code-size contract with callable sites.
+def mir_numeric_inline_leaf(native_module: MirModule, function: MirFunction): Boolean
+	if function.kind != 1
+		return false
+	end
+	entry := mir_block_index(native_module, function, function.entry_block)
+	if entry < 0
+		return false
+	end
+	return native_module.blocks[entry].instruction_count <= 32
+end
+
+def mir_numeric_callable_expansion(native_module: MirModule, caller: MirFunction, site: Integer, small: Hash<String, Integer>, mut budget: Array<Integer>): MirNumericPlan
+	callable := mir_callable_plan_at(native_module.callable_plans[0], site)
+	if callable.callee < 0
+		return mir_numeric_empty()
+	end
+	callee := mir_function_index(native_module, callable.callee)
+	if callee < 0
+		return mir_numeric_empty()
+	end
+	leaf := native_module.functions[callee]
+	if !mir_numeric_inline_leaf(native_module, leaf)
+		return mir_numeric_empty()
+	end
+	# Captures are loaded from the verified environment, never assumed small.
+	mut arguments: Array<Integer> := []
+	mut argument := 0
+	while argument < callable.captures
+		arguments.push(0)
+		argument += 1
+	end
+	instruction := native_module.instructions[site]
+	argument = 0
+	while argument < instruction.second
+		mut fact := 0
+		if small.key?(integer_string(native_module.arguments[instruction.payload + argument]))
+			fact = 1
+		end
+		arguments.push(fact)
+		argument += 1
+	end
+	budget[2] -= 1
+	return mir_numeric_leaf(native_module, leaf, caller.id, site, arguments, budget)
+end
+
 # Retain the bounded module policy, now selected from verified CFG/SSA facts.
 # Large modules have no numeric expansion and need no additional flow analysis.
 def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
@@ -318,6 +365,11 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 					if mode > 0
 						operations.push(mir_numeric_selection(native_module, function, flow, position, mode))
 					end
+				elsif instruction.kind == 42 && loop == 0 && budget[2] > 0
+					plan := mir_numeric_callable_expansion(native_module, function, position, small, budget)
+					if plan.function_id >= 0
+						plans.push(plan)
+					end
 				elsif instruction.kind == 11 && loop == 0 && budget[2] > 0
 					call := native_module.calls[instruction.payload]
 					if native_module.signatures[call.callee].kind == 4
@@ -344,8 +396,7 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 					callee := mir_function_index(native_module, call.callee)
 					if callee >= 0 && native_module.signatures[call.callee].kind == 0
 						leaf := native_module.functions[callee]
-						entry := mir_block_index(native_module, leaf, leaf.entry_block)
-						if leaf.kind == 1 && entry >= 0 && native_module.blocks[entry].instruction_count <= 32
+						if mir_numeric_inline_leaf(native_module, leaf)
 							mut arguments: Array<Integer> := []
 							mut argument := 0
 							while argument < call.argument_count
