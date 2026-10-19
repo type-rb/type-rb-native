@@ -38,7 +38,9 @@ error = re.findall(r'^data \$trbn_allocation_error = [^\n]+', decoded, re.M)
 assert len(error) == 1
 storage = re.findall(r'^data \$trbn_storage_available = [^\n]+', decoded, re.M)
 assert len(storage) == 1
-il = 'export ' + error[0] + '\n' + storage[0] + '\n' + '\n'.join(bodies)
+integer_strings = re.findall(r'^data \$trbn_small_integer_strings = [^\n]+\n.*?^\}', decoded, re.M | re.S)
+assert len(integer_strings) == 1
+il = 'export ' + error[0] + '\n' + storage[0] + '\n' + integer_strings[0] + '\n' + '\n'.join(bodies)
 observer = r'''
 #include <assert.h>
 #include <stdint.h>
@@ -98,10 +100,13 @@ static void clear(void) {
     trbn_gc_heap_bytes = trbn_gc_allocated_bytes = peak = published = 0;
     trbn_gc_temp_count = 0;
 }
-static void expect(struct string *s, const void *bytes, size_t size, int64_t points) {
-    assert(s->descriptor == (uintptr_t)trbn_desc_string);
+static void expect_bytes(struct string *s, const void *bytes, size_t size, int64_t points) {
     assert(s->length == (int64_t)size && s->points == points);
     assert(!memcmp(s->bytes, bytes, size) && s->bytes[size] == 0);
+}
+static void expect(struct string *s, const void *bytes, size_t size, int64_t points) {
+    assert(s->descriptor == (uintptr_t)trbn_desc_string);
+    expect_bytes(s, bytes, size, points);
 }
 int main(int argc, char **argv) {
     if (argc > 1) {
@@ -230,7 +235,20 @@ int main(int argc, char **argv) {
     expect(trbn_string_concat(a, b), "\xe3\x81\x82\0a", 5, 3);
     assert(trbn_string_concat(empty, a) == a && trbn_string_concat(b, empty) == b);
     clear();
-    int64_t values[] = {-9007199254740991LL, -123, 0, 9, 123, 9007199254740991LL};
+    /* Static strings need neither heap publication nor an allocation. Keep the
+       managed-descriptor assertion intact for every constructor and fallback. */
+    fail_allocation = 1;
+    for (int64_t value = 0; value < 100; ++value) {
+        char buffer[32]; int size = snprintf(buffer, sizeof buffer, "%lld", (long long)value);
+        struct string *cached = trbn_integer_to_string(value);
+        assert(cached->descriptor == 0);
+        expect_bytes(cached, buffer, size, size);
+        assert(trbn_integer_to_string(value) == cached);
+        assert(published == 0 && trbn_gc_heap_bytes == 0 && trbn_gc_allocated_bytes == 0);
+        assert(trbn_gc_temp_count == 0);
+    }
+    fail_allocation = 0;
+    int64_t values[] = {-9007199254740991LL, -123, -1, 100, 123, 9007199254740991LL};
     for (unsigned i = 0; i < sizeof values / sizeof *values; ++i) {
         char buffer[32]; int size = snprintf(buffer, sizeof buffer, "%lld", (long long)values[i]);
         expect(trbn_integer_to_string(values[i]), buffer, size, size); clear();

@@ -57,7 +57,8 @@ end
         if line == '}':
             ordinary = False
         if ordinary and any(marker in line for marker in (
-                'call $trbnf', 'call $trbn_array_new(', 'call $trbn_gc_alloc(',
+                'call $trbnf', 'call $trbn_array_new(', 'call $trbn_array_new_reserved(',
+                'call $trbn_array_grow_paced(', 'call $trbn_gc_alloc(',
                 'call $trbn_string_concat(')):
             forced.append('\tcall $trbn_gc_collect(w 0)')
             hooks += 1

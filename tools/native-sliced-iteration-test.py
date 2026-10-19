@@ -38,7 +38,8 @@ with tempfile.TemporaryDirectory(prefix='native-sliced-iteration-') as temporary
         if line == '}':
             ordinary = False
         if ordinary and any(marker in line for marker in (
-                'call $trbn_array_new(', 'call $trbn_array_push_',
+                'call $trbn_array_new(', 'call $trbn_array_new_reserved(',
+                'call $trbn_array_push_', 'call $trbn_array_grow_paced(',
                 'call $trbn_gc_alloc(', 'call $trbn_string_concat(', 'call $trbnf')):
             forced.append('\tcall $trbn_gc_collect(w 0)')
             hooks += 1
