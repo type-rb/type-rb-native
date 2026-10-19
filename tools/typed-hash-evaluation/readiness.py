@@ -9,6 +9,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
+REGISTRATION = Path(__file__).resolve().with_name("registration.json")
 sys.path.insert(0, str(ROOT / "tools/daily-performance"))
 from measure import digest, source_case
 
@@ -69,6 +70,18 @@ def validate_gc(rows):
     return {"unchangedCases": list(CASES), "allocatedBytesRatio": 1., "managedPeakRatio": 1.}
 
 
+def validate_matrix(rows, suite):
+    selected = [case for case in suite["cases"] if case["id"] in CASES]
+    if len(selected) != len(CASES) or {case["id"] for case in selected} != set(CASES):
+        raise ValueError("Missing or duplicate readiness case")
+    expected = {(case["id"], role) for case in selected for role in READINESS_ROLES
+                if role != "pure-go" or "pureGoSource" in case}
+    actual = [(row["case"], row["role"]) for row in rows]
+    if len(actual) != len(set(actual)) or set(actual) != expected:
+        raise ValueError("Missing, duplicate or unexpected readiness case/role")
+
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--compilers", type=Path, required=True)
@@ -101,7 +114,7 @@ def main():
         return result
 
     try:
-        registration = json.loads((ROOT / "tools/hash-probe-evaluation/registration.json").read_text())
+        registration = json.loads(REGISTRATION.read_text())
         validate_prior_compilers(roles, registration["priorLinuxCompilers"])
         for case in suite["cases"]:
             if case["id"] not in CASES:
@@ -145,8 +158,7 @@ def main():
                     raise ValueError(f"{case['id']}/{role}: repeated build identity differs")
                 rows.append({"case": case["id"], "role": role, "sha256": hashes[0], "builds": 2, "outputs": 2, **({"gc": stats} if stats else {})})
                 print(f"ready {case['id']} {role}", flush=True)
-        if len(rows) != 8:
-            raise ValueError("Incomplete readiness matrix")
+        validate_matrix(rows, suite)
         ir = {}
         for case in CASES:
             current = next(row for row in rows if row["case"] == case and row["role"] == "native")

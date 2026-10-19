@@ -400,7 +400,7 @@ def main():
         # Preserve failed/missing observations as invalid, never as a passing snapshot.
         write(args.output, {"status": "invalid", "error": str(error)})
         return 1
-    result["hash-string-keys"] = allocation
+    result["allocation"] = allocation
     if allocation["managedPeakRatio"] > 1.05:
         result["failures"].append("allocation/managed-peak-growth")
         result["status"] = "unmet"
