@@ -22,11 +22,11 @@ def backend_identity(root=ROOT):
     backend = json.loads((root / "tools/qbe/backend.json").read_text())
     if set(backend) != {"name", "version", "sourceURL", "sourceSHA256", "variant", "patches"}:
         raise ValueError("invalid QBE identity shape")
-    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-arm64-immediates-v1":
+    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-arm64-memory-v1":
         raise ValueError("unsupported QBE identity")
     if not backend["sourceURL"].startswith("https://") or not re.fullmatch(r"[0-9a-f]{64}", backend["sourceSHA256"]):
         raise ValueError("invalid QBE source identity")
-    paths = ["tools/qbe/sqrt.patch", "tools/qbe/arm64-immediates.patch"]
+    paths = ["tools/qbe/sqrt.patch", "tools/qbe/arm64-immediates.patch", "tools/qbe/arm64-memory.patch"]
     if len(backend["patches"]) != len(paths):
         raise ValueError("invalid QBE patch set")
     for patch, path in zip(backend["patches"], paths):
@@ -40,7 +40,9 @@ def backend_identity(root=ROOT):
 def check_capability(binary):
     source = ("export function d $probe(d %x) {\n@start\n %y =d sqrt %x\n ret %y\n}\n"
               "export function l $integer(l %x) {\n@start\n %a =l add %x, 7\n"
-              " %b =l and %a, 65535\n %c =l sar %b, 65\n ret %c\n}\n")
+              " %b =l and %a, 65535\n %c =l sar %b, 65\n ret %c\n}\n"
+              "export function l $memory(l %p) {\n@start\n %a =l add %p, 8\n"
+              " %x =l loadl %a\n %b =l add %p, 16\n storel %x, %b\n ret %x\n}\n")
     for target, instruction in (("arm64_apple", "fsqrt"), ("arm64", "fsqrt"), ("amd64_sysv", "sqrtsd")):
         result = subprocess.run([str(binary), "-t", target], input=source, text=True,
                                 capture_output=True, timeout=30)
@@ -50,6 +52,9 @@ def check_capability(binary):
             for operation, constant in (("add", "7"), ("and", "65535"), ("asr", "1")):
                 if not re.search(rf"\b{operation}\s+[^\n]*, #{constant}\s*$", result.stdout, re.MULTILINE):
                     raise ValueError(f"QBE lacks the required {target} integer immediate selection")
+            for operation, offset in (("ldr", "8"), ("str", "16")):
+                if not re.search(rf"\b{operation}\s+[^\n]*\[x\d+, #{offset}\]", result.stdout):
+                    raise ValueError(f"QBE lacks the required {target} memory operand selection")
 
 
 def build(output, archive=None):

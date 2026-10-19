@@ -20,7 +20,7 @@ class BackendTest(unittest.TestCase):
             root = Path(temporary)
             shutil.copytree(qbe.ROOT / "tools/qbe", root / "tools/qbe")
             original = qbe.backend_identity(root)
-            self.assertEqual(original["variant"], "typerb-arm64-immediates-v1")
+            self.assertEqual(original["variant"], "typerb-arm64-memory-v1")
             manifest = root / "tools/qbe/backend.json"
             for key, value in (("variant", "stock"), ("version", "1.4"),
                                ("patches", []), ("patches", original["patches"][::-1]),

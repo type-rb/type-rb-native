@@ -1,0 +1,90 @@
+--- a/arm64/isel.c
++++ b/arm64/isel.c
+@@ -317,6 +317,51 @@
+ 	}
+ }
+ 
++/* Consume only a unique address add. Shared liveness and allocation already
++ * handle a register base in RMem; frame and symbol addresses stay unchanged. */
++static void
++selmem(Ins *i, Fn *fn)
++{
++	Ins *d;
++	Tmp *t;
++	Con *c;
++	Addr a;
++	Ref *r;
++	int sz;
++
++	if (isload(i->op)) {
++		r = &i->arg[0];
++		sz = loadsz(i);
++	} else if (isstore(i->op)) {
++		r = &i->arg[1];
++		sz = storesz(i);
++	} else
++		return;
++	if (rtype(*r) != RTmp || r->val < Tmp0)
++		return;
++	t = &fn->tmp[r->val];
++	d = t->def;
++	if (t->ndef != 1 || t->nuse != 1 || !d
++	|| d->op != Oadd || d->cls != Kl
++	|| rtype(d->arg[0]) != RTmp || d->arg[0].val < Tmp0
++	|| rtype(d->arg[1]) != RCon)
++		return;
++	if (fn->tmp[d->arg[0].val].cls != Kl
++	|| fn->tmp[d->arg[0].val].slot != -1)
++		return;
++	c = &fn->con[d->arg[1].val];
++	if (c->type != CBits || c->bits.i < 0
++	|| c->bits.i > 4095 * sz || c->bits.i % sz)
++		return;
++	a = (Addr){.offset = *c, .base = d->arg[0], .index = R};
++	vgrow(&fn->mem, ++fn->nmem);
++	fn->mem[fn->nmem-1] = a;
++	*r = MEM(fn->nmem-1);
++	/* The add's base use becomes the memory operand's base use. */
++	t->nuse = 0;
++	*d = (Ins){.op = Onop};
++}
++
+ void
+ arm64_isel(Fn *fn)
+ {
+@@ -344,6 +389,11 @@
+ 				*i = (Ins){.op = Onop};
+ 			}
+ 
++	/* Definitions still refer to the original instruction storage here. */
++	for (b=fn->start; b; b=b->link)
++		for (i=b->ins; i<&b->ins[b->nins]; i++)
++			selmem(i, fn);
++
+ 	for (b=fn->start; b; b=b->link) {
+ 		curi = &insb[NIns];
+ 		for (sb=(Blk*[3]){b->s1, b->s2, 0}; *sb; sb++)
+--- a/arm64/emit.c
++++ b/arm64/emit.c
+@@ -169,6 +169,7 @@
+ emitf(char *s, Ins *i, E *e)
+ {
+ 	Ref r;
++	Addr *a;
+ 	int k, c;
+ 	Con *pc;
+ 	uint64_t n;
+@@ -259,6 +260,13 @@
+ 				break;
+ 			case RSlot:
+ 				fprintf(e->f, "[x29, %"PRIu64"]", slot(r, e));
++				break;
++			case RMem:
++				a = &e->fn->mem[r.val];
++				assert(isreg(a->base) && req(a->index, R));
++				assert(a->offset.type == CBits);
++				fprintf(e->f, "[%s, #%"PRId64"]",
++					rname(a->base.val, Kl), a->offset.bits.i);
+ 				break;
+ 			}
+ 			break;

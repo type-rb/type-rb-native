@@ -1,11 +1,11 @@
 # Native QBE variant
 
-`backend.json` pins the QBE 1.3 release archive and both patch digests.
+`backend.json` pins the QBE 1.3 release archive and all three patch digests.
 `python3 tools/qbe_toolchain.py /path/to/qbe-1.3` verifies them, applies the
 patches without fuzz, builds QBE and checks supported-target instruction emission.
 The binary's receipt records upstream, patch, builder and C compiler identities.
 Checkout builds include those tracked inputs in their content cache. An explicit
-`TRBN_QBE` override must support the same operations and ARM64 immediate selection.
+`TRBN_QBE` override must support the same operations and ARM64 operand selection.
 
 The six added upstream lines define a unary single/double floating-point `sqrt`
 and select `fsqrt`, `sqrtss` or `sqrtsd`. Native uses the double form only for
@@ -33,8 +33,20 @@ counts and fallback controls. `--baseline /path/to/previous/qbe` also compares
 unchanged AMD64 emission. The patch adds no target-independent optimization or
 runtime helper.
 
-Maintenance is two small pinned patches, one acquisition helper and target/edge tests.
-A QBE upgrade must rebase both patches, run upstream tests, run these controls on
+`arm64-memory.patch` folds a single-use address addition into a load or store
+when its register base and positive, naturally aligned constant offset fit the
+instruction. It uses the existing memory operand representation and shared
+liveness, spilling and register allocation. Multiply used addresses, frame and
+symbol addresses, variable offsets and unsupported displacements retain the
+ordinary path. Address definitions are inspected before instruction storage is
+replaced. No memory operation moves or changes width.
+Run `python3 tools/qbe_memory_test.py --qbe /path/to/qbe` for byte-level load/store
+checks, signed extension, floating-point bit preservation, displacement bounds,
+fallbacks and enough live base pointers to require spilling. Its optional
+`--baseline` control compares AMD64 emission with the preceding backend.
+
+Maintenance is three small pinned patches, one acquisition helper and target/edge tests.
+A QBE upgrade must rebase the patches, run upstream tests, run these controls on
 each supported host, and repeat ordinary compiler validation. Historical seed
 manifests and their replay workflows retain their original stock QBE identity;
 the current compatibility schema records this variant separately. No patched
