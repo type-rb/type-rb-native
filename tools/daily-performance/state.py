@@ -67,7 +67,7 @@ def validate(state):
         if "pure-go" in roles and not weekly:
             if (not isinstance(pure_go_cases, list) or not pure_go_cases or
                     len(set(pure_go_cases)) != len(pure_go_cases) or
-                    not {"fannkuch-redux", "n-body", "spectral-norm"}.issubset(pure_go_cases)):
+                    not {"allocation", "n-body", "spectral-norm"}.issubset(pure_go_cases)):
                 raise ValueError("Invalid Pure Go coverage")
         elif pure_go_cases:
             raise ValueError("Pure Go cases lack a compiler identity")
@@ -103,7 +103,7 @@ def validate(state):
                             raise ValueError("Invalid measurement metric")
                     if not 0 < metrics["wallMin"] <= metrics["wallSeconds"] <= metrics["wallMax"]:
                         raise ValueError("Invalid measurement range")
-        if weekly and set(cases) != {"fannkuch-redux", "n-body", "spectral-norm"}:
+        if weekly and set(cases) != {"allocation", "n-body", "spectral-norm"}:
             raise ValueError("Invalid weekly workload coverage")
         if not set(pure_go_cases).issubset(cases) or not set(baseline_cases or []).issubset(cases):
             raise ValueError("Missing Pure Go or frozen baseline workload")

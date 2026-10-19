@@ -38,13 +38,13 @@ class WeeklyContextTests(unittest.TestCase):
         sources = self.registered_sources()
         cases = weekly.context_cases(suite, sources)
         self.assertEqual([case["id"] for case in cases],
-                         ["fannkuch-redux", "n-body", "spectral-norm"])
+                         ["allocation", "n-body", "spectral-norm"])
         self.assertTrue(any(case["id"] == "string-building" and "pureGoSource" in case
                             for case in suite["cases"]))
         self.assertEqual(suite, before)
         suite["cases"].reverse()
         self.assertEqual([case["id"] for case in weekly.context_cases(suite, sources)],
-                         ["spectral-norm", "n-body", "fannkuch-redux"])
+                         ["spectral-norm", "n-body", "allocation"])
 
     def test_incomplete_registered_roles_fail_before_any_observation(self):
         sources = self.registered_sources()
@@ -341,7 +341,7 @@ exec "$@"
         old = snapshot()
         current = snapshot()
         current["rows"] = []
-        current["pureGoCases"] = ["fannkuch-redux", "n-body", "spectral-norm"]
+        current["pureGoCases"] = ["allocation", "n-body", "spectral-norm"]
         current["roles"]["pure-go"] = {"revision": "b" * 40}
         for name in [*current["pureGoCases"], "startup"]:
             for role in current["roles"]:
@@ -362,7 +362,7 @@ exec "$@"
             hashes = {r["case"]: r["source_sha256"] for r in csv.DictReader(stream, delimiter="\t") if r["language"] == "go"}
         cases = state.read(state.ROOT / "tools/daily-performance/suite.json")["cases"]
         upstream = [case for case in cases if "pureGoSource" in case and case["id"] in hashes]
-        self.assertEqual({case["id"] for case in upstream}, {"fannkuch-redux", "n-body", "spectral-norm"})
+        self.assertEqual({case["id"] for case in upstream}, {"allocation", "n-body", "spectral-norm"})
         for case in upstream:
             self.assertEqual(hashlib.sha256((state.ROOT / case["pureGoSource"]).read_bytes()).hexdigest(), hashes[case["id"]])
 
@@ -404,7 +404,7 @@ exec "$@"
         weekly["roles"] = {role: {"revision": "a" * 40} for role in ("native", "pure-go", "c", "cpp", "rust", "java")}
         template = weekly["rows"][0]
         weekly["rows"] = [{**copy.deepcopy(template), "role": role, "case": case}
-                          for role in weekly["roles"] for case in ("fannkuch-redux", "n-body", "spectral-norm")]
+                          for role in weekly["roles"] for case in ("allocation", "n-body", "spectral-norm")]
         state.validate({**state.empty(), "latest": weekly})
         partial = copy.deepcopy(weekly); partial["rows"].pop()
         with self.assertRaises(ValueError): state.validate({**state.empty(), "latest": partial})
