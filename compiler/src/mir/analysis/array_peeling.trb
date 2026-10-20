@@ -1,0 +1,114 @@
+import { binary_less } from frontend/types/operators
+import { mir_terminator_branch, mir_terminator_jump } from mir/model/control
+import { mir_op_array_position, mir_op_array_store, mir_op_integer_to_float, mir_op_scalar_binary, mir_op_scalar_literal } from mir/model/instructions
+import { MirArrayLoop, MirFunction, MirModule } from mir/model/module
+import { mir_element_type } from mir/model/types
+import { mir_loop_bounded_index, mir_loop_halved_edge } from mir/analysis/array_bounds
+import { mir_array_primitive_value } from mir/analysis/array_values
+import { MirFlow, mir_flow_alias, mir_flow_aliases, mir_flow_block_index, mir_flow_parameter_slot, mir_flow_position, mir_flow_type } from mir/analysis/flow
+import { mir_natural_loop } from mir/analysis/loops
+import { mir_exact_integer_literal } from mir/analysis/ranges
+import { mir_live_add, mir_managed_contains } from mir/analysis/roots
+
+# Peeling exposes constant indexes in short reflected-index loops. This is a
+# lowering schedule for the same checked instructions: neither the condition
+# nor any failure edge is removed. Keep the original canonical SSA so all
+# existing bounds and numeric facts are independently checked at their owner.
+def mir_array_peel_body(native_module: MirModule, function: MirFunction, flow: MirFlow, plan: MirArrayLoop, bounded: Array<Integer>): Integer
+	if plan.cached_values.size() > 0 || plan.reserved_pushes.size() > 0
+		return -1
+	end
+	header_index := mir_flow_block_index(flow, plan.header)
+	header := native_module.blocks[function.block_start + header_index]
+	loop := mir_natural_loop(native_module, function, flow, header_index)
+	if header.terminator != mir_terminator_branch() || header.first_target == header.second_target || loop.preheader < 0 || loop.members.size() != 2
+		return -1
+	end
+	body_index := mir_flow_block_index(flow, header.first_target)
+	body := native_module.blocks[function.block_start + body_index]
+	if body.terminator != mir_terminator_jump() || body.first_target != header.id || body.instruction_count > 32
+		return -1
+	end
+	if flow.predecessors[body_index].size() != 1 || flow.predecessors[body_index][0] != header_index
+		return -1
+	end
+	preheader := native_module.blocks[function.block_start + loop.preheader]
+	if preheader.id != plan.preheader
+		return -1
+	end
+	position := mir_flow_position(flow, header.condition)
+	if position < header.instruction_start || position >= header.instruction_start + header.instruction_count
+		return -1
+	end
+	condition := native_module.instructions[position]
+	if condition.kind != mir_op_scalar_binary() || condition.payload != binary_less()
+		return -1
+	end
+	slot := mir_flow_parameter_slot(native_module, header, condition.first)
+	if slot < 0
+		return -1
+	end
+	origins := mir_flow_aliases(native_module, function, flow, native_module.blocks[function.block_start + flow.entry])
+	initial := mir_flow_alias(origins, native_module.arguments[preheader.first_argument_start + slot])
+	initial_position := mir_flow_position(flow, initial)
+	if initial_position < 0 || !mir_exact_integer_literal(native_module, native_module.instructions[initial_position], "0")
+		return -1
+	end
+	if mir_loop_halved_edge(native_module, flow, origins, condition.second, preheader) < 0
+		return -1
+	end
+	aliases := mir_flow_aliases(native_module, function, flow, header)
+	mut reflected := false
+	[header, body].each do |block|
+		mut at := block.instruction_start
+		while at < block.instruction_start + block.instruction_count
+			instruction := native_module.instructions[at]
+			kind := instruction.kind
+			if kind >= mir_op_array_position() && kind <= mir_op_array_store()
+				if !mir_managed_contains(bounded, at) || !mir_array_primitive_value(mir_element_type(native_module, mir_flow_type(flow, instruction.first)))
+					return -1
+				end
+				if mir_flow_alias(aliases, instruction.second) != condition.first && mir_loop_bounded_index(native_module, flow, aliases, origins, header, preheader, instruction.second)
+					reflected = true
+				end
+			elsif kind < mir_op_scalar_literal() || kind > mir_op_integer_to_float()
+				return -1
+			end
+			at += 1
+		end
+	end
+	if reflected
+		return body.id
+	end
+	return -1
+end
+
+def mir_array_loop_peels(native_module: MirModule, function: MirFunction, flow: MirFlow, plans: Array<MirArrayLoop>): Array<MirArrayLoop>
+	if native_module.functions.size() > 96 || function.block_count > 128
+		return plans
+	end
+	mut bounded: Array<Integer> := []
+	plans.each do |plan|
+		plan.accesses.each do |access|
+			mir_live_add(bounded, access)
+		end
+		plan.headers.each do |header|
+			header.bounded_accesses.each do |access|
+				mir_live_add(bounded, access)
+			end
+		end
+	end
+	mut result: Array<MirArrayLoop> := []
+	mut count := 0
+	plans.each do |plan|
+		mut body := -1
+		if count < 2
+			body = mir_array_peel_body(native_module, function, flow, plan, bounded)
+		end
+		if body >= 0
+			count += 1
+		end
+		result.push(MirArrayLoop.new(header: plan.header, preheader: plan.preheader, owner: plan.owner, length: plan.length, accesses: plan.accesses, headers: plan.headers, reserved_pushes: plan.reserved_pushes, cached_values: plan.cached_values, peel_body: body))
+	end
+	return result
+end

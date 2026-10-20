@@ -78,6 +78,40 @@ def indexed_fixture(loads, c_types):
     expected = (loaded_bits(520, 8, 64) + loaded_bits(1032, 8, 64)) % (1 << 64)
     checks += ["fill();", f"CHECK(indexed_shared(arena + 512, arena + 1024, 1) == UINT64_C({expected}), shared_index);"]
 
+    # An address shared by a load, a store and optionally an opaque call must
+    # retain every non-memory use while folding both eligible memory operands.
+    for number, (store, load, cls, width) in enumerate((
+            ("storeb", "loadub", "w", 1), ("storeh", "loaduh", "w", 2),
+            ("storew", "loadw", "w", 4), ("storel", "loadl", "l", 8),
+            ("stores", "loads", "s", 4), ("stored", "loadd", "d", 8))):
+        shift = width.bit_length() - 1
+        bits = 64 if cls in ("l", "d") else 32
+        expected = int.from_bytes(b"\xa5" * width, "little")
+        for escaped in (False, True):
+            name = f"indexed_update_{number}_{int(escaped)}"
+            escape = " call $opaque_address(l %a)\n" if escaped else ""
+            il.append(f"export function {cls} ${name}(l %p, l %i, {cls} %v) {{\n@start\n"
+                      f" %offset =l shl %i, {shift}\n %a =l add %offset, %p\n"
+                      f" %old ={cls} {load} %a\n{escape} {store} %v, %a\n ret %old\n}}\n")
+            declarations.append(f"extern {c_types[cls]} {name}(void *, uint64_t, {c_types[cls]});")
+            indexes = [-7, -1, 0, 3, 19] + ([(1 << (64 - shift)) + 3] if shift else [])
+            for index in indexes:
+                offset = (index << shift) % (1 << 64)
+                if offset >= 1 << 63:
+                    offset -= 1 << 64
+                value = (1 << bits) - 1
+                argument = f"UINT{bits}_C({value})"
+                if cls in ("s", "d"):
+                    argument = f"value{bits}({argument})"
+                call = f"{name}(arena + 513, UINT64_C({index % (1 << 64)}), {argument})"
+                if cls in ("s", "d"):
+                    call = f"bits{bits}({call})"
+                checks.append(f"memset(arena, 0xa5, sizeof arena); "
+                              f"CHECK((uint64_t)({call}) == UINT64_C({expected}), {name}_old); "
+                              f"CHECK(stored({513 + offset}, {width}, UINT64_C({value})), {name}_new);")
+                if escaped:
+                    checks.append(f"CHECK(observed == arena + {513 + offset}, {name}_escape);")
+
     # Both the bases and indexes exceed the register set across an opaque call.
     spill = ["export function l $indexed_spills(l %p, l %indexes) {\n@start"]
     for index in range(40):
@@ -95,7 +129,7 @@ def indexed_fixture(loads, c_types):
     il.append("\n".join(spill))
     declarations.append("extern uint64_t indexed_spills(void **, int64_t *);")
     expected = sum(loaded_bits(2000 + i * 16 + (i % 3 - 1) * 8, 8, 64) for i in range(40)) % (1 << 64)
-    checks += ["void *indexed_bases[40]; int64_t indexes[40];",
+    checks += ["fill();", "void *indexed_bases[40]; int64_t indexes[40];",
                "for (int i = 0; i < 40; ++i) { indexed_bases[i] = arena + 2000 + i * 16; indexes[i] = i % 3 - 1; }",
                f"CHECK(indexed_spills(indexed_bases, indexes) == UINT64_C({expected}), indexed_spills);"]
     return il, declarations, checks
@@ -147,8 +181,8 @@ def fixture():
                                   f"CHECK(stored({base + offset}, {width}, UINT64_C({value})), {name});")
             count += 1
 
-    # Register offsets exercise indexed operands; multiply used addresses,
-    # frame addresses and symbols retain the ordinary address calculation.
+    # Escaped addresses retain their non-memory calculation. Frame addresses
+    # and symbols remain on the ordinary path.
     il += ["export function l $memory_variable(l %p, l %offset) {\n@start\n"
            " %a =l add %p, %offset\n %v =l loadl %a\n ret %v\n}\n",
            "export function l $memory_shared(l %p) {\n@start\n %a =l add %p, 8\n"

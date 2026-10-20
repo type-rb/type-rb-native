@@ -116,9 +116,12 @@ record MirValue
 end
 
 # A prior successful guard supplies a normalized position, never an address.
+# A loaded or stored primitive SSA value may also be reused while independently
+# proven unchanged. A loaded_value of -1 reuses only the checked position.
 record MirArrayReadGuard
 	instruction: Integer
 	source: Integer
+	loaded_value: Integer
 end
 
 # An Array retains its own length and storage across a header-stable loop.
@@ -128,10 +131,25 @@ record MirArrayHeader
 	owner: Integer
 	accesses: Array<Integer>
 	nonnegative_accesses: Array<Integer>
+	# Both bounds follow from an exclusive true edge and a stable loop header.
+	bounded_accesses: Array<Integer>
+end
+
+# A primitive element held across a loop, initialized only after body entry and
+# written back at its exclusive exit. All access lists and alias proofs are
+# reconstructed from canonical instructions; no unchecked load is introduced.
+record MirArrayCachedValue
+	owner: Integer
+	index: Integer
+	type_id: Integer
+	body: Integer
+	exit: Integer
+	loads: Array<Integer>
+	stores: Array<Integer>
 end
 
 # Header reuse for one verified natural loop. A guard Array also proves its
-# own checked indexes; scalar-bound loops retain independent bounds checks.
+# own checked indexes; other Arrays require a separate dominating length guard.
 # owner and length are -1 when no Array supplies the loop bound.
 record MirArrayLoop
 	header: Integer
@@ -142,6 +160,9 @@ record MirArrayLoop
 	headers: Array<MirArrayHeader>
 	# Fresh reserved outputs append at most once per induction step.
 	reserved_pushes: Array<Integer>
+	cached_values: Array<MirArrayCachedValue>
+	# Duplicate the verified first header/body visit when this body is present.
+	peel_body: Integer
 end
 
 # One lazy scalar result cache, reset on each entry from its loop preheader.
@@ -160,6 +181,12 @@ record MirArrayJoin
 	construction: Integer
 	array: Integer
 	join: Integer
+	# Sole adjacent String.size instruction; -1 keeps the materialized String.
+	size: Integer
+	# Verified separator literal with ASCII boundary bytes; -1 keeps runtime checks.
+	separator_literal: Integer
+	# Final binary concat represented by byte/point counts until this join; -1 otherwise.
+	size_concat: Integer
 	appends: Array<Integer>
 	elements: Array<Integer>
 end

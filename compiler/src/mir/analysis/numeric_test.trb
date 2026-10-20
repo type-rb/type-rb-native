@@ -31,6 +31,52 @@ def numeric_mir_source(): String
 end
 
 describe("MIR numeric expansion ownership") do
+	test("reserves expansion budgets for hot loops across functions with cold copies") do
+		body := "(values: Array<Integer>, limit: Integer): Integer\nmut total := 0\nmut index := 0\nwhile index < limit\ntotal += leaf(values[index])\nindex += 1\nend\nreturn total\nend\n"
+		mut state := numeric_mir_check("def leaf(value: Integer): Integer\nreturn value * 2 + 1\nend\ndef first" + body + "def second" + body + "def main()\nputs(first([2, 3], 2))\nputs(second([5, 7], 2))\nputs(first([], -1))\nend\n")
+		mut first := 0
+		mut second := 0
+		state.scalar_mir.numeric_plans[0].each do |plan|
+			if plan.caller == 1
+				first += 1
+			elsif plan.caller == 2
+				second += 1
+			end
+		end
+		expect(first).to_equal(1)
+		expect(second).to_equal(1)
+		before := control_test_output(emit_qbe(state))
+		# The two checked fallback copies still call the scalar helper.
+		expect(before.split("call $trbnf0(").size()).to_equal(3)
+		plans := state.scalar_mir.numeric_plans[0]
+		intrinsic_mir_erase(state)
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		state.scalar_mir.functions.each do |function|
+			mut left := function.block_start
+			mut right := left + function.block_count - 1
+			while left < right
+				saved := state.scalar_mir.blocks[left]
+				state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
+				state.scalar_mir.blocks[right] = saved
+				left += 1
+				right -= 1
+			end
+		end
+		optimize_verified_mir(state.scalar_mir)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(mir_numeric_plans_equal(plans, state.scalar_mir.numeric_plans[0])).to_be_true()
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("12\n26\n0\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("uses verified collection lengths for one-sided Integer range checks") do
 		source := "def add_array_size(value: Integer, numbers: Array<Integer>): Integer\nreturn value + numbers.size()\nend\ndef add_string_size(value: Integer, text: String): Integer\nreturn value + text.size()\nend\ndef add_unknown(value: Integer, step: Integer): Integer\nreturn value + step\nend\ndef main()\nputs(add_array_size(4, [1, 2]))\nputs(add_string_size(4, \"xy\"))\nputs(add_unknown(4, -1))\nend\n"
 		mut state := numeric_mir_check(source)

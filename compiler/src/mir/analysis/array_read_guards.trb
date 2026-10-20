@@ -6,6 +6,8 @@ import { integer_string } from support/literals
 import { MirArrayReadGuard, MirFunction, MirModule, MirValue } from mir/model/module
 import { mir_instruction_effects } from mir/analysis/call_effects
 import { mir_live_add } from mir/analysis/roots
+import { mir_fixed_array_index_checks } from mir/analysis/array_lengths
+import { mir_array_value_guards } from mir/analysis/array_values
 
 record MirArrayChecks
 	reuse: Array<Integer>
@@ -78,9 +80,10 @@ def mir_function_array_checks(native_module: MirModule, function: MirFunction, v
 	end
 	# Canonical instruction order keeps verification independent of block storage.
 	positions.each do |position|
-		guards.push(MirArrayReadGuard.new(instruction: position, source: sources[integer_string(position)]))
+		guards.push(MirArrayReadGuard.new(instruction: position, source: sources[integer_string(position)], loaded_value: -1))
 	end
-	return MirArrayChecks.new(reuse: reuse, guards: guards)
+	mir_fixed_array_index_checks(native_module, function, values, reuse)
+	return MirArrayChecks.new(reuse: reuse, guards: mir_array_value_guards(native_module, function, guards))
 end
 
 def mir_array_read_guards_equal(left: Array<MirArrayReadGuard>, right: Array<MirArrayReadGuard>): Boolean
@@ -90,6 +93,9 @@ def mir_array_read_guards_equal(left: Array<MirArrayReadGuard>, right: Array<Mir
 	mut index := 0
 	while index < left.size()
 		if left[index].instruction != right[index].instruction || left[index].source != right[index].source
+			return false
+		end
+		if left[index].loaded_value != right[index].loaded_value
 			return false
 		end
 		index += 1

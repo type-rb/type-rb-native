@@ -89,17 +89,42 @@ not a performance improvement.
   skipped paths, zero-trip behavior and failure order. Managed return values and
   indirect or external calls remain excluded. The cache stores only a successful
   Integer, Boolean or Float result and is reset on loop reentry.
-- `compiler/src/mir/analysis/array_loops.trb`: verified loop-header and within-block checked-index
-  reuse plans. Stable Arrays retain their own length and storage across pure
-  Array-size or scalar-counted loops; only the Array-size guard proves checked
-  positions for its own owner. Proven nonnegative positions still check each
-  other Array's own length.
-  Allocation, mutation, I/O and calls with unknown effects invalidate reuse.
+- `compiler/src/mir/analysis/array_loops.trb`: verified natural-loop plans, composed
+  from separate header, bounds, append and value analyses. Stable storage alone
+  permits header reuse; it does not prove an index safe. A dominating successful
+  length comparison can establish bounds for another Array. Its true edge must
+  be exclusive, and the bound and owner must remain unchanged on all backedges.
+  Checked endpoint arithmetic also supports reflected indexes.
+- `compiler/src/mir/passes/array_loop_versions.trb`: bounded fast/fallback loop
+  duplication with explicit length and, where useful, storage-identity guards.
+  The original checked path handles short or aliased Arrays. Cloned values,
+  calls, origins and edge arguments remain canonical MIR. Expansion is limited
+  per function and disabled for large modules to bound compiler cost.
+- `compiler/src/mir/analysis/array_values.trb`: primitive load reuse and store
+  forwarding within one block. SSA identity alone never proves disjoint storage;
+  intervening writes need an independently verified identity guard. Normalized
+  assignment indexes retain the original length-stability proof.
+- `compiler/src/mir/analysis/array_promotions.trb`: lazy primitive-element
+  promotion across a two-block loop with an exclusive exit. A moving index starts
+  at checked `i + 1` and cannot alias the unchanged nonnegative index `i`;
+  foreign owners require disjointness guards. The region excludes observers,
+  allocation, resize and possible failures. Values load only after first body
+  entry and flush before exit work, preserving zero iterations and Float order.
+- `compiler/src/mir/analysis/array_peeling.trb`: a small reflected-index loop may
+  duplicate its first checked header/body visit. The verified schedule retains
+  every condition and failure edge; the QBE adapter only routes labels and
+  ordinary parallel edge copies. The original canonical instructions remain
+  available to independently reconstruct bounds, numeric and value plans.
 - `compiler/src/mir/lowering/records.trb`, `compiler/src/backend/qbe/emit/records.trb`: nominal construction/projection contracts and their ABI adaptation. Readonly field bindings remain distinct from SSA IDs and mutable projected values.
 - `compiler/src/backend/qbe/emit/arrays.trb`: ABI adaptation of verified Array operations.
 - `compiler/src/mir/lowering/calls.trb`: declaration capture, checked calls and their verification.
 - `compiler/src/mir/analysis/call_effects.trb`: ephemeral direct-call graph and monotone effect summaries, rebuilt independently for verification. Each function is scanned once and each summary increases at most twice.
 - `compiler/src/mir/analysis/string_splits.trb`: bounded String literal-flow and split plans, independently rederived before static fragment adaptation.
+- `compiler/src/mir/analysis/array_joins.trb`: fresh single-use join fragments and
+  adjacent size consumers can avoid intermediate Arrays or Strings. Literal
+  separator boundaries must prove that UTF-8 code-point counts compose;
+  otherwise the ordinary runtime path checks the joined bytes. Observable
+  intermediate values, managed roots and evaluation order remain unchanged.
 - `compiler/src/mir/lowering/strings.trb`: String, conversion and output construction/contracts.
 - `compiler/src/mir/analysis/literal_data.trb`: portable bytes and code-point counts
   for ordinary String literals and String singletons, indexed by MIR payload.

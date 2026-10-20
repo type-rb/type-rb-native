@@ -19,14 +19,19 @@ import { mir_enum_stack_plans } from mir/analysis/enum_stack
 import { mir_function_value_groups } from mir/analysis/flow
 import { MirFunction, MirModule, mir_instruction_with_payload } from mir/model/module
 import { mir_scalar_guard } from mir/analysis/ranges
+import { mir_inline_leaf_loops } from mir/passes/leaf_loops
+import { mir_hoist_loop_records } from mir/passes/record_loops
 import { mir_expand_enum_calls } from mir/passes/enum_calls
 import { mir_fold_integer_literal_calls } from mir/passes/literal_calls
+import { mir_version_array_loops } from mir/passes/array_loop_versions
 
 def mir_function_with_guard(function: MirFunction, guard: Integer): MirFunction
 	return MirFunction.new(kind: function.kind, result_type: function.result_type, integer_guard: guard, id: function.id, entry_block: function.entry_block, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: function.block_start, block_count: function.block_count)
 end
 
 def optimize_verified_mir(mut native_module: MirModule)
+	mir_inline_leaf_loops(native_module)
+	mir_hoist_loop_records(native_module)
 	mir_expand_enum_calls(native_module)
 	mir_fold_integer_literal_calls(native_module)
 	mut index := 0
@@ -49,6 +54,9 @@ def optimize_verified_mir(mut native_module: MirModule)
 	end
 	# Rebuild from current SSA and call edges, never from a previous plan.
 	native_module.callable_plans[0] = mir_callable_plans(native_module)
+	if mir_version_array_loops(native_module)
+		native_module.callable_plans[0] = mir_callable_plans(native_module)
+	end
 	literals := mir_literal_data(native_module)
 	index = 0
 	while index < literals.size()
