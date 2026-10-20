@@ -3,6 +3,7 @@ import { literal_type_base, literal_integer_type, literal_string_type } from fro
 import { find_newtype_type } from frontend/types/newtype_types
 import { union_parts } from frontend/types/union_types
 import { callable_parts } from frontend/types/callable_types
+import { generic_base } from frontend/types/generic_arguments
 import { find_enum_type } from frontend/types/enum_types
 import { nullable_assignable, nullable_element } from frontend/types/nullable_types
 import { repl_absent, repl_none, repl_payload } from repl/nullable
@@ -27,18 +28,20 @@ def repl_find(environment: ReplEnvironment, name: String): Integer
 	return -1
 end
 
-def repl_bind(mut environment: ReplEnvironment, name: String, value: Integer, mutable: Integer)
+def repl_bind(mut environment: ReplEnvironment, name: String, value: Integer, mutable: Integer, presentation: String = "")
 	index := environment.count[0]
 	if index == environment.names.size()
 		environment.names.push(name)
 		environment.values.push(value)
 		environment.cells.push(0)
 		environment.mutable.push(mutable)
+		environment.presentations.push(presentation)
 	else
 		environment.names[index] = name
 		environment.values[index] = value
 		environment.cells[index] = 0
 		environment.mutable[index] = mutable
+		environment.presentations[index] = presentation
 	end
 	environment.count[0] += 1
 	return
@@ -67,6 +70,33 @@ def repl_assign_binding(mut store: ReplStore, mut environment: ReplEnvironment, 
 	else
 		environment.values[binding] = value
 	end
+end
+
+# Enum values are immutable views over shared payloads. A declaration or a
+# projected read can change its display type without changing the saved value.
+# Containers retain their existing identity; their checked type labels belong
+# to the submission/binding projection, not their mutable payload pool nodes.
+def repl_present(mut store: ReplStore, id: Integer, presentation: String): Integer
+	if nullable_element(repl_type(store, id)) != "" || union_parts(repl_type(store, id)).size() > 0
+		if repl_absent(store, id)
+			return id
+		end
+		payload := repl_present(store, store.children[id][0], presentation)
+		if payload == store.children[id][0]
+			return id
+		end
+		view := repl_value(store, store.types[id], store.integers[id], store.floats[id], store.texts[id], [payload])
+		store.value_programs[view] = store.value_programs[id]
+		return view
+	end
+	current := store.active_program[0]
+	if current < 0 || find_enum_type(store.programs[current], repl_type(store, id)) < 0 || store.presentations[id] == presentation
+		return id
+	end
+	copied := repl_value(store, store.types[id], store.integers[id], store.floats[id], store.texts[id], store.children[id])
+	store.value_programs[copied] = store.value_programs[id]
+	store.presentations[copied] = presentation
+	return copied
 end
 
 def repl_coerce(mut store: ReplStore, id: Integer, expected: String): Integer
@@ -452,6 +482,9 @@ def repl_render(state: CompilerState, store: ReplStore, id: Integer, depth: Inte
 	end
 	enum_index := find_enum_type(state, value.type_name)
 	if enum_index >= 0
+		if store.presentations[id] != ""
+			nominal_name = generic_base(store.presentations[id])
+		end
 		mut text := nominal_name + "::" + value.text
 		row := state.nominal.enum_variants[value.integer]
 		if row.field_count > 0
@@ -503,6 +536,7 @@ def repl_copy_value(source: ReplStore, mut target: ReplStore, id: Integer, mut m
 		copied := repl_hash_new(target, value.type_name, table.keys.size())
 		mapping[id] = copied
 		target.value_programs[copied] = owner
+		target.presentations[copied] = source.presentations[id]
 		mut index := 0
 		while index < table.order.size()
 			key_id := table.order[index]
@@ -522,11 +556,13 @@ def repl_copy_value(source: ReplStore, mut target: ReplStore, id: Integer, mut m
 		copied := repl_value(target, value.type_name, value.integer, value.floating, value.text, target.children[0])
 		mapping[id] = copied
 		target.value_programs[copied] = owner
+		target.presentations[copied] = source.presentations[id]
 		return copied
 	end
 	copied := repl_value(target, value.type_name, value.integer, value.floating, value.text, [])
 	mapping[id] = copied
 	target.value_programs[copied] = owner
+	target.presentations[copied] = source.presentations[id]
 	mut index := 0
 	while index < value.children.size()
 		target.children[copied].push(repl_copy_value(source, target, value.children[index], mapping, programs))
