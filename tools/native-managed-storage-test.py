@@ -34,6 +34,8 @@ extern void *trbn_storage_alloc(int64_t);
 extern void trbn_storage_free(void *, int64_t);
 extern uintptr_t trbn_storage_available[7];
 #define LIMIT 2048
+#define PAGE_BYTES 16384
+#define HEADER_BYTES 64
 struct block { unsigned char *base; size_t size; };
 struct object { unsigned char *base; size_t size; unsigned char pattern; };
 static struct block blocks[LIMIT];
@@ -50,7 +52,7 @@ static void guard(struct block *b) {
 void *guard_malloc(size_t size) {
     last_request = size;
     if (fail_allocation) return NULL;
-    assert(size <= 8192);
+    assert(size <= PAGE_BYTES);
     unsigned char *raw = malloc(size + 64); assert(raw);
     memset(raw, 0xd7, size + 64); memset(raw + 32, 0xa5, size);
     for (unsigned i = 0; i < LIMIT; ++i) if (!blocks[i].base) {
@@ -110,19 +112,19 @@ static void check(void) {
             size_t expected_stride = ((o->size + 7) & ~(size_t)7) + 8;
             assert(!stride || stride == expected_stride); stride = expected_stride;
             uintptr_t cell = (uintptr_t)o->base - 8;
-            assert(cell >= owner + 64 && cell + stride <= owner + 4096);
-            assert((cell - owner - 64) % stride == 0);
+            assert(cell >= owner + HEADER_BYTES && cell + stride <= owner + PAGE_BYTES);
+            assert((cell - owner - HEADER_BYTES) % stride == 0);
             ++live;
         }
         assert((live != 0) != (direct != 0)); /* No retained empty pages. */
         if (direct) { assert(direct == 1); continue; }
-        assert(block->size == 4096);
+        assert(block->size == PAGE_BYTES);
         uintptr_t *page = (uintptr_t *)block->base;
-        size_t capacity = 4032 / stride;
+        size_t capacity = (PAGE_BYTES - HEADER_BYTES) / stride;
         assert(page[4] == capacity && page[5] == live && page[6] == stride);
-        assert(page[3] >= (uintptr_t)page + 64);
-        assert(page[3] <= (uintptr_t)page + 64 + capacity * stride);
-        assert((page[3] - (uintptr_t)page - 64) % stride == 0);
+        assert(page[3] >= (uintptr_t)page + HEADER_BYTES);
+        assert(page[3] <= (uintptr_t)page + HEADER_BYTES + capacity * stride);
+        assert((page[3] - (uintptr_t)page - HEADER_BYTES) % stride == 0);
         unsigned class_index = (unsigned)(stride / 8 - 3);
         assert(class_index < 7 && page[7] == (uintptr_t)&trbn_storage_available[class_index]);
         unsigned found = 0, traversed = 0;
@@ -147,8 +149,9 @@ int main(void) {
     /* Every byte-size boundary, three full pages plus a partial page, then
        full-to-available reuse and head/interior/last page removal. */
     for (size_t size = 16; size <= 64; ++size) {
-        unsigned capacity = (unsigned)(4032 / (((size + 7) & ~(size_t)7) + 8));
+        unsigned capacity = (unsigned)((PAGE_BYTES - HEADER_BYTES) / (((size + 7) & ~(size_t)7) + 8));
         unsigned count = capacity * 3 + 1;
+        assert(count <= LIMIT);
         size_t before = allocations;
         for (unsigned i = 0; i < count; ++i) put(i, size);
         check(); assert(allocations == before + 4);
@@ -180,11 +183,11 @@ int main(void) {
         assert(!trbn_storage_alloc(invalid[i])); assert(last_request == (size_t)invalid[i]);
     }
     for (int64_t size = 16; size <= 64; ++size) {
-        assert(!trbn_storage_alloc(size)); assert(last_request == 4096);
+        assert(!trbn_storage_alloc(size)); assert(last_request == PAGE_BYTES);
         check();
     }
     fail_allocation = 0;
-    for (unsigned i = 0; i < 168; ++i) put(i, 16);
+    for (unsigned i = 0; i < (PAGE_BYTES - HEADER_BYTES) / 24; ++i) put(i, 16);
     check(); fail_allocation = 1;
     assert(!trbn_storage_alloc(16)); check();
     drop(73); put(73, 16); check(); /* Reuse needs no system allocation. */
