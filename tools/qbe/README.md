@@ -58,11 +58,13 @@ to require spilling across calls. Its optional
 
 `gcm.patch` fixes recursive expression sinking to update the emitted instruction
 instead of its temporary copy. Otherwise the copied root still refers to the
-original operands and leaves the newly sunk children unused. It also retains an
-expression outside a more frequently executed loop, using QBE's existing loop
-weights. This prevents invariant predicate trees from being recomputed on each
-visit. The change adds no instruction, alias assumption or arithmetic rewrite,
-and applies to every target. Run `python3 tools/qbe_gcm_test.py --qbe /path/to/qbe`
+original operands and leaves the newly sunk children unused. It also retains a
+branch predicate outside a more frequently executed loop, using QBE's existing
+loop weights. Cheap memory addresses retain QBE's rematerialization policy to
+limit register pressure. This prevents invariant predicate trees from being
+recomputed on each visit. The change adds no instruction, alias assumption or
+arithmetic rewrite, and applies to every target.
+Run `python3 tools/qbe_gcm_test.py --qbe /path/to/qbe`
 for six-target emission checks and an independent native oracle for shared
 predicates, signed boundaries, zero-trip loops and invariant memory addresses.
 Unlike the ARM64 selector patches alone, this patch can change AMD64 emission.

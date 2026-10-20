@@ -41,6 +41,26 @@ MOTION_PROBE = """export function l $motion(l %a, l %b, l %c, l %n) {
 }
 """
 
+ADDRESS_MOTION_PROBE = """export function l $address_motion(l %p, l %i, l %n) {
+@start
+ %offset =l shl %i, 3
+ %address =l add %p, %offset
+ jmp @loop
+@loop
+ %count =l phi @start 0, @body %next
+ %sum =l phi @start 0, @body %newsum
+ %more =w csltl %count, %n
+ jnz %more, @body, @done
+@body
+ %value =l loadl %address
+ %newsum =l add %sum, %value
+ %next =l add %count, 1
+ jmp @loop
+@done
+ ret %sum
+}
+"""
+
 
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -103,6 +123,12 @@ def check_capability(binary):
     body = moved.partition("@body\n")[2].partition("@yes\n")[0]
     if result.returncode or not body or re.search(r"\b(?:csltl|cnel|and)\b", body):
         raise ValueError("QBE lacks the required invariant expression motion")
+    result = subprocess.run([str(binary), "-t", "arm64", "-d", "G"], input=ADDRESS_MOTION_PROBE,
+                            text=True, capture_output=True, timeout=30)
+    moved = result.stderr.partition("> After GCM:")[2]
+    body = moved.partition("@body\n")[2].partition("@done\n")[0]
+    if result.returncode or not re.search(r"\bload %snk\.\d+", body):
+        raise ValueError("QBE lacks the required loop address rematerialization")
 
 
 def build(output, archive=None):

@@ -103,6 +103,19 @@ class BackendTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "invariant expression motion"):
                     qbe.check_capability(Path("synthetic-previous-motion-qbe"))
 
+    def test_guard_only_backend_does_not_claim_address_motion(self):
+        assembly = ("fsqrt d0, d0\nsqrtsd %xmm0, %xmm0\nadd x0, x0, #7\n"
+                    "and x0, x0, #65535\nasr x0, x0, #1\n"
+                    "ldr x0, [x1, #8]\nstr x0, [x1, #16]\n"
+                    "ldr x0, [x1, x2, lsl #3]\nstr w0, [x1, x2, lsl #2]\n"
+                    "shared_memory:\nldr x0, [x1, x2, lsl #3]\n"
+                    "str x4, [x1, x2, lsl #3]\n")
+        dump = "> After GCM:\n@body\n %value =l load %address\n@yes\n@done\n"
+        with patch.object(qbe.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, assembly, dump)):
+            with self.assertRaisesRegex(ValueError, "loop address rematerialization"):
+                qbe.check_capability(Path("synthetic-guard-only-qbe"))
+
 
 if __name__ == "__main__":
     unittest.main()

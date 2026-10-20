@@ -120,7 +120,7 @@ int main(void) {
 
 
 def check_motion(qbe, target):
-    for name, source in (("guard", GUARD), ("shared", SHARED)):
+    for name, source in (("guard", GUARD), ("shared", SHARED), ("address", ADDRESS)):
         result = subprocess.run([str(qbe), "-t", target, "-d", "G"], input=source,
                                 text=True, capture_output=True, check=True)
         moved = result.stderr.split("> After GCM:", 1)[1]
@@ -133,6 +133,10 @@ def check_motion(qbe, target):
             body = moved.split("@body\n", 1)[1].split("@yes\n", 1)[0]
             if re.search(r"\b(?:csltl|cnel|and)\b", body):
                 raise AssertionError(f"{target}: invariant predicate was sunk into the loop")
+        elif name == "address":
+            body = moved.split("@body\n", 1)[1].split("@done\n", 1)[0]
+            if not re.search(r"\bload %snk\.\d+", body):
+                raise AssertionError(f"{target}: cheap address rematerialization was disabled")
 
 
 def main():

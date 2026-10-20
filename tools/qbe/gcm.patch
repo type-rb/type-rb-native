@@ -1,10 +1,14 @@
 --- a/gcm.c
 +++ b/gcm.c
-@@ -378,7 +378,7 @@
+@@ -376,9 +376,9 @@
+ }
+ 
  static void
- sinkref(Fn *fn, Blk *b, Ref *pr)
- {
+-sinkref(Fn *fn, Blk *b, Ref *pr)
+-{
 -	Ins i;
++sinkref(Fn *fn, Blk *b, Ref *pr, int branch)
++{
 +	Ins i, *copy;
  	Tmp *t;
  	Ref r;
@@ -13,7 +17,7 @@
  	t = &fn->tmp[pr->val];
  	if (!t->def
  	|| t->bid == b->id
-+	|| fn->rpo[t->bid]->loop < b->loop
++	|| (branch && fn->rpo[t->bid]->loop < b->loop)
  	|| pinned(t->def)
  	|| !cheap(t->def))
  		return;
@@ -24,8 +28,22 @@
 -	sinkref(fn, b, &i.arg[0]);
 -	sinkref(fn, b, &i.arg[1]);
 +	copy = curi;
-+	sinkref(fn, b, &copy->arg[0]);
-+	sinkref(fn, b, &copy->arg[1]);
++	sinkref(fn, b, &copy->arg[0], branch);
++	sinkref(fn, b, &copy->arg[1], branch);
  }
  
  /* redistribute trivial ops to point of
+@@ -416,10 +418,10 @@
+ 	for (b=fn->start; b; b=b->link) {
+ 		for (i=b->ins; i<&b->ins[b->nins]; i++)
+ 			if (isload(i->op))
+-				sinkref(fn, b, &i->arg[0]);
++				sinkref(fn, b, &i->arg[0], 0);
+ 			else if (isstore(i->op))
+-				sinkref(fn, b, &i->arg[1]);
+-		sinkref(fn, b, &b->jmp.arg);
++				sinkref(fn, b, &i->arg[1], 0);
++		sinkref(fn, b, &b->jmp.arg, b->jmp.type == Jjnz);
+ 	}
+ 	addgcmins(fn, curi, &insb[NIns] - curi);
+ }
