@@ -39,15 +39,14 @@
  	{ Odiv,    Ki, "sdiv %=, %0, %1" },
  	{ Odiv,    Ka, "fdiv %=, %0, %1" },
  	{ Oudiv,   Ki, "udiv %=, %0, %1" },
-@@ -564,6 +565,65 @@
+@@ -564,6 +565,55 @@
  
  */
  
 +/* Contract only an explicitly permitted multiply and its adjacent consumer.
-+ * No operand can change between them. Omit the rounded product only when the
-+ * consumer overwrites it or the next write precedes every use in this block.
-+ * Calls and block exits stop that proof, including implicit ABI register uses.
-+ * Otherwise preserve the product when the result can be computed first safely.
++ * No operand can change between them. The rounded product must either be
++ * overwritten by that consumer or killed before its next use in this block.
++ * Calls and block exits stop the proof, including implicit ABI register uses.
 + * Keeping this after register allocation avoids a third generic IR operand.
 + */
 +static int
@@ -57,7 +56,7 @@
 +	Ref other;
 +	char *op;
 +	char reg;
-+	int product, keep;
++	int product;
 +
 +	if (mul->op != Omulc || mul + 1 == end)
 +		return 0;
@@ -71,24 +70,17 @@
 +		return 0;
 +	product = req(mul->to, add->arg[1]);
 +	other = add->arg[!product];
-+	keep = 0;
 +	if (!req(mul->to, add->to)) {
 +		for (next=add+1; next!=end; next++) {
 +			if (next->op == Ocall
-+			|| req(next->arg[0], mul->to) || req(next->arg[1], mul->to)) {
-+				keep = 1;
-+				break;
-+			}
++			|| req(next->arg[0], mul->to) || req(next->arg[1], mul->to))
++				return 0;
 +			if (req(next->to, mul->to))
 +				break;
 +		}
 +		if (next == end)
-+			keep = 1;
++			return 0;
 +	}
-+	/* A live rounded product can follow the fused result when computing that
-+	 * result leaves both multiply inputs intact. No extra register is needed. */
-+	if (keep && (req(add->to, mul->arg[0]) || req(add->to, mul->arg[1])))
-+		return 0;
 +	op = "fmadd";
 +	if (add->op == Osub)
 +		op = product ? "fmsub" : "fnmsub";
@@ -97,15 +89,13 @@
 +		op, reg, add->to.val - V0,
 +		reg, mul->arg[0].val - V0, reg, mul->arg[1].val - V0,
 +		reg, other.val - V0);
-+	if (keep)
-+		emitins(mul, e);
 +	return 1;
 +}
 +
  void
  arm64_emitfn(Fn *fn, FILE *out)
  {
-@@ -633,7 +693,10 @@
+@@ -633,7 +683,10 @@
  		if (lbl || b->npred > 1)
  			fprintf(e->f, "%s%d:\n", T.asloc, id0+b->id);
  		for (i=b->ins; i!=&b->ins[b->nins]; i++)

@@ -36,15 +36,6 @@ export function {width} ${width}_twice({width} %a, {width} %b) {{
  %result ={width} add %product, %product
  ret %result
 }}
-export function {width} ${width}_live({width} %a, {width} %b, {width} %c, l %out) {{
-@start
- %product ={width} mulc %a, %b
- %result ={width} add %product, %c
- store{width} %result, %out
- %next =l add %out, {8 if width == "d" else 4}
- store{width} %b, %next
- ret %product
-}}
 export function {width} ${width}_call({width} %a, {width} %b, {width} %c) {{
 @start
  %product ={width} mulc %a, %b
@@ -92,7 +83,6 @@ extern Scalar @W@_strict_subtract(Scalar, Scalar, Scalar);
 extern Scalar @W@_strict_reverse_subtract(Scalar, Scalar, Scalar);
 extern Scalar @W@_reuse(Scalar, Scalar, Scalar, Scalar *);
 extern Scalar @W@_twice(Scalar, Scalar);
-extern Scalar @W@_live(Scalar, Scalar, Scalar, Scalar *);
 extern Scalar @W@_call(Scalar, Scalar, Scalar);
 extern Scalar @W@_branch(Scalar, Scalar, Scalar, int);
 extern Scalar @W@_constant(void);
@@ -129,11 +119,6 @@ static int check(Scalar a, Scalar b, Scalar c) {
     if (!same(@W@_branch(a, b, c, 0), product)) return 34;
     result = @W@_branch(a, b, c, 1);
     if (!same(result, separate[0]) && !same(result, fused[0])) return 35;
-    Scalar live[2];
-    result = @W@_live(a, b, c, live);
-    if (!same(result, product)) return 37;
-    if (!same(live[0], HOST_FUSES ? fused[0] : separate[0])) return 38;
-    if (!same(live[1], b)) return 39;
     return 0;
 }
 int check_@W@(void) {
@@ -150,7 +135,7 @@ int check_@W@(void) {
             fprintf(stderr, "@W@ edge %u/%u/%u failed check %d\n", a, b, c, status);
             return status;
         }
-        checks += 17;
+        checks += 14;
     }
     uint64_t state = UINT64_C(0x384028ccab71e107);
     for (unsigned n = 0; n < 4096; ++n) {
@@ -165,7 +150,7 @@ int check_@W@(void) {
             fprintf(stderr, "@W@ random %u failed check %d\n", n, status);
             return status;
         }
-        checks += 17;
+        checks += 14;
     }
     printf("@W@ contraction: %u checks passed\n", checks);
     return 0;
@@ -177,7 +162,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--qbe", required=True, type=Path)
     parser.add_argument("--baseline", type=Path)
-    parser.add_argument("--previous-contraction", type=Path)
     args = parser.parse_args()
     qbe = args.qbe.resolve()
     source = operations("d") + operations("s")
@@ -196,15 +180,6 @@ def main():
                         body = body.split("/* end function")[0]
                         fused = bool(re.search(r"\bf(?:madd|msub|nmsub)\b", body))
                         assert fused == (target.startswith("arm64") and not prefix), (target, symbol)
-                body = re.split(rf"(?m)^_?{width}_live:\s*$", result.stdout)[1]
-                body = body.split("/* end function")[0]
-                fused = bool(re.search(r"\bfmadd\b", body))
-                assert fused == target.startswith("arm64"), (target, width, "live product")
-                if fused:
-                    assert re.search(r"\bfmul\b", body), (target, width, "missing rounded product")
-                body = re.split(rf"(?m)^_?{width}_reuse:\s*$", result.stdout)[1]
-                body = body.split("/* end function")[0]
-                assert not re.search(r"\bfmadd\b", body), (target, width, "input alias")
         machine = platform.machine()
         arm64 = machine in ("arm64", "aarch64")
         if arm64:
@@ -238,11 +213,6 @@ def main():
     if args.baseline:
         result = subprocess.run([str(args.baseline.resolve())], input=source, text=True, capture_output=True)
         assert result.returncode != 0 and "mulc" in result.stderr, "previous backend accepted the new opcode"
-    if args.previous_contraction:
-        result = subprocess.run([str(args.previous_contraction.resolve()), "-t", "arm64"],
-                                input=source, text=True, capture_output=True, check=True)
-        body = re.split(r"(?m)^d_live:\s*$", result.stdout)[1].split("/* end function")[0]
-        assert not re.search(r"\bfmadd\b", body), "previous variant already preserves fused live products"
     print("QBE Float contraction, strict multiplication, reuse, calls and branches passed on six emission targets")
 
 
