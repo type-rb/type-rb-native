@@ -79,13 +79,59 @@ ADDRESS = """export function $address(l %p, l %seed, l %n) {
 }
 """
 
+COPY_CYCLE = """export function l $copy_cycle(l %a, l %b, l %n, l %p) {
+@start
+ jmp @loop
+@loop
+ %i =l phi @start 0, @body %next
+ %left =l phi @start %a, @body %right
+ %right =l phi @start %b, @body %left
+ %more =w csltl %i, %n
+ jnz %more, @body, @done
+@body
+ storel %i, %p
+ %unused =l call $observe(l %i)
+ %next =l add %i, 1
+ jmp @loop
+@done
+ ret %i
+}
+"""
+
+LIVE_CYCLE = COPY_CYCLE.replace("$copy_cycle(", "$live_cycle(").replace("ret %i", "ret %left")
+OBSERVED_CYCLE = COPY_CYCLE.replace("$copy_cycle(", "$observed_cycle(").replace(
+    "storel %i, %p", "storel %left, %p").replace("$observe(l %i)", "$observe(l %right)")
+FLOAT_CYCLE = """export function d $float_cycle(d %a, d %b, l %n) {
+@start
+ jmp @loop
+@loop
+ %i =l phi @start 0, @body %next
+ %left =d phi @start %a, @body %right
+ %right =d phi @start %b, @body %left
+ %more =w csltl %i, %n
+ jnz %more, @body, @done
+@body
+ %next =l add %i, 1
+ jmp @loop
+@done
+ ret %left
+}
+"""
+
 DRIVER = r"""
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 extern int64_t guard(int64_t, int64_t, int64_t, int64_t);
 extern int64_t single_guard(int64_t, int64_t, int64_t, int64_t);
 extern int64_t shared(int64_t, int64_t, int64_t, int64_t);
 extern void address(uint64_t *, uint64_t, int64_t);
+extern int64_t copy_cycle(int64_t, int64_t, int64_t, int64_t *);
+extern int64_t live_cycle(int64_t, int64_t, int64_t, int64_t *);
+extern int64_t observed_cycle(int64_t, int64_t, int64_t, int64_t *);
+extern double float_cycle(double, double, int64_t);
+static int64_t observed, calls;
+int64_t observe(int64_t value) { observed = value; ++calls; return 0; }
 int main(void) {
     int64_t values[] = {INT64_MIN, -1, 0, 1, 17, INT64_MAX};
     int64_t trips[] = {-3, 0, 1, 2, 31, 65};
@@ -120,6 +166,36 @@ int main(void) {
             ++checks;
         }
     }
+    for (unsigned a = 0; a < 6; ++a)
+    for (unsigned b = 0; b < 6; ++b)
+    for (unsigned n = 0; n < 6; ++n) {
+        int64_t count = trips[n] > 0 ? trips[n] : 0;
+        int64_t last = count ? count - 1 : 99;
+        int64_t stored = 99;
+        observed = 99; calls = 0;
+        if (copy_cycle(values[a], values[b], trips[n], &stored) != count
+            || stored != last || observed != last || calls != count) return 5;
+        ++checks;
+        stored = observed = 99; calls = 0;
+        int64_t expected = values[count & 1 ? b : a];
+        if (live_cycle(values[a], values[b], trips[n], &stored) != expected
+            || stored != last || observed != last || calls != count) return 6;
+        ++checks;
+        stored = observed = 99; calls = 0;
+        int64_t left = count ? values[(count - 1) & 1 ? b : a] : 99;
+        int64_t right = count ? values[(count - 1) & 1 ? a : b] : 99;
+        if (observed_cycle(values[a], values[b], trips[n], &stored) != count
+            || stored != left || observed != right || calls != count) return 7;
+        ++checks;
+        double fa, fb, actual;
+        uint64_t bits;
+        memcpy(&fa, &values[a], sizeof fa);
+        memcpy(&fb, &values[b], sizeof fb);
+        actual = float_cycle(fa, fb, trips[n]);
+        memcpy(&bits, &actual, sizeof bits);
+        if (bits != (uint64_t)expected) return 8;
+        ++checks;
+    }
     printf("%u GCM semantic checks passed\n", checks);
     return 0;
 }
@@ -149,6 +225,11 @@ def check_motion(qbe, target):
             body = moved.split("@body\n", 1)[1].split("@yes\n", 1)[0]
             if "csltl" not in body:
                 raise AssertionError(f"{target}: single comparison rematerialization was disabled")
+    result = subprocess.run([str(qbe), "-t", target, "-d", "G"], input=COPY_CYCLE,
+                            text=True, capture_output=True, check=True)
+    moved = result.stderr.split("> After GCM:", 1)[1]
+    if re.search(r"%(?:left|right)(?:\.\d+)?\b", moved):
+        raise AssertionError(f"{target}: unused copy cycle survived")
 
 
 def main():
@@ -160,7 +241,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="qbe-gcm-") as temporary:
         root = Path(temporary)
         source = root / "input.ssa"
-        source.write_text(GUARD + SINGLE_GUARD + SHARED + ADDRESS)
+        source.write_text(GUARD + SINGLE_GUARD + SHARED + ADDRESS
+                          + COPY_CYCLE + LIVE_CYCLE + OBSERVED_CYCLE + FLOAT_CYCLE)
         for target in targets:
             check_motion(qbe, target)
             subprocess.run([str(qbe), "-t", target, "-o", str(root / (target + ".s")),
@@ -174,7 +256,7 @@ def main():
         subprocess.run([os.environ.get("CC", "cc"), str(driver), str(root / (native + ".s")),
                         "-o", str(program)], check=True)
         result = subprocess.run([str(program)], capture_output=True, text=True, check=True)
-        assert result.stdout == "4608 GCM semantic checks passed\n", result.stdout
+        assert result.stdout == "5472 GCM semantic checks passed\n", result.stdout
         assert not result.stderr, result.stderr
         print(result.stdout, end="")
         print("Recursive operands and invariant guards verified for six targets")

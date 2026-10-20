@@ -64,11 +64,18 @@ existing loop weights. Single comparisons remain eligible for rematerialization,
 so instruction selection can use branch flags without retaining a Boolean value.
 Cheap memory addresses retain the same policy to limit register pressure. This
 prevents invariant predicate trees from being recomputed on each visit.
+Before scheduling, a worklist marks phi and copy dependencies from every
+non-copy operand and terminator. Unmarked copies, including otherwise unused
+phi cycles, are removed. The pass keeps all ordinary operations and leaves
+their elimination to the existing scheduler. Calls, memory operands, return
+values and loop conditions remain roots of this analysis. Functions without
+phi nodes do not need the pass.
 The change adds no instruction, alias assumption or
 arithmetic rewrite, and applies to every target.
 Run `python3 tools/qbe_gcm_test.py --qbe /path/to/qbe`
 for six-target emission checks and an independent native oracle for shared
-predicates, signed boundaries, zero-trip loops and invariant memory addresses.
+predicates, signed boundaries, zero-trip loops, invariant memory addresses,
+unused copy cycles and cycles observed through calls, stores and returns.
 Unlike the ARM64 selector patches alone, this patch can change AMD64 emission.
 
 `fma.patch` adds the floating-point `mulc` operation: ordinary multiplication

@@ -61,6 +61,32 @@ ADDRESS_MOTION_PROBE = """export function l $address_motion(l %p, l %i, l %n) {
 }
 """
 
+COPY_CYCLE_PROBE = """export function l $copy_cycle(l %a, l %b, l %n) {
+@start
+ jmp @loop
+@loop
+ %i =l phi @start 0, @body %next
+ %left =l phi @start %a, @body %right
+ %right =l phi @start %b, @body %left
+ %more =w csltl %i, %n
+ jnz %more, @body, @done
+@body
+ %next =l add %i, 1
+ jmp @loop
+@done
+ ret %i
+}
+"""
+
+
+def check_copy_liveness(binary):
+    result = subprocess.run([str(binary), "-t", "arm64", "-d", "G"], input=COPY_CYCLE_PROBE,
+                            text=True, capture_output=True, timeout=30)
+    moved = result.stderr.partition("> After GCM:")[2]
+    if (result.returncode or not re.search(r"\bret[wlsd]? ", moved)
+            or re.search(r"%(?:left|right)(?:\.\d+)?\b", moved)):
+        raise ValueError("QBE lacks the required dead copy cycle elimination")
+
 
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -70,7 +96,7 @@ def backend_identity(root=ROOT):
     backend = json.loads((root / "tools/qbe/backend.json").read_text())
     if set(backend) != {"name", "version", "sourceURL", "sourceSHA256", "variant", "patches"}:
         raise ValueError("invalid QBE identity shape")
-    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-float-contraction-v4":
+    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-copy-liveness-v1":
         raise ValueError("unsupported QBE identity")
     if not backend["sourceURL"].startswith("https://") or not re.fullmatch(r"[0-9a-f]{64}", backend["sourceSHA256"]):
         raise ValueError("invalid QBE source identity")
@@ -150,6 +176,7 @@ def check_capability(binary):
     body = moved.partition("@body\n")[2].partition("@yes\n")[0]
     if result.returncode or "csltl" not in body:
         raise ValueError("QBE lacks the required single comparison rematerialization")
+    check_copy_liveness(binary)
     check_contraction(binary)
 
 

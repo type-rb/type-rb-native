@@ -15,6 +15,13 @@ import qbe_toolchain as qbe
 
 
 class BackendTest(unittest.TestCase):
+    def test_unused_copy_cycle_or_missing_dump_is_rejected(self):
+        for dump in ("", "> After GCM:\n@loop\n %left =l phi @start %a, @body %right\nret %i\n"):
+            with self.subTest(dump=dump), patch.object(
+                    qbe.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", dump)):
+                with self.assertRaisesRegex(ValueError, "dead copy cycle"):
+                    qbe.check_copy_liveness(Path("synthetic-copy-qbe"))
+
     def test_missing_or_unconditional_contraction_is_rejected(self):
         for assembly in ("fmul d0, d0, d1\nfadd d0, d0, d2\n", "fmadd d0, d0, d1, d2\n"):
             with self.subTest(assembly=assembly), patch.object(
@@ -28,7 +35,7 @@ class BackendTest(unittest.TestCase):
             root = Path(temporary)
             shutil.copytree(qbe.ROOT / "tools/qbe", root / "tools/qbe")
             original = qbe.backend_identity(root)
-            self.assertEqual(original["variant"], "typerb-float-contraction-v4")
+            self.assertEqual(original["variant"], "typerb-copy-liveness-v1")
             manifest = root / "tools/qbe/backend.json"
             for key, value in (("variant", "stock"), ("version", "1.4"),
                                ("patches", []), ("patches", original["patches"][::-1]),
