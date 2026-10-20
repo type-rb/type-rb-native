@@ -1,11 +1,12 @@
 # Native QBE variant
 
-`backend.json` pins the QBE 1.3 release archive and all three patch digests.
+`backend.json` pins the QBE 1.3 release archive and all four patch digests.
 `python3 tools/qbe_toolchain.py /path/to/qbe-1.3` verifies them, applies the
 patches without fuzz, builds QBE and checks supported-target instruction emission.
 The binary's receipt records upstream, patch, builder and C compiler identities.
 Checkout builds include those tracked inputs in their content cache. An explicit
-`TRBN_QBE` override must support the same operations and ARM64 operand selection.
+`TRBN_QBE` override must support the same operations, ARM64 operand selection
+and expression-motion behavior.
 
 The six added upstream lines define a unary single/double floating-point `sqrt`
 and select `fsqrt`, `sqrtss` or `sqrtsd`. Native uses the double form only for
@@ -55,7 +56,18 @@ shifts, and enough live bases and indexes
 to require spilling across calls. Its optional
 `--baseline` control compares AMD64 emission with the preceding backend.
 
-Maintenance is three small pinned patches, one acquisition helper and target/edge tests.
+`gcm.patch` fixes recursive expression sinking to update the emitted instruction
+instead of its temporary copy. Otherwise the copied root still refers to the
+original operands and leaves the newly sunk children unused. It also retains an
+expression outside a more frequently executed loop, using QBE's existing loop
+weights. This prevents invariant predicate trees from being recomputed on each
+visit. The change adds no instruction, alias assumption or arithmetic rewrite,
+and applies to every target. Run `python3 tools/qbe_gcm_test.py --qbe /path/to/qbe`
+for six-target emission checks and an independent native oracle for shared
+predicates, signed boundaries, zero-trip loops and invariant memory addresses.
+Unlike the ARM64 selector patches alone, this patch can change AMD64 emission.
+
+Maintenance is four small pinned patches, one acquisition helper and target/edge tests.
 A QBE upgrade must rebase the patches, run upstream tests, run these controls on
 each supported host, and repeat ordinary compiler validation. Historical seed
 manifests and their replay workflows retain their original stock QBE identity;

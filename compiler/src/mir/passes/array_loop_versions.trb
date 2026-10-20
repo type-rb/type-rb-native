@@ -13,6 +13,7 @@ import { mir_array_promotion_separations } from mir/analysis/array_promotions
 import { mir_planned_instruction_effects } from mir/analysis/callables
 import { MirFlow, MirFlowAliases, mir_build_flow, mir_flow_alias, mir_flow_aliases, mir_flow_block_index, mir_flow_blocks, mir_flow_dominates, mir_value_available } from mir/analysis/flow
 import { mir_nonnegative_values } from mir/analysis/ranges
+import { mir_natural_loop } from mir/analysis/loops
 import { mir_live_add, mir_live_before, mir_managed_contains } from mir/analysis/roots
 import { mir_rewrite_block, mir_rewrite_function, mir_rewrite_instruction, mir_rewrite_next_block, mir_rewrite_next_value } from mir/passes/rewrite
 import { integer_string } from support/literals
@@ -150,6 +151,50 @@ def mir_array_version_guarded(native_module: MirModule, function: MirFunction, f
 	return false
 end
 
+# Guard operands available before an enclosing loop retain their identities.
+# The existing member scan rejects resizing and observing effects throughout
+# that wider region. Choose its fast or checked path once, keeping cold values
+# out of the repeated fast loop without changing any arithmetic or access.
+def mir_array_version_enclosing(native_module: MirModule, function: MirFunction, flow: MirFlow, plan: MirArrayVersion): MirArrayVersion
+	mut result := MirArrayVersion.new(header: plan.header, preheader: plan.preheader, bound: plan.bound, owners: plan.owners, members: plan.members, separations: plan.separations)
+	mut operands: Array<Integer> := []
+	if plan.bound.owner >= 0
+		mir_live_add(operands, plan.bound.owner)
+	else
+		mir_live_add(operands, plan.bound.value)
+	end
+	plan.owners.each do |owner|
+		mir_live_add(operands, owner)
+	end
+	plan.separations.each do |pair|
+		mir_live_add(operands, pair.reader)
+		mir_live_add(operands, pair.writer)
+	end
+	mut header := 0
+	while header < function.block_count
+		if header != result.header && mir_flow_dominates(flow, header, result.header)
+			loop := mir_natural_loop(native_module, function, flow, header)
+			if loop.preheader >= 0 && mir_managed_contains(loop.members, result.header) && mir_managed_contains(loop.members, result.preheader)
+				preheader := native_module.blocks[function.block_start + loop.preheader]
+				mut available := true
+				operands.each do |value|
+					if !mir_value_available(flow, preheader, preheader.instruction_start + preheader.instruction_count, value)
+						available = false
+					end
+				end
+				if available
+					members := mir_array_version_members(native_module, function, flow, header)
+					if members.size() > 0 && mir_array_version_values(native_module, function, members).size() > 0
+						result = MirArrayVersion.new(header: header, preheader: loop.preheader, bound: plan.bound, owners: plan.owners, members: members, separations: plan.separations)
+					end
+				end
+			end
+		end
+		header += 1
+	end
+	return result
+end
+
 def mir_array_version_candidate(native_module: MirModule, function: MirFunction): MirArrayVersion
 	if function.kind != mir_function_control()
 		return mir_no_array_version()
@@ -207,7 +252,8 @@ def mir_array_version_candidate(native_module: MirModule, function: MirFunction)
 					if members.size() > 0 && mir_array_version_values(native_module, function, members).size() > 0
 						separations := mir_array_value_separations(native_module, function, flow, origins, preheader, members)
 						promotion_separations := mir_array_promotion_separations(native_module, function, flow, origins, nonnegative, preheader, members, separations)
-						return MirArrayVersion.new(header: header_index, preheader: mir_flow_block_index(flow, preheader.id), bound: bound, owners: owners, members: members, separations: promotion_separations)
+						version := MirArrayVersion.new(header: header_index, preheader: mir_flow_block_index(flow, preheader.id), bound: bound, owners: owners, members: members, separations: promotion_separations)
+						return mir_array_version_enclosing(native_module, function, flow, version)
 					end
 				end
 			end
