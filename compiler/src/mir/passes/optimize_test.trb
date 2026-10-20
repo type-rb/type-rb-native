@@ -9,6 +9,9 @@ import { MirInstruction } from mir/model/module
 import { optimize_verified_mir } from mir/passes/optimize
 import { verify_mir } from mir/verify/module
 import { mir_test_module } from testing/mir/model
+import { logical_run_qbe } from testing/qbe_runner
+import trb/std/process
+import trb/std/result
 
 describe("Native TypeRB frontend") do
 	test("inlines bounded scalar helpers outside lexical loops") do
@@ -43,7 +46,7 @@ describe("Native TypeRB frontend") do
 		expect(occurrence_count(qbe, "call $trbn_fail(l $trbn_bounds_error, l 30)") >= 2).to_be_true()
 	end
 
-	test("inlines only eligible scalar leaf calls in managed caller loops") do
+	test("inlines eligible scalar and branching helpers in managed caller loops") do
 		eligible_source := "def scalar(left: Integer, right: Integer): Integer\n\tsum := left + right\n\treturn sum * 2\nend\n\ndef main()\n\t_marker := {1 => 1}\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := scalar(index, 1)\n\t\tindex += value\n\tend\n\treturn\nend\n"
 		mut eligible := compiler_new(eligible_source.size() + 1)
 		expect(lex(eligible, eligible_source)).to_be_true()
@@ -71,13 +74,26 @@ describe("Native TypeRB frontend") do
 		expect(non_loop_qbe.include?("# native retained scalar call ")).to_be_false()
 		expect(non_loop_qbe.include?("@integer_range_failure")).to_be_true()
 
-		ineligible_source := "def choose(value: Integer): Integer\n\tif value > 0\n\t\treturn value\n\telse\n\t\treturn 0\n\tend\nend\n\ndef main()\n\t_marker := {1 => 1}\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := choose(index)\n\t\tindex += value + 1\n\tend\n\treturn\nend\n"
-		mut ineligible := compiler_new(ineligible_source.size() + 1)
-		expect(lex(ineligible, ineligible_source)).to_be_true()
-		expect(parse_module(ineligible, 0, ineligible.module_graph.entry_module[0])).to_be_true()
-		expect(resolve(ineligible)).to_be_true()
-		expect(check(ineligible)).to_be_true()
-		expect(output_source(emit_qbe(ineligible)).include?("call $trbnf0")).to_be_true()
+		# The bounded read-only helper pass can also expand control flow.
+		# Exercise both arms instead of retaining the older leaf-only limit.
+		branch_source := "def choose(value: Integer): Integer\n\tif value > 0\n\t\treturn value\n\telse\n\t\treturn 0\n\tend\nend\n\ndef main()\n\t_marker := {1 => 1}\n\tmut index := -1\n\tmut total := 0\n\twhile index < 2\n\t\ttotal += choose(index)\n\t\tindex += 1\n\tend\n\tputs(total)\nend\n"
+		mut branch := compiler_new(branch_source.size() + 1)
+		expect(lex(branch, branch_source)).to_be_true()
+		expect(parse_module(branch, 0, branch.module_graph.entry_module[0])).to_be_true()
+		expect(resolve(branch)).to_be_true()
+		expect(check(branch)).to_be_true()
+		branch_qbe := output_source(emit_qbe(branch))
+		expect(branch_qbe.include?("call $trbnf0")).to_be_false()
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, branch_qbe)
+			when Result::Ok(actual)
+				expect(actual).to_equal("1\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
 
 		delegating_source := "def increment(value: Integer): Integer\n\treturn value + 1\nend\n\ndef delegating(value: Integer): Integer\n\treturn increment(value)\nend\n\ndef main()\n\t_marker := {1 => 1}\n\tmut index := 0\n\twhile index < 1\n\t\tindex = delegating(index)\n\tend\n\treturn\nend\n"
 		mut delegating := compiler_new(delegating_source.size() + 1)
