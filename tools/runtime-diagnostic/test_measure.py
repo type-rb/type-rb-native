@@ -14,6 +14,7 @@ spec = importlib.util.spec_from_file_location("hardware_diagnostic", ROOT / "mea
 diagnostic = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(diagnostic)
 from reuse import PREFIX, unpack_verified, validate_reuse, verified_compiler, verified_program
+from float_controls import control_sources
 
 
 class DiagnosticTest(unittest.TestCase):
@@ -22,6 +23,40 @@ class DiagnosticTest(unittest.TestCase):
 
     def test_registered_public_inputs_are_unchanged(self):
         diagnostic.validate_registration(self.plan)
+
+    def test_selected_cases_reject_missing_unknown_and_duplicate_inputs(self):
+        for cases in ([], ["unknown"], ["n-body", "n-body"]):
+            with self.subTest(cases=cases), self.assertRaisesRegex(ValueError, "subset"):
+                diagnostic.validate_registration(dict(self.plan, cases=cases))
+
+    def test_float_controls_preserve_the_original_and_surrounding_program(self):
+        source = (diagnostic.ROOT / "benchmarks/benchmarksgame/pure-go/n-body/main.go").read_text()
+        controls = control_sources(source)
+        self.assertEqual(controls["control-go-original"], source)
+        prefix = source[:source.index("func advance(")]
+        suffix = source[source.index("\nfunc nbody("):]
+        for changed in controls.values():
+            self.assertTrue(changed.startswith(prefix))
+            self.assertTrue(changed.endswith(suffix))
+        self.assertEqual(controls["control-go-separate"].count("float64("), 12)
+        self.assertEqual(controls["control-go-native-order-separate"].count("float64("), 18)
+        with self.assertRaisesRegex(ValueError, "source shape changed"):
+            control_sources(source.replace("dx*dx + dy*dy + dz*dz", "dx*dx"))
+
+    def test_float_controls_require_exact_source_and_selected_nbody(self):
+        plan = copy.deepcopy(self.plan)
+        source = diagnostic.ROOT / "benchmarks/benchmarksgame/pure-go/n-body/main.go"
+        plan["floatControls"] = {"sourceSHA256": diagnostic.digest(source),
+                                 "goVersion": "go version go1.27.3 linux/arm64"}
+        diagnostic.validate_registration(plan)
+        for field, value in (("sourceSHA256", "0" * 64), ("goVersion", "latest")):
+            changed = copy.deepcopy(plan)
+            changed["floatControls"][field] = value
+            with self.assertRaisesRegex(ValueError, "exact N-body"):
+                diagnostic.validate_registration(changed)
+        plan["cases"] = ["closures"]
+        with self.assertRaisesRegex(ValueError, "exact N-body"):
+            diagnostic.validate_registration(plan)
 
     def test_floating_sources_and_changed_workloads_are_rejected(self):
         for field, value in (("revision", "main"), ("appSHA256", {})):

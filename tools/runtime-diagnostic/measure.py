@@ -15,6 +15,7 @@ from measure import correct, digest, observe, source_case
 from state import ROOT, git, read, write
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from reuse import load_reused, validate_reuse, verified_compiler, verified_program
+from float_controls import prepare_controls
 
 
 def validate_registration(plan):
@@ -31,6 +32,16 @@ def validate_registration(plan):
     if "reuse" in plan:
         validate_reuse(plan["reuse"])
     cases = {case["id"] for case in suite["cases"]}
+    selected = plan.get("cases", sorted(cases))
+    if not selected or len(set(selected)) != len(selected) or set(selected) - cases:
+        raise ValueError("Diagnostic cases must be a nonempty unique subset of the suite")
+    if "floatControls" in plan:
+        control = plan["floatControls"]
+        case = next(case for case in suite["cases"] if case["id"] == "n-body")
+        if ("n-body" not in selected or set(control) != {"sourceSHA256", "goVersion"}
+                or control["sourceSHA256"] != digest(ROOT / case["pureGoSource"])
+                or not re.fullmatch(r"go version go[0-9]+\.[0-9]+\.[0-9]+ linux/arm64", control["goVersion"])):
+            raise ValueError("Float attribution controls require exact N-body source and Go identities")
     for role, variant in variants.items():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", role):
             raise ValueError("Invalid role name")
@@ -101,6 +112,9 @@ def run(args):
     env = {key: value for key, value in os.environ.items()
            if not key.startswith("TYPE_RB_NATIVE_RUNTIME_")}
     env.update(LC_ALL="C", GOMAXPROCS="1")
+    if ("floatControls" in plan and subprocess.check_output(["go", "version"]).decode().strip()
+            != plan["floatControls"]["goVersion"]):
+        raise ValueError("Float attribution Go version differs")
     raw, prepared = [], {}
     reused = load_reused(plan["reuse"], output) if "reuse" in plan else None
     reused_plan = read(reused / "registration.json") if reused else None
@@ -168,6 +182,8 @@ def run(args):
 
     cases = []
     for case in suite["cases"]:
+        if "cases" in plan and case["id"] not in plan["cases"]:
+            continue
         case_dir = evidence / "apps" / case["id"]
         case_dir.mkdir(parents=True)
         expected = source_case(case, case_dir)
@@ -222,6 +238,12 @@ def run(args):
                                    stdout=emitted, check=True, env=env, timeout=90)
                 subprocess.run([prepared[role]["qbe"], "-t", "arm64", "-o",
                                 role_dir / "program.s", role_dir / "program.ssa"], check=True)
+        if case["id"] == "n-body" and "floatControls" in plan:
+            controls = prepare_controls((case_dir / "pure-go.go").read_text(), case_dir,
+                                        artifacts["pure-go"], record, write)
+            roles.extend(controls)
+            artifacts.update(controls)
+            write(case_dir / "identities.json", artifacts)
         cases.append((case, case_dir, expected, roles, artifacts))
 
     for iteration in range(6):
