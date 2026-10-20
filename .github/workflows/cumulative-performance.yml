@@ -2,6 +2,11 @@ name: Cumulative String performance qualification
 
 on:
   workflow_dispatch:
+    inputs:
+      hardware_diagnostic:
+        description: Run the registered branch hardware diagnostic without publication
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -14,7 +19,7 @@ concurrency:
 jobs:
   measure:
     # A failed cohort is evidence, not an invitation to rerun for a pass.
-    if: github.ref == 'refs/heads/main' && github.run_attempt == 1
+    if: github.run_attempt == 1 && ((github.ref == 'refs/heads/main' && !inputs.hardware_diagnostic) || (github.ref != 'refs/heads/main' && inputs.hardware_diagnostic))
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 25
     steps:
@@ -22,7 +27,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate the registered hardware diagnostic before preparation
+        if: inputs.hardware_diagnostic
+        run: |
+          python3 tools/runtime-diagnostic/test_measure.py
+          python3 - <<'PYTHON'
+          import json, runpy
+          diagnostic = runpy.run_path("tools/runtime-diagnostic/measure.py")
+          diagnostic["validate_registration"](json.load(open("tools/runtime-diagnostic/registration.json")))
+          PYTHON
+
       - name: Validate the registered accepted sources before preparation
+        if: ${{ !inputs.hardware_diagnostic }}
         id: sources
         run: |
           python3 tools/cumulative-performance/qualify.py select --output "$RUNNER_TEMP/selection.json"
@@ -34,6 +50,7 @@ jobs:
           PY
 
       - name: Check out the exact accepted measurement source
+        if: ${{ !inputs.hardware_diagnostic }}
         env:
           CANDIDATE: ${{ steps.sources.outputs.candidate }}
         run: git worktree add --detach "$RUNNER_TEMP/qualification-source" "$CANDIDATE"
@@ -70,6 +87,7 @@ jobs:
             type-rb-native-bootstrap-linux-arm64 "$RUNNER_TEMP/baseline-release"
 
       - name: Close the current, original and frozen ordinary compiler chains
+        if: ${{ !inputs.hardware_diagnostic }}
         working-directory: ${{ runner.temp }}/qualification-source
         env:
           NATIVE_MIR_COST_MODE: mir-migration
@@ -81,6 +99,7 @@ jobs:
             --baseline-seed "$RUNNER_TEMP/baseline-release/type-rb-native-bootstrap-linux-arm64"
 
       - name: Run the unchanged daily measurement controller once
+        if: ${{ !inputs.hardware_diagnostic }}
         working-directory: ${{ runner.temp }}/qualification-source
         run: |
           sudo swapoff -a
@@ -89,14 +108,14 @@ jobs:
             --evidence "$RUNNER_TEMP/measurements" --output "$RUNNER_TEMP/snapshot.json"
 
       - name: Assess the registered budget, identities and existing target
-        if: always() && steps.sources.outcome == 'success'
+        if: always() && !inputs.hardware_diagnostic && steps.sources.outcome == 'success'
         run: |
           python3 tools/cumulative-performance/qualify.py assess \
             --selection "$RUNNER_TEMP/selection.json" --snapshot "$RUNNER_TEMP/snapshot.json" \
             --raw "$RUNNER_TEMP/measurements/raw.json" --output "$RUNNER_TEMP/qualification.json"
 
       - name: Retain qualification evidence, including failures
-        if: always()
+        if: always() && !inputs.hardware_diagnostic
         uses: actions/upload-artifact@v7
         with:
           name: cumulative-performance-evidence
@@ -115,5 +134,25 @@ jobs:
             ${{ runner.temp }}/compilers/*/seed-input.json
             ${{ runner.temp }}/release/*.json
             ${{ runner.temp }}/baseline-release/*.json
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Compare the registered applications once on Neoverse N2
+        if: inputs.hardware_diagnostic
+        run: |
+          sudo swapoff -a
+          python3 tools/runtime-diagnostic/measure.py \
+            --registration tools/runtime-diagnostic/registration.json \
+            --seed "$RUNNER_TEMP/release/type-rb-native-bootstrap-linux-arm64" \
+            --reference "$RUNNER_TEMP/trb" --output "$RUNNER_TEMP/hardware-diagnostic"
+
+      - name: Retain complete diagnostic evidence, including failures
+        if: always() && inputs.hardware_diagnostic
+        uses: actions/upload-artifact@v7
+        with:
+          name: hardware-diagnostic-evidence
+          path: |
+            tools/runtime-diagnostic/registration.json
+            ${{ runner.temp }}/hardware-diagnostic/evidence
           retention-days: 90
           if-no-files-found: warn
