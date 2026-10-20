@@ -1,5 +1,5 @@
 import { checked_category_value } from frontend/types/value_categories
-import { record_collection_capture } from frontend/checking/collections/context_analysis
+import { collection_inference_region, pending_collection_declaration, record_collection_capture, record_collection_witness } from frontend/checking/collections/context_analysis
 import { mir_state_enabled_slot } from state/local_slots
 import { checking_lowering } from state/checking_phases
 import { hash_action_delete, hash_action_empty, hash_action_fetch, hash_action_has_key, hash_action_index_read, hash_action_index_write, hash_action_keys, hash_action_literal, hash_action_merge, hash_action_none, hash_action_size, hash_action_update, hash_action_values } from mir/model/hash_actions
@@ -144,7 +144,11 @@ def checked_hash_call(mut state: CompilerState, mut position: Array<Integer>, mu
 	if kind == hash_action_none()
 		return type_diagnostic(state, line, "unsupported Hash method " + method)
 	end
-	if receiver.type_name == "Hash" && kind != hash_action_size() && kind != hash_action_empty()
+	mut inference_update := false
+	if kind == hash_action_update() && pending_collection_declaration(state, locals, receiver) >= 0
+		inference_update = true
+	end
+	if receiver.type_name == "Hash" && kind != hash_action_size() && kind != hash_action_empty() && !inference_update
 		return type_diagnostic(state, line, "Hash method requires a concrete Hash<K, V> type")
 	end
 	if kind == hash_action_delete() || kind == hash_action_update()
@@ -163,9 +167,19 @@ def checked_hash_call(mut state: CompilerState, mut position: Array<Integer>, mu
 		result_type = hash_value_type(receiver.type_name)
 	end
 	if kind == hash_action_merge() || kind == hash_action_update()
-		value := check_expression(state, position, locals, 1, receiver.type_name)
+		mut expected := receiver.type_name
+		if inference_update
+			expected = ""
+		end
+		value := check_expression(state, position, locals, 1, expected)
 		argument = checked_mir_value(value)
 		diverged = value.type_name == "Never"
+		if inference_update && hash_key_type(value.type_name) != ""
+			binding := receiver.nullable_binding
+			inferred := record_collection_witness(state, locals, binding, value.type_name)
+			store_string(locals.types, binding, inferred)
+			store_integer(locals.hash_inference_regions, binding, collection_inference_region(state, locals, binding))
+		end
 	end
 	if kind == hash_action_size()
 		result_type = "Integer"
