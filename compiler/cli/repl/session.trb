@@ -11,7 +11,8 @@ import { ReplCandidates, repl_editor_read, repl_editor_paint } from repl/editor
 import { repl_incomplete, repl_escape } from repl/syntax
 import { repl_history_load, repl_history_save } from repl/history
 import { CompilerState, has_diagnostic } from state/state
-import { CheckedFlowFact } from state/source_state
+import { find_enum_type } from frontend/types/enum_types
+import { CheckedFlowFact, CheckedPresentation } from state/source_state
 import { sparse_integer_at, sparse_string_at, load_integer, load_string } from support/storage
 import { find_function_in_module } from frontend/resolution/declaration_lookup
 import { find_record_type } from frontend/resolution/type_resolution
@@ -99,7 +100,11 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 	end
 	if type_only
 		type_name := sparse_string_at(state.submissions[0].types, position[0])
-		puts(repl_editor_paint(repl_type_name(state, type_name), repl_style_type(), repl_use_color()))
+		mut presentation := sparse_string_at(state.submissions[0].presentations, position[0])
+		if presentation == ""
+			presentation = repl_type_name(state, type_name)
+		end
+		puts(repl_editor_paint(presentation, repl_style_type(), repl_use_color()))
 		return true
 	end
 	repl_activate(session.store, state)
@@ -114,6 +119,7 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 	mut flow := [repl_flow_normal()]
 	mut value := 0
 	mut display_type := ""
+	mut presentation := ""
 	mut display_mutable := false
 	finish_line := line_number + repl_lines(input) + 1
 	mut evaluating := true
@@ -127,6 +133,7 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 			result_origin = origin
 		end
 		display_type = sparse_string_at(state.submissions[0].types, result_origin)
+		presentation = sparse_string_at(state.submissions[0].presentations, result_origin)
 		display_mutable = sparse_integer_at(state.submissions[0].mutable, result_origin) == 1
 		skip_newlines(state, position)
 		if load_integer(state.source_tokens.token_lines, position[0]) >= finish_line
@@ -168,7 +175,13 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 		if display_type == ""
 			display_type = repl_type(session.store, value)
 		end
-		mut rendered := repl_editor_paint(repl_render(state, session.store, value, 0), repl_style_string(), repl_use_color()) + repl_editor_paint(" : ", repl_style_comment(), repl_use_color()) + repl_editor_paint(repl_type_name(state, display_type), repl_style_type(), repl_use_color())
+		if find_enum_type(state, repl_type(session.store, value)) >= 0
+			presentation = session.store.presentations[value]
+		end
+		if presentation == ""
+			presentation = repl_type_name(state, display_type)
+		end
+		mut rendered := repl_editor_paint(repl_render(state, session.store, value, 0), repl_style_string(), repl_use_color()) + repl_editor_paint(" : ", repl_style_comment(), repl_use_color()) + repl_editor_paint(presentation, repl_style_type(), repl_use_color())
 		if display_mutable
 			rendered += repl_editor_paint(" [mut]", repl_style_comment(), repl_use_color())
 		end
@@ -231,7 +244,15 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 		end
 		binding += 1
 	end
-	mut state := repl_checked_input(source, session.project, start_line, finish_line, session.facts[0], [], captured, projected_start, start_line, authored, session.submissions.size() + 1)
+	mut presentations: Array<CheckedPresentation> := []
+	mut retained := 0
+	while retained < session.environment.count[0]
+		if session.environment.presentations[retained] != ""
+			presentations.push(CheckedPresentation.new(name: session.environment.names[retained], type_name: session.environment.presentations[retained]))
+		end
+		retained += 1
+	end
+	mut state := repl_checked_input(source, session.project, start_line, finish_line, session.facts[0], [], captured, projected_start, start_line, authored, session.submissions.size() + 1, presentations)
 	if has_diagnostic(state)
 		mut offset := repl_lines(prefix)
 		if declarations
@@ -272,7 +293,11 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 				if row.source_id == state.module_graph.entry_module[0] && row.line > repl_lines(session.text[0]) && row.line <= repl_lines(session.text[0] + input + "\n") && !row.name.include?("::")
 					key := repl_global_key(state, identity)
 					value := session.store.children[session.store.globals[key]][0]
-					puts(repl_editor_paint(repl_render(state, session.store, value, 0), repl_style_string(), repl_use_color()) + repl_editor_paint(" : ", repl_style_comment(), repl_use_color()) + repl_editor_paint(repl_type_name(state, state.global_bindings.global_types[identity]), repl_style_type(), repl_use_color()))
+					mut presentation := sparse_string_at(state.submissions[0].presentations, row.origin)
+					if presentation == ""
+						presentation = repl_type_name(state, state.global_bindings.global_types[identity])
+					end
+					puts(repl_editor_paint(repl_render(state, session.store, value, 0), repl_style_string(), repl_use_color()) + repl_editor_paint(" : ", repl_style_comment(), repl_use_color()) + repl_editor_paint(presentation, repl_style_type(), repl_use_color()))
 				end
 				identity += 1
 			end

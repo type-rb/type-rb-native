@@ -17,7 +17,7 @@ import { binding_scope_check, result_interactive_entry, result_operation, standa
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from frontend/syntax/syntax_tokens
 import { mir_enum_operation } from mir/lowering/enums
 import { enum_uppercase } from frontend/types/enum_types
-import { checked_submission_boundary, checked_submission_result } from frontend/checking/program/submission
+import { checked_retained_presentation, checked_submission_boundary, checked_submission_result } from frontend/checking/program/submission
 import { nullable_apply, nullable_finish, nullable_replace, nullable_replace_type } from frontend/checking/nominal/nullable_flow
 import { nullable_element } from frontend/types/nullable_types
 import { mir_nullable_coerce } from mir/lowering/nullable
@@ -163,7 +163,18 @@ def check_declaration(
 		mir_binding_initialize(state, locals, locals.count[0] - 1, value, origin)
 	end
 	store_string(state.callables.checked[0].local_types, origin, local_type)
-	checked_submission_result(state, origin, local_type, mutable)
+	mut presentation := ""
+	if declared_type == ""
+		presentation = value.presentation
+	end
+	retained := checked_retained_presentation(state, state.module_graph.active_module[0], line, name)
+	if retained != ""
+		presentation = retained
+	end
+	if added
+		store_string(locals.presentations, locals.count[0] - 1, presentation)
+	end
+	checked_submission_result(state, origin, local_type, mutable, presentation)
 	finish_statement(state, position)
 	if value.type_name == "Never"
 		return value
@@ -269,7 +280,7 @@ def check_simple_statement(
 		if right.flow_type == "Nil"
 			display_type = "Nil"
 		end
-		checked_submission_result(state, origin, display_type, display_mutable)
+		checked_submission_result(state, origin, display_type, display_mutable, "")
 		checked_hash_refine(state, locals, left.origin, right.type_name)
 		hash := checked_hash_plan(state, left.origin)
 		mut hash_value := checked_view(right, right.type_name, right.category)
@@ -311,7 +322,7 @@ def check_simple_statement(
 			advance(position)
 			right := check_statement_value(state, position, locals, "Boolean")
 			result_type := binary_result_type(state, binary, left.type_name, right.type_name, line, operator_origin)
-			checked_submission_result(state, origin, result_type, display_mutable)
+			checked_submission_result(state, origin, result_type, display_mutable, "")
 			if right.type_name != "Never" && result_type == "Boolean" && locals.mir_state[mir_state_enabled_slot()] == 1
 				if !mir_checked_union_store(state, locals, left, right) && !mir_checked_object_store(state, locals, left, right) && !mir_checked_array_store(state, locals, left, right)
 					mir_binding_assign(state, locals, left, right)
@@ -341,7 +352,7 @@ def check_simple_statement(
 				return right
 			end
 			result_type := binary_result_type(state, compound, left.type_name, right.type_name, line, operator_origin)
-			checked_submission_result(state, origin, result_type, display_mutable)
+			checked_submission_result(state, origin, result_type, display_mutable, "")
 			if locals.mir_state[mir_state_enabled_slot()] == 1
 				mut value := checked_value(result_type, checked_category_value(), 9007199254740991, 0)
 				if result_type == "String"
