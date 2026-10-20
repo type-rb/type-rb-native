@@ -20,7 +20,7 @@ class BackendTest(unittest.TestCase):
             root = Path(temporary)
             shutil.copytree(qbe.ROOT / "tools/qbe", root / "tools/qbe")
             original = qbe.backend_identity(root)
-            self.assertEqual(original["variant"], "typerb-arm64-memory-v1")
+            self.assertEqual(original["variant"], "typerb-arm64-memory-v2")
             manifest = root / "tools/qbe/backend.json"
             for key, value in (("variant", "stock"), ("version", "1.4"),
                                ("patches", []), ("patches", original["patches"][::-1]),
@@ -70,6 +70,14 @@ class BackendTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "archive digest"):
                 qbe.build(root, archive)
             self.assertEqual(binary.read_bytes(), b"not a verified binary")
+
+    def test_constant_memory_backend_does_not_claim_indexed_capability(self):
+        previous = ("fsqrt d0, d0\nadd x0, x0, #7\nand x0, x0, #65535\nasr x0, x0, #1\n"
+                    "ldr x0, [x1, #8]\nstr x0, [x1, #16]\n")
+        with patch.object(qbe.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, previous, "")):
+            with self.assertRaisesRegex(ValueError, "indexed memory"):
+                qbe.check_capability(Path("synthetic-previous-qbe"))
 
 
 if __name__ == "__main__":

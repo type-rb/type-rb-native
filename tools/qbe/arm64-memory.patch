@@ -1,16 +1,44 @@
 --- a/arm64/isel.c
 +++ b/arm64/isel.c
-@@ -317,6 +317,51 @@
+@@ -317,6 +317,98 @@
  	}
  }
  
++static int
++memreg(Ref r, Fn *fn)
++{
++	return rtype(r) == RTmp && r.val >= Tmp0
++		&& fn->tmp[r.val].cls == Kl && fn->tmp[r.val].slot == -1;
++}
++
++/* Use only shifts directly encodable by the memory operation. Other shifts
++ * remain ordinary instructions and may still serve as an unscaled index. */
++static Ins *
++memshift(Ref r, int sz, Fn *fn)
++{
++	Ins *d;
++	Con *c;
++
++	if (!memreg(r, fn) || fn->tmp[r.val].ndef != 1)
++		return 0;
++	d = fn->tmp[r.val].def;
++	if (!d || d->op != Oshl || d->cls != Kl
++	|| !memreg(d->arg[0], fn) || rtype(d->arg[1]) != RCon)
++		return 0;
++	c = &fn->con[d->arg[1].val];
++	if (c->type != CBits || c->bits.i < 0 || c->bits.i > 3
++	|| (1 << c->bits.i) != sz)
++		return 0;
++	return d;
++}
++
 +/* Consume only a unique address add. Shared liveness and allocation already
-+ * handle a register base in RMem; frame and symbol addresses stay unchanged. */
++ * handle both registers in RMem; frame and symbol addresses stay unchanged. */
 +static void
 +selmem(Ins *i, Fn *fn)
 +{
-+	Ins *d;
-+	Tmp *t;
++	Ins *d, *shift;
++	Tmp *t, *index;
 +	Con *c;
 +	Addr a;
 +	Ref *r;
@@ -30,21 +58,40 @@
 +	d = t->def;
 +	if (t->ndef != 1 || t->nuse != 1 || !d
 +	|| d->op != Oadd || d->cls != Kl
-+	|| rtype(d->arg[0]) != RTmp || d->arg[0].val < Tmp0
-+	|| rtype(d->arg[1]) != RCon)
++	|| !memreg(d->arg[0], fn))
 +		return;
-+	if (fn->tmp[d->arg[0].val].cls != Kl
-+	|| fn->tmp[d->arg[0].val].slot != -1)
++	a = (Addr){.offset = {.type = CBits}, .base = d->arg[0],
++		.index = R, .scale = 1};
++	if (rtype(d->arg[1]) == RCon) {
++		c = &fn->con[d->arg[1].val];
++		if (c->type != CBits || c->bits.i < 0
++		|| c->bits.i > 4095 * sz || c->bits.i % sz)
++			return;
++		a.offset = *c;
++	} else if (memreg(d->arg[1], fn)) {
++		a.index = d->arg[1];
++		shift = memshift(a.index, sz, fn);
++		if (!shift && (shift = memshift(a.base, sz, fn))) {
++			a.index = a.base;
++			a.base = d->arg[1];
++		}
++		if (shift) {
++			index = &fn->tmp[a.index.val];
++			a.index = shift->arg[0];
++			a.scale = sz;
++			/* Replace one shift-result use with its source. A shared shift
++			 * keeps its own source use in addition to the memory index. */
++			if (--index->nuse == 0)
++				*shift = (Ins){.op = Onop};
++			else
++				fn->tmp[a.index.val].nuse++;
++		}
++	} else
 +		return;
-+	c = &fn->con[d->arg[1].val];
-+	if (c->type != CBits || c->bits.i < 0
-+	|| c->bits.i > 4095 * sz || c->bits.i % sz)
-+		return;
-+	a = (Addr){.offset = *c, .base = d->arg[0], .index = R};
 +	vgrow(&fn->mem, ++fn->nmem);
 +	fn->mem[fn->nmem-1] = a;
 +	*r = MEM(fn->nmem-1);
-+	/* The add's base use becomes the memory operand's base use. */
++	/* The add's operand uses become the memory operand's register uses. */
 +	t->nuse = 0;
 +	*d = (Ins){.op = Onop};
 +}
@@ -52,7 +99,7 @@
  void
  arm64_isel(Fn *fn)
  {
-@@ -344,6 +389,11 @@
+@@ -344,6 +436,11 @@
  				*i = (Ins){.op = Onop};
  			}
  
@@ -74,17 +121,28 @@
  	int k, c;
  	Con *pc;
  	uint64_t n;
-@@ -259,6 +260,13 @@
+@@ -259,6 +260,24 @@
  				break;
  			case RSlot:
  				fprintf(e->f, "[x29, %"PRIu64"]", slot(r, e));
 +				break;
 +			case RMem:
 +				a = &e->fn->mem[r.val];
-+				assert(isreg(a->base) && req(a->index, R));
++				assert(isreg(a->base));
 +				assert(a->offset.type == CBits);
-+				fprintf(e->f, "[%s, #%"PRId64"]",
-+					rname(a->base.val, Kl), a->offset.bits.i);
++				fprintf(e->f, "[%s, ", rname(a->base.val, Kl));
++				if (req(a->index, R))
++					fprintf(e->f, "#%"PRId64, a->offset.bits.i);
++				else {
++					assert(isreg(a->index) && a->offset.bits.i == 0);
++					fprintf(e->f, "%s", rname(a->index.val, Kl));
++					if (a->scale != 1) {
++						assert(a->scale == 2 || a->scale == 4 || a->scale == 8);
++						fprintf(e->f, ", lsl #%d",
++							a->scale == 8 ? 3 : a->scale == 4 ? 2 : 1);
++					}
++				}
++				fputc(']', e->f);
  				break;
  			}
  			break;

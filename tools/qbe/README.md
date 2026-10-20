@@ -37,15 +37,18 @@ unchanged AMD64 emission. The patch adds no target-independent optimization or
 runtime helper.
 
 `arm64-memory.patch` folds a single-use address addition into a load or store
-when its register base and positive, naturally aligned constant offset fit the
-instruction. It uses the existing memory operand representation and shared
-liveness, spilling and register allocation. Multiply used addresses, frame and
-symbol addresses, variable offsets and unsupported displacements retain the
-ordinary path. Address definitions are inspected before instruction storage is
-replaced. No memory operation moves or changes width.
+when a register base and offset fit the instruction. Offsets can be positive,
+naturally aligned constants or 64-bit registers, optionally shifted by the
+element width. A shared shift keeps its remaining uses. It uses the existing
+memory operand representation and shared liveness, spilling and register
+allocation. Multiply used addresses, frame and symbol addresses and unsupported
+constant displacements retain the ordinary path. Other shifts remain explicit
+and can supply an unscaled register offset. Address definitions are inspected
+before instruction storage is replaced. No memory operation moves or changes width.
 Run `python3 tools/qbe_memory_test.py --qbe /path/to/qbe` for byte-level load/store
 checks, signed extension, floating-point bit preservation, displacement bounds,
-fallbacks and enough live base pointers to require spilling. Its optional
+fallbacks, wrapping indexes, shared shifts, and enough live bases and indexes
+to require spilling across calls. Its optional
 `--baseline` control compares AMD64 emission with the preceding backend.
 
 Maintenance is three small pinned patches, one acquisition helper and target/edge tests.
