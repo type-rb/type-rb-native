@@ -89,10 +89,8 @@ def mir_array_join_size(native_module: MirModule, function: MirFunction, block: 
 	return size
 end
 
-# The separator's ASCII edges prevent even invalid UTF-8 fragments from
-# merging into a code point. Literal data is independently verified first.
-def mir_array_join_separator_literal(native_module: MirModule, flow: MirFlow, join: Integer): Integer
-	position := mir_flow_position(flow, native_module.instructions[join].second)
+def mir_array_join_literal(native_module: MirModule, flow: MirFlow, value: Integer): Integer
+	position := mir_flow_position(flow, value)
 	if position < 0
 		return -1
 	end
@@ -100,11 +98,27 @@ def mir_array_join_separator_literal(native_module: MirModule, flow: MirFlow, jo
 	if instruction.kind != mir_op_string_literal()
 		return -1
 	end
+	# Reference-host recovery can know the point count without having the
+	# literal bytes. Keep that unavailable state on the existing runtime path.
 	data := native_module.literal_data[instruction.payload]
-	if data.bytes.size() == 0 || data.bytes[0] >= 128 || data.bytes[data.bytes.size() - 1] >= 128
+	if data.points > data.bytes.size()
 		return -1
 	end
 	return instruction.payload
+end
+
+# The separator's ASCII edges prevent even invalid UTF-8 fragments from
+# merging into a code point. Literal data is independently verified first.
+def mir_array_join_separator_literal(native_module: MirModule, flow: MirFlow, join: Integer): Integer
+	literal := mir_array_join_literal(native_module, flow, native_module.instructions[join].second)
+	if literal < 0
+		return -1
+	end
+	data := native_module.literal_data[literal]
+	if data.bytes.size() == 0 || data.bytes[0] >= 128 || data.bytes[data.bytes.size() - 1] >= 128
+		return -1
+	end
+	return literal
 end
 
 # No allocation remains for this plan. Root lowering and code generation use
@@ -160,7 +174,7 @@ def mir_array_join_with_size_concat(native_module: MirModule, function: MirFunct
 				concats := mir_function_string_concats(native_module, function)
 				if mir_string_concat_index(concats, position) < 0 && mir_array_join_uses_confined(native_module, function, element, plan.appends)
 					if mir_array_join_ascii_fragment(native_module, flow, instruction.first) || mir_array_join_ascii_fragment(native_module, flow, instruction.second)
-						return MirArrayJoin.new(construction: plan.construction, array: plan.array, join: plan.join, size: plan.size, separator_literal: plan.separator_literal, size_concat: position, appends: plan.appends, elements: plan.elements)
+						return MirArrayJoin.new(construction: plan.construction, array: plan.array, join: plan.join, size: plan.size, separator_literal: plan.separator_literal, size_concat: position, appends: plan.appends, elements: plan.elements, element_literals: plan.element_literals)
 					end
 				end
 			end
@@ -243,7 +257,11 @@ def mir_function_array_joins(native_module: MirModule, function: MirFunction, va
 					end
 					if mir_array_join_uses_confined(native_module, function, array.result, allowed)
 						size := mir_array_join_size(native_module, function, block, join)
-						plan := MirArrayJoin.new(construction: construction, array: array.result, join: join, size: size, separator_literal: mir_array_join_separator_literal(native_module, flow, join), size_concat: -1, appends: appends, elements: elements)
+						mut element_literals: Array<Integer> := []
+						elements.each do |element|
+							element_literals.push(mir_array_join_literal(native_module, flow, element))
+						end
+						plan := MirArrayJoin.new(construction: construction, array: array.result, join: join, size: size, separator_literal: mir_array_join_separator_literal(native_module, flow, join), size_concat: -1, appends: appends, elements: elements, element_literals: element_literals)
 						plans.push(mir_array_join_with_size_concat(native_module, function, flow, block, plan))
 					end
 				end
@@ -275,7 +293,7 @@ def mir_array_joins_equal(left: Array<MirArrayJoin>, right: Array<MirArrayJoin>)
 	while index < left.size()
 		a := left[index]
 		b := right[index]
-		if a.construction != b.construction || a.array != b.array || a.join != b.join || a.size != b.size || a.separator_literal != b.separator_literal || a.size_concat != b.size_concat || !mir_live_equal(a.appends, b.appends) || !mir_live_equal(a.elements, b.elements)
+		if a.construction != b.construction || a.array != b.array || a.join != b.join || a.size != b.size || a.separator_literal != b.separator_literal || a.size_concat != b.size_concat || !mir_live_equal(a.appends, b.appends) || !mir_live_equal(a.elements, b.elements) || !mir_live_equal(a.element_literals, b.element_literals)
 			return false
 		end
 		index += 1

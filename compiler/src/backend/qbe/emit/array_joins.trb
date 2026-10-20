@@ -36,6 +36,9 @@ def emit_mir_array_join_size(native_module: MirModule, plan: MirArrayJoin, opera
 		return emitted_value("0", "Integer")
 	end
 	if plan.elements.size() == 1
+		if plan.element_literals[0] >= 0
+			return emitted_value(integer_string(native_module.literal_data[plan.element_literals[0]].points), "Integer")
+		end
 		address := emit_address(context, output, operands[plan.elements[0]], 16)
 		result := emit_temporary(context)
 		qbe_output_line(output, "\t" + result + " =l loadl " + address)
@@ -53,7 +56,11 @@ def emit_mir_array_join_size(native_module: MirModule, plan: MirArrayJoin, opera
 		end
 		mut length := "%join_size_bytes" + integer_string(plan.join)
 		mut item_points := "%join_size_points" + integer_string(plan.join)
-		if !virtual
+		if plan.element_literals[index] >= 0
+			literal := native_module.literal_data[plan.element_literals[index]]
+			length = integer_string(literal.bytes.size())
+			item_points = integer_string(literal.points)
+		elsif !virtual
 			length_address := emit_address(context, output, operands[element], 8)
 			length = emit_temporary(context)
 			points_address := emit_address(context, output, operands[element], 16)
