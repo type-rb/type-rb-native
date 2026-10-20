@@ -22,7 +22,7 @@ Each count describes registered probes, not language coverage percentages.
 | Nominal newtypes | basic | 1 / 83 | Class/interface representation dependencies; Method-specific generic parameters with the remaining callable/generic family | NewtypeStatement |
 | Generic declarations and applications | basic | 3 / 83 | Remaining method-specific generic combinations and deferred generic class methods; Wider constraints and type applications | GenericExpression |
 | Union values, literal types and discriminated unions | basic | 9 / 198 | Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference |  |
-| Function values and lexical capture | basic | 0 / 92 | Callable equality, method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
+| Function values and lexical capture | basic | 0 / 109 | Method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
 | Arrays and checked indexes | basic | 11 / 324 | Remaining receiver and inference combinations; unguarded nullable indexing (issue #1120); Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
 | Hash values and operations | basic | 12 / 69 | Wider key/value representations, dynamic Any operations, remaining inference combinations and managed lifetimes; nullable Hash reference Go lowering and unguarded indexing (issue #1120) | HashLiteral |
 | Structured and value-producing iteration | basic | 0 / 176 | Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
