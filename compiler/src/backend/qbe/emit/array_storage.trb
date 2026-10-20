@@ -1,0 +1,49 @@
+import { MirArrayLoop } from mir/model/module
+import { QbeEmitContext, emit_temporary } from backend/qbe/context
+import { QbeOutput, qbe_output_line } from backend/qbe/output
+import { integer_string } from support/literals
+
+# Select only a header already verified for this exact access. A primary
+# header's size instruction can only belong to itself or an enclosing loop.
+# Cache initialization uses a body access of a verified two-block loop, so no
+# nested header can cover it. Arbitrary body accesses cannot justify earlier
+# header initialization and must not be passed by that caller.
+def qbe_array_storage_header(plans: Array<MirArrayLoop>, instruction: Integer, excluded: Integer): String
+	if instruction < 0
+		return ""
+	end
+	plans.each do |plan|
+		if plan.header != excluded
+			if plan.length == instruction
+				return integer_string(plan.header)
+			end
+			plan.accesses.each do |access|
+				if access == instruction
+					return integer_string(plan.header)
+				end
+			end
+			plan.headers.each do |header|
+				header.accesses.each do |access|
+					if access == instruction
+						return integer_string(plan.header) + "_" + integer_string(header.identity)
+					end
+				end
+			end
+		end
+	end
+	return ""
+end
+
+def emit_mir_array_storage(name: String, owner: String, reused: String, mut context: QbeEmitContext, mut output: QbeOutput)
+	if reused != ""
+		qbe_output_line(output, "\t%mir_array_length" + name + " =l copy %mir_array_length" + reused)
+		qbe_output_line(output, "\t%mir_array_data" + name + " =l copy %mir_array_data" + reused)
+		return
+	end
+	length := emit_temporary(context)
+	data := emit_temporary(context)
+	qbe_output_line(output, "\t" + length + " =l add " + owner + ", 8")
+	qbe_output_line(output, "\t%mir_array_length" + name + " =l loadl " + length)
+	qbe_output_line(output, "\t" + data + " =l add " + owner + ", 24")
+	qbe_output_line(output, "\t%mir_array_data" + name + " =l loadl " + data)
+end

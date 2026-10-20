@@ -47,6 +47,18 @@ describe("MIR Array loop value promotion") do
 		before := control_test_output(emit_qbe(state))
 		expect(before.include?("@mir_array_initialize_")).to_be_true()
 		expect(before.include?("%mir_array_ready_")).to_be_false()
+		mut reused := 0
+		mut shared_lengths := 0
+		before.split("\n").each do |line|
+			if line.include?("%mir_array_cached_") && line.include?("_address =l add %mir_array_data")
+				reused += 1
+			end
+			if line.include?("\t%mir_array_length") && line.include?(" =l copy %mir_array_length")
+				shared_lengths += 1
+			end
+		end
+		expect(reused).to_equal(2)
+		expect(shared_lengths > 0).to_be_true()
 		intrinsic_mir_erase(state)
 		optimize_verified_mir(state.scalar_mir)
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
