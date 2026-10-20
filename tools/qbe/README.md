@@ -94,16 +94,7 @@ subnormals, nonfinite values, random bit patterns, product reuse, calls and
 branches, successor observations and loop-carried products.
 `--baseline /path/to/previous/qbe` verifies rejection of the new IL.
 
-`loop-layout.patch` places a two-block loop's body before its conditional
-header after register allocation. The original entry still branches to the
-header, so zero iterations remain possible. Later iterations fall through from
-the body to the test, eliminating one unconditional jump per iteration.
-This changes only assembly order; instructions, CFG edges and register choices
-remain unchanged. Entry blocks and bodies with multiple predecessors are
-excluded. The acquisition probe checks the branch shape, and the control-flow
-tests cover zero trips, nested loops, memory updates and observable calls.
-
-Maintenance is six pinned patches, one acquisition helper and target/edge tests.
+Maintenance is five pinned patches, one acquisition helper and target/edge tests.
 A QBE upgrade must rebase the patches, run upstream tests, run these controls on
 each supported host, and repeat ordinary compiler validation. Historical seed
 manifests and their replay workflows retain their original stock QBE identity;
