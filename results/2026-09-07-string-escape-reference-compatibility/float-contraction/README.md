@@ -26,10 +26,11 @@ That run validates the preceding pin. Fresh exact-pin observations and acceptanc
 belong to this update's PR validation and subsequent Main validation.
 
 Local preflight passes with the exact reference executable built through
-`tools/build-reference.py`. The reference AST check and all 1,772 registered
-language cases pass, covering 6,460 command outcomes without changing their
-expectations. The registry's 39 existing parity gaps and 26 uncovered contract
-groups remain recorded; passing this oracle check does not close those gaps.
+`tools/build-reference.py`. After integrating the current baseline, the reference
+AST check and all 1,806 registered language cases pass, covering 6,595 command
+outcomes without changing their expectations. The registry's 37 existing parity
+gaps and 26 uncovered contract groups remain recorded; passing this oracle
+check does not close those gaps.
 
 The independent Native `0.1.0-dev` identity, backend, immutable bootstrap assets
 and historical measurements retain their existing identities. This update does
