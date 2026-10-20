@@ -13,6 +13,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daily-performance"))
 from measure import correct, digest, observe, source_case
 from state import ROOT, git, read, write
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from reuse import load_reused, validate_reuse, verified_compiler, verified_program
 
 
 def validate_registration(plan):
@@ -26,10 +28,16 @@ def validate_registration(plan):
     if str(os.environ.get("GITHUB_RUN_ATTEMPT", "1")) != "1":
         raise ValueError("Do not retry a completed diagnostic cohort")
     suite = read(ROOT / "tools/daily-performance/suite.json")
+    if "reuse" in plan:
+        validate_reuse(plan["reuse"])
     cases = {case["id"] for case in suite["cases"]}
     for role, variant in variants.items():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", role):
             raise ValueError("Invalid role name")
+        if "reuse" in plan:
+            keys = {"reusedRole", "parentCompilerRole"} & set(variant)
+            if len(keys) != 1 or any(not re.fullmatch(r"[a-z][a-z0-9-]*", variant[key]) for key in keys):
+                raise ValueError("Each reused-cohort variant needs one exact preparation mode")
         revision = variant["revision"]
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
             raise ValueError("Each source revision must be exact")
@@ -94,6 +102,16 @@ def run(args):
            if not key.startswith("TYPE_RB_NATIVE_RUNTIME_")}
     env.update(LC_ALL="C", GOMAXPROCS="1")
     raw, prepared = [], {}
+    reused = load_reused(plan["reuse"], output) if "reuse" in plan else None
+    reused_plan = read(reused / "registration.json") if reused else None
+    if reused:
+        if (reused_plan["suiteSHA256"] != plan["suiteSHA256"]
+                or read(reused / "context.json")["referenceRevision"] != (ROOT / "TYPE_RB_REVISION").read_text().strip()):
+            raise ValueError("Reused workload or reference inputs differ")
+        write(evidence / "reuse.json", {
+            "source": plan["reuse"], "context": read(reused / "context.json"),
+            "preparation": "Exact accepted applications and one new compiler generation per candidate; not a new bootstrap qualification",
+        })
 
     def record(command, directory, timeout, **metadata):
         item = observe(command, directory, timeout, env=env, core=core)
@@ -106,6 +124,12 @@ def run(args):
         return item
 
     for role, variant in plan["variants"].items():
+        if reused and "reusedRole" in variant:
+            previous = reused_plan["variants"][variant["reusedRole"]]
+            if previous["revision"] != variant["revision"] or previous["appSHA256"] != variant["appSHA256"]:
+                raise ValueError("Reused source or registered applications differ")
+            prepared[role] = {"reusedRole": variant["reusedRole"]}
+            continue
         print(f"Prepare {role} at {variant['revision']}", flush=True)
         source = output / "sources" / role
         source.parent.mkdir(exist_ok=True)
@@ -118,9 +142,9 @@ def run(args):
                directory / "qbe-build", 120, kind="qbe-build", role=role)
         qbe = qbe_root / "qbe"
         shutil.copyfile(qbe_root / "build-info.json", directory / "qbe-build-info.json")
-        compiler = args.seed
+        compiler = verified_compiler(reused, variant["parentCompilerRole"]) if reused else args.seed
         generations = []
-        for generation in range(4):
+        for generation in range(1 if reused else 4):
             generation_dir = directory / str(generation)
             generation_dir.mkdir()
             produced = generation_dir / "compiler"
@@ -138,7 +162,7 @@ def run(args):
             generations.append({"sha256": digest(produced), "bytes": produced.stat().st_size})
             compiler = produced
         write(directory / "generations.json", generations)
-        if generations[-1] != generations[-2]:
+        if not reused and generations[-1] != generations[-2]:
             raise ValueError("Ordinary compiler fixed point differs")
         prepared[role] = {"compiler": compiler, "qbe": qbe}
 
@@ -157,7 +181,24 @@ def run(args):
             role_dir = case_dir / role
             role_dir.mkdir()
             program = role_dir / "program"
-            if role == "pure-go":
+            reused_role = prepared.get(role, {}).get("reusedRole")
+            if reused and (reused_role or role in ("pure-go", "typerb-go")):
+                old_case = reused / "apps" / case["id"]
+                if (old_case / "expected").read_bytes() != expected:
+                    raise ValueError("Reused expected output differs")
+                old_role = reused_role or role
+                identity = read(old_case / "identities.json")[old_role]
+                shutil.copyfile(verified_program(old_case / old_role, identity), program)
+                program.chmod(0o755)
+                if reused_role:
+                    for extension in ("ssa", "s"):
+                        shutil.copyfile(old_case / old_role / f"program.{extension}", role_dir / f"program.{extension}")
+                artifacts[role] = identity
+                if reused_role and identity["sha256"] != plan["variants"][role]["appSHA256"][case["id"]]:
+                    raise ValueError("Reused program differs from registration")
+                write(case_dir / "identities.json", artifacts)
+                continue
+            elif role == "pure-go":
                 command = ["go", "build", "-trimpath", "-o", program, case_dir / "pure-go.go"]
             elif role == "typerb-go":
                 command = [args.reference, "build", "--compile", "--config",
@@ -197,6 +238,7 @@ def run(args):
                               phase="first" if iteration == 0 else "steady",
                               iteration=iteration, artifact=artifacts[role])
                 correct(item, observation_dir, expected)
+                write(observation_dir / "observation.json", item)
                 write(evidence / "raw.json", raw)
                 if item["status"] != "pass":
                     raise ValueError("Runtime output differs")
