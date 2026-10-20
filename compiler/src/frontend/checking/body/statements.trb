@@ -6,7 +6,7 @@ import { hash_action_index_write, hash_action_literal } from mir/model/hash_acti
 import { binary_add_assign } from frontend/types/operators
 import { token_kind_newline } from state/token_kinds
 import { mir_op_enum_field, mir_op_enum_test } from mir/model/instructions
-import { checked_array_refine, checked_hash_inference_region, checked_hash_numeric_region, checked_hash_refine } from frontend/checking/collections/inference
+import { checked_array_refine, checked_collection_context, checked_hash_inference_region, checked_hash_numeric_region, checked_hash_refine } from frontend/checking/collections/inference
 import { mir_checked_object_store } from frontend/checking/nominal/object_fields
 import { find_object_type, object_value_assignable } from frontend/types/object_types
 import { mir_checked_union_store } from frontend/checking/nominal/union_members
@@ -200,7 +200,7 @@ def check_simple_statement(
 		end
 		mut right_expected := expected
 		hash_inference_region := checked_hash_inference_region(state, locals, left.origin)
-		if expected == "Array" || hash_inference_region
+		if expected == "Array" || expected == "Hash" || hash_inference_region
 			right_expected = ""
 		end
 		# A first empty Array value has no element witness. The reference
@@ -223,7 +223,17 @@ def check_simple_statement(
 				error := checked_array_refine(state, locals, left, element_type)
 				if error != ""
 					diagnostic(state, "TRBN4004", line, error)
+				else
+					expected = right.type_name
 				end
+			end
+		end
+		if expected == "Hash"
+			refined := checked_collection_context(state, locals, left, right.type_name)
+			if refined.type_name == "Hash"
+				diagnostic(state, "TRBN4004", line, "untyped Hash assignment requires a typed Hash value")
+			else
+				expected = refined.type_name
 			end
 		end
 		if left.nullable_binding >= 0 && left.nullable_field == -1
