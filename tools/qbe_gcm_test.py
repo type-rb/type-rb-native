@@ -37,6 +37,9 @@ GUARD = """export function l $guard(l %a, l %b, l %c, l %n) {
 }
 """
 
+SINGLE_GUARD = GUARD.replace("$guard(", "$single_guard(").replace(
+    "%both =w and %one, %two", "%both =w copy %one")
+
 SHARED = """export function l $shared(l %a, l %b, l %c, l %which) {
 @start
  %one =l csltl %a, %b
@@ -80,6 +83,7 @@ DRIVER = r"""
 #include <stdint.h>
 #include <stdio.h>
 extern int64_t guard(int64_t, int64_t, int64_t, int64_t);
+extern int64_t single_guard(int64_t, int64_t, int64_t, int64_t);
 extern int64_t shared(int64_t, int64_t, int64_t, int64_t);
 extern void address(uint64_t *, uint64_t, int64_t);
 int main(void) {
@@ -95,7 +99,10 @@ int main(void) {
             int64_t expected = count * (condition ? 7 : -3);
             if (guard(values[a], values[b], values[c], trips[n]) != expected)
                 return 1;
-            ++checks;
+            if (single_guard(values[a], values[b], values[c], trips[n])
+                != count * (values[a] < values[b] ? 7 : -3))
+                return 4;
+            checks += 2;
         }
         if (shared(values[a], values[b], values[c], -1) != (condition ? 7 : -3)
             || shared(values[a], values[b], values[c], 1) != condition)
@@ -120,7 +127,8 @@ int main(void) {
 
 
 def check_motion(qbe, target):
-    for name, source in (("guard", GUARD), ("shared", SHARED), ("address", ADDRESS)):
+    for name, source in (("guard", GUARD), ("single", SINGLE_GUARD),
+                         ("shared", SHARED), ("address", ADDRESS)):
         result = subprocess.run([str(qbe), "-t", target, "-d", "G"], input=source,
                                 text=True, capture_output=True, check=True)
         moved = result.stderr.split("> After GCM:", 1)[1]
@@ -137,6 +145,10 @@ def check_motion(qbe, target):
             body = moved.split("@body\n", 1)[1].split("@done\n", 1)[0]
             if not re.search(r"\bload %snk\.\d+", body):
                 raise AssertionError(f"{target}: cheap address rematerialization was disabled")
+        elif name == "single":
+            body = moved.split("@body\n", 1)[1].split("@yes\n", 1)[0]
+            if "csltl" not in body:
+                raise AssertionError(f"{target}: single comparison rematerialization was disabled")
 
 
 def main():
@@ -148,7 +160,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="qbe-gcm-") as temporary:
         root = Path(temporary)
         source = root / "input.ssa"
-        source.write_text(GUARD + SHARED + ADDRESS)
+        source.write_text(GUARD + SINGLE_GUARD + SHARED + ADDRESS)
         for target in targets:
             check_motion(qbe, target)
             subprocess.run([str(qbe), "-t", target, "-o", str(root / (target + ".s")),
@@ -162,7 +174,7 @@ def main():
         subprocess.run([os.environ.get("CC", "cc"), str(driver), str(root / (native + ".s")),
                         "-o", str(program)], check=True)
         result = subprocess.run([str(program)], capture_output=True, text=True, check=True)
-        assert result.stdout == "3312 GCM semantic checks passed\n", result.stdout
+        assert result.stdout == "4608 GCM semantic checks passed\n", result.stdout
         assert not result.stderr, result.stderr
         print(result.stdout, end="")
         print("Recursive operands and invariant guards verified for six targets")

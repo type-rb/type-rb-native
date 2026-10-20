@@ -129,6 +129,13 @@ def check_capability(binary):
     body = moved.partition("@body\n")[2].partition("@done\n")[0]
     if result.returncode or not re.search(r"\bload %snk\.\d+", body):
         raise ValueError("QBE lacks the required loop address rematerialization")
+    single = MOTION_PROBE.replace("%both =w and %one, %two", "%both =w copy %one")
+    result = subprocess.run([str(binary), "-t", "arm64", "-d", "G"], input=single,
+                            text=True, capture_output=True, timeout=30)
+    moved = result.stderr.partition("> After GCM:")[2]
+    body = moved.partition("@body\n")[2].partition("@yes\n")[0]
+    if result.returncode or "csltl" not in body:
+        raise ValueError("QBE lacks the required single comparison rematerialization")
 
 
 def build(output, archive=None):
