@@ -1,3 +1,4 @@
+import { repl_number, repl_binary_value } from repl/operators
 import { control_syntax_case, control_syntax_guarded_transfer, control_syntax_if, control_syntax_ternary, loop_transfer_none } from state/control_kinds
 import { repl_flow_break, repl_flow_continue, repl_flow_kind_slot, repl_flow_loop_owner_slot, repl_flow_normal, repl_flow_return, repl_flow_value_slot, repl_loop_flow_offset } from repl/flow_kinds
 import { checked_logical_operator_offset } from frontend/types/operator_plans
@@ -19,7 +20,6 @@ import { repl_builtin_number_parse, repl_string_integer, repl_string_float } fro
 import { builtin_result_method } from frontend/checking/builtins/results
 import { repl_builtin_lookup } from repl/builtin_lookup
 import { union_parts } from frontend/types/union_types
-import { string_starts_with } from support/path
 import { find_newtype_in_module, find_newtype_type, newtype_type } from frontend/types/newtype_types
 import { newtype_method_function } from frontend/resolution/newtype_methods
 import { find_visible_newtype } from frontend/resolution/declaration_lookup
@@ -64,210 +64,13 @@ import { checked_loop_transfer_kind } from frontend/checking/body/control
 import { checked_iteration_require, checked_range_require, checked_transform_require } from frontend/checking/collections/iteration
 import { find_visible_enum, find_visible_function, find_visible_record } from frontend/resolution/declaration_lookup
 import { find_record_type, find_field, record_type, array_element_type } from frontend/resolution/type_resolution
-import { number_is_float, number_without_underscores, integer_string } from support/literals
-import { native_cli_float, native_cli_interrupt, native_cli_pow } from host
+import { number_is_float, number_without_underscores } from support/literals
+import { native_cli_float, native_cli_interrupt } from host
 import { repl_type, repl_set_type, repl_variant, repl_get, ReplStore, ReplEnvironment, ReplReference, repl_value, repl_integer, repl_float, repl_boolean, repl_string, repl_reference, repl_environment } from repl/model
 import { repl_scalar_string, repl_binding_value, repl_assign_binding, repl_render, repl_find, repl_bind, repl_coerce } from repl/values
 
 # Evaluation follows the already checked token stream. Parser, resolution and
 # type checking remain owned by the ordinary compiler; no source is replayed.
-def repl_number(text: String): Integer
-	mut result := 0
-	mut index := 0
-	while index < text.size()
-		mut digit := 0
-		while digit < 10
-			if integer_string(digit) == text[index]
-				result = result * 10 + digit
-			end
-			digit += 1
-		end
-		index += 1
-	end
-	return result
-end
-
-def repl_numeric(mut store: ReplStore, left: Integer, operator: String, right: Integer): Integer
-	if union_parts(repl_type(store, left)).size() > 0
-		return repl_numeric(store, store.children[left][0], operator, right)
-	end
-	if union_parts(repl_type(store, right)).size() > 0
-		return repl_numeric(store, left, operator, store.children[right][0])
-	end
-	if repl_type(store, left) == "Nil" || repl_type(store, right) == "Nil"
-		mut same := repl_absent(store, left) == repl_absent(store, right)
-		if operator == "!="
-			same = !same
-		end
-		return repl_boolean(store, same)
-	end
-	if string_starts_with(repl_type(store, left), "Newtype#")
-		return repl_numeric(store, store.children[left][0], operator, store.children[right][0])
-	end
-	a := repl_get(store, left)
-	b := repl_get(store, right)
-	if (a.type_name == "String") != (b.type_name == "String")
-		if operator == "==" || operator == "!="
-			return repl_boolean(store, operator == "!=")
-		end
-	end
-	if a.type_name == "String"
-		if operator == "+"
-			return repl_string(store, a.text + b.text)
-		end
-		if operator == "=="
-			return repl_boolean(store, a.text == b.text)
-		end
-		return repl_boolean(store, a.text != b.text)
-	end
-	if a.type_name == "Boolean"
-		if operator == "=="
-			return repl_boolean(store, a.integer == b.integer)
-		end
-		return repl_boolean(store, a.integer != b.integer)
-	end
-	mut floating := a.type_name == "Float"
-	if b.type_name == "Float"
-		floating = true
-	end
-	if floating
-		mut x := a.floating
-		mut y := b.floating
-		if a.type_name == "Integer"
-			x = a.integer
-		end
-		if b.type_name == "Integer"
-			y = b.integer
-		end
-		if operator == "+"
-			return repl_float(store, x + y)
-		end
-		if operator == "-"
-			return repl_float(store, x - y)
-		end
-		if operator == "*"
-			return repl_float(store, x * y)
-		end
-		if operator == "/"
-			return repl_float(store, x / y)
-		end
-		if operator == "**"
-			return repl_float(store, native_cli_pow(x, y))
-		end
-		if operator == "=="
-			return repl_boolean(store, x == y)
-		end
-		if operator == "!="
-			return repl_boolean(store, x != y)
-		end
-		if operator == "<"
-			return repl_boolean(store, x < y)
-		end
-		if operator == "<="
-			return repl_boolean(store, x <= y)
-		end
-		if operator == ">"
-			return repl_boolean(store, x > y)
-		end
-		return repl_boolean(store, x >= y)
-	end
-	x := a.integer
-	y := b.integer
-	if operator == "=="
-		return repl_boolean(store, x == y)
-	end
-	if operator == "!="
-		return repl_boolean(store, x != y)
-	end
-	if operator == "<"
-		return repl_boolean(store, x < y)
-	end
-	if operator == "<="
-		return repl_boolean(store, x <= y)
-	end
-	if operator == ">"
-		return repl_boolean(store, x > y)
-	end
-	if operator == ">="
-		return repl_boolean(store, x >= y)
-	end
-	if operator == "**"
-		if y < 0
-			store.error[0] = "panic: negative Integer exponent"
-			return 0
-		end
-		mut result := repl_integer(store, 1)
-		mut factor := left
-		mut exponent := y
-		while exponent > 0
-			if exponent % 2 == 1
-				result = repl_numeric(store, result, "*", factor)
-				if store.error[0] != ""
-					return 0
-				end
-			end
-			exponent /= 2
-			if exponent > 0
-				factor = repl_numeric(store, factor, "*", factor)
-				if store.error[0] != ""
-					return 0
-				end
-			end
-		end
-		return result
-	end
-	limit := 9007199254740991
-	mut overflow := false
-	if operator == "+"
-		if y > 0
-			overflow = x > limit - y
-		else
-			overflow = x < -limit - y
-		end
-	end
-	if operator == "-"
-		if y < 0
-			overflow = x > limit + y
-		else
-			overflow = x < -limit + y
-		end
-	end
-	if operator == "*"
-		if y != 0
-			mut ax := x
-			mut ay := y
-			if ax < 0
-				ax = -ax
-			end
-			if ay < 0
-				ay = -ay
-			end
-			overflow = ax > limit / ay
-		end
-	end
-	if overflow
-		store.error[0] = "panic: Integer is outside the portable range"
-		return 0
-	end
-	if operator == "+"
-		return repl_integer(store, x + y)
-	end
-	if operator == "-"
-		return repl_integer(store, x - y)
-	end
-	if operator == "*"
-		return repl_integer(store, x * y)
-	end
-	if y == 0
-		store.error[0] = "panic: division by zero"
-		return 0
-	end
-	if operator == "/"
-		return repl_integer(store, x / y)
-	end
-	return repl_integer(store, x % y)
-end
-
 def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Integer>, mut store: ReplStore): Integer
 	if object_abstract_function(state, function)
 		return repl_interface_call(state, function, arguments, store)
@@ -1321,7 +1124,7 @@ def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut 
 					end
 					result = repl_reference(repl_value(store, "Range<Integer>", 0, 0.0, "", [start, finish, repl_integer(store, plan.exclusive)]))
 				else
-					result = repl_reference(repl_numeric(store, result.value, operator, right.value))
+					result = repl_reference(repl_binary_value(store, result.value, operator, right.value))
 				end
 			end
 		end
@@ -1688,7 +1491,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 		end
 		mut result := repl_coerce(store, right.value, expected)
 		if operator != "=" && !logical
-			result = repl_numeric(store, left.value, operator[0], result)
+			result = repl_binary_value(store, left.value, operator[0], result)
 		end
 		if store.error[0] == ""
 			if hash_assignment
@@ -1884,7 +1687,7 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			position[0] = branch.condition
 			while position[0] < branch.condition_finish && !selected
 				pattern := repl_expression(state, position, store, environment, 1, repl_type(store, selector))
-				comparison := repl_numeric(store, selector, "==", pattern.value)
+				comparison := repl_binary_value(store, selector, "==", pattern.value)
 				selected = store.integers[comparison] != 0
 				if token_is(state, position[0], ",")
 					position[0] += 1

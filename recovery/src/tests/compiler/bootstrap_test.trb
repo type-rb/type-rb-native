@@ -1417,12 +1417,15 @@ def _recovery_restore_module(directory: String, name: String, source: String): R
 end
 
 # Check the isolated entry before expensive generation controls as well as on B1.
+# A controlled missing dependency keeps this exact diagnostic independent of
+# canonical import order; the full compiler entry remains the probe's body.
 def _recovery_require_compiler_imports(executable: String, entry: String): Result<Boolean, String>
-	hidden := try _recovery_process(executable, ["--source-content", "check", entry])
+	isolated := "import { recovery_missing_dependency } from recovery_probe_missing\n" + entry
+	hidden := try _recovery_process(executable, ["--source-content", "check", isolated])
 	if hidden.status != 0 || !hidden.stderr.empty?()
 		return Result<Boolean, String>::Err("hidden compiler-source probe process differs")
 	end
-	if hidden.stdout != "TRBN4003:1:module does not export validate_compilation_units\n"
+	if hidden.stdout != "TRBN4003:1:module does not export recovery_missing_dependency\n"
 		return Result<Boolean, String>::Err("hidden compiler-source import diagnostic differs: " + hidden.stdout)
 	end
 	return Result<Boolean, String>::Ok(true)
