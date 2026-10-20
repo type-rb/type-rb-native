@@ -5,6 +5,7 @@ import { array_method_concat, array_method_include, array_method_join, array_met
 import { mir_op_array_mutate, mir_op_array_push, mir_op_array_size, mir_op_scalar_conversion, mir_op_string_replace, mir_op_string_size } from mir/model/instructions
 import { bytes_method_argument_type, bytes_method_arity, bytes_method_kind, mir_bytes_method } from mir/lowering/bytes
 import { checked_array_numeric_candidate, checked_array_numeric_record, checked_array_numeric_region, checked_array_refine } from frontend/checking/collections/inference
+import { pending_collection_declaration } from frontend/checking/collections/context_analysis
 import { object_instance_type } from frontend/types/object_types
 import { mir_checked_object_new } from mir/lowering/objects
 import { builtin_result_method } from frontend/checking/builtins/results
@@ -242,10 +243,11 @@ def check_method_call(
 		return checked_hash_call(state, position, locals, receiver, method)
 	end
 	mut unshift_numeric_region := false
+	inference_region := pending_collection_declaration(state, locals, receiver) >= 0
 	if receiver.type_name == "Array<Integer>" && method == "unshift"
 		unshift_numeric_region = checked_array_numeric_region(state, locals, receiver)
 	end
-	if (receiver.type_name == "Array" || unshift_numeric_region) && method == "unshift"
+	if (receiver.type_name == "Array" || unshift_numeric_region || inference_region) && method == "unshift"
 		origin := position[0]
 		line := load_integer(state.source_tokens.token_lines, origin)
 		if receiver.mutable == 0
@@ -257,7 +259,7 @@ def check_method_call(
 		advance(position)
 		skip_newlines(state, position)
 		mut argument_type := array_element_type(receiver.type_name)
-		if unshift_numeric_region
+		if unshift_numeric_region || inference_region
 			argument_type = ""
 		end
 		value := check_expression(state, position, locals, 1, argument_type)
@@ -269,7 +271,7 @@ def check_method_call(
 		if has_diagnostic(state)
 			return checked_value("Invalid", checked_category_value(), origin, 0)
 		end
-		if receiver.type_name == "Array"
+		if receiver.type_name == "Array" || inference_region
 			error := checked_array_refine(state, locals, receiver, value.type_name)
 			if error != ""
 				return type_diagnostic(state, line, error)
@@ -319,7 +321,7 @@ def check_method_call(
 			diagnostic(state, "TRBN4004", line, "push requires a mutable binding")
 		end
 		mut argument_type := element_type
-		if numeric_region
+		if numeric_region || inference_region
 			argument_type = ""
 		end
 		value := check_expression(state, position, locals, 1, argument_type)
@@ -328,7 +330,7 @@ def check_method_call(
 		if value.type_name == "Never"
 			return value
 		end
-		if receiver.type_name == "Array" && !has_diagnostic(state)
+		if (receiver.type_name == "Array" || inference_region) && !has_diagnostic(state)
 			error := checked_array_refine(state, locals, receiver, value.type_name)
 			if error != ""
 				return type_diagnostic(state, line, error)
