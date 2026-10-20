@@ -1,3 +1,4 @@
+import { mir_range_field_exclusive, mir_range_field_first, mir_range_field_last } from mir/model/operation_modes
 import { checked_category_value } from frontend/types/value_categories
 import { mir_control_loop_depth_slot } from state/local_slots
 import { transform_all, transform_any, transform_find_index, transform_none, transform_reduce, transform_select } from frontend/types/transform_kinds
@@ -37,7 +38,7 @@ def mir_transform_search_yield(mut state: CompilerState, mut locals: CheckedLoca
 		selected = mir_iteration_local(locals, result_slot + 2, "Integer", origin)
 		if plan.iteration.source_kind == iteration_source_range()
 			owner := load_integer(locals.mir_values, result_slot + 1) - 1
-			start := mir_checked_range_field(state, locals, owner, 0, origin)
+			start := mir_checked_range_field(state, locals, owner, mir_range_field_first(), origin)
 			selected = scalar_mir_binary(state, locals, "-", selected, start, "Integer", origin)
 		end
 	end
@@ -52,19 +53,19 @@ end
 def mir_iteration_range_test(mut state: CompilerState, mut locals: CheckedLocals, frame: MirControlLoop, body: Integer, saved: Integer)
 	line := load_integer(state.source_tokens.token_lines, frame.origin)
 	owner := load_integer(locals.mir_values, saved) - 1
-	exclusive := mir_checked_range_field(state, locals, owner, 2, frame.origin)
+	exclusive := mir_checked_range_field(state, locals, owner, mir_range_field_exclusive(), frame.origin)
 	first := mir_control_allocate(locals)
 	second := mir_control_allocate(locals)
 	mir_control_conditional(state, locals, checked_mir_value(exclusive), first, frame.binding_count, second, frame.binding_count)
 	mir_control_enter(state, locals, first, line)
 	first_owner := load_integer(locals.mir_values, saved) - 1
-	first_end := mir_checked_range_field(state, locals, first_owner, 1, frame.origin)
+	first_end := mir_checked_range_field(state, locals, first_owner, mir_range_field_last(), frame.origin)
 	first_cursor := mir_iteration_local(locals, saved + 1, "Integer", frame.origin)
 	before := scalar_mir_binary(state, locals, "<", first_cursor, first_end, "Boolean", frame.origin)
 	mir_control_conditional(state, locals, checked_mir_value(before), body, frame.binding_count, frame.exit, frame.exit_binding_count)
 	mir_control_enter(state, locals, second, line)
 	second_owner := load_integer(locals.mir_values, saved) - 1
-	second_end := mir_checked_range_field(state, locals, second_owner, 1, frame.origin)
+	second_end := mir_checked_range_field(state, locals, second_owner, mir_range_field_last(), frame.origin)
 	second_cursor := mir_iteration_local(locals, saved + 1, "Integer", frame.origin)
 	through := scalar_mir_binary(state, locals, "<=", second_cursor, second_end, "Boolean", frame.origin)
 	mir_control_conditional(state, locals, checked_mir_value(through), body, frame.binding_count, frame.exit, frame.exit_binding_count)
@@ -83,7 +84,7 @@ def mir_checked_iteration_begin(mut state: CompilerState, mut locals: CheckedLoc
 	mut cursor := scalar_mir_literal(state, locals, "Integer", plan.syntax.origin, "0")
 	zero := cursor
 	if plan.source_kind == iteration_source_range()
-		cursor = mir_checked_range_field(state, locals, owner, 0, plan.syntax.origin)
+		cursor = mir_checked_range_field(state, locals, owner, mir_range_field_first(), plan.syntax.origin)
 	end
 	store_integer(locals.mir_values, saved + 1, checked_mir_value(cursor) + 1)
 	if plan.source_kind == iteration_source_range() && plan.syntax.second_origin >= 0
@@ -150,7 +151,7 @@ def mir_checked_iteration_end(mut state: CompilerState, mut locals: CheckedLocal
 		mir_control_enter(state, locals, frame.continuation, line)
 		if plan.source_kind == iteration_source_range()
 			owner := load_integer(locals.mir_values, saved) - 1
-			bound := mir_checked_range_field(state, locals, owner, 1, plan.syntax.origin)
+			bound := mir_checked_range_field(state, locals, owner, mir_range_field_last(), plan.syntax.origin)
 			cursor := mir_iteration_local(locals, saved + 1, "Integer", plan.syntax.origin)
 			last := scalar_mir_binary(state, locals, "==", cursor, bound, "Boolean", plan.syntax.origin)
 			step := mir_control_allocate(locals)

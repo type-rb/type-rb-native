@@ -1,5 +1,6 @@
-import { mir_state_failure_block_slot } from state/local_slots
+import { mir_array_mutate_unshift, mir_guard_array_not_empty } from mir/model/operation_modes
 import { array_method_concat, array_method_count, array_method_dup, array_method_empty, array_method_first, array_method_include, array_method_index, array_method_join, array_method_last, array_method_none, array_method_pop, array_method_reverse, array_method_shift, array_method_slice, array_method_sort, array_method_sort_descending, array_method_uniq, array_method_unshift } from frontend/types/method_kinds
+import { mir_state_failure_block_slot } from state/local_slots
 import { mir_op_array_copy, mir_op_array_join, mir_op_array_load, mir_op_array_mutate, mir_op_array_size, mir_op_guard } from mir/model/instructions
 import { mir_array_query } from frontend/checking/builtins/array_queries
 import { mir_array_sort } from frontend/checking/builtins/array_sorting
@@ -73,9 +74,9 @@ def mir_array_method(mut state: CompilerState, mut locals: CheckedLocals, kind: 
 		element := array_element_type(receiver.type_name)
 		if kind == array_method_unshift()
 			value := mir_nullable_coerce(state, locals, argument, element, origin)
-			return mir_checked_array_operation(state, locals, mir_op_array_mutate(), checked_mir_value(receiver), checked_mir_value(value), 0, "Void", origin)
+			return mir_checked_array_operation(state, locals, mir_op_array_mutate(), checked_mir_value(receiver), checked_mir_value(value), mir_array_mutate_unshift(), "Void", origin)
 		end
-		result := mir_checked_array_operation(state, locals, mir_op_array_mutate(), checked_mir_value(receiver), -1, kind - 7, element, origin)
+		result := mir_checked_array_operation(state, locals, mir_op_array_mutate(), checked_mir_value(receiver), -1, kind - array_method_unshift(), element, origin)
 		return checked_value(result.type_name, result.category, origin, 1)
 	end
 	if kind >= array_method_dup()
@@ -83,7 +84,7 @@ def mir_array_method(mut state: CompilerState, mut locals: CheckedLocals, kind: 
 		if kind == array_method_slice()
 			bounds = checked_mir_value(argument)
 		end
-		return mir_checked_array_operation(state, locals, mir_op_array_copy(), checked_mir_value(receiver), bounds, kind - 4, receiver.type_name, origin)
+		return mir_checked_array_operation(state, locals, mir_op_array_copy(), checked_mir_value(receiver), bounds, kind - array_method_dup(), receiver.type_name, origin)
 	end
 	mir_control_prepare(state, locals)
 	zero := scalar_mir_literal(state, locals, "Integer", origin, "0")
@@ -93,7 +94,7 @@ def mir_array_method(mut state: CompilerState, mut locals: CheckedLocals, kind: 
 	end
 	present := scalar_mir_binary(state, locals, ">", size, zero, "Boolean", origin)
 	if mir_control_active(locals)
-		scalar_mir_instruction(state, locals, mir_op_guard(), -1, checked_mir_value(present), -1, 2, locals.mir_state[mir_state_failure_block_slot()], load_integer(state.source_tokens.token_lines, origin))
+		scalar_mir_instruction(state, locals, mir_op_guard(), -1, checked_mir_value(present), -1, mir_guard_array_not_empty(), locals.mir_state[mir_state_failure_block_slot()], load_integer(state.source_tokens.token_lines, origin))
 	end
 	mut index := checked_mir_value(zero)
 	if kind == array_method_last()

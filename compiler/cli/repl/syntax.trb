@@ -1,3 +1,4 @@
+import { repl_style_callable, repl_style_comment, repl_style_incomplete, repl_style_keyword, repl_style_literal, repl_style_plain, repl_style_string, repl_style_type } from repl/display_kinds
 import { token_kind_identifier, token_kind_newline, token_kind_number, token_kind_string } from state/token_kinds
 import { token_is, skip_newlines } from frontend/syntax/syntax_tokens
 import { parse_module } from frontend/syntax/parser
@@ -44,10 +45,10 @@ def repl_syntax_flat(source: String): ReplSyntax
 	while index < source.size()
 		start := index
 		character := source[index]
-		mut kind := 0
+		mut kind := repl_style_plain()
 		index += 1
 		if character == "#"
-			kind = 4
+			kind = repl_style_comment()
 			mut loop_2 := true
 			while loop_2
 				mut condition_1 := index < source.size()
@@ -62,17 +63,17 @@ def repl_syntax_flat(source: String): ReplSyntax
 			end
 		else
 			if character == "\"" || character == "'"
-				kind = 2
+				kind = repl_style_string()
 				finish := interpolation_quote_end(source, index, character)
 				if finish < 0
 					index = source.size()
-					kind = 7
+					kind = repl_style_incomplete()
 				else
 					index = finish + 1
 				end
 			else
 				if character_in(character, "0123456789")
-					kind = 3
+					kind = repl_style_literal()
 					mut loop_7 := true
 					while loop_7
 						mut condition_6 := index < source.size()
@@ -106,7 +107,7 @@ def repl_syntax_flat(source: String): ReplSyntax
 						end
 						word := compiler_source_slice(source, start, index)
 						if repl_keyword(word)
-							kind = 1
+							kind = repl_style_keyword()
 						else
 							mut condition_10 := word == "true"
 							if !condition_10
@@ -116,10 +117,10 @@ def repl_syntax_flat(source: String): ReplSyntax
 								condition_10 = word == "nil"
 							end
 							if condition_10
-								kind = 3
+								kind = repl_style_literal()
 							else
 								if character_in(character, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-									kind = 5
+									kind = repl_style_type()
 								else
 									mut lookahead := index
 									mut loop_12 := true
@@ -139,14 +140,14 @@ def repl_syntax_flat(source: String): ReplSyntax
 										condition_13 = previous == "."
 									end
 									if condition_13
-										kind = 6
+										kind = repl_style_callable()
 									else
 										mut condition_14 := lookahead < source.size()
 										if condition_14
 											condition_14 = source[lookahead] == "("
 										end
 										if condition_14
-											kind = 6
+											kind = repl_style_callable()
 										end
 									end
 								end
@@ -166,7 +167,7 @@ def repl_syntax_flat(source: String): ReplSyntax
 			condition_15 = character != "\t"
 		end
 		if condition_15
-			condition_15 = kind != 4
+			condition_15 = kind != repl_style_comment()
 		end
 		if condition_15
 			previous = word
@@ -200,12 +201,12 @@ def repl_string_spans(mut spans: ReplSyntax, source: String, start: Integer, fin
 				embedded = source[index + 1] == "{"
 			end
 			if embedded
-				repl_syntax_span(spans, source, chunk, index, 2)
+				repl_syntax_span(spans, source, chunk, index, repl_style_string())
 				mut end_index := interpolation_end(source, index + 2)
-				mut marker_kind := 1
+				mut marker_kind := repl_style_keyword()
 				if end_index < 0
 					end_index = finish
-					marker_kind = 7
+					marker_kind = repl_style_incomplete()
 				end
 				repl_syntax_span(spans, source, index, index + 2, marker_kind)
 				inner := repl_syntax(compiler_source_slice(source, index + 2, end_index))
@@ -215,7 +216,7 @@ def repl_string_spans(mut spans: ReplSyntax, source: String, start: Integer, fin
 					part += 1
 				end
 				if end_index < finish
-					repl_syntax_span(spans, source, end_index, end_index + 1, 1)
+					repl_syntax_span(spans, source, end_index, end_index + 1, repl_style_keyword())
 				end
 				index = end_index + 1
 				chunk = index
@@ -333,12 +334,12 @@ def repl_indent(source: String): String
 				condition_20 = word == "catch"
 			end
 			branch := condition_20
-			mut condition_21 := kind != 2
+			mut condition_21 := kind != repl_style_string()
 			if condition_21
-				condition_21 = kind != 4
+				condition_21 = kind != repl_style_comment()
 			end
 			if condition_21
-				condition_21 = kind != 7
+				condition_21 = kind != repl_style_incomplete()
 			end
 			if condition_21
 				condition_21 = closing
@@ -370,12 +371,12 @@ def repl_indent(source: String): String
 			end
 			output += word
 			line_start = word == "\n"
-			mut condition_24 := kind != 2
+			mut condition_24 := kind != repl_style_string()
 			if condition_24
-				condition_24 = kind != 4
+				condition_24 = kind != repl_style_comment()
 			end
 			if condition_24
-				condition_24 = kind != 7
+				condition_24 = kind != repl_style_incomplete()
 			end
 			if condition_24
 				mut condition_25 := repl_block_open(word)

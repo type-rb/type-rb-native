@@ -1,3 +1,5 @@
+import { mir_array_copy_slice, mir_array_mutate_unshift } from mir/model/operation_modes
+import { qbe_runtime_float_array_slot } from backend/qbe/runtime_slots
 import { mir_op_array_copy, mir_op_array_load, mir_op_array_mutate, mir_op_array_new, mir_op_array_position, mir_op_array_push, mir_op_array_size, mir_op_array_store } from mir/model/instructions
 import { integer_string } from support/literals
 import { MirArrayLoop, MirArrayReadGuard, MirInstruction } from mir/model/module
@@ -196,7 +198,7 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 	end
 	owner := operands[instruction.first]
 	if kind == mir_op_array_mutate()
-		if instruction.payload == 0
+		if instruction.payload == mir_array_mutate_unshift()
 			mut value := operands[instruction.second]
 			if mir_storage_type_name(state.scalar_mir, mir_operand_type(value_types, instruction.second)) == "Float"
 				value = emit_temporary(context)
@@ -222,7 +224,7 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 			descriptor = "$trbn_desc_array_managed"
 		end
 		mut bounds := "0"
-		if instruction.payload == 2
+		if instruction.payload == mir_array_copy_slice()
 			bounds = operands[instruction.second]
 		end
 		qbe_output_line(output, "\t" + result + " =l call $trbn_array_copy(l " + owner + ", l " + bounds + ", w " + integer_string(instruction.payload) + ", l " + descriptor + ")")
@@ -284,7 +286,7 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 	if kind == mir_op_array_push()
 		element := mir_element_type(state.scalar_mir, mir_operand_type(value_types, instruction.first))
 		if mir_storage_type_name(state.scalar_mir, element) == "Float"
-			output.runtime_flags[0] = 1
+			output.runtime_flags[qbe_runtime_float_array_slot()] = 1
 			qbe_output_line(output, "\tcall $trbn_array_push_d(l " + owner + ", d " + second + ")")
 		else
 			qbe_output_line(output, "\tcall $trbn_array_push_paced(l " + owner + ", l " + second + ")")

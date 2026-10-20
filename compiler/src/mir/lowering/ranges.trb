@@ -1,3 +1,4 @@
+import { mir_range_field_exclusive, mir_range_field_first } from mir/model/operation_modes
 import { checked_category_value } from frontend/types/value_categories
 import { mir_type_boolean, mir_type_integer } from mir/model/type_ids
 import { mir_op_range_field, mir_op_range_new } from mir/model/instructions
@@ -10,7 +11,7 @@ import { CompilerState } from state/state
 import { CheckedLocals } from state/local_state
 import { load_integer } from support/storage
 
-# 31 captures both endpoints and exclusivity; 32 reads an immutable component.
+# Range construction captures endpoints and exclusivity; field reads are immutable.
 # Iteration uses ordinary verified blocks and scalar comparisons, not source spans.
 def mir_checked_range_new(mut state: CompilerState, mut locals: CheckedLocals, first: CheckedValue, last: CheckedValue, exclusive: Integer, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
@@ -31,7 +32,7 @@ end
 def mir_checked_range_field(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, field: Integer, origin: Integer): CheckedValue
 	mut type_name := "Integer"
 	mut type_id := mir_type_integer()
-	if field == 2
+	if field == mir_range_field_exclusive()
 		type_name = "Boolean"
 		type_id = mir_type_boolean()
 	end
@@ -58,11 +59,11 @@ def mir_range_instruction_error(flow: MirFlow, native_module: MirModule, functio
 		end
 		return ""
 	end
-	if mir_semantic_type_name(native_module, first) != "Range<Integer>" || instruction.second != -1 || instruction.payload < 0 || instruction.payload > 2
+	if mir_semantic_type_name(native_module, first) != "Range<Integer>" || instruction.second != -1 || instruction.payload < mir_range_field_first() || instruction.payload > mir_range_field_exclusive()
 		return "MIR Range component shape differs"
 	end
 	mut expected := 1
-	if instruction.payload == 2
+	if instruction.payload == mir_range_field_exclusive()
 		expected = 2
 	end
 	if result != expected

@@ -1,3 +1,4 @@
+import { mir_guard_slice_size, mir_range_field_first, mir_range_field_last } from mir/model/operation_modes
 import { checked_category_value } from frontend/types/value_categories
 import { mir_control_loop_depth_slot, mir_state_failure_block_slot } from state/local_slots
 import { iteration_source_array, iteration_source_range } from frontend/types/iteration_kinds
@@ -39,7 +40,7 @@ def mir_slice_advance(mut state: CompilerState, mut locals: CheckedLocals, plan:
 	mut joined := -1
 	if plan.source_kind == iteration_source_range()
 		owner := load_integer(locals.mir_values, saved) - 1
-		bound := mir_checked_range_field(state, locals, owner, 1, origin)
+		bound := mir_checked_range_field(state, locals, owner, mir_range_field_last(), origin)
 		cursor := mir_iteration_local(locals, saved + 1, "Integer", origin)
 		last := scalar_mir_binary(state, locals, "==", cursor, bound, "Boolean", origin)
 		step := mir_control_branch(state, locals, last, line)
@@ -69,12 +70,12 @@ def mir_sliced_iteration_begin(mut state: CompilerState, mut locals: CheckedLoca
 	line := load_integer(state.source_tokens.token_lines, origin)
 	zero := scalar_mir_literal(state, locals, "Integer", origin, "0")
 	valid := scalar_mir_binary(state, locals, ">", size, zero, "Boolean", plan.syntax.slice_start)
-	scalar_mir_instruction(state, locals, mir_op_guard(), -1, checked_mir_value(valid), -1, 3, locals.mir_state[mir_state_failure_block_slot()], line)
+	scalar_mir_instruction(state, locals, mir_op_guard(), -1, checked_mir_value(valid), -1, mir_guard_slice_size(), locals.mir_state[mir_state_failure_block_slot()], line)
 	owner := checked_mir_value(receiver)
 	store_integer(locals.mir_values, saved, owner + 1)
 	mut cursor := scalar_mir_literal(state, locals, "Integer", origin, "0")
 	if plan.source_kind == iteration_source_range()
-		cursor = mir_checked_range_field(state, locals, owner, 0, origin)
+		cursor = mir_checked_range_field(state, locals, owner, mir_range_field_first(), origin)
 	end
 	store_integer(locals.mir_values, saved + 1, checked_mir_value(cursor) + 1)
 	store_integer(locals.mir_values, saved + 2, checked_mir_value(zero) + 1)

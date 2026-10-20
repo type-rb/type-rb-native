@@ -1,3 +1,4 @@
+import { mir_convert_boolean_to_string, mir_convert_float_to_integer, mir_convert_float_to_string, mir_convert_integer_to_string, mir_convert_string_float_status, mir_convert_string_integer_status, mir_convert_string_to_float, mir_convert_string_to_integer, mir_nil_test_not_equal, mir_puts_any_mode, mir_puts_scalar_mode, mir_string_case_lower, mir_string_case_upper, mir_string_compare_before, mir_string_compare_equal, mir_string_compare_not_equal, mir_string_query_contains, mir_string_query_first, mir_string_sequence_chars, mir_string_sequence_codepoints, mir_string_sequence_reverse, mir_string_trim_both, mir_string_trim_right } from mir/model/operation_modes
 import { checked_category_value } from frontend/types/value_categories
 import { mir_type_boolean, mir_type_float, mir_type_integer, mir_type_string } from mir/model/type_ids
 import { mir_op_array_join, mir_op_nil_test, mir_op_nullable_extract, mir_op_puts, mir_op_scalar_conversion, mir_op_string_case, mir_op_string_compare, mir_op_string_concat, mir_op_string_index, mir_op_string_literal, mir_op_string_query, mir_op_string_replace, mir_op_string_sequence, mir_op_string_size, mir_op_string_slice, mir_op_string_split, mir_op_string_trim, mir_op_union_extract, mir_op_union_inject, mir_op_union_test } from mir/model/instructions
@@ -43,12 +44,13 @@ end
 def mir_checked_string_binary(mut state: CompilerState, mut locals: CheckedLocals, left: CheckedValue, right: CheckedValue, operator: String, origin: Integer): CheckedValue
 	mut kind := mir_op_string_compare()
 	mut result_type := "Boolean"
-	mut payload := 0
+	# Equality uses mode zero; concatenation keeps the same empty payload.
+	mut payload := mir_string_compare_equal()
 	if operator == "+"
 		kind = mir_op_string_concat()
 		result_type = "String"
 	elsif operator == "!="
-		payload = 1
+		payload = mir_string_compare_not_equal()
 	end
 	return mir_checked_string_operation(state, locals, kind, checked_mir_value(left), checked_mir_value(right), payload, result_type, origin)
 end
@@ -83,7 +85,7 @@ def mir_puts_nil(mut state: CompilerState, mut locals: CheckedLocals, origin: In
 	literal := locals.mir_literal_texts.size()
 	locals.mir_literal_texts.push("<nil>")
 	value := mir_checked_string_operation(state, locals, mir_op_string_literal(), -1, -1, literal, "String", origin)
-	return mir_checked_string_operation(state, locals, mir_op_puts(), checked_mir_value(value), -1, 0, "Void", origin)
+	return mir_checked_string_operation(state, locals, mir_op_puts(), checked_mir_value(value), -1, mir_puts_scalar_mode(), "Void", origin)
 end
 
 def mir_checked_puts(mut state: CompilerState, mut locals: CheckedLocals, arguments: Array<Integer>, origin: Integer): CheckedValue
@@ -101,14 +103,14 @@ def mir_checked_puts(mut state: CompilerState, mut locals: CheckedLocals, argume
 		return mir_puts_nil(state, locals, origin)
 	end
 	if type_name == "Any"
-		return mir_checked_string_operation(state, locals, mir_op_puts(), value, -1, 1, "Void", origin)
+		return mir_checked_string_operation(state, locals, mir_op_puts(), value, -1, mir_puts_any_mode(), "Void", origin)
 	end
 	element := nullable_element(type_name)
 	if element != ""
 		mir_control_prepare(state, locals)
 		line := load_integer(state.source_tokens.token_lines, origin)
 		optional := mir_checked_value(type_name, value, origin, 0)
-		condition := mir_checked_nullable(state, locals, mir_op_nil_test(), optional, "Boolean", 1, origin)
+		condition := mir_checked_nullable(state, locals, mir_op_nil_test(), optional, "Boolean", mir_nil_test_not_equal(), origin)
 		alternate := mir_control_branch(state, locals, condition, line)
 		payload := mir_checked_nullable(state, locals, mir_op_nullable_extract(), optional, element, 0, origin)
 		mir_checked_puts(state, locals, [checked_mir_value(payload)], origin)
@@ -153,13 +155,13 @@ def mir_checked_puts(mut state: CompilerState, mut locals: CheckedLocals, argume
 		value = checked_mir_value(widened)
 	end
 	if locals.mir_value_rows[value].type_id == mir_type_integer()
-		converted := mir_checked_string_operation(state, locals, mir_op_scalar_conversion(), value, -1, 1, "String", origin)
+		converted := mir_checked_string_operation(state, locals, mir_op_scalar_conversion(), value, -1, mir_convert_integer_to_string(), "String", origin)
 		value = checked_mir_value(converted)
 	elsif locals.mir_value_rows[value].type_id == mir_type_float()
-		converted := mir_checked_string_operation(state, locals, mir_op_scalar_conversion(), value, -1, 4, "String", origin)
+		converted := mir_checked_string_operation(state, locals, mir_op_scalar_conversion(), value, -1, mir_convert_float_to_string(), "String", origin)
 		value = checked_mir_value(converted)
 	end
-	return mir_checked_string_operation(state, locals, mir_op_puts(), value, -1, 0, "Void", origin)
+	return mir_checked_string_operation(state, locals, mir_op_puts(), value, -1, mir_puts_scalar_mode(), "Void", origin)
 end
 
 def mir_string_instruction_error(flow: MirFlow, native_module: MirModule, function: MirFunction, block: MirBlock, index: Integer, instruction: MirInstruction): String
@@ -176,7 +178,7 @@ def mir_string_instruction_error(flow: MirFlow, native_module: MirModule, functi
 			return "MIR String transform receiver is unavailable or not String"
 		end
 		if kind == mir_op_string_case()
-			if result != mir_type_string() || instruction.second != -1 || instruction.payload < 0 || instruction.payload > 1
+			if result != mir_type_string() || instruction.second != -1 || instruction.payload < mir_string_case_upper() || instruction.payload > mir_string_case_lower()
 				return "MIR String case conversion shape differs"
 			end
 			return ""
@@ -197,7 +199,7 @@ def mir_string_instruction_error(flow: MirFlow, native_module: MirModule, functi
 		if !mir_value_available(flow, block, index, instruction.first)
 			return "MIR String trim operand is undefined"
 		end
-		if first != mir_type_string() || result != mir_type_string() || instruction.second != -1 || instruction.payload < 0 || instruction.payload > 2
+		if first != mir_type_string() || result != mir_type_string() || instruction.second != -1 || instruction.payload < mir_string_trim_both() || instruction.payload > mir_string_trim_right()
 			return "MIR String trim type or mode differs"
 		end
 		return ""
@@ -233,13 +235,13 @@ def mir_string_instruction_error(flow: MirFlow, native_module: MirModule, functi
 		return ""
 	end
 	if kind == mir_op_string_sequence()
-		if first != mir_type_string() || instruction.second != -1 || instruction.payload < 0 || instruction.payload > 2
+		if first != mir_type_string() || instruction.second != -1 || instruction.payload < mir_string_sequence_codepoints() || instruction.payload > mir_string_sequence_reverse()
 			return "MIR String sequence operand or mode differs"
 		end
 		mut expected := "Array<Integer>"
-		if instruction.payload == 1
+		if instruction.payload == mir_string_sequence_chars()
 			expected = "Array<String>"
-		elsif instruction.payload == 2
+		elsif instruction.payload == mir_string_sequence_reverse()
 			expected = "String"
 		end
 		if mir_semantic_type_name(native_module, result) != expected
@@ -255,10 +257,10 @@ def mir_string_instruction_error(flow: MirFlow, native_module: MirModule, functi
 			return "MIR String operand type differs"
 		end
 		# String search: first/last code-point search or prefix/suffix/contains predicates.
-		if kind == mir_op_string_query() && second == mir_type_string() && result == mir_type_integer() && instruction.payload >= 0 && instruction.payload <= 4
+		if kind == mir_op_string_query() && second == mir_type_string() && result == mir_type_integer() && instruction.payload >= mir_string_query_first() && instruction.payload <= mir_string_query_contains()
 			return ""
 		end
-		if kind == mir_op_string_compare() && second == mir_type_string() && result == mir_type_boolean() && instruction.payload >= 0 && instruction.payload <= 2
+		if kind == mir_op_string_compare() && second == mir_type_string() && result == mir_type_boolean() && instruction.payload >= mir_string_compare_equal() && instruction.payload <= mir_string_compare_before()
 			return ""
 		end
 		if instruction.payload == 0 && result == mir_type_string()
@@ -274,20 +276,20 @@ def mir_string_instruction_error(flow: MirFlow, native_module: MirModule, functi
 			return ""
 		end
 		if kind == mir_op_scalar_conversion()
-			if first == mir_type_string() && ((instruction.payload == 6 && result == mir_type_float()) || ((instruction.payload == 7 || instruction.payload == 8) && result == mir_type_integer()))
+			if first == mir_type_string() && ((instruction.payload == mir_convert_string_to_float() && result == mir_type_float()) || ((instruction.payload == mir_convert_string_integer_status() || instruction.payload == mir_convert_string_float_status()) && result == mir_type_integer()))
 				return ""
 			end
-			if result == mir_type_string() && ((instruction.payload == 1 && first == mir_type_integer()) || (instruction.payload == 4 && first == mir_type_float()) || (instruction.payload == 5 && first == mir_type_boolean()))
+			if result == mir_type_string() && ((instruction.payload == mir_convert_integer_to_string() && first == mir_type_integer()) || (instruction.payload == mir_convert_float_to_string() && first == mir_type_float()) || (instruction.payload == mir_convert_boolean_to_string() && first == mir_type_boolean()))
 				return ""
 			end
-			if result == mir_type_integer() && ((instruction.payload == 2 && first == mir_type_string()) || (instruction.payload == 3 && first == mir_type_float()))
+			if result == mir_type_integer() && ((instruction.payload == mir_convert_string_to_integer() && first == mir_type_string()) || (instruction.payload == mir_convert_float_to_integer() && first == mir_type_float()))
 				return ""
 			end
 		end
-		if kind == mir_op_puts() && instruction.payload == 0 && instruction.result == -1 && (first == mir_type_string() || first == mir_type_boolean())
+		if kind == mir_op_puts() && instruction.payload == mir_puts_scalar_mode() && instruction.result == -1 && (first == mir_type_string() || first == mir_type_boolean())
 			return ""
 		end
-		if kind == mir_op_puts() && instruction.payload == 1 && instruction.result == -1 && mir_semantic_type_name(native_module, first) == "Any"
+		if kind == mir_op_puts() && instruction.payload == mir_puts_any_mode() && instruction.result == -1 && mir_semantic_type_name(native_module, first) == "Any"
 			return ""
 		end
 	end

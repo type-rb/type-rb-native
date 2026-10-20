@@ -1,3 +1,4 @@
+import { standard_source_errors, standard_source_internal_url, standard_source_official_start, standard_source_result, standard_source_unit, standard_source_url } from state/standard_source_kinds
 import { lex_module } from frontend/syntax/lexer
 import { parse_module } from frontend/syntax/parser
 import { CompilerState, add_module, diagnostic, has_diagnostic } from state/state
@@ -8,67 +9,67 @@ import { sparse_integer_at, store_integer } from support/storage
 # modules. Their owner tag is assigned only by this loader, never by spelling.
 def standard_source_kind(path: String): Integer
 	if path == "trb/std/result"
-		return 1
+		return standard_source_result()
 	end
 	if path == "trb/std/unit"
-		return 2
+		return standard_source_unit()
 	end
 	if path == "trb/std/errors"
-		return 3
+		return standard_source_errors()
 	end
 	if path == "trb/std/url"
-		return 4
+		return standard_source_url()
 	end
 	if path == "trb/internal/url"
-		return 5
+		return standard_source_internal_url()
 	end
 	return official_source_kind(path)
 end
 
 def standard_source_name(kind: Integer): String
-	if kind >= 100
+	if kind >= standard_source_official_start()
 		return official_source_name(kind)
 	end
-	if kind == 4
+	if kind == standard_source_url()
 		return "trb/std/url/index"
 	end
-	if kind == 5
+	if kind == standard_source_internal_url()
 		return "trb/internal/url/index"
 	end
-	if kind == 1
+	if kind == standard_source_result()
 		return "trb/std/result/index"
 	end
-	if kind == 3
+	if kind == standard_source_errors()
 		return "trb/std/errors/index"
 	end
 	return "trb/std/unit/index"
 end
 
 def standard_source_text(kind: Integer): String
-	if kind >= 100
+	if kind >= standard_source_official_start()
 		return official_source_text(kind)
 	end
-	if kind == 4
+	if kind == standard_source_url()
 		return pinned_url_source()
 	end
-	if kind == 5
+	if kind == standard_source_internal_url()
 		return native_url_source()
 	end
-	if kind == 1
+	if kind == standard_source_result()
 		return "enum Result<T, E>\nOk(value: T)\nErr(error: E)\nend\n"
 	end
-	if kind == 3
+	if kind == standard_source_errors()
 		return "record EnumValueError\nvalue: String | Integer\nmessage: String\nend\nrecord IndexLookupError\nindex: Integer\nsize: Integer\nmessage: String\nend\nrecord SliceRangeError\nstart: Integer\nfinish: Integer\nexclusive: Boolean\nsize: Integer\nmessage: String\nend\nrecord KeyLookupError\nkey: String | Integer\nmessage: String\nend\nenum NumberParseErrorKind\nInvalidFormat\nOutOfRange\nend\nrecord NumberParseError\nkind: NumberParseErrorKind\ninput: String\nmessage: String\nend\n"
 	end
 	return "record Unit\nend\n"
 end
 
 def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer): Integer
-	if kind == 5 && sparse_integer_at(state.standard_modules, state.module_graph.active_module[0]) != 4
+	if kind == standard_source_internal_url() && sparse_integer_at(state.standard_modules, state.module_graph.active_module[0]) != standard_source_url()
 		diagnostic(state, "TRBN4003", line, "internal package imports are reserved for verified standard sources: trb/internal/url")
 		return -1
 	end
-	if kind >= 100 && !official_source_supported(kind)
+	if kind >= standard_source_official_start() && !official_source_supported(kind)
 		diagnostic(state, "TRBN4003", line, "official package requires an unimplemented platform or semantic provider: " + official_source_name(kind))
 		return -1
 	end

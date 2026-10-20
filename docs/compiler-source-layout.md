@@ -117,7 +117,11 @@ receive the same fold.
 | Source operators, checked operator plans, declaration receivers and methods | `frontend/types/operators`, `operator_plans`, `value_categories`, `method_kinds` |
 | Declaration, generic, attribute, iteration and transform kinds | Corresponding `frontend/types/*_kinds` modules |
 | MIR instructions, types, control, calls, Hash actions and numeric proofs | Corresponding `mir/model` modules |
+| Instruction-specific conversion, query, copy, guard and field modes | `mir/model/operation_modes` |
 | Parsed JSON node categories | `project/json_kinds` |
+| Loader-owned standard source identities | `state/standard_source_kinds` |
+| Shared QBE runtime requirement slots | `backend/qbe/runtime_slots` |
+| REPL display, control flow and input status | `repl/display_kinds`, `flow_kinds`, `input_status` in the CLI |
 
 Name shared-array indices without changing alias ownership: writes must remain
 visible to the other holders of the same state cell. A sole `[0]` cell, ordinary
@@ -131,6 +135,24 @@ encoding or deliberately forge invalid MIR may retain literal values. Such
 fixtures should not derive their expected value from the implementation being
 tested. Regenerate recovery inventories with `tools/recovery_layout_sync.py`
 after moving or adding an owner; do not maintain a second mapping in recovery.
+
+The remaining numerical boundaries are intentional:
+
+- The official source generator assigns catalog IDs from 100. Handwritten
+  loader code names that boundary; the generated catalog and upstream source
+  bytes remain generator-owned.
+- Process and Math use negative virtual import targets. Their translation to
+  checked receivers and runtime adapters is documented at the translation
+  sites, rather than treating the targets as source module IDs.
+- MIR payloads can hold SSA operands, literal indices, capacity limits or an
+  unused zero. Use an operation mode only when that opcode defines one.
+  Runtime assembly strings preserve the corresponding wire representation.
+- Callable flow distinguishes unresolved and unknown negative states;
+  nullable facts distinguish a binding from a replacement barrier.
+  These meanings stay with their analysis owners.
+- One-cell mutable flags, terminal bytes, OS exit codes, word offsets,
+  allocation sizes, hash parameters and checksum constants are data at their
+  existing boundaries. Naming semantic tags does not require renaming them.
 
 Recovery has its own `recovery/trbconfig.jsonc`, project name
 `type-rb-native-recovery`, and Go module

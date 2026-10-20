@@ -1,3 +1,4 @@
+import { mir_array_copy_duplicate, mir_array_copy_slice, mir_array_mutate_shift, mir_array_mutate_unshift } from mir/model/operation_modes
 import { checked_category_value } from frontend/types/value_categories
 import { mir_type_integer, mir_type_none } from mir/model/type_ids
 import { mir_op_array_copy, mir_op_array_load, mir_op_array_mutate, mir_op_array_new, mir_op_array_position, mir_op_array_push, mir_op_array_size, mir_op_array_store } from mir/model/instructions
@@ -11,15 +12,14 @@ import { CompilerState } from state/state
 import { CheckedLocals } from state/local_state
 import { load_integer } from support/storage
 
-# 19: empty Array, optionally borrowing an Array length as a capacity hint;
+# Array construction may borrow another Array length as a capacity hint;
 # its payload caps the hint when positive, and zero leaves it uncapped.
-# 20: live size; 21: checked logical position; 22: load;
-# 23: store (payload is the value); 24: push. Position selection precedes RHS
-# evaluation. Loads/stores keep the owner and logical index, never an address.
+# Position selection precedes RHS evaluation. Loads/stores keep the owner
+# and logical index, never an address; a store carries its value in payload.
 def mir_checked_array_operation(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, first: Integer, second: Integer, payload: Integer, type_name: String, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
 	type_id := mir_semantic_type_id(state.scalar_mir, type_name)
-	if (type_id == mir_type_none() && type_name != "Void") || (kind != mir_op_array_new() && first < 0) || (((kind >= mir_op_array_position() && kind <= mir_op_array_push()) || (kind == mir_op_array_copy() && payload == 2) || (kind == mir_op_array_mutate() && payload == 0)) && second < 0) || (kind == mir_op_array_store() && payload < 0)
+	if (type_id == mir_type_none() && type_name != "Void") || (kind != mir_op_array_new() && first < 0) || (((kind >= mir_op_array_position() && kind <= mir_op_array_push()) || (kind == mir_op_array_copy() && payload == mir_array_copy_slice()) || (kind == mir_op_array_mutate() && payload == mir_array_mutate_unshift())) && second < 0) || (kind == mir_op_array_store() && payload < 0)
 		scalar_mir_disable(locals)
 	end
 	mut mutable := 0
@@ -117,10 +117,10 @@ def mir_array_instruction_error(flow: MirFlow, native_module: MirModule, functio
 		return "MIR Array owner type differs"
 	end
 	if kind == mir_op_array_mutate()
-		if instruction.payload < 0 || instruction.payload > 2
+		if instruction.payload < mir_array_mutate_unshift() || instruction.payload > mir_array_mutate_shift()
 			return "MIR Array mutation mode differs"
 		end
-		if instruction.payload == 0
+		if instruction.payload == mir_array_mutate_unshift()
 			if instruction.result != -1 || !mir_value_available(flow, block, index, instruction.second) || mir_flow_type(flow, instruction.second) != element
 				return "MIR Array unshift type differs"
 			end
@@ -130,10 +130,10 @@ def mir_array_instruction_error(flow: MirFlow, native_module: MirModule, functio
 		return ""
 	end
 	if kind == mir_op_array_copy()
-		if result != mir_flow_type(flow, instruction.first) || instruction.payload < 0 || instruction.payload > 2
+		if result != mir_flow_type(flow, instruction.first) || instruction.payload < mir_array_copy_duplicate() || instruction.payload > mir_array_copy_slice()
 			return "MIR Array copy result or mode differs"
 		end
-		if instruction.payload < 2
+		if instruction.payload < mir_array_copy_slice()
 			if instruction.second != -1
 				return "MIR Array copy has unexpected bounds"
 			end

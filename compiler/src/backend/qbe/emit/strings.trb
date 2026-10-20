@@ -1,3 +1,5 @@
+import { mir_convert_boolean_to_string, mir_convert_float_to_integer, mir_convert_float_to_string, mir_convert_string_float_status, mir_convert_string_integer_status, mir_convert_string_to_float, mir_convert_string_to_integer, mir_puts_any_mode, mir_string_compare_before, mir_string_compare_not_equal, mir_string_sequence_reverse } from mir/model/operation_modes
+import { qbe_runtime_boolean_output_slot, qbe_runtime_float_string_slot, qbe_runtime_process_slot } from backend/qbe/runtime_slots
 import { mir_type_boolean } from mir/model/type_ids
 import { mir_op_array_join, mir_op_puts, mir_op_scalar_conversion, mir_op_string_case, mir_op_string_compare, mir_op_string_index, mir_op_string_literal, mir_op_string_query, mir_op_string_replace, mir_op_string_sequence, mir_op_string_size, mir_op_string_slice, mir_op_string_split, mir_op_string_trim } from mir/model/instructions
 import { integer_string } from support/literals
@@ -38,13 +40,13 @@ def emit_mir_string_instruction(state: CompilerState, value_types: Array<Integer
 	first := operands[instruction.first]
 	if kind == mir_op_puts()
 		mut runtime := "$trbn_puts"
-		if instruction.payload == 1
+		if instruction.payload == mir_puts_any_mode()
 			runtime = "$trbn_puts_any"
-			output.runtime_flags[1] = 1
-			output.runtime_flags[6] = 1
+			output.runtime_flags[qbe_runtime_process_slot()] = 1
+			output.runtime_flags[qbe_runtime_float_string_slot()] = 1
 		elsif mir_operand_type(value_types, instruction.first) == mir_type_boolean()
 			runtime = "$trbn_puts_boolean"
-			output.runtime_flags[4] = 1
+			output.runtime_flags[qbe_runtime_boolean_output_slot()] = 1
 		end
 		qbe_output_line(output, "\tcall " + runtime + "(l " + first + ")")
 		return emitted_value("", "Void")
@@ -63,7 +65,7 @@ def emit_mir_string_instruction(state: CompilerState, value_types: Array<Integer
 	elsif kind == mir_op_string_slice()
 		qbe_output_line(output, "\t" + result + " =l call $trbn_string_slice(l " + first + ", l " + operands[instruction.second] + ")")
 	elsif kind == mir_op_string_sequence()
-		if instruction.payload == 2
+		if instruction.payload == mir_string_sequence_reverse()
 			qbe_output_line(output, "\t" + result + " =l call $trbn_string_reverse(l " + first + ")")
 		else
 			qbe_output_line(output, "\t" + result + " =l call $trbn_string_sequence(l " + first + ", l " + integer_string(instruction.payload) + ")")
@@ -75,26 +77,26 @@ def emit_mir_string_instruction(state: CompilerState, value_types: Array<Integer
 		qbe_output_line(output, "\t" + address + " =l add " + first + ", 16")
 		qbe_output_line(output, "\t" + result + " =l loadl " + address)
 	elsif kind == mir_op_scalar_conversion()
-		output.runtime_flags[1] = 1
+		output.runtime_flags[qbe_runtime_process_slot()] = 1
 		mut storage := "l"
 		mut conversion := "$trbn_integer_to_string(l "
-		if instruction.payload == 2
+		if instruction.payload == mir_convert_string_to_integer()
 			conversion = "$trbn_string_to_integer(l "
-		elsif instruction.payload == 3
+		elsif instruction.payload == mir_convert_float_to_integer()
 			conversion = "$trbn_float_to_integer(d "
-		elsif instruction.payload == 4
+		elsif instruction.payload == mir_convert_float_to_string()
 			conversion = "$trbn_float_to_string(d "
-			output.runtime_flags[6] = 1
-		elsif instruction.payload == 5
+			output.runtime_flags[qbe_runtime_float_string_slot()] = 1
+		elsif instruction.payload == mir_convert_boolean_to_string()
 			conversion = "$trbn_boolean_to_string(l "
-			output.runtime_flags[4] = 1
+			output.runtime_flags[qbe_runtime_boolean_output_slot()] = 1
 		end
-		if instruction.payload == 6
+		if instruction.payload == mir_convert_string_to_float()
 			conversion = "$trbn_string_to_float(l "
 			storage = "d"
-		elsif instruction.payload == 7
+		elsif instruction.payload == mir_convert_string_integer_status()
 			conversion = "$trbn_string_integer_status(l "
-		elsif instruction.payload == 8
+		elsif instruction.payload == mir_convert_string_float_status()
 			conversion = "$trbn_string_float_status(l "
 		end
 		qbe_output_line(output, "\t" + result + " =" + storage + " call " + conversion + first + ")")
@@ -102,14 +104,14 @@ def emit_mir_string_instruction(state: CompilerState, value_types: Array<Integer
 		mut runtime := "$trbn_string_concat"
 		if kind == mir_op_string_compare()
 			runtime = "$trbn_string_equal"
-			if instruction.payload == 2
+			if instruction.payload == mir_string_compare_before()
 				runtime = "$trbn_string_before"
 			end
 		elsif kind == mir_op_string_index()
 			runtime = "$trbn_string_index"
 		end
 		qbe_output_line(output, "\t" + result + " =l call " + runtime + "(l " + first + ", l " + operands[instruction.second] + ")")
-		if kind == mir_op_string_compare() && instruction.payload == 1
+		if kind == mir_op_string_compare() && instruction.payload == mir_string_compare_not_equal()
 			inverted := emit_temporary(context)
 			qbe_output_line(output, "\t" + inverted + " =l ceql " + result + ", 0")
 			return emitted_value(inverted, result_type)

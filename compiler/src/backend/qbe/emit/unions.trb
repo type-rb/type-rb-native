@@ -1,3 +1,5 @@
+import { mir_puts_any_mode } from mir/model/operation_modes
+import { qbe_runtime_float_string_slot, qbe_runtime_process_slot } from backend/qbe/runtime_slots
 import { mir_type_boolean, mir_type_composite_start, mir_type_float, mir_type_float_array, mir_type_integer, mir_type_integer_array, mir_type_string } from mir/model/type_ids
 import { mir_type_kind_any, mir_type_kind_array, mir_type_kind_bytes, mir_type_kind_hash, mir_type_kind_nil, mir_type_kind_union } from mir/model/type_kinds
 import { mir_op_puts, mir_op_union_inject, mir_op_union_test } from mir/model/instructions
@@ -60,7 +62,7 @@ def emit_any_output_runtime(state: CompilerState, mut output: QbeOutput)
 	mut used := false
 	mut any_type := 0
 	state.scalar_mir.instructions.each do |instruction|
-		if instruction.kind == mir_op_puts() && instruction.payload == 1
+		if instruction.kind == mir_op_puts() && instruction.payload == mir_puts_any_mode()
 			used = true
 		end
 	end
@@ -74,8 +76,8 @@ def emit_any_output_runtime(state: CompilerState, mut output: QbeOutput)
 	if !used || any_type == 0
 		return
 	end
-	output.runtime_flags[1] = 1
-	output.runtime_flags[6] = 1
+	output.runtime_flags[qbe_runtime_process_slot()] = 1
+	output.runtime_flags[qbe_runtime_float_string_slot()] = 1
 	qbe_output_line(output, "data $trbn_any_array_open = { b \"&[\" }\ndata $trbn_any_hash_open = { b \"map[\" }\ndata $trbn_any_close = { b \"]\" }\ndata $trbn_any_space = { b \" \" }\ndata $trbn_any_colon = { b \":\" }\ndata $trbn_any_dot = { b \".\" }\ndata $trbn_any_minus = { b \"-\" }\ndata $trbn_any_zero = { b \"0\" }\ndata $trbn_any_nil = { b \"<nil>\" }\ndata $trbn_any_true = { b \"true\" }\ndata $trbn_any_false = { b \"false\" }\ndata $trbn_any_positive_inf = { b \"+Inf\" }\ndata $trbn_any_negative_inf = { b \"-Inf\" }\ndata $trbn_any_exponent = { b \"e%+03d\", b 0 }\ndata $trbn_any_newline = { b 10 }\ndata $trbn_any_error = { b \"panic: Any value cannot be printed\", b 10 }")
 	qbe_output_line(output, "\nfunction $trbn_any_write_string(l %value) {\n@start\n %length_address =l add %value, 8\n %length =l loadl %length_address\n %data =l add %value, 24\n call $write(w 1, l %data, l %length)\n ret\n}\n")
 	qbe_output_line(output, "\nfunction $trbn_any_write_integer(l %value) {\n@start\n %string =l call $trbn_integer_to_string(l %value)\n call $trbn_any_write_string(l %string)\n ret\n}\n")

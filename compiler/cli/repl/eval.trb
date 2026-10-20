@@ -1,6 +1,7 @@
+import { control_syntax_case, control_syntax_guarded_transfer, control_syntax_if, control_syntax_ternary, loop_transfer_none } from state/control_kinds
+import { repl_flow_break, repl_flow_continue, repl_flow_kind_slot, repl_flow_loop_owner_slot, repl_flow_normal, repl_flow_return, repl_flow_value_slot, repl_loop_flow_offset } from repl/flow_kinds
 import { checked_logical_operator_offset } from frontend/types/operator_plans
 import { declaration_object } from frontend/types/declaration_kinds
-import { control_syntax_case, control_syntax_guarded_transfer, control_syntax_if, control_syntax_ternary, loop_transfer_none } from state/control_kinds
 import { transform_all, transform_any, transform_find, transform_find_index, transform_map, transform_none, transform_reduce, transform_select, transform_sort_by, transform_sort_by_descending } from frontend/types/transform_kinds
 import { iteration_source_array, iteration_source_hash, iteration_source_range } from frontend/types/iteration_kinds
 import { hash_action_copy, hash_action_delete, hash_action_empty, hash_action_fetch, hash_action_has_key, hash_action_index_write, hash_action_keys, hash_action_merge, hash_action_none, hash_action_size, hash_action_update } from mir/model/hash_actions
@@ -287,7 +288,7 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 		index += 1
 	end
 	mut position := [load_integer(state.declarations.function_body_starts, function)]
-	mut flow := [0]
+	mut flow := [repl_flow_normal()]
 	module_name := state.module_graph.active_module[0]
 	previous_owner := state.global_bindings.declaration_owner[0]
 	state.global_bindings.declaration_owner[0] = sparse_string_at(state.source_tokens.token_namespaces, position[0])
@@ -401,7 +402,7 @@ def repl_indirect_call(mut store: ReplStore, id: Integer, arguments: Array<Integ
 	store.depth[0] += 1
 	mut environment := repl_closure_environment(state, store, id, arguments)
 	mut position := [load_integer(state.declarations.function_body_starts, function)]
-	mut flow := [0]
+	mut flow := [repl_flow_normal()]
 	mut result := repl_block(state, position, store, environment, flow, -1)
 	result_type := load_string(state.declarations.function_result_types, function)
 	if result_type == "Void"
@@ -434,7 +435,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		origin := position[0]
 		position[0] += 1
 		operand := repl_postfix(state, position, store, environment, "")
-		if store.error[0] != "" || environment.flow[0] != 0
+		if store.error[0] != "" || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 			return operand
 		end
 		operation := result_projection(state, origin, false)
@@ -448,8 +449,8 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		end
 		converted := repl_coerce(store, payload, operation.boundary_error)
 		returned := repl_value(store, operation.boundary_type, operation.boundary_variant, 0.0, "Err", [converted])
-		environment.flow[0] = 1
-		environment.flow[1] = returned
+		environment.flow[repl_flow_kind_slot()] = repl_flow_return()
+		environment.flow[repl_flow_value_slot()] = returned
 		return repl_reference(returned)
 	end
 	if token_is(state, position[0], "if") || token_is(state, position[0], "case")
@@ -489,15 +490,15 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	if text == "+"
 		operand := repl_expression(state, position, store, environment, 8, "")
-		if environment.flow[0] != 0
-			return repl_reference(environment.flow[1])
+		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			return repl_reference(environment.flow[repl_flow_value_slot()])
 		end
 		return repl_reference(operand.value)
 	end
 	if text == "-"
 		operand := repl_expression(state, position, store, environment, 8, "")
-		if environment.flow[0] != 0
-			return repl_reference(environment.flow[1])
+		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			return repl_reference(environment.flow[repl_flow_value_slot()])
 		end
 		mut id := operand.value
 		if union_parts(repl_type(store, id)).size() > 0
@@ -511,16 +512,16 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	if text == "!"
 		operand := repl_expression(state, position, store, environment, 8, "Boolean")
-		if environment.flow[0] != 0
-			return repl_reference(environment.flow[1])
+		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			return repl_reference(environment.flow[repl_flow_value_slot()])
 		end
 		return repl_reference(repl_boolean(store, store.integers[operand.value] == 0))
 	end
 	if text == "("
 		skip_newlines(state, position)
 		result := repl_expression(state, position, store, environment, 1, expected)
-		if environment.flow[0] != 0
-			return repl_reference(environment.flow[1])
+		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			return repl_reference(environment.flow[repl_flow_value_slot()])
 		end
 		position[0] += 1
 		return result
@@ -535,13 +536,13 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		skip_newlines(state, position)
 		while !token_is(state, position[0], "}")
 			key := repl_expression(state, position, store, environment, 1, plan.key_type)
-			if environment.flow[0] != 0
-				return repl_reference(environment.flow[1])
+			if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+				return repl_reference(environment.flow[repl_flow_value_slot()])
 			end
 			position[0] += 1
 			item := repl_expression(state, position, store, environment, 1, plan.value_type)
-			if environment.flow[0] != 0
-				return repl_reference(environment.flow[1])
+			if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+				return repl_reference(environment.flow[repl_flow_value_slot()])
 			end
 			if store.error[0] != ""
 				return repl_reference(0)
@@ -572,8 +573,8 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		end
 		while !token_is(state, position[0], "]")
 			value := repl_expression(state, position, store, environment, 1, element)
-			if environment.flow[0] != 0
-				return repl_reference(environment.flow[1])
+			if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+				return repl_reference(environment.flow[repl_flow_value_slot()])
 			end
 			children.push(value.value)
 			if token_is(state, position[0], ",")
@@ -659,8 +660,8 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				parameter_type = load_string(state.declarations.parameter_types, start + slot)
 			end
 			value := repl_expression(state, position, store, environment, 1, parameter_type)
-			if environment.flow[0] != 0
-				return repl_reference(environment.flow[1])
+			if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+				return repl_reference(environment.flow[repl_flow_value_slot()])
 			end
 			bindings.values[slot] = repl_coerce(store, value.value, parameter_type)
 			if token_is(state, position[0], ",")
@@ -721,8 +722,8 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				end
 				type_name := state.nominal.enum_fields[row.field_start + slot].type_name
 				value := repl_expression(state, position, store, environment, 1, type_name)
-				if environment.flow[0] != 0
-					return repl_reference(environment.flow[1])
+				if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+					return repl_reference(environment.flow[repl_flow_value_slot()])
 				end
 				bindings.values[slot] = repl_coerce(store, value.value, type_name)
 				if token_is(state, position[0], ",")
@@ -761,8 +762,8 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			skip_newlines(state, position)
 			representation := state.nominal.newtypes[newtype_owner].representation
 			argument := repl_expression(state, position, store, environment, 1, representation)
-			if environment.flow[0] != 0
-				return repl_reference(environment.flow[1])
+			if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+				return repl_reference(environment.flow[repl_flow_value_slot()])
 			end
 			skip_newlines(state, position)
 			if token_is(state, position[0], ",")
@@ -785,8 +786,8 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				if operation.origin == call_origin
 					skip_newlines(state, position)
 					argument := repl_expression(state, position, store, environment, 1, raw_enum_type(state, operation.owner))
-					if environment.flow[0] != 0
-						return repl_reference(environment.flow[1])
+					if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+						return repl_reference(environment.flow[repl_flow_value_slot()])
 					end
 					skip_newlines(state, position)
 					position[0] += 1
@@ -798,8 +799,8 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		end
 		if standard_package_import(state, state.module_graph.active_module[0], text) == -3
 			argument := repl_expression(state, position, store, environment, 1, "Float")
-			if environment.flow[0] != 0
-				return repl_reference(environment.flow[1])
+			if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+				return repl_reference(environment.flow[repl_flow_value_slot()])
 			end
 			position[0] += 1
 			value := repl_coerce(store, argument.value, "Float")
@@ -828,8 +829,8 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					field := start + slot
 					type_name := load_string(state.declarations.field_types, field)
 					value := repl_expression(state, position, store, environment, 1, type_name)
-					if environment.flow[0] != 0
-						return repl_reference(environment.flow[1])
+					if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+						return repl_reference(environment.flow[repl_flow_value_slot()])
 					end
 					bindings.values[slot] = repl_coerce(store, value.value, type_name)
 					if token_is(state, position[0], ",")
@@ -857,8 +858,8 @@ def repl_callable_expression(mut state: CompilerState, mut position: Array<Integ
 	mut arguments: Array<Integer> := []
 	while !token_is(state, position[0], ")") && store.error[0] == ""
 		argument := repl_expression(state, position, store, environment, 1, parts[arguments.size() + 1])
-		if environment.flow[0] != 0
-			return repl_reference(environment.flow[1])
+		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			return repl_reference(environment.flow[repl_flow_value_slot()])
 		end
 		arguments.push(argument.value)
 		skip_newlines(state, position)
@@ -876,8 +877,8 @@ end
 
 def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, expected: String): ReplReference
 	mut result := repl_primary(state, position, store, environment, expected)
-	if environment.flow[0] != 0
-		return repl_reference(environment.flow[1])
+	if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+		return repl_reference(environment.flow[repl_flow_value_slot()])
 	end
 	mut complete := false
 	while !complete
@@ -913,8 +914,8 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				repl_set_type(store, result.value, plan.type_name)
 				position[0] += 1
 				key := repl_expression(state, position, store, environment, 1, plan.key_type)
-				if environment.flow[0] != 0
-					return repl_reference(environment.flow[1])
+				if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+					return repl_reference(environment.flow[repl_flow_value_slot()])
 				end
 				position[0] += 1
 				if plan.kind == hash_action_index_write()
@@ -926,8 +927,8 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			end
 			position[0] += 1
 			requested := repl_expression(state, position, store, environment, 1, "Integer")
-			if environment.flow[0] != 0
-				return repl_reference(environment.flow[1])
+			if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+				return repl_reference(environment.flow[repl_flow_value_slot()])
 			end
 			position[0] += 1
 			mut length := value.children.size()
@@ -958,7 +959,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					if store.error[0] != ""
 						return result
 					end
-					if safe_origin >= 0 && environment.flow[0] == 0
+					if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
 						result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 					end
 					next
@@ -981,7 +982,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					else
 						result = repl_reference(repl_object_method(state, position, store, environment, value.type_name, member, result.value))
 					end
-					if safe_origin >= 0 && environment.flow[0] == 0
+					if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
 						result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 					end
 					next
@@ -1005,7 +1006,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 							function := newtype_method_function(state, value.type_name, member, false)
 							result = repl_reference(repl_nominal_method_call(state, position, store, environment, function, result.value))
 						end
-						if safe_origin >= 0 && environment.flow[0] == 0
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -1023,7 +1024,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					method_function := enum_method_function(state, value.type_name, member)
 					if method_function >= 0
 						result = repl_reference(repl_nominal_method_call(state, position, store, environment, method_function, result.value))
-						if safe_origin >= 0 && environment.flow[0] == 0
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -1050,8 +1051,8 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						position[0] += 1
 						skip_newlines(state, position)
 						argument := repl_expression(state, position, store, environment, 1, argument_type)
-						if environment.flow[0] != 0
-							return repl_reference(environment.flow[1])
+						if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+							return repl_reference(environment.flow[repl_flow_value_slot()])
 						end
 						if store.error[0] != ""
 							return repl_reference(0)
@@ -1064,14 +1065,14 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						position[0] += 1
 						converted := repl_coerce(store, argument.value, argument_type)
 						result = repl_reference(repl_builtin_lookup(state, store, kind, result.value, converted, load_string(state.callables.checked[0].builtin_result_types, origin)))
-						if safe_origin >= 0 && environment.flow[0] == 0 && store.error[0] == ""
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
 					end
 					if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
 						result = repl_reference(repl_hash_method(state, position, store, environment, result.value))
-						if safe_origin >= 0 && environment.flow[0] == 0
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -1101,8 +1102,8 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 								argument_type = "String"
 							end
 							checked_argument := repl_expression(state, position, store, environment, 1, argument_type)
-							if environment.flow[0] != 0
-								return repl_reference(environment.flow[1])
+							if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+								return repl_reference(environment.flow[repl_flow_value_slot()])
 							end
 							if store.error[0] != ""
 								return repl_reference(0)
@@ -1116,7 +1117,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						position[0] += 1
 						result = repl_reference(repl_array_method(store, kind, result.value, argument))
-						if safe_origin >= 0 && environment.flow[0] == 0 && store.error[0] == ""
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -1128,8 +1129,8 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						mut argument := -1
 						if bytes_method_arity(kind) == 1
 							checked_argument := repl_expression(state, position, store, environment, 1, bytes_method_argument_type(kind))
-							if environment.flow[0] != 0
-								return repl_reference(environment.flow[1])
+							if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+								return repl_reference(environment.flow[repl_flow_value_slot()])
 							end
 							if store.error[0] != ""
 								return repl_reference(0)
@@ -1143,7 +1144,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						position[0] += 1
 						result = repl_reference(repl_bytes_method(store, kind, result.value, argument))
-						if safe_origin >= 0 && environment.flow[0] == 0 && store.error[0] == ""
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -1156,8 +1157,8 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						mut arguments: Array<Integer> := []
 						while arguments.size() < string_method_arity(kind)
 							checked_argument := repl_expression(state, position, store, environment, 1, string_method_argument_type(kind))
-							if environment.flow[0] != 0
-								return repl_reference(environment.flow[1])
+							if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+								return repl_reference(environment.flow[repl_flow_value_slot()])
 							end
 							if store.error[0] != ""
 								return repl_reference(0)
@@ -1176,7 +1177,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						else
 							result = repl_reference(repl_string_method(store, kind, result.value, argument))
 						end
-						if safe_origin >= 0 && environment.flow[0] == 0 && store.error[0] == ""
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -1186,7 +1187,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						skip_newlines(state, position)
 						position[0] += 1
 						result = repl_reference(repl_float_method(store, float_method_kind(member), result.value))
-						if safe_origin >= 0 && environment.flow[0] == 0 && store.error[0] == ""
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -1198,8 +1199,8 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						mut arguments: Array<Integer> := []
 						while arguments.size() < integer_method_arity(kind)
 							argument := repl_expression(state, position, store, environment, 1, "Integer")
-							if environment.flow[0] != 0
-								return repl_reference(environment.flow[1])
+							if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+								return repl_reference(environment.flow[repl_flow_value_slot()])
 							end
 							if store.error[0] != ""
 								return repl_reference(0)
@@ -1213,7 +1214,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						position[0] += 1
 						result = repl_reference(repl_integer_method(store, kind, result.value, arguments))
-						if safe_origin >= 0 && environment.flow[0] == 0 && store.error[0] == ""
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -1221,8 +1222,8 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					position[0] += 1
 					if member == "push"
 						argument := repl_expression(state, position, store, environment, 1, array_element_type(value.type_name))
-						if environment.flow[0] != 0
-							return repl_reference(environment.flow[1])
+						if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+							return repl_reference(environment.flow[repl_flow_value_slot()])
 						end
 						store.children[result.value].push(repl_coerce(store, argument.value, array_element_type(value.type_name)))
 						result = repl_reference(0)
@@ -1251,7 +1252,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				complete = true
 			end
 		end
-		if safe_origin >= 0 && environment.flow[0] == 0
+		if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
 			result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 		end
 	end
@@ -1261,8 +1262,8 @@ end
 def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, minimum: Integer, expected: String): ReplReference
 	expression_origin := position[0]
 	mut result := repl_postfix(state, position, store, environment, expected)
-	if environment.flow[0] != 0
-		return repl_reference(environment.flow[1])
+	if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+		return repl_reference(environment.flow[repl_flow_value_slot()])
 	end
 	mut complete := false
 	while !complete
@@ -1293,8 +1294,8 @@ def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut 
 					result = repl_reference(result.value)
 				else
 					result = repl_reference(repl_expression(state, position, store, environment, precedence + 1, "Boolean").value)
-					if environment.flow[0] != 0
-						return repl_reference(environment.flow[1])
+					if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+						return repl_reference(environment.flow[repl_flow_value_slot()])
 					end
 				end
 			else
@@ -1304,8 +1305,8 @@ def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut 
 					right_precedence = precedence
 				end
 				right := repl_expression(state, position, store, environment, right_precedence, "")
-				if environment.flow[0] != 0
-					return repl_reference(environment.flow[1])
+				if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+					return repl_reference(environment.flow[repl_flow_value_slot()])
 				end
 				if precedence == 3
 					if store.error[0] != ""
@@ -1389,8 +1390,8 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 	if store.error[0] != ""
 		return 0
 	end
-	if environment.flow[0] != 0
-		return environment.flow[1]
+	if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+		return environment.flow[repl_flow_value_slot()]
 	end
 	if token_is(state, plan.syntax.receiver_finish, "&.")
 		if repl_absent(store, receiver)
@@ -1407,8 +1408,8 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 	if plan.syntax.slice_start >= 0
 		position[0] = plan.syntax.slice_start
 		size := repl_expression(state, position, store, environment, 1, "Integer").value
-		if store.error[0] != "" || environment.flow[0] != 0
-			return environment.flow[1]
+		if store.error[0] != "" || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			return environment.flow[repl_flow_value_slot()]
 		end
 		slice_size = store.integers[size]
 		if slice_size <= 0
@@ -1480,12 +1481,12 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		end
 		position[0] = plan.syntax.body_start
 		result = repl_block(state, position, store, environment, flow, plan.syntax.origin)
-		if flow[0] == 2
-			flow[0] = 0
+		if flow[repl_flow_kind_slot()] == repl_flow_break()
+			flow[repl_flow_kind_slot()] = repl_flow_normal()
 			break
-		elsif flow[0] == 3
-			flow[0] = 0
-		elsif flow[0] != 0
+		elsif flow[repl_flow_kind_slot()] == repl_flow_continue()
+			flow[repl_flow_kind_slot()] = repl_flow_normal()
+		elsif flow[repl_flow_kind_slot()] != repl_flow_normal()
 			break
 		end
 		if store.error[0] != ""
@@ -1522,7 +1523,7 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 	end
 	environment.count[0] = saved
 	position[0] = plan.syntax.finish
-	if flow[0] == 1
+	if flow[repl_flow_kind_slot()] == repl_flow_return()
 		return result
 	end
 	return 0
@@ -1557,8 +1558,8 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 		while running
 			position[0] = start
 			condition := repl_expression(state, position, store, environment, 1, "Boolean")
-			if environment.flow[0] != 0
-				return environment.flow[1]
+			if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+				return environment.flow[repl_flow_value_slot()]
 			end
 			if store.integers[condition.value] == 0
 				running = false
@@ -1567,12 +1568,12 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 				result = repl_block(state, position, store, environment, flow, start - 1)
 				environment.count[0] = saved
 			end
-			if flow[0] == 2
-				flow[0] = 0
+			if flow[repl_flow_kind_slot()] == repl_flow_break()
+				flow[repl_flow_kind_slot()] = repl_flow_normal()
 				running = false
-			elsif flow[0] == 3
-				flow[0] = 0
-			elsif flow[0] != 0
+			elsif flow[repl_flow_kind_slot()] == repl_flow_continue()
+				flow[repl_flow_kind_slot()] = repl_flow_normal()
+			elsif flow[repl_flow_kind_slot()] != repl_flow_normal()
 				running = false
 			end
 			if store.error[0] != ""
@@ -1584,26 +1585,26 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 	end
 	if syntax_loop_transfer_kind(state, position[0]) > loop_transfer_none()
 		kind := checked_loop_transfer_kind(state, position[0], loop_origin)
-		if kind == 0
+		if kind == loop_transfer_none()
 			store.error[0] = "invalid checked loop transfer target"
 			return 0
 		end
 		# Return remains 1; the nearest while consumes exit/header transfers.
-		flow[0] = kind + 1
+		flow[repl_flow_kind_slot()] = kind + repl_loop_flow_offset()
 		position[0] += 1
 		return 0
 	end
 	if token_is(state, position[0], "return")
 		position[0] += 1
 		if syntax_statement_boundary(state, position[0]) || token_is(state, position[0], "if")
-			flow[0] = 1
+			flow[repl_flow_kind_slot()] = repl_flow_return()
 			return 0
 		end
 		value := repl_statement_expression(state, position, store, environment, "")
-		if environment.flow[0] != 0
-			return environment.flow[1]
+		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			return environment.flow[repl_flow_value_slot()]
 		end
-		flow[0] = 1
+		flow[repl_flow_kind_slot()] = repl_flow_return()
 		return value.value
 	end
 	if declaration_start(state, position[0])
@@ -1623,8 +1624,8 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 		end
 		position[0] += 1
 		value := repl_statement_expression(state, position, store, environment, expected)
-		if environment.flow[0] != 0
-			return environment.flow[1]
+		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			return environment.flow[repl_flow_value_slot()]
 		end
 		result := repl_coerce(store, value.value, expected)
 		if store.error[0] == ""
@@ -1633,8 +1634,8 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 		return result
 	end
 	left := repl_statement_expression(state, position, store, environment, "")
-	if environment.flow[0] != 0
-		return environment.flow[1]
+	if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+		return environment.flow[repl_flow_value_slot()]
 	end
 	if store.error[0] != ""
 		return 0
@@ -1682,8 +1683,8 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 			end
 		end
 		right := repl_statement_expression(state, position, store, environment, expected)
-		if environment.flow[0] != 0
-			return environment.flow[1]
+		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			return environment.flow[repl_flow_value_slot()]
 		end
 		mut result := repl_coerce(store, right.value, expected)
 		if operator != "=" && !logical
@@ -1730,7 +1731,7 @@ def repl_block(mut state: CompilerState, mut position: Array<Integer>, mut store
 			else
 				result = repl_statement(state, position, store, environment, flow, loop_origin)
 				skip_newlines(state, position)
-				if flow[0] != 0
+				if flow[repl_flow_kind_slot()] != repl_flow_normal()
 					complete = true
 				end
 			end
@@ -1747,14 +1748,14 @@ def repl_hash_method(mut state: CompilerState, mut position: Array<Integer>, mut
 	mut argument := 0
 	if plan.kind == hash_action_has_key() || plan.kind == hash_action_delete() || plan.kind == hash_action_fetch()
 		argument = repl_expression(state, position, store, environment, 1, plan.key_type).value
-		if environment.flow[0] != 0
-			return environment.flow[1]
+		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			return environment.flow[repl_flow_value_slot()]
 		end
 	end
 	if plan.kind == hash_action_merge() || plan.kind == hash_action_update()
 		argument = repl_expression(state, position, store, environment, 1, plan.type_name).value
-		if environment.flow[0] != 0
-			return environment.flow[1]
+		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			return environment.flow[repl_flow_value_slot()]
 		end
 	end
 	skip_newlines(state, position)
@@ -1804,8 +1805,8 @@ def repl_hash_method(mut state: CompilerState, mut position: Array<Integer>, mut
 end
 
 def repl_statement(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>, loop_origin: Integer): Integer
-	environment.flow[0] = flow[0]
-	environment.flow[2] = loop_origin
+	environment.flow[repl_flow_kind_slot()] = flow[repl_flow_kind_slot()]
+	environment.flow[repl_flow_loop_owner_slot()] = loop_origin
 	origin := position[0]
 	environment.result_origin[0] = origin
 	guard := sparse_integer_at(state.parsed.control_origins, position[0])
@@ -1814,16 +1815,16 @@ def repl_statement(mut state: CompilerState, mut position: Array<Integer>, mut s
 		position[0] = control.selector
 		condition := repl_expression(state, position, store, environment, 1, "Boolean")
 		mut result := 0
-		if environment.flow[0] != 0
-			result = environment.flow[1]
+		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			result = environment.flow[repl_flow_value_slot()]
 		end
-		if environment.flow[0] == 0 && store.integers[condition.value] != 0
+		if environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.integers[condition.value] != 0
 			position[0] = control.origin
 			result = repl_statement_value(state, position, store, environment, environment.flow, loop_origin)
 		end
-		flow[0] = environment.flow[0]
-		if flow[0] != 0
-			environment.flow[1] = result
+		flow[repl_flow_kind_slot()] = environment.flow[repl_flow_kind_slot()]
+		if flow[repl_flow_kind_slot()] != repl_flow_normal()
+			environment.flow[repl_flow_value_slot()] = result
 		end
 		position[0] = control.finish
 		return result
@@ -1835,9 +1836,9 @@ def repl_statement(mut state: CompilerState, mut position: Array<Integer>, mut s
 	if !token_is(state, origin, "if") && !token_is(state, origin, "case") && !token_is(state, origin, "while")
 		environment.result_origin[0] = origin
 	end
-	flow[0] = environment.flow[0]
-	if flow[0] != 0
-		environment.flow[1] = result
+	flow[repl_flow_kind_slot()] = environment.flow[repl_flow_kind_slot()]
+	if flow[repl_flow_kind_slot()] != repl_flow_normal()
+		environment.flow[repl_flow_value_slot()] = result
 	end
 	return result
 end
@@ -1853,7 +1854,7 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	mut result := 0
 	mut index := 0
-	while index < control.branches.size() && environment.flow[0] == 0 && store.error[0] == ""
+	while index < control.branches.size() && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
 		branch := control.branches[index]
 		mut selected := branch.condition < 0
 		if control.kind == control_syntax_ternary() && index == 0
@@ -1890,7 +1891,7 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				end
 			end
 		end
-		if environment.flow[0] != 0
+		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 			break
 		end
 		if selected
@@ -1898,7 +1899,7 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			if control.kind == control_syntax_ternary()
 				result = repl_expression(state, position, store, environment, 1, "").value
 			else
-				result = repl_block(state, position, store, environment, environment.flow, environment.flow[2])
+				result = repl_block(state, position, store, environment, environment.flow, environment.flow[repl_flow_loop_owner_slot()])
 			end
 			break
 		end
@@ -1906,8 +1907,8 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	environment.count[0] = saved
 	position[0] = control.finish
-	if environment.flow[0] != 0
-		return environment.flow[1]
+	if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+		return environment.flow[repl_flow_value_slot()]
 	end
 	return repl_coerce(store, result, load_string(state.callables.checked[0].control_types, origin))
 end
@@ -1920,7 +1921,7 @@ def repl_statement_expression(mut state: CompilerState, mut position: Array<Inte
 	end
 	handler := state.parsed.catch_syntax[encoded - 1]
 	operand := repl_expression(state, position, store, environment, 1, "")
-	if store.error[0] != "" || environment.flow[0] != 0
+	if store.error[0] != "" || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 		return operand
 	end
 	operation := result_projection(state, origin, true)
@@ -1933,12 +1934,12 @@ def repl_statement_expression(mut state: CompilerState, mut position: Array<Inte
 		saved := environment.count[0]
 		repl_bind(environment, load_string(state.source_tokens.token_texts, handler.binding), value, 0)
 		position[0] = handler.body
-		value = repl_block(state, position, store, environment, environment.flow, environment.flow[2])
+		value = repl_block(state, position, store, environment, environment.flow, environment.flow[repl_flow_loop_owner_slot()])
 		environment.count[0] = saved
 	end
 	position[0] = handler.finish
-	if environment.flow[0] != 0
-		return repl_reference(environment.flow[1])
+	if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+		return repl_reference(environment.flow[repl_flow_value_slot()])
 	end
 	return repl_reference(repl_coerce(store, repl_coerce(store, value, operation.success_type), expected))
 end
@@ -1961,7 +1962,7 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 	elsif syntax.kind == transform_reduce()
 		position[0] = syntax.initial_start
 		result = repl_expression(state, position, store, environment, 1, plan.type_name).value
-		if store.error[0] != "" || environment.flow[0] != 0
+		if store.error[0] != "" || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 			return result
 		end
 	else
@@ -1977,7 +1978,7 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 		bound = store.integers[store.children[receiver][1]]
 		exclusive = store.integers[store.children[receiver][2]]
 	end
-	mut flow := [0]
+	mut flow := [repl_flow_normal()]
 	while store.error[0] == ""
 		if plan.iteration.source_kind == iteration_source_array()
 			if cursor >= store.children[receiver].size()
@@ -2002,7 +2003,7 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 		end
 		position[0] = shape.body_start
 		yielded := repl_block(state, position, store, environment, flow, -1)
-		if store.error[0] != "" || flow[0] != 0 || environment.flow[0] != 0
+		if store.error[0] != "" || flow[repl_flow_kind_slot()] != repl_flow_normal() || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 			break
 		end
 		if syntax.kind >= transform_sort_by()
@@ -2053,7 +2054,7 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 	end
 	environment.count[0] = saved
 	position[0] = shape.finish
-	if syntax.kind >= transform_sort_by() && store.error[0] == "" && flow[0] == 0 && environment.flow[0] == 0
+	if syntax.kind >= transform_sort_by() && store.error[0] == "" && flow[repl_flow_kind_slot()] == repl_flow_normal() && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
 		return repl_array_sort_keys(store, result, keys, syntax.kind == transform_sort_by_descending())
 	end
 	return result
@@ -2078,8 +2079,8 @@ def repl_nominal_method_call(mut state: CompilerState, mut position: Array<Integ
 		start := load_integer(state.declarations.function_parameter_starts, function)
 		type_name := load_string(state.declarations.parameter_types, start + slot)
 		value := repl_expression(state, position, store, environment, 1, type_name)
-		if environment.flow[0] != 0
-			return environment.flow[1]
+		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			return environment.flow[repl_flow_value_slot()]
 		end
 		bindings.values[slot] = repl_coerce(store, value.value, type_name)
 		if token_is(state, position[0], ",")

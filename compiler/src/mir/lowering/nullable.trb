@@ -1,3 +1,4 @@
+import { mir_nil_test_equal, mir_nil_test_not_equal } from mir/model/operation_modes
 import { checked_category_value } from frontend/types/value_categories
 import { mir_control_parameter_count_slot } from state/local_slots
 import { mir_type_boolean, mir_type_none } from mir/model/type_ids
@@ -20,7 +21,7 @@ import { CheckedLocals } from state/local_state
 import { load_integer } from support/storage
 
 # Explicit operations retain semantics before optional representation lowering:
-# 33 none, 34 present, 35 nil test, 36 checked payload extraction.
+# None, present, nil testing and checked payload extraction have distinct opcodes.
 def mir_checked_nullable(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, value: CheckedValue, type_name: String, payload: Integer, origin: Integer): CheckedValue
 	result := scalar_mir_value(state, locals, mir_semantic_type_id(state.scalar_mir, type_name), origin)
 	if result < 0
@@ -103,7 +104,7 @@ def mir_nullable_instruction_error(flow: MirFlow, native_module: MirModule, func
 		return "MIR nullable operand is unavailable"
 	end
 	if instruction.kind == mir_op_nil_test()
-		if result != mir_type_boolean() || instruction.payload < 0 || instruction.payload > 1
+		if result != mir_type_boolean() || instruction.payload < mir_nil_test_equal() || instruction.payload > mir_nil_test_not_equal()
 			return "MIR nil test result or mode differs"
 		end
 		if mir_nullable_element(native_module, first) == mir_type_none() && mir_semantic_type_name(native_module, first) != "Nil"
@@ -111,7 +112,7 @@ def mir_nullable_instruction_error(flow: MirFlow, native_module: MirModule, func
 		end
 		return ""
 	end
-	if instruction.payload != 0
+	if instruction.payload != mir_nil_test_equal()
 		return "MIR nullable payload mode differs"
 	end
 	if instruction.kind == mir_op_nullable_inject()
@@ -141,7 +142,7 @@ def mir_nullable_widen(mut state: CompilerState, mut locals: CheckedLocals, valu
 	if value.type_name == "Any"
 		condition = mir_union_operation(state, locals, mir_op_union_test(), value, "Nil", "Boolean", origin)
 	else
-		condition = mir_checked_nullable(state, locals, mir_op_nil_test(), value, "Boolean", 0, origin)
+		condition = mir_checked_nullable(state, locals, mir_op_nil_test(), value, "Boolean", mir_nil_test_equal(), origin)
 	end
 	alternate := mir_control_branch(state, locals, condition, line)
 	absent := mir_checked_nullable(state, locals, mir_op_nullable_none(), value, expected, 0, origin)
