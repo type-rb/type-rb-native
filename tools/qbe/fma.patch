@@ -39,7 +39,7 @@
  	{ Odiv,    Ki, "sdiv %=, %0, %1" },
  	{ Odiv,    Ka, "fdiv %=, %0, %1" },
  	{ Oudiv,   Ki, "udiv %=, %0, %1" },
-@@ -564,6 +565,79 @@
+@@ -564,6 +565,88 @@
  
  */
  
@@ -69,7 +69,7 @@
 +static int
 +emitcontract(Ins *mul, Blk *b, E *e)
 +{
-+	Ins *add, *next, *end;
++	Ins *add, *next, *end, *prior;
 +	Ref other;
 +	char *op;
 +	char reg;
@@ -97,6 +97,15 @@
 +				break;
 +		}
 +		if (next == end) {
++			/* A predecessor-fed addend can be a reduction chain:
++			 * fusion may lengthen its critical path. Extend the
++			 * overwrite proof only for a locally defined addend.
++			 */
++			for (prior=b->ins; prior!=mul; prior++)
++				if (req(prior->to, other))
++					break;
++			if (prior == mul)
++				return 0;
 +			if (bshas(b->out, mul->to.val) || req(b->jmp.arg, mul->to))
 +				return 0;
 +			/* Return values are implicit uses, separate from successors. */
@@ -119,7 +128,7 @@
  void
  arm64_emitfn(Fn *fn, FILE *out)
  {
-@@ -629,11 +703,15 @@
+@@ -629,11 +712,15 @@
  			emitins(i, e);
  		}
  

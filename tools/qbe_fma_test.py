@@ -107,6 +107,25 @@ export function {width} ${width}_accumulate(l %values, l %count, {width} %b, {wi
 @done
  ret %sum
 }}
+export function {width} ${width}_update(l %values, l %count, {width} %b) {{
+@start
+ jmp @loop
+@loop
+ %i =l phi @start 0, @body %next
+ %more =w csltl %i, %count
+ jnz %more, @body, @done
+@body
+ %offset =l mul %i, {8 if width == "d" else 4}
+ %address =l add %values, %offset
+ %value ={width} load{width} %address
+ %product ={width} mulc %value, %b
+ %result ={width} add %value, %product
+ store{width} %result, %address
+ %next =l add %i, 1
+ jmp @loop
+@done
+ ret %b
+}}
 export function {width} ${width}_constant() {{
 @start
  %product ={width} mulc {width}_2.0, {width}_3.0
@@ -143,6 +162,7 @@ extern Scalar @W@_return_product(Scalar, Scalar, Scalar, Scalar *);
 extern Scalar @W@_successor(Scalar, Scalar, Scalar, int, Scalar *);
 extern Scalar @W@_carried(Scalar, Scalar, Scalar, long long, Scalar *);
 extern Scalar @W@_accumulate(Scalar *, long long, Scalar, Scalar);
+extern Scalar @W@_update(Scalar *, long long, Scalar);
 extern Scalar @W@_constant(void);
 Scalar echo_@W@(Scalar value) { return value; }
 static int same(Scalar a, Scalar b) {
@@ -195,13 +215,19 @@ static int check(Scalar a, Scalar b, Scalar c) {
     Scalar values[] = {a, b, c}, sum = c;
     for (int i = 0; i < 3; ++i) {
         volatile Scalar rounded = values[i] * b;
-        sum = HOST_FUSES ? @FMA@(values[i], b, sum) : sum + rounded;
+        sum = sum + rounded;
     }
     if (!same(@W@_accumulate(values, 3, b, c), sum)) return 46;
     observed = 7.0;
     if (!same(@W@_carried(a, b, c, 0, &observed), a)) return 47;
     if (observed != 7.0) return 48;
     if (!same(@W@_accumulate(values, 0, b, c), c)) return 49;
+    @W@_update(values, 3, b);
+    Scalar original[] = {a, b, c};
+    for (int i = 0; i < 3; ++i) {
+        volatile Scalar rounded = original[i] * b;
+        if (!same(values[i], original[i] + rounded) && !same(values[i], @FMA@(original[i], b, original[i]))) return 50;
+    }
     return 0;
 }
 int check_@W@(void) {
@@ -218,7 +244,7 @@ int check_@W@(void) {
             fprintf(stderr, "@W@ edge %u/%u/%u failed check %d\n", a, b, c, status);
             return status;
         }
-        checks += 24;
+        checks += 27;
     }
     uint64_t state = UINT64_C(0x384028ccab71e107);
     for (unsigned n = 0; n < 4096; ++n) {
@@ -233,7 +259,7 @@ int check_@W@(void) {
             fprintf(stderr, "@W@ random %u failed check %d\n", n, status);
             return status;
         }
-        checks += 24;
+        checks += 27;
     }
     printf("@W@ contraction: %u checks passed\n", checks);
     return 0;
@@ -265,7 +291,7 @@ def main():
                         assert fused == (target.startswith("arm64") and not prefix), (target, symbol)
                 body = re.split(rf"(?m)^_?{width}_accumulate:\s*$", result.stdout)[1]
                 body = body.split("/* end function")[0]
-                assert bool(re.search(r"\bfmadd\b", body)) == target.startswith("arm64"), (target, width)
+                assert not re.search(r"\bfmadd\b", body), (target, width, "accumulator")
         machine = platform.machine()
         arm64 = machine in ("arm64", "aarch64")
         if arm64:
