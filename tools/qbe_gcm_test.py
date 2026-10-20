@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check recursive expression motion and invariant loop guards."""
+"""Check expression motion, invariant guards and late loop layout."""
 import argparse
 import os
 from pathlib import Path
@@ -79,6 +79,50 @@ ADDRESS = """export function $address(l %p, l %seed, l %n) {
 }
 """
 
+CALLED = """export function l $called(l %seed, l %n) {
+@start
+ jmp @loop
+@loop
+ %i =l phi @start 0, @body %next
+ %value =l phi @start %seed, @body %updated
+ %more =w csltl %i, %n
+ jnz %more, @body, @done
+@body
+ %updated =l call $layout_step(l %value, l %i)
+ %next =l add %i, 1
+ jmp @loop
+@done
+ ret %value
+}
+"""
+
+NESTED = """export function l $nested(l %n, l %m) {
+@start
+ jmp @outer
+@outer
+ %i =l phi @start 0, @advance %nexti
+ %total =l phi @start 0, @advance %sum
+ %morei =w csltl %i, %n
+ jnz %morei, @prepare, @done
+@prepare
+ jmp @inner
+@inner
+ %j =l phi @prepare 0, @body %nextj
+ %sum =l phi @prepare %total, @body %added
+ %morej =w csltl %j, %m
+ jnz %morej, @body, @advance
+@body
+ %added =l add %sum, %j
+ %nextj =l add %j, 1
+ jmp @inner
+@advance
+ %nexti =l add %i, 1
+ jmp @outer
+@done
+ ret %total
+}
+"""
+
 DRIVER = r"""
 #include <stdint.h>
 #include <stdio.h>
@@ -86,6 +130,13 @@ extern int64_t guard(int64_t, int64_t, int64_t, int64_t);
 extern int64_t single_guard(int64_t, int64_t, int64_t, int64_t);
 extern int64_t shared(int64_t, int64_t, int64_t, int64_t);
 extern void address(uint64_t *, uint64_t, int64_t);
+extern uint64_t called(uint64_t, int64_t);
+extern int64_t nested(int64_t, int64_t);
+static unsigned calls;
+uint64_t layout_step(uint64_t value, uint64_t index) {
+    ++calls;
+    return value * UINT64_C(1664525) + index + UINT64_C(1013904223);
+}
 int main(void) {
     int64_t values[] = {INT64_MIN, -1, 0, 1, 17, INT64_MAX};
     int64_t trips[] = {-3, 0, 1, 2, 31, 65};
@@ -120,7 +171,22 @@ int main(void) {
             ++checks;
         }
     }
-    printf("%u GCM semantic checks passed\n", checks);
+    for (unsigned a = 0; a < 6; ++a)
+    for (unsigned n = 0; n < 6; ++n) {
+        uint64_t expected = (uint64_t)values[a];
+        for (int64_t i = 0; i < trips[n]; ++i)
+            expected = expected * UINT64_C(1664525) + i + UINT64_C(1013904223);
+        calls = 0;
+        if (called((uint64_t)values[a], trips[n]) != expected) return 5;
+        if (calls != (trips[n] > 0 ? (unsigned)trips[n] : 0)) return 6;
+        checks += 2;
+        int64_t total = 0;
+        for (int64_t i = 0; i < trips[a]; ++i)
+        for (int64_t j = 0; j < trips[n]; ++j) total += j;
+        if (nested(trips[a], trips[n]) != total) return 7;
+        ++checks;
+    }
+    printf("%u control-flow semantic checks passed\n", checks);
     return 0;
 }
 """
@@ -160,7 +226,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="qbe-gcm-") as temporary:
         root = Path(temporary)
         source = root / "input.ssa"
-        source.write_text(GUARD + SINGLE_GUARD + SHARED + ADDRESS)
+        source.write_text(GUARD + SINGLE_GUARD + SHARED + ADDRESS + CALLED + NESTED)
         for target in targets:
             check_motion(qbe, target)
             subprocess.run([str(qbe), "-t", target, "-o", str(root / (target + ".s")),
@@ -174,10 +240,10 @@ def main():
         subprocess.run([os.environ.get("CC", "cc"), str(driver), str(root / (native + ".s")),
                         "-o", str(program)], check=True)
         result = subprocess.run([str(program)], capture_output=True, text=True, check=True)
-        assert result.stdout == "4608 GCM semantic checks passed\n", result.stdout
+        assert result.stdout == "4716 control-flow semantic checks passed\n", result.stdout
         assert not result.stderr, result.stderr
         print(result.stdout, end="")
-        print("Recursive operands and invariant guards verified for six targets")
+        print("Expression motion, invariant guards and loop layout verified for six targets")
 
 
 if __name__ == "__main__":

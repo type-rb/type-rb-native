@@ -70,11 +70,11 @@ def backend_identity(root=ROOT):
     backend = json.loads((root / "tools/qbe/backend.json").read_text())
     if set(backend) != {"name", "version", "sourceURL", "sourceSHA256", "variant", "patches"}:
         raise ValueError("invalid QBE identity shape")
-    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-float-contraction-v4":
+    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-loop-layout-v1":
         raise ValueError("unsupported QBE identity")
     if not backend["sourceURL"].startswith("https://") or not re.fullmatch(r"[0-9a-f]{64}", backend["sourceSHA256"]):
         raise ValueError("invalid QBE source identity")
-    paths = ["tools/qbe/sqrt.patch", "tools/qbe/arm64-immediates.patch", "tools/qbe/arm64-memory.patch", "tools/qbe/gcm.patch", "tools/qbe/fma.patch"]
+    paths = ["tools/qbe/sqrt.patch", "tools/qbe/arm64-immediates.patch", "tools/qbe/arm64-memory.patch", "tools/qbe/gcm.patch", "tools/qbe/fma.patch", "tools/qbe/loop-layout.patch"]
     if len(backend["patches"]) != len(paths):
         raise ValueError("invalid QBE patch set")
     for patch, path in zip(backend["patches"], paths):
@@ -97,6 +97,22 @@ def check_contraction(binary):
             expected = permitted and target.startswith("arm64")
             if result.returncode or fused != expected:
                 raise ValueError(f"QBE lacks the required {target} Float contraction behavior")
+
+
+def check_loop_layout(binary):
+    for target in ("arm64", "arm64_apple", "amd64_sysv"):
+        result = subprocess.run([str(binary), "-t", target], input=ADDRESS_MOTION_PROBE,
+                                text=True, capture_output=True, timeout=30)
+        lines = result.stdout.splitlines()
+        labels = {line.strip()[:-1]: index for index, line in enumerate(lines)
+                  if line.strip().endswith(":")}
+        backward = []
+        for index, line in enumerate(lines):
+            branch = re.fullmatch(r"\s*(b[a-z]*|j[a-z]+)\s+([.\w]+)\s*", line)
+            if branch and labels.get(branch[2], index + 1) < index:
+                backward.append(branch[1])
+        if result.returncode or len(backward) != 1 or backward[0] in ("b", "jmp"):
+            raise ValueError(f"QBE lacks the required {target} loop layout")
 
 
 def check_capability(binary):
@@ -151,6 +167,7 @@ def check_capability(binary):
     if result.returncode or "csltl" not in body:
         raise ValueError("QBE lacks the required single comparison rematerialization")
     check_contraction(binary)
+    check_loop_layout(binary)
 
 
 def build(output, archive=None):
