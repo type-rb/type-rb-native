@@ -3,7 +3,8 @@ import { mir_type_kind_callable } from mir/model/type_kinds
 import { mir_signature_ordinary } from mir/model/call_kinds
 import { mir_function_fixture, mir_terminator_branch, mir_terminator_jump } from mir/model/control
 import { mir_op_callable_new, mir_op_direct_call, mir_op_indirect_call } from mir/model/instructions
-import { mir_effect_conservative } from mir/model/effects
+import { mir_effect_conservative, mir_effect_none } from mir/model/effects
+import { mir_unused_callable_allocations } from mir/analysis/callable_allocations
 import { mir_call_effect_summaries, mir_instruction_effects } from mir/analysis/call_effects
 import { integer_string } from support/literals
 import { mir_identity_key } from mir/analysis/identities
@@ -92,7 +93,7 @@ def mir_callable_plans(native_module: MirModule): Array<MirCallablePlan>
 	mut result: Array<MirCallablePlan> := []
 	mut needed := false
 	native_module.instructions.each do |instruction|
-		if instruction.kind == mir_op_indirect_call()
+		if instruction.kind == mir_op_indirect_call() || instruction.kind == mir_op_callable_new()
 			needed = true
 		end
 	end
@@ -200,10 +201,17 @@ def mir_callable_plans(native_module: MirModule): Array<MirCallablePlan>
 		end
 	end
 	mut effects: Array<Integer> := []
+	allocations := mir_unused_callable_allocations(native_module)
+	mut unused: Hash<String, Integer> := {}
+	allocations.each.with_index do |plan, index|
+		unused[integer_string(plan.instruction)] = index
+	end
 	index = 0
 	while index < native_module.instructions.size()
 		key := integer_string(index)
-		if plans.key?(key)
+		if unused.key?(key)
+			result.push(allocations[unused[key]])
+		elsif plans.key?(key)
 			if effects.size() == 0
 				effects = mir_call_effect_summaries(native_module)
 			end
@@ -249,8 +257,13 @@ end
 # Consumers run after canonical plan verification or fresh plan construction.
 # Keep unknown invocation and primitive operation effects with their owner.
 def mir_planned_instruction_effects(native_module: MirModule, instruction: MirInstruction, position: Integer): Integer
-	if instruction.kind == mir_op_indirect_call() && native_module.callable_plans.size() == 1
-		return mir_callable_plan_at(native_module.callable_plans[0], position).effects
+	if native_module.callable_plans.size() == 1
+		if instruction.kind == mir_op_indirect_call()
+			return mir_callable_plan_at(native_module.callable_plans[0], position).effects
+		end
+		if instruction.kind == mir_op_callable_new() && mir_callable_plan_at(native_module.callable_plans[0], position).effects == mir_effect_none()
+			return mir_effect_none()
+		end
 	end
 	return mir_instruction_effects(native_module, instruction)
 end
