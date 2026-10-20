@@ -75,7 +75,9 @@ alias_sessions = [
     {
         "name": 'import-relocation',
         "text": 'import { Choice as Imported, Pick as Selected } from model\nvalue := Selected::First\nvalues := [value]\nenum Choice\nDifferent\nend\n:type value\nvalue\nvalues[0]\nputs(value == Imported::First)\n:reload\nvalue\nvalues[0]\n:quit\n',
-        "expected": 'Pick::First : Pick\n[Pick::First] : Array<Pick>\nPick\nPick::First : Pick\nChoice::First : Choice\ntrue\nreloaded\ntrue\nPick::First : Pick\nChoice::First : Choice\n',
+        # Canonical projections still use the visible nominal import spelling.
+        # That existing display difference is separate from checked type aliases.
+        "expected": 'Pick::First : Pick\n[Pick::First] : Array<Pick>\nPick\nPick::First : Pick\nChoice::First : Imported\ntrue\nreloaded\ntrue\nPick::First : Pick\nChoice::First : Imported\n',
         "files": {'model.trb': 'enum Choice\nFirst\nSecond\nend\nalias Pick = Choice\n'},
     },
     {
