@@ -86,6 +86,27 @@ class DiagnosticTest(unittest.TestCase):
         self.assertIsNone(diagnostic.summary(records))
         self.assertIsNone(diagnostic.summary(records[1:]))
 
+    def test_each_implementation_rotates_independently_of_case_order(self):
+        for count in (1, 4, 16):
+            for width in (4, 5, 7):
+                roles = [f"role-{n}" for n in range(width)]
+                cases = [({"id": n}, None, None, roles, {}) for n in range(count)]
+                first_roles = {n: [] for n in range(count)}
+                for iteration in range(width):
+                    schedule = list(diagnostic.runtime_schedule(cases, iteration))
+                    self.assertEqual(len(schedule), count * width)
+                    grouped = [schedule[n:n + width] for n in range(0, len(schedule), width)]
+                    self.assertEqual([group[0][0][0]["id"] for group in grouped],
+                                     list(range(iteration % count, count))
+                                     + list(range(iteration % count)))
+                    for group in grouped:
+                        case_id = group[0][0][0]["id"]
+                        self.assertEqual({entry[0]["id"] for entry, _role in group}, {case_id})
+                        self.assertCountEqual([role for _entry, role in group], roles)
+                        first_roles[case_id].append(group[0][1])
+                for first in first_roles.values():
+                    self.assertCountEqual(first, roles)
+
     def test_reuse_requires_exact_archive_and_preparation_identifiers(self):
         valid = {"runId": 1, "artifactId": 2, "archiveSHA256": "a" * 64,
                  "controllerRevision": "b" * 40}

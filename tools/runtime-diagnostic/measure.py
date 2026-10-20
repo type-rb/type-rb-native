@@ -84,6 +84,18 @@ def summary(records):
     return result
 
 
+def runtime_schedule(cases, iteration):
+    # Keep the original case index when rotating cases. Its position in the
+    # rotated list would cancel the independent rotation of implementations.
+    indexed = list(enumerate(cases))
+    offset = iteration % len(indexed)
+    for index, entry in indexed[offset:] + indexed[:offset]:
+        roles = entry[3]
+        start = (iteration + index) % len(roles)
+        for role in roles[start:] + roles[:start]:
+            yield entry, role
+
+
 def run(args):
     plan = read(args.registration)
     suite = validate_registration(plan)
@@ -247,23 +259,21 @@ def run(args):
         cases.append((case, case_dir, expected, roles, artifacts))
 
     for iteration in range(6):
-        rotated = cases[iteration % len(cases):] + cases[:iteration % len(cases)]
-        for index, (case, directory, expected, roles, artifacts) in enumerate(rotated):
-            offset = (iteration + index) % len(roles)
-            for role in roles[offset:] + roles[:offset]:
-                program = directory / role / "program"
-                if digest(program) != artifacts[role]["sha256"]:
-                    raise ValueError("Application changed after preparation")
-                observation_dir = directory / role / f"runtime-{iteration}"
-                item = record([program, *case["args"]], observation_dir, 30,
-                              kind="runtime", case=case["id"], role=role,
-                              phase="first" if iteration == 0 else "steady",
-                              iteration=iteration, artifact=artifacts[role])
-                correct(item, observation_dir, expected)
-                write(observation_dir / "observation.json", item)
-                write(evidence / "raw.json", raw)
-                if item["status"] != "pass":
-                    raise ValueError("Runtime output differs")
+        for entry, role in runtime_schedule(cases, iteration):
+            case, directory, expected, roles, artifacts = entry
+            program = directory / role / "program"
+            if digest(program) != artifacts[role]["sha256"]:
+                raise ValueError("Application changed after preparation")
+            observation_dir = directory / role / f"runtime-{iteration}"
+            item = record([program, *case["args"]], observation_dir, 30,
+                          kind="runtime", case=case["id"], role=role,
+                          phase="first" if iteration == 0 else "steady",
+                          iteration=iteration, artifact=artifacts[role])
+            correct(item, observation_dir, expected)
+            write(observation_dir / "observation.json", item)
+            write(evidence / "raw.json", raw)
+            if item["status"] != "pass":
+                raise ValueError("Runtime output differs")
         print(f"Completed round {iteration}; {len(raw)} observations retained", flush=True)
     rows = []
     for case, _directory, _expected, roles, artifacts in cases:
