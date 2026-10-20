@@ -1,3 +1,6 @@
+import { default_parameter, default_record_field } from state/default_kinds
+import { generic_record } from frontend/types/generic_kinds
+import { attribute_record_field } from frontend/types/attribute_kinds
 import { GlobalDeclaration } from frontend/types/global_model
 import { namespace_qualify } from frontend/types/namespace_model
 import { enum_uppercase } from frontend/types/enum_types
@@ -18,7 +21,7 @@ def parse_default_initializer(mut state: CompilerState, mut position: Array<Inte
 	end
 	state.parsed.default_initializers.push(DefaultInitializer.new(kind: kind, owner: owner, slot: slot, start: start, finish: position[0]))
 	state.parsed.default_functions.push(-1)
-	if kind == 0
+	if kind == default_parameter()
 		store_integer(state.parsed.parameter_defaults, slot, state.parsed.default_initializers.size())
 	else
 		store_integer(state.parsed.field_defaults, slot, state.parsed.default_initializers.size())
@@ -68,7 +71,7 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 					return false
 				end
 				default_finish = position[0]
-			elsif !parse_default_initializer(state, position, 1, record_index, state.declarations.field_count[0])
+			elsif !parse_default_initializer(state, position, default_record_field(), record_index, state.declarations.field_count[0])
 				return false
 			end
 			default_seen = true
@@ -76,7 +79,7 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 			diagnostic(state, "TRBN4002", field_line, "required record field cannot follow a default field")
 			return false
 		end
-		if !parse_declaration_attributes(state, position, 1, name, field_name)
+		if !parse_declaration_attributes(state, position, attribute_record_field(), name, field_name)
 			return false
 		end
 		if !finish_statement(state, position)
@@ -96,7 +99,7 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 	advance(position)
 	if parameters.size() > 0
 		variant := GenericVariant.new(name: name, line: line, fields: fields)
-		state.type_resolution.generic_definitions.push(GenericDefinition.new(kind: 1, name: name, source_id: state.module_graph.active_module[0], line: line, parameters: parameters, variants: [variant]))
+		state.type_resolution.generic_definitions.push(GenericDefinition.new(kind: generic_record(), name: name, source_id: state.module_graph.active_module[0], line: line, parameters: parameters, variants: [variant]))
 	else
 		store_integer(state.declarations.record_field_counts, record_index, count)
 		state.declarations.record_count[0] = record_index + 1
@@ -208,7 +211,7 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>, recei
 							return false
 						end
 						default_finish = position[0]
-					elsif !parse_default_initializer(state, position, 0, state.declarations.function_count[0], parameter_index)
+					elsif !parse_default_initializer(state, position, default_parameter(), state.declarations.function_count[0], parameter_index)
 						return false
 					end
 					default_seen = true

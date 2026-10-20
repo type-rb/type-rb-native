@@ -1,3 +1,8 @@
+import { mir_scalar_inline_add } from mir/model/scalar_operators
+import { binary_add, binary_less } from frontend/types/operators
+import { mir_type_integer, mir_type_none } from mir/model/type_ids
+import { mir_function_control, mir_terminator_branch, mir_terminator_jump } from mir/model/control
+import { mir_op_array_new, mir_op_array_position, mir_op_array_push, mir_op_array_size, mir_op_array_store, mir_op_direct_call, mir_op_indirect_call, mir_op_integer_to_float, mir_op_scalar_binary, mir_op_scalar_literal } from mir/model/instructions
 import { mir_effect_failure, mir_effect_none } from mir/model/effects
 import { mir_planned_instruction_effects } from mir/analysis/callables
 import { integer_string } from support/literals
@@ -49,14 +54,14 @@ def mir_array_headers_across_pushes(native_module: MirModule, function: MirFunct
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[index]
-			if instruction.kind == 24
+			if instruction.kind == mir_op_array_push()
 				identity := mir_flow_alias(aliases, instruction.first)
 				mut allocation := -1
 				headers.each do |candidate|
-					if candidate.identity == identity && mir_element_type(native_module, mir_flow_type(flow, candidate.owner)) == 1
+					if candidate.identity == identity && mir_element_type(native_module, mir_flow_type(flow, candidate.owner)) == mir_type_integer()
 						position := mir_loop_definition(flow, candidate.owner)
 						if position >= preheader.instruction_start && position < preheader.instruction_start + preheader.instruction_count
-							if native_module.instructions[position].kind == 19
+							if native_module.instructions[position].kind == mir_op_array_new()
 								allocation = position
 							end
 						end
@@ -89,7 +94,7 @@ def mir_array_stable_headers(native_module: MirModule, flow: MirFlow, header: Mi
 	mut slot := 0
 	while slot < header.parameter_count
 		identity := native_module.arguments[header.parameter_start + slot]
-		if mir_element_type(native_module, mir_flow_type(flow, identity)) != 0
+		if mir_element_type(native_module, mir_flow_type(flow, identity)) != mir_type_none()
 			mut stable := true
 			mut edge := 0
 			while edge < flow.predecessors[header_index].size()
@@ -114,7 +119,7 @@ end
 
 def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlow, nonnegative: MirNonnegative, header_index: Integer): MirArrayLoop
 	header := native_module.blocks[function.block_start + header_index]
-	if header.terminator != 2 || flow.ranks[header_index] < 0 || header.first_target == header.id || header.first_target == header.second_target
+	if header.terminator != mir_terminator_branch() || flow.ranks[header_index] < 0 || header.first_target == header.id || header.first_target == header.second_target
 		return mir_no_array_loop()
 	end
 	condition_index := mir_loop_definition(flow, header.condition)
@@ -122,14 +127,14 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 		return mir_no_array_loop()
 	end
 	condition := native_module.instructions[condition_index]
-	if condition.kind != 7 || condition.payload != 8
+	if condition.kind != mir_op_scalar_binary() || condition.payload != binary_less()
 		return mir_no_array_loop()
 	end
 	mut length_index := mir_loop_definition(flow, condition.second)
 	mut guard_owner := -1
 	if length_index >= header.instruction_start && length_index < header.instruction_start + header.instruction_count
 		length := native_module.instructions[length_index]
-		if length.kind == 20
+		if length.kind == mir_op_array_size()
 			guard_owner = length.first
 		end
 	end
@@ -172,7 +177,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 					return mir_no_array_loop()
 				end
 				update := native_module.instructions[definition]
-				if update.kind != 7 || (update.payload != 1 && update.payload != 13) || update.failure < 0
+				if update.kind != mir_op_scalar_binary() || (update.payload != binary_add() && update.payload != mir_scalar_inline_add()) || update.failure < 0
 					return mir_no_array_loop()
 				end
 				if mir_flow_alias(aliases, update.first) != condition.first || !mir_loop_literal(native_module, flow, mir_flow_alias(aliases, update.second), "1")
@@ -181,7 +186,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 			end
 			pending.push(block_index)
 		else
-			if preheader >= 0 || block.terminator != 1 || !mir_loop_literal(native_module, flow, index_value, "0")
+			if preheader >= 0 || block.terminator != mir_terminator_jump() || !mir_loop_literal(native_module, flow, index_value, "0")
 				return mir_no_array_loop()
 			end
 			preheader = block.id
@@ -231,17 +236,17 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 			# Scalar operations, element access, disjoint fresh-output pushes and
 			# calls with no continuing side effect retain the selected headers.
 			mut pure_call := false
-			if (instruction.kind == 11 && instruction.payload >= 0 && instruction.payload < native_module.calls.size()) || instruction.kind == 42
+			if (instruction.kind == mir_op_direct_call() && instruction.payload >= 0 && instruction.payload < native_module.calls.size()) || instruction.kind == mir_op_indirect_call()
 				effects := mir_planned_instruction_effects(native_module, instruction, instruction_index)
 				pure_call = effects == mir_effect_none()
 				if effects == mir_effect_failure()
 					pure_call = true
 				end
 			end
-			if (instruction.kind < 6 || instruction.kind > 9) && (instruction.kind < 20 || instruction.kind > 24) && !pure_call
+			if (instruction.kind < mir_op_scalar_literal() || instruction.kind > mir_op_integer_to_float()) && (instruction.kind < mir_op_array_size() || instruction.kind > mir_op_array_push()) && !pure_call
 				return mir_no_array_loop()
 			end
-			if guard_owner >= 0 && instruction.kind >= 21 && instruction.kind <= 23 && mir_flow_dominates(flow, body, member)
+			if guard_owner >= 0 && instruction.kind >= mir_op_array_position() && instruction.kind <= mir_op_array_store() && mir_flow_dominates(flow, body, member)
 				if mir_flow_alias(aliases, instruction.first) == guard_owner
 					mut guarded := mir_flow_alias(aliases, instruction.second) == condition.first
 					if !guarded && captured.key?(integer_string(instruction.second))
@@ -249,13 +254,13 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 					end
 					if guarded
 						mir_live_add(accesses, instruction_index)
-						if instruction.kind == 21
+						if instruction.kind == mir_op_array_position()
 							captured[integer_string(instruction.result)] = guard_owner
 						end
 					end
 				end
 			end
-			if instruction.kind >= 20 && instruction.kind <= 23
+			if instruction.kind >= mir_op_array_size() && instruction.kind <= mir_op_array_store()
 				identity := mir_flow_alias(aliases, instruction.first)
 				# The guard owner's header is also stable for other indexes.
 				# Keep their checks; omit only accesses already covered by the
@@ -271,7 +276,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 				headers.each do |candidate|
 					if candidate.identity == identity && !covered
 						mir_live_add(candidate.accesses, instruction_index)
-						if instruction.kind >= 21 && mir_flow_dominates(flow, body, member) && mir_nonnegative_value(nonnegative, instruction.second)
+						if instruction.kind >= mir_op_array_position() && mir_flow_dominates(flow, body, member) && mir_nonnegative_value(nonnegative, instruction.second)
 							mir_live_add(candidate.nonnegative_accesses, instruction_index)
 						end
 					end
@@ -294,7 +299,7 @@ end
 
 def mir_function_array_loops(native_module: MirModule, function: MirFunction): Array<MirArrayLoop>
 	mut plans: Array<MirArrayLoop> := []
-	if function.kind != 3
+	if function.kind != mir_function_control()
 		return plans
 	end
 	# Sort by block identity so physical block reordering preserves the plan.
@@ -324,14 +329,14 @@ def mir_function_array_loops(native_module: MirModule, function: MirFunction): A
 end
 
 def mir_array_loop_candidate(native_module: MirModule, block: MirBlock): Boolean
-	if block.terminator != 2
+	if block.terminator != mir_terminator_branch()
 		return false
 	end
 	mut condition := -1
 	mut index := block.instruction_start
 	while index < block.instruction_start + block.instruction_count
 		instruction := native_module.instructions[index]
-		if instruction.result == block.condition && instruction.kind == 7 && instruction.payload == 8
+		if instruction.result == block.condition && instruction.kind == mir_op_scalar_binary() && instruction.payload == binary_less()
 			condition = instruction.first
 		end
 		index += 1

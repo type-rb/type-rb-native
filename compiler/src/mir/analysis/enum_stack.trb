@@ -1,3 +1,6 @@
+import { mir_type_composite_start } from mir/model/type_ids
+import { mir_function_control, mir_terminator_return } from mir/model/control
+import { mir_op_callable_new, mir_op_direct_call, mir_op_enum_field, mir_op_enum_new, mir_op_enum_test } from mir/model/instructions
 import { mir_enum_id } from mir/model/types
 import { MirBlock, MirFunction, MirModule, mir_block_index, mir_function_index } from mir/model/module
 import { mir_managed_type } from mir/model/types
@@ -21,7 +24,7 @@ def mir_enum_stack_result_type(native_module: MirModule, function_id: Integer): 
 	mut index := 0
 	while index < native_module.types.size()
 		if native_module.types[index].name == name
-			return index + 9
+			return index + mir_type_composite_start()
 		end
 		index += 1
 	end
@@ -98,7 +101,7 @@ def mir_enum_stack_return_shape(native_module: MirModule, function: MirFunction,
 	mut block_index := function.block_start
 	while block_index < function.block_start + function.block_count
 		block := native_module.blocks[block_index]
-		if block.terminator == 3
+		if block.terminator == mir_terminator_return()
 			returns += 1
 			if mir_enum_stack_value_type(native_module, function.id, block.return_value) != type_id
 				return false
@@ -108,11 +111,11 @@ def mir_enum_stack_return_shape(native_module: MirModule, function: MirFunction,
 				return false
 			end
 			instruction := native_module.instructions[definition]
-			if instruction.kind == 37
+			if instruction.kind == mir_op_enum_new()
 				if native_module.enum_variants[instruction.payload].owner != mir_enum_id(native_module, type_id)
 					return false
 				end
-			elsif instruction.kind == 11
+			elsif instruction.kind == mir_op_direct_call()
 				callee := native_module.calls[instruction.payload].callee
 				if callee >= function.id || !mir_enum_stack_selected(plans, callee)
 					return false
@@ -176,8 +179,8 @@ def mir_enum_stack_value_safe(native_module: MirModule, function: MirFunction, v
 			instruction := native_module.instructions[instruction_index]
 			uses := mir_live_before(native_module, managed, instruction, [])
 			if uses.size() > 0
-				if instruction.kind != 38 && instruction.kind != 39
-					if instruction.kind != 11 || !allow_direct_argument
+				if instruction.kind != mir_op_enum_test() && instruction.kind != mir_op_enum_field()
+					if instruction.kind != mir_op_direct_call() || !allow_direct_argument
 						return false
 					end
 				end
@@ -263,7 +266,7 @@ def mir_enum_stack_borrowed_parameter_safe(native_module: MirModule, function: M
 		while index < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[index]
 			uses := mir_live_before(native_module, aliases, instruction, [])
-			if uses.size() > 0 && instruction.kind != 38 && instruction.kind != 39
+			if uses.size() > 0 && instruction.kind != mir_op_enum_test() && instruction.kind != mir_op_enum_field()
 				return false
 			end
 			index += 1
@@ -289,7 +292,7 @@ def mir_enum_stack_argument_uses_safe(native_module: MirModule, function: MirFun
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[index]
-			if instruction.kind == 11
+			if instruction.kind == mir_op_direct_call()
 				call := native_module.calls[instruction.payload]
 				mut argument := 0
 				while argument < call.argument_count
@@ -299,7 +302,7 @@ def mir_enum_stack_argument_uses_safe(native_module: MirModule, function: MirFun
 							return false
 						end
 						callee := native_module.functions[callee_index]
-						if callee.kind != 3 || argument >= callee.parameter_count
+						if callee.kind != mir_function_control() || argument >= callee.parameter_count
 							return false
 						end
 						parameter := native_module.arguments[callee.parameter_start + argument]
@@ -330,7 +333,7 @@ def mir_enum_stack_function_safe(native_module: MirModule, function: MirFunction
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[index]
-			if instruction.kind == 37 && mir_enum_stack_value_type(native_module, function.id, instruction.result) == type_id
+			if instruction.kind == mir_op_enum_new() && mir_enum_stack_value_type(native_module, function.id, instruction.result) == type_id
 				if !mir_enum_stack_value_safe(native_module, function, instruction.result, true, false, false)
 					return false
 				end
@@ -369,11 +372,11 @@ def mir_enum_stack_callers_safe(native_module: MirModule, callee: Integer, plans
 			mut index := block.instruction_start
 			while index < block.instruction_start + block.instruction_count
 				instruction := native_module.instructions[index]
-				if instruction.kind == 41 && instruction.payload == callee
+				if instruction.kind == mir_op_callable_new() && instruction.payload == callee
 					return false
 				end
-				if instruction.kind == 11 && native_module.calls[instruction.payload].callee == callee
-					if function.kind != 3
+				if instruction.kind == mir_op_direct_call() && native_module.calls[instruction.payload].callee == callee
+					if function.kind != mir_function_control()
 						return false
 					end
 					if !mir_enum_stack_value_safe(native_module, function, instruction.result, mir_enum_stack_selected(plans, function.id), scalar_payloads, scalar_payloads)
@@ -401,7 +404,7 @@ def mir_enum_stack_plans(native_module: MirModule): Array<Integer>
 	# forward/recursive and callable paths keep the ordinary heap ABI.
 	native_module.functions.each do |function|
 		type_id := mir_enum_stack_result_type(native_module, function.id)
-		if function.kind == 3 && function.id >= 0 && function.id < plans.size() && mir_enum_stack_shape(native_module, type_id)
+		if function.kind == mir_function_control() && function.id >= 0 && function.id < plans.size() && mir_enum_stack_shape(native_module, type_id)
 			if mir_enum_stack_return_shape(native_module, function, type_id, plans)
 				plans[function.id] = 1
 			end

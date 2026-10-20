@@ -1,3 +1,7 @@
+import { checked_category_value } from frontend/types/value_categories
+import { binding_use_parameter } from state/binding_kinds
+import { mir_state_function_slot, nullable_state_head_slot } from state/local_slots
+import { checking_discovery, checking_lowering } from state/checking_phases
 import { ResolutionLocals, resolution_local_bind, resolution_locals_new } from state/resolution_locals
 import { CheckedLambda, LambdaCapture, LambdaSyntax, callable_parts } from frontend/types/callable_types
 import { nullable_fact, nullable_lookup } from frontend/checking/nominal/nullable_flow
@@ -27,7 +31,7 @@ def lambda_locals(mut state: CompilerState, parent: CheckedLocals, syntax: Lambd
 			if mutable == 0
 				flow := nullable_lookup(parent, slot, -1, declared)
 				if flow != declared
-					locals.nullable_state[0] = nullable_fact(locals, inherited, -1, flow, locals.nullable_state[0])
+					locals.nullable_state[nullable_state_head_slot()] = nullable_fact(locals, inherited, -1, flow, locals.nullable_state[nullable_state_head_slot()])
 				end
 			end
 			locals.capture_parents.push(local_identity(parent, slot))
@@ -48,7 +52,7 @@ def lambda_locals(mut state: CompilerState, parent: CheckedLocals, syntax: Lambd
 	while parameter < syntax.parameters.size()
 		row := syntax.parameters[parameter]
 		if local_add(state, locals, row.name, parts[parameter + 1], row.mutable, load_integer(state.source_tokens.token_lines, row.origin))
-			local_require_use(locals, locals.count[0] - 1, row.name, row.origin, 2)
+			local_require_use(locals, locals.count[0] - 1, row.name, row.origin, binding_use_parameter())
 		end
 		parameter += 1
 	end
@@ -116,7 +120,7 @@ def checked_return_type(state: CompilerState, locals: CheckedLocals): String
 	if locals.lambda_result.size() > 0
 		return locals.lambda_result[0]
 	end
-	return load_string(state.declarations.function_result_types, locals.mir_state[1])
+	return load_string(state.declarations.function_result_types, locals.mir_state[mir_state_function_slot()])
 end
 
 def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, mut parent: CheckedLocals): CheckedValue
@@ -127,7 +131,7 @@ def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, m
 		return type_diagnostic(state, line, "fn requires an owned syntax region")
 	end
 	syntax := state.callables.lambdas[encoded - 1]
-	if state.callables.lambda_phase[0] == 2
+	if state.callables.lambda_phase[0] == checking_lowering()
 		position[0] = syntax.finish
 		return lower_lambda(state, parent, origin)
 	end
@@ -135,7 +139,7 @@ def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, m
 	type_name := load_string(previous.lambda_types, origin)
 	mut locals := lambda_locals(state, parent, syntax, type_name)
 	if has_diagnostic(state)
-		return checked_value("Invalid", 0, origin, 0)
+		return checked_value("Invalid", checked_category_value(), origin, 0)
 	end
 	body := state.callables.checked_bodies.size()
 	state.callables.checked_bodies.push(checked_body_new(-1, syntax.body_start, syntax.body_finish + 1))
@@ -159,15 +163,15 @@ def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, m
 	state.callables.checked[0] = previous
 	position[0] = syntax.finish
 	if has_diagnostic(state)
-		return checked_value("Invalid", 0, origin, 0)
+		return checked_value("Invalid", checked_category_value(), origin, 0)
 	end
 	captures := lambda_captures(state, parent, locals, origin)
 	mut lambda := CheckedLambda.new(origin: origin, type_name: type_name, body: body, inherited_count: locals.capture_parents.size(), function: [-1], captures: captures)
 	state.callables.checked[0].lambdas.push(lambda)
-	if state.callables.lambda_phase[0] == 1
+	if state.callables.lambda_phase[0] == checking_discovery()
 		declare_lambda(state, lambda)
 	end
-	return checked_value(type_name, 0, origin, 0)
+	return checked_value(type_name, checked_category_value(), origin, 0)
 end
 
 # Transform values are loop-carried bindings above the receiver/cursor boundary.

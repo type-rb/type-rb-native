@@ -1,3 +1,6 @@
+import { mir_convert_string_float_status, mir_convert_string_integer_status, mir_convert_string_to_float, mir_convert_string_to_integer } from mir/model/operation_modes
+import { checked_category_value } from frontend/types/value_categories
+import { mir_op_scalar_conversion } from mir/model/instructions
 import { mir_builtin_error } from frontend/checking/builtins/lookup
 import { builtin_result_type, builtin_result_variant } from frontend/checking/builtins/results
 import { CheckedValue, checked_mir_value, checked_value, scalar_mir_binary, scalar_mir_literal } from frontend/checking/body/values
@@ -33,26 +36,26 @@ end
 # verified branches and aggregate operations own success and structured failure.
 def mir_builtin_number_parse(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, floating: Boolean, origin: Integer): CheckedValue
 	mut number := "Integer"
-	mut conversion := 2
-	mut status_mode := 7
+	mut conversion := mir_convert_string_to_integer()
+	mut status_mode := mir_convert_string_integer_status()
 	if floating
 		number = "Float"
-		conversion = 6
-		status_mode = 8
+		conversion = mir_convert_string_to_float()
+		status_mode = mir_convert_string_float_status()
 	end
 	result_type := builtin_result_type(state, number, "NumberParseError")
 	store_string(state.callables.checked[0].builtin_result_types, origin, result_type)
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
-		return checked_value(result_type, 0, origin, 0)
+		return checked_value(result_type, checked_category_value(), origin, 0)
 	end
 	line := load_integer(state.source_tokens.token_lines, origin)
-	status := mir_checked_string_operation(state, locals, 17, checked_mir_value(receiver), -1, status_mode, "Integer", origin)
+	status := mir_checked_string_operation(state, locals, mir_op_scalar_conversion(), checked_mir_value(receiver), -1, status_mode, "Integer", origin)
 	zero := scalar_mir_literal(state, locals, "Integer", origin, "0")
 	valid := scalar_mir_binary(state, locals, "==", status, zero, "Boolean", origin)
 	mut join := mir_value_join(locals, line)
 	failure := mir_control_branch(state, locals, valid, line)
-	value := mir_checked_string_operation(state, locals, 17, checked_mir_value(receiver), -1, conversion, number, origin)
+	value := mir_checked_string_operation(state, locals, mir_op_scalar_conversion(), checked_mir_value(receiver), -1, conversion, number, origin)
 	success := mir_enum_construct(state, locals, builtin_result_variant(state, result_type, true), [checked_mir_value(value)], origin)
 	mir_value_exit(state, locals, join, success)
 	mir_control_enter(state, locals, failure, line)

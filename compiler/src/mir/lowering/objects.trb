@@ -1,3 +1,5 @@
+import { checked_category_value } from frontend/types/value_categories
+import { mir_op_direct_call, mir_op_object_field, mir_op_object_new } from mir/model/instructions
 import { CheckedValue, checked_value, mir_checked_value, scalar_mir_instruction, scalar_mir_value } from frontend/checking/body/values
 import { MirBlock, MirInstruction, MirModule } from mir/model/module
 import { mir_control_active, mir_control_prepare } from mir/build/control
@@ -12,10 +14,10 @@ import { load_integer } from support/storage
 def mir_checked_object_new(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, type_name: String, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
-		return checked_value(type_name, 0, 9007199254740991, 1)
+		return checked_value(type_name, checked_category_value(), 9007199254740991, 1)
 	end
 	result := scalar_mir_value(state, locals, state.scalar_mir.objects[owner].type_id, origin)
-	scalar_mir_instruction(state, locals, 63, result, -1, -1, owner, -1, load_integer(state.source_tokens.token_lines, origin))
+	scalar_mir_instruction(state, locals, mir_op_object_new(), result, -1, -1, owner, -1, load_integer(state.source_tokens.token_lines, origin))
 	return mir_checked_value(type_name, result, 9007199254740991, 1)
 end
 
@@ -23,7 +25,7 @@ def mir_object_instruction_error(flow: MirFlow, native_module: MirModule, block:
 	if instruction.failure != -1
 		return "MIR class operation failure shape differs"
 	end
-	if instruction.kind == 63
+	if instruction.kind == mir_op_object_new()
 		owner := mir_object_id(native_module, mir_flow_type(flow, instruction.result))
 		if owner < 0 || instruction.payload != owner
 			return "MIR class allocation identity differs"
@@ -48,7 +50,7 @@ def mir_object_instruction_error(flow: MirFlow, native_module: MirModule, block:
 				return "MIR class allocation requires its initializer"
 			end
 			following := native_module.instructions[index + 1]
-			if following.kind != 11 || following.payload < 0 || following.payload >= native_module.calls.size()
+			if following.kind != mir_op_direct_call() || following.payload < 0 || following.payload >= native_module.calls.size()
 				return "MIR class allocation must immediately enter its initializer"
 			end
 			call := native_module.calls[following.payload]
@@ -77,7 +79,7 @@ def mir_object_instruction_error(flow: MirFlow, native_module: MirModule, block:
 		return "MIR class field identity differs"
 	end
 	field := definition.fields[instruction.payload]
-	if instruction.kind == 64
+	if instruction.kind == mir_op_object_field()
 		if instruction.second != -1 || mir_flow_type(flow, instruction.result) != field.type_id
 			return "MIR class field load type differs"
 		end

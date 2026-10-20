@@ -1,3 +1,6 @@
+import { mir_terminator_trap } from mir/model/control
+import { mir_type_boolean, mir_type_float, mir_type_integer, mir_type_string } from mir/model/type_ids
+import { mir_op_enum_field, mir_op_enum_new, mir_op_enum_test, mir_op_guard, mir_op_scalar_binary, mir_op_scalar_literal, mir_op_string_literal, mir_op_value_copy } from mir/model/instructions
 import { integer_string, small_nonnegative_integer_operand } from support/literals
 import { MirFunction, MirInstruction, MirModule, MirValue, mir_block_index, mir_value_type } from mir/model/module
 import { mir_enum_id } from mir/model/types
@@ -28,7 +31,7 @@ def mir_enum_component_fields(native_module: MirModule, type_id: Integer): Array
 			mut index := variant.field_start
 			while index < variant.field_start + variant.field_count
 				field_type := native_module.enum_fields[index].type_id
-				if field_type != 1 && field_type != 2 && field_type != 5 && field_type != 8
+				if field_type != mir_type_integer() && field_type != mir_type_boolean() && field_type != mir_type_float() && field_type != mir_type_string()
 					return []
 				end
 				fields.push(index)
@@ -48,9 +51,9 @@ end
 def mir_enum_nonliteral_strings(native_module: MirModule, function: MirFunction): Array<Integer>
 	mut dynamic: Array<Integer> := []
 	native_module.values.each do |value|
-		if value.function_id == function.id && value.type_id == 8
+		if value.function_id == function.id && value.type_id == mir_type_string()
 			definition := mir_enum_stack_definition(native_module, function, value.id)
-			if definition >= 0 && native_module.instructions[definition].kind != 12 && native_module.instructions[definition].kind != 39
+			if definition >= 0 && native_module.instructions[definition].kind != mir_op_string_literal() && native_module.instructions[definition].kind != mir_op_enum_field()
 				mir_managed_add(dynamic, value.id)
 			end
 		end
@@ -58,7 +61,7 @@ def mir_enum_nonliteral_strings(native_module: MirModule, function: MirFunction)
 	mut parameter := 0
 	while parameter < function.parameter_count
 		value := native_module.arguments[function.parameter_start + parameter]
-		if mir_value_type(native_module, function.id, value) == 8
+		if mir_value_type(native_module, function.id, value) == mir_type_string()
 			mir_managed_add(dynamic, value)
 		end
 		parameter += 1
@@ -94,7 +97,7 @@ def mir_enum_nonliteral_strings(native_module: MirModule, function: MirFunction)
 			mut cursor := block.instruction_start
 			while cursor < block.instruction_start + block.instruction_count
 				instruction := native_module.instructions[cursor]
-				if instruction.kind == 39 && native_module.enum_fields[instruction.payload].type_id == 8
+				if instruction.kind == mir_op_enum_field() && native_module.enum_fields[instruction.payload].type_id == mir_type_string()
 					variant := native_module.enum_fields[instruction.payload].owner
 					mut other := function.block_start
 					while other < function.block_start + function.block_count
@@ -102,7 +105,7 @@ def mir_enum_nonliteral_strings(native_module: MirModule, function: MirFunction)
 						mut producer := producer_block.instruction_start
 						while producer < producer_block.instruction_start + producer_block.instruction_count
 							constructor := native_module.instructions[producer]
-							if constructor.kind == 37 && constructor.payload == variant
+							if constructor.kind == mir_op_enum_new() && constructor.payload == variant
 								value := native_module.arguments[constructor.first + instruction.payload - native_module.enum_variants[variant].field_start]
 								if mir_managed_contains(dynamic, value)
 									mir_managed_add(dynamic, instruction.result)
@@ -143,7 +146,7 @@ def mir_enum_components_closed(native_module: MirModule, function: MirFunction, 
 		while cursor < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[cursor]
 			if mir_managed_contains(enums, instruction.result)
-				if instruction.kind != 37
+				if instruction.kind != mir_op_enum_new()
 					return false
 				end
 				mut field := 0
@@ -154,7 +157,7 @@ def mir_enum_components_closed(native_module: MirModule, function: MirFunction, 
 					field += 1
 				end
 			end
-			if mir_live_before(native_module, enums, instruction, []).size() > 0 && instruction.kind != 38 && instruction.kind != 39
+			if mir_live_before(native_module, enums, instruction, []).size() > 0 && instruction.kind != mir_op_enum_test() && instruction.kind != mir_op_enum_field()
 				return false
 			end
 			cursor += 1
@@ -187,12 +190,12 @@ end
 def mir_enum_component_literal(mut native_module: MirModule, result: Integer, type_id: Integer, text: String, source: Integer, line: Integer)
 	literal := native_module.literal_texts.size()
 	native_module.literal_texts.push(text)
-	mut kind := 6
+	mut kind := mir_op_scalar_literal()
 	mut fact := 0
-	if type_id == 8
-		kind = 12
+	if type_id == mir_type_string()
+		kind = mir_op_string_literal()
 		fact = -1
-	elsif type_id == 1 && small_nonnegative_integer_operand(text)
+	elsif type_id == mir_type_integer() && small_nonnegative_integer_operand(text)
 		fact = 1
 	end
 	native_module.instructions.push(MirInstruction.new(kind: kind, result: result, first: fact, second: -1, payload: literal, failure: -1, source_id: source, line: line))
@@ -237,7 +240,7 @@ def mir_scalarize_enum_components(mut native_module: MirModule, function_index: 
 		mut cursor := block.instruction_start
 		while cursor < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[cursor]
-			if instruction.kind == 37
+			if instruction.kind == mir_op_enum_new()
 				parts := mir_enum_components_at(components, instruction.result)
 				fields := mir_enum_component_fields(native_module, mir_value_type(native_module, function.id, instruction.result))
 				variant := native_module.enum_variants[instruction.payload]
@@ -268,7 +271,7 @@ def mir_scalarize_enum_components(mut native_module: MirModule, function_index: 
 		mut cursor := block.instruction_start
 		while cursor < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[cursor]
-			if instruction.kind == 37
+			if instruction.kind == mir_op_enum_new()
 				parts := mir_enum_components_at(components, instruction.result)
 				mir_enum_component_literal(native_module, parts[0], 1, integer_string(instruction.payload), instruction.source_id, instruction.line)
 				fields := mir_enum_component_fields(native_module, mir_value_type(native_module, function.id, instruction.result))
@@ -277,42 +280,42 @@ def mir_scalarize_enum_components(mut native_module: MirModule, function_index: 
 					if !aliases.key?(integer_string(parts[field + 1]))
 						type_id := native_module.enum_fields[fields[field]].type_id
 						mut text := "0"
-						if type_id == 2
+						if type_id == mir_type_boolean()
 							text = "false"
-						elsif type_id == 5
+						elsif type_id == mir_type_float()
 							text = "0.0"
-						elsif type_id == 8
+						elsif type_id == mir_type_string()
 							text = ""
 						end
 						mir_enum_component_literal(native_module, parts[field + 1], type_id, text, instruction.source_id, instruction.line)
 					end
 					field += 1
 				end
-			elsif instruction.kind == 38 || instruction.kind == 39
+			elsif instruction.kind == mir_op_enum_test() || instruction.kind == mir_op_enum_field()
 				mut variant := instruction.payload
-				if instruction.kind == 39
+				if instruction.kind == mir_op_enum_field()
 					variant = native_module.enum_fields[variant].owner
 				end
 				literal := next_id
-				native_module.values.push(MirValue.new(function_id: function.id, id: next_id, type_id: 1, source_id: instruction.source_id, line: instruction.line))
+				native_module.values.push(MirValue.new(function_id: function.id, id: next_id, type_id: mir_type_integer(), source_id: instruction.source_id, line: instruction.line))
 				next_id += 1
 				mir_enum_component_literal(native_module, literal, 1, integer_string(variant), instruction.source_id, instruction.line)
 				mut result := instruction.result
-				if instruction.kind == 39
+				if instruction.kind == mir_op_enum_field()
 					result = next_id
-					native_module.values.push(MirValue.new(function_id: function.id, id: next_id, type_id: 2, source_id: instruction.source_id, line: instruction.line))
+					native_module.values.push(MirValue.new(function_id: function.id, id: next_id, type_id: mir_type_boolean(), source_id: instruction.source_id, line: instruction.line))
 					next_id += 1
 				end
 				tag := mir_enum_components_at(components, instruction.first)[0]
-				native_module.instructions.push(MirInstruction.new(kind: 7, result: result, first: tag, second: literal, payload: 6, failure: -1, source_id: instruction.source_id, line: instruction.line))
-				if instruction.kind == 39
-					native_module.instructions.push(MirInstruction.new(kind: 43, result: -1, first: result, second: -1, payload: 4, failure: failure, source_id: instruction.source_id, line: instruction.line))
+				native_module.instructions.push(MirInstruction.new(kind: mir_op_scalar_binary(), result: result, first: tag, second: literal, payload: 6, failure: -1, source_id: instruction.source_id, line: instruction.line))
+				if instruction.kind == mir_op_enum_field()
+					native_module.instructions.push(MirInstruction.new(kind: mir_op_guard(), result: -1, first: result, second: -1, payload: 4, failure: failure, source_id: instruction.source_id, line: instruction.line))
 					fields := mir_enum_component_fields(native_module, mir_value_type(native_module, function.id, instruction.first))
 					mut field := 0
 					while field < fields.size()
 						if fields[field] == instruction.payload
 							payload := mir_rewrite_value(aliases, mir_enum_components_at(components, instruction.first)[field + 1])
-							native_module.instructions.push(MirInstruction.new(kind: 73, result: instruction.result, first: payload, second: -1, payload: 0, failure: -1, source_id: instruction.source_id, line: instruction.line))
+							native_module.instructions.push(MirInstruction.new(kind: mir_op_value_copy(), result: instruction.result, first: payload, second: -1, payload: 0, failure: -1, source_id: instruction.source_id, line: instruction.line))
 						end
 						field += 1
 					end
@@ -328,14 +331,14 @@ def mir_scalarize_enum_components(mut native_module: MirModule, function_index: 
 		native_module.blocks.push(mir_block(block.id, block.source_id, block.line, parameters[0], parameters[1], instruction_start, native_module.instructions.size() - instruction_start, block.terminator, mir_rewrite_value(aliases, block.condition), block.first_target, block.second_target, first[0], first[1], second[0], second[1], mir_rewrite_value(aliases, block.return_value)))
 		index += 1
 	end
-	native_module.blocks.push(mir_block(failure, function.source_id, function.line, 0, 0, 0, 0, 4, -1, -1, -1, 0, 0, 0, 0, -1))
+	native_module.blocks.push(mir_block(failure, function.source_id, function.line, 0, 0, 0, 0, mir_terminator_trap(), -1, -1, -1, 0, 0, 0, 0, -1))
 	# Reuse each aggregate's identity for its tag; every retained value row
 	# still has exactly one definition, including explicit payload copies.
 	index = 0
 	while index < native_module.values.size()
 		value := native_module.values[index]
 		if value.function_id == function.id && mir_managed_contains(enums, value.id)
-			native_module.values[index] = MirValue.new(function_id: function.id, id: value.id, type_id: 1, source_id: value.source_id, line: value.line)
+			native_module.values[index] = MirValue.new(function_id: function.id, id: value.id, type_id: mir_type_integer(), source_id: value.source_id, line: value.line)
 		end
 		index += 1
 	end

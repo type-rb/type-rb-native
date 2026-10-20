@@ -1,3 +1,5 @@
+import { mir_function_control, mir_terminator_branch, mir_terminator_jump, mir_terminator_return } from mir/model/control
+import { mir_op_array_position, mir_op_array_store, mir_op_callable_new, mir_op_direct_call, mir_op_enum_new, mir_op_hash_new, mir_op_hash_set, mir_op_indirect_call, mir_op_record_new, mir_op_scalar_binary, mir_op_scalar_literal, mir_op_singleton_literal, mir_op_string_compare, mir_op_string_concat, mir_op_string_index, mir_op_string_literal, mir_op_string_replace } from mir/model/instructions
 import { mir_effect_allocation } from mir/model/effects
 import { mir_planned_instruction_effects } from mir/analysis/callables
 import { mir_managed_type } from mir/model/types
@@ -81,33 +83,33 @@ def mir_live_before(native_module: MirModule, managed: Array<Integer>, instructi
 		end
 	end
 	kind := instruction.kind
-	if kind == 42
+	if kind == mir_op_indirect_call()
 		mir_live_operand(managed, live, instruction.first)
 		mut index := instruction.payload
 		while index < instruction.payload + instruction.second
 			mir_live_operand(managed, live, native_module.arguments[index])
 			index += 1
 		end
-	elsif kind == 11
+	elsif kind == mir_op_direct_call()
 		call := native_module.calls[instruction.payload]
 		mut index := call.argument_start
 		while index < call.argument_start + call.argument_count
 			mir_live_operand(managed, live, native_module.arguments[index])
 			index += 1
 		end
-	elsif kind == 25 || kind == 37 || kind == 41
+	elsif kind == mir_op_record_new() || kind == mir_op_enum_new() || kind == mir_op_callable_new()
 		mut index := instruction.first
 		while index < instruction.first + instruction.second
 			mir_live_operand(managed, live, native_module.arguments[index])
 			index += 1
 		end
-	elsif kind != 6 && kind != 12 && kind != 57 && kind != 27
+	elsif kind != mir_op_scalar_literal() && kind != mir_op_string_literal() && kind != mir_op_singleton_literal() && kind != mir_op_hash_new()
 		mir_live_operand(managed, live, instruction.first)
-		if kind == 7 || kind == 13 || kind == 14 || kind == 16 || kind >= 21
+		if kind == mir_op_scalar_binary() || kind == mir_op_string_concat() || kind == mir_op_string_compare() || kind == mir_op_string_index() || kind >= mir_op_array_position()
 			mir_live_operand(managed, live, instruction.second)
 		end
 	end
-	if kind == 23 || kind == 29 || kind == 61
+	if kind == mir_op_array_store() || kind == mir_op_hash_set() || kind == mir_op_string_replace()
 		mir_live_operand(managed, live, instruction.payload)
 	end
 	return live
@@ -153,13 +155,13 @@ end
 
 def mir_live_exit(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>, managed: Array<Integer>, block: MirBlock, incoming: Array<Array<Integer>>): Array<Integer>
 	mut live: Array<Integer> := []
-	if block.terminator == 1 || block.terminator == 2
+	if block.terminator == mir_terminator_jump() || block.terminator == mir_terminator_branch()
 		mir_live_edge(native_module, function, blocks, block.first_target, block.first_argument_start, live, incoming)
 	end
-	if block.terminator == 2
+	if block.terminator == mir_terminator_branch()
 		mir_live_edge(native_module, function, blocks, block.second_target, block.second_argument_start, live, incoming)
 	end
-	if block.terminator == 3
+	if block.terminator == mir_terminator_return()
 		mir_live_operand(managed, live, block.return_value)
 	end
 	return live
@@ -229,10 +231,10 @@ def mir_live_incoming(native_module: MirModule, function: MirFunction, blocks: H
 	index = 0
 	while index < function.block_count
 		block := native_module.blocks[function.block_start + index]
-		if block.terminator == 1 || block.terminator == 2
+		if block.terminator == mir_terminator_jump() || block.terminator == mir_terminator_branch()
 			predecessors[blocks[integer_string(block.first_target)]].push(index)
 		end
-		if block.terminator == 2
+		if block.terminator == mir_terminator_branch()
 			predecessors[blocks[integer_string(block.second_target)]].push(index)
 		end
 		index += 1
@@ -263,7 +265,7 @@ end
 def mir_function_roots_with_values(native_module: MirModule, function: MirFunction, values: Array<MirValue>): MirRootPlan
 	mut points: Array<Integer> := []
 	mut roots: Array<Array<Integer>> := []
-	if function.kind != 3
+	if function.kind != mir_function_control()
 		return MirRootPlan.new(function_id: function.id, instructions: points, roots: roots, capacity: 0)
 	end
 	blocks := mir_flow_blocks(native_module, function)

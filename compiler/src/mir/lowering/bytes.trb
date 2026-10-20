@@ -1,3 +1,6 @@
+import { checked_category_value } from frontend/types/value_categories
+import { bytes_method_at, bytes_method_concat, bytes_method_from_string, bytes_method_none, bytes_method_size, bytes_method_to_string, bytes_method_valid_utf8 } from frontend/types/method_kinds
+import { mir_bytes_opcode_offset, mir_op_integer_immediate, mir_op_scalar_literal } from mir/model/instructions
 import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from frontend/checking/body/values
 import { mir_control_active, mir_control_prepare } from mir/build/control
 import { MirBlock, MirInstruction, MirModule } from mir/model/module
@@ -12,45 +15,45 @@ import { load_integer } from support/storage
 # concatenation, 71 UTF-8 replacement decoding, 72 UTF-8 validity.
 def bytes_method_kind(receiver: String, name: String): Integer
 	if receiver == "String" && name == "to_bytes"
-		return 1
+		return bytes_method_from_string()
 	end
 	if receiver != "Bytes"
-		return 0
+		return bytes_method_none()
 	end
 	if name == "size"
-		return 2
+		return bytes_method_size()
 	elsif name == "at"
-		return 3
+		return bytes_method_at()
 	elsif name == "concat"
-		return 4
+		return bytes_method_concat()
 	elsif name == "to_s"
-		return 5
+		return bytes_method_to_string()
 	elsif name == "valid_utf8?"
-		return 6
+		return bytes_method_valid_utf8()
 	end
-	return 0
+	return bytes_method_none()
 end
 
 def bytes_method_arity(kind: Integer): Integer
-	if kind == 3 || kind == 4
+	if kind == bytes_method_at() || kind == bytes_method_concat()
 		return 1
 	end
 	return 0
 end
 
 def bytes_method_argument_type(kind: Integer): String
-	if kind == 4
+	if kind == bytes_method_concat()
 		return "Bytes"
 	end
 	return "Integer"
 end
 
 def bytes_method_result(kind: Integer): String
-	if kind == 2 || kind == 3
+	if kind == bytes_method_size() || kind == bytes_method_at()
 		return "Integer"
-	elsif kind == 5
+	elsif kind == bytes_method_to_string()
 		return "String"
-	elsif kind == 6
+	elsif kind == bytes_method_valid_utf8()
 		return "Boolean"
 	end
 	return "Bytes"
@@ -68,23 +71,23 @@ def mir_bytes_method(mut state: CompilerState, mut locals: CheckedLocals, kind: 
 	end
 	result_type := bytes_method_result(kind)
 	if !mir_control_active(locals)
-		return checked_value(result_type, 0, 9007199254740991, 0)
+		return checked_value(result_type, checked_category_value(), 9007199254740991, 0)
 	end
 	result := scalar_mir_value(state, locals, mir_semantic_type_id(state.scalar_mir, result_type), origin)
-	scalar_mir_instruction(state, locals, kind + 66, result, first, second, 0, -1, load_integer(state.source_tokens.token_lines, origin))
+	scalar_mir_instruction(state, locals, kind + mir_bytes_opcode_offset(), result, first, second, 0, -1, load_integer(state.source_tokens.token_lines, origin))
 	return mir_checked_value(result_type, result, 9007199254740991, 0)
 end
 
 def mir_bytes_instruction_error(flow: MirFlow, native_module: MirModule, block: MirBlock, index: Integer, instruction: MirInstruction): String
-	kind := instruction.kind - 66
-	if kind < 1 || kind > 6 || instruction.payload != 0 || instruction.failure != -1
+	kind := instruction.kind - mir_bytes_opcode_offset()
+	if kind < mir_op_integer_immediate() || kind > mir_op_scalar_literal() || instruction.payload != 0 || instruction.failure != -1
 		return "MIR Bytes operation shape differs"
 	end
 	if !mir_value_available(flow, block, index, instruction.first)
 		return "MIR Bytes receiver is unavailable"
 	end
 	mut receiver_type := "Bytes"
-	if kind == 1
+	if kind == mir_op_integer_immediate()
 		receiver_type = "String"
 	end
 	if mir_semantic_type_name(native_module, mir_flow_type(flow, instruction.first)) != receiver_type

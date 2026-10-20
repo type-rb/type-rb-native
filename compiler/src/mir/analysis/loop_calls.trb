@@ -1,3 +1,7 @@
+import { mir_type_boolean, mir_type_float, mir_type_integer } from mir/model/type_ids
+import { mir_signature_ordinary } from mir/model/call_kinds
+import { mir_function_control, mir_terminator_jump } from mir/model/control
+import { mir_op_direct_call } from mir/model/instructions
 import { mir_effect_failure, mir_effect_none } from mir/model/effects
 import { integer_string } from support/literals
 import { MirBlock, MirFunction, MirLoopCall, MirModule, mir_function_index } from mir/model/module
@@ -12,18 +16,18 @@ import { mir_numeric_blocks } from mir/analysis/numeric
 # interchangeable even when a call returns equal contents.
 def mir_loop_call_candidate(native_module: MirModule, position: Integer, flow: MirFlow): Boolean
 	instruction := native_module.instructions[position]
-	if instruction.kind != 11 || instruction.result < 0
+	if instruction.kind != mir_op_direct_call() || instruction.result < 0
 		return false
 	end
 	result := mir_flow_type(flow, instruction.result)
-	if result != 1 && result != 2 && result != 5
+	if result != mir_type_integer() && result != mir_type_boolean() && result != mir_type_float()
 		return false
 	end
 	call := native_module.calls[instruction.payload]
 	if call.effects != mir_effect_none() && call.effects != mir_effect_failure()
 		return false
 	end
-	if native_module.signatures[call.callee].kind != 0
+	if native_module.signatures[call.callee].kind != mir_signature_ordinary()
 		return false
 	end
 	return mir_function_index(native_module, call.callee) >= 0
@@ -75,7 +79,7 @@ def mir_loop_calls_at_header(native_module: MirModule, function: MirFunction, fl
 		if mir_flow_dominates(flow, header_index, previous)
 			pending.push(previous)
 		else
-			if preheader != -1 || native_module.blocks[function.block_start + previous].terminator != 1
+			if preheader != -1 || native_module.blocks[function.block_start + previous].terminator != mir_terminator_jump()
 				preheader = -2
 			else
 				preheader = previous
@@ -145,7 +149,7 @@ end
 
 def mir_function_loop_calls(native_module: MirModule, function: MirFunction): Array<MirLoopCall>
 	mut plans: Array<MirLoopCall> := []
-	if function.kind != 3
+	if function.kind != mir_function_control()
 		return plans
 	end
 	mut has_call := false
@@ -155,7 +159,7 @@ def mir_function_loop_calls(native_module: MirModule, function: MirFunction): Ar
 		mut position := block.instruction_start
 		while position < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[position]
-			if instruction.kind == 11
+			if instruction.kind == mir_op_direct_call()
 				if native_module.calls[instruction.payload].effects == mir_effect_none() || native_module.calls[instruction.payload].effects == mir_effect_failure()
 					has_call = true
 				end

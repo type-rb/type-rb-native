@@ -1,3 +1,7 @@
+import { mir_type_integer } from mir/model/type_ids
+import { mir_adapter_none, mir_signature_ordinary } from mir/model/call_kinds
+import { mir_function_scalar, mir_terminator_return, mir_terminator_trap } from mir/model/control
+import { mir_op_direct_call, mir_op_scalar_literal } from mir/model/instructions
 import { mir_refine_call_effects } from mir/analysis/call_effects
 import { MirFunction, MirInstruction, MirModule, mir_block_index, mir_value_type } from mir/model/module
 
@@ -6,14 +10,14 @@ import { MirFunction, MirInstruction, MirModule, mir_block_index, mir_value_type
 # summaries conservatively include failure. Names and stored effects are not
 # evidence for this rewrite.
 def mir_integer_literal_return(native_module: MirModule, function: MirFunction): Integer
-	if function.kind != 1 || function.parameter_count != 0 || function.result_type != "Integer" || function.block_count != 2
+	if function.kind != mir_function_scalar() || function.parameter_count != 0 || function.result_type != "Integer" || function.block_count != 2
 		return -1
 	end
 	if function.id < 0 || function.id >= native_module.signatures.size()
 		return -1
 	end
 	signature := native_module.signatures[function.id]
-	if signature.kind != 0 || signature.adapter != 0 || signature.parameter_types.size() != 0 || signature.result_type != "Integer"
+	if signature.kind != mir_signature_ordinary() || signature.adapter != mir_adapter_none() || signature.parameter_types.size() != 0 || signature.result_type != "Integer"
 		return -1
 	end
 	entry_index := mir_block_index(native_module, function, function.entry_block)
@@ -21,22 +25,22 @@ def mir_integer_literal_return(native_module: MirModule, function: MirFunction):
 		return -1
 	end
 	entry := native_module.blocks[entry_index]
-	# Terminator 3 returns a value; the other scalar block is an empty trap.
-	if entry.terminator != 3 || entry.parameter_count != 0 || entry.instruction_count != 1
+	# The entry returns a value; the other scalar block is an empty trap.
+	if entry.terminator != mir_terminator_return() || entry.parameter_count != 0 || entry.instruction_count != 1
 		return -1
 	end
 	mut index := function.block_start
 	while index < function.block_start + function.block_count
 		block := native_module.blocks[index]
-		if index != entry_index && (block.terminator != 4 || block.parameter_count != 0 || block.instruction_count != 0)
+		if index != entry_index && (block.terminator != mir_terminator_trap() || block.parameter_count != 0 || block.instruction_count != 0)
 			return -1
 		end
 		index += 1
 	end
 	literal := native_module.instructions[entry.instruction_start]
-	# Kind 6 retains the verified module literal and its nonnegative fact.
+	# A scalar literal retains the verified module value and nonnegative fact.
 	# Negative expressions have a separate unary instruction and stay ordinary.
-	if literal.kind != 6 || literal.failure != -1 || literal.result != entry.return_value || mir_value_type(native_module, function.id, literal.result) != 1
+	if literal.kind != mir_op_scalar_literal() || literal.failure != -1 || literal.result != entry.return_value || mir_value_type(native_module, function.id, literal.result) != mir_type_integer()
 		return -1
 	end
 	return entry.instruction_start
@@ -62,8 +66,8 @@ def mir_fold_integer_literal_calls(mut native_module: MirModule)
 	mut index := 0
 	while index < native_module.instructions.size()
 		instruction := native_module.instructions[index]
-		# Kind 11 is a direct call. Indirect/foreign calls keep their own path.
-		if instruction.kind == 11
+		# Only direct calls participate. Indirect/foreign calls keep their own path.
+		if instruction.kind == mir_op_direct_call()
 			call := native_module.calls[instruction.payload]
 			literal_index := literals[call.callee]
 			if call.argument_count == 0 && literal_index >= 0

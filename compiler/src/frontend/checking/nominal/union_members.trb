@@ -1,3 +1,7 @@
+import { checked_category_value } from frontend/types/value_categories
+import { mir_control_parameter_count_slot, nullable_state_head_slot } from state/local_slots
+import { binary_add_assign } from frontend/types/operators
+import { mir_op_object_store, mir_op_union_extract, mir_op_union_test } from mir/model/instructions
 import { literal_type_base } from frontend/types/literal_types
 import { literal_branch_types } from frontend/checking/nominal/literal_cases
 import { union_parts, union_type } from frontend/types/union_types
@@ -120,29 +124,29 @@ def check_union_member(mut state: CompilerState, mut locals: CheckedLocals, valu
 	line := load_integer(state.source_tokens.token_lines, origin)
 	if expected == ""
 		diagnostic(state, "TRBN4004", line, "union alternatives do not expose a common data field " + member)
-		return checked_view(value, "Invalid", 0)
+		return checked_view(value, "Invalid", checked_category_value())
 	end
 	assignment := token_is(state, origin + 1, "=")
-	compound := binary_operator_id(load_string(state.source_tokens.token_texts, origin + 1)) >= 17
+	compound := binary_operator_id(load_string(state.source_tokens.token_texts, origin + 1)) >= binary_add_assign()
 	if assignment || compound
 		writable := union_member_write_type(state, value.type_name, member, origin)
 		if writable == ""
-			return checked_view(value, "Invalid", 0)
+			return checked_view(value, "Invalid", checked_category_value())
 		end
 		operand := checked_mir_value(value)
 		if mir_control_active(locals) && operand >= 0
 			locals.mir_union_targets.push(MirUnionTarget.new(origin: origin, owner: operand, type_name: value.type_name, member: member))
 		end
 		if assignment
-			return checked_bound_value(writable, 0, origin, value.mutable, value.binding)
+			return checked_bound_value(writable, checked_category_value(), origin, value.mutable, value.binding)
 		end
 	end
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
 		if assignment || compound
-			return checked_bound_value(expected, 0, origin, value.mutable, value.binding)
+			return checked_bound_value(expected, checked_category_value(), origin, value.mutable, value.binding)
 		end
-		return checked_view(value, expected, 0)
+		return checked_view(value, expected, checked_category_value())
 	end
 	join := mir_control_allocate(locals)
 	alternatives := union_parts(value.type_name)
@@ -151,10 +155,10 @@ def check_union_member(mut state: CompilerState, mut locals: CheckedLocals, valu
 		alternative := alternatives[index]
 		mut next_branch := -1
 		if index + 1 < alternatives.size()
-			condition := mir_union_operation(state, locals, 53, value, alternative, "Boolean", origin)
+			condition := mir_union_operation(state, locals, mir_op_union_test(), value, alternative, "Boolean", origin)
 			next_branch = mir_control_branch(state, locals, condition, line)
 		end
-		payload := mir_union_operation(state, locals, 54, value, alternative, alternative, origin)
+		payload := mir_union_operation(state, locals, mir_op_union_extract(), value, alternative, alternative, origin)
 		projected := mir_checked_union_member(state, locals, payload, member, origin)
 		converted := mir_nullable_coerce(state, locals, projected, expected, origin)
 		arguments := mir_control_arguments(locals, locals.count[0])
@@ -168,7 +172,7 @@ def check_union_member(mut state: CompilerState, mut locals: CheckedLocals, valu
 	mir_control_enter(state, locals, join, line)
 	result := mir_add_value(state, locals, mir_semantic_type_id(state.scalar_mir, expected), line)
 	locals.mir_arguments.push(result)
-	locals.mir_control[5] += 1
+	locals.mir_control[mir_control_parameter_count_slot()] += 1
 	mut result_origin := 9007199254740991
 	mut result_readonly := true
 	if assignment || compound
@@ -197,12 +201,12 @@ def mir_checked_union_store(mut state: CompilerState, mut locals: CheckedLocals,
 					alternative := alternatives[alternative_index]
 					mut next_branch := -1
 					if alternative_index + 1 < alternatives.size()
-						condition := mir_union_operation(state, locals, 53, receiver, alternative, "Boolean", row.origin)
+						condition := mir_union_operation(state, locals, mir_op_union_test(), receiver, alternative, "Boolean", row.origin)
 						next_branch = mir_control_branch(state, locals, condition, load_integer(state.source_tokens.token_lines, row.origin))
 					end
-					payload := mir_union_operation(state, locals, 54, receiver, alternative, alternative, row.origin)
+					payload := mir_union_operation(state, locals, mir_op_union_extract(), receiver, alternative, alternative, row.origin)
 					field := object_field_index(state, find_object_type(state, alternative), "@" + row.member)
-					scalar_mir_instruction(state, locals, 65, -1, checked_mir_value(payload), operand, field, -1, load_integer(state.source_tokens.token_lines, row.origin))
+					scalar_mir_instruction(state, locals, mir_op_object_store(), -1, checked_mir_value(payload), operand, field, -1, load_integer(state.source_tokens.token_lines, row.origin))
 					mir_control_jump(state, locals, join, locals.count[0])
 					if next_branch >= 0
 						mir_control_enter(state, locals, next_branch, load_integer(state.source_tokens.token_lines, row.origin))
@@ -277,6 +281,6 @@ def narrow_union_discriminant(state: CompilerState, mut locals: CheckedLocals, c
 		end
 	end
 	if matched.size() > 0
-		locals.nullable_state[0] = nullable_fact(locals, binding, -1, union_type(matched), locals.nullable_state[0])
+		locals.nullable_state[nullable_state_head_slot()] = nullable_fact(locals, binding, -1, union_type(matched), locals.nullable_state[nullable_state_head_slot()])
 	end
 end

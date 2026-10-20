@@ -1,3 +1,5 @@
+import { mir_type_integer, mir_type_string } from mir/model/type_ids
+import { mir_op_guard, mir_op_hash_get, mir_op_hash_set, mir_op_integer_immediate, mir_op_integer_less, mir_op_integer_to_float, mir_op_scalar_literal, mir_op_string_literal } from mir/model/instructions
 import { mir_instruction_occurrences } from mir/analysis/flow
 import { MirHashLookupReuse, MirInstruction, MirModule, mir_value_type } from mir/model/module
 import { mir_hash_key_type } from mir/model/types
@@ -6,13 +8,13 @@ import { mir_hash_key_type } from mir/model/types
 # allocations, mutation, other reads and future instruction kinds invalidate it.
 # Scalar failures stay in place and never turn a missing get into an insertion.
 def mir_hash_lookup_preserves(instruction: MirInstruction): Boolean
-	if instruction.kind >= 1 && instruction.kind <= 3
+	if instruction.kind >= mir_op_integer_immediate() && instruction.kind <= mir_op_integer_less()
 		return true
 	end
-	if instruction.kind >= 6 && instruction.kind <= 9
+	if instruction.kind >= mir_op_scalar_literal() && instruction.kind <= mir_op_integer_to_float()
 		return true
 	end
-	if instruction.kind == 12 || instruction.kind == 43
+	if instruction.kind == mir_op_string_literal() || instruction.kind == mir_op_guard()
 		return true
 	end
 	return false
@@ -31,15 +33,15 @@ def mir_hash_lookup_plans(native_module: MirModule): Array<MirHashLookupReuse>
 				instruction := native_module.instructions[index]
 				if occurrences[index] != 1
 					producer = -1
-				elsif instruction.kind == 28
+				elsif instruction.kind == mir_op_hash_get()
 					producer = index
-				elsif instruction.kind == 29
+				elsif instruction.kind == mir_op_hash_set()
 					if producer >= 0
 						get := native_module.instructions[producer]
 						if get.first == instruction.first && get.second == instruction.second
 							owner_type := mir_value_type(native_module, function.id, get.first)
 							key_type := mir_hash_key_type(native_module, owner_type)
-							if key_type == 1 || key_type == 8
+							if key_type == mir_type_integer() || key_type == mir_type_string()
 								plans.push(MirHashLookupReuse.new(producer: producer, store: index))
 							end
 						end

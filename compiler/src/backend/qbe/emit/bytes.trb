@@ -1,3 +1,5 @@
+import { mir_type_kind_bytes } from mir/model/type_kinds
+import { mir_op_bytes_at, mir_op_bytes_concat, mir_op_bytes_size, mir_op_bytes_to_string, mir_op_string_to_bytes } from mir/model/instructions
 import { MirInstruction, MirModule } from mir/model/module
 import { mir_operand_type, mir_storage_type_name } from mir/model/types
 import { QbeEmitContext, QbeValue, emit_temporary, emitted_value } from backend/qbe/context
@@ -9,19 +11,19 @@ import { CompilerState } from state/state
 def emit_mir_bytes_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	first := operands[instruction.first]
 	result_type := mir_storage_type_name(state.scalar_mir, mir_operand_type(value_types, instruction.result))
-	if instruction.kind == 67
+	if instruction.kind == mir_op_string_to_bytes()
 		return emitted_value(first, result_type)
 	end
 	result := emit_temporary(context)
-	if instruction.kind == 68
+	if instruction.kind == mir_op_bytes_size()
 		address := emit_temporary(context)
 		qbe_output_line(output, "\t" + address + " =l add " + first + ", 8")
 		qbe_output_line(output, "\t" + result + " =l loadl " + address)
-	elsif instruction.kind == 69
+	elsif instruction.kind == mir_op_bytes_at()
 		qbe_output_line(output, "\t" + result + " =l call $trbn_bytes_at(l " + first + ", l " + operands[instruction.second] + ")")
-	elsif instruction.kind == 70
+	elsif instruction.kind == mir_op_bytes_concat()
 		qbe_output_line(output, "\t" + result + " =l call $trbn_string_concat(l " + first + ", l " + operands[instruction.second] + ")")
-	elsif instruction.kind == 71
+	elsif instruction.kind == mir_op_bytes_to_string()
 		qbe_output_line(output, "\t" + result + " =l call $trbn_bytes_to_string(l " + first + ")")
 	else
 		qbe_output_line(output, "\t" + result + " =l call $trbn_bytes_valid_utf8(l " + first + ")")
@@ -36,7 +38,7 @@ def emit_bytes_runtime(native_module: MirModule, mut output: QbeOutput)
 	# Ordinary programs without Bytes keep their existing runtime surface.
 	mut needed := false
 	native_module.types.each do |row|
-		if row.kind == 17
+		if row.kind == mir_type_kind_bytes()
 			needed = true
 		end
 	end

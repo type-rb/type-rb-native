@@ -1,3 +1,7 @@
+import { mir_nil_test_not_equal } from mir/model/operation_modes
+import { mir_type_composite_start } from mir/model/type_ids
+import { mir_type_kind_nullable } from mir/model/type_kinds
+import { mir_op_nil_test, mir_op_nullable_inject, mir_op_nullable_none } from mir/model/instructions
 import { integer_string } from support/literals
 import { MirInstruction } from mir/model/module
 import { mir_managed_type, mir_operand_type, mir_storage_type_name } from mir/model/types
@@ -11,12 +15,12 @@ def emit_nullable_descriptors(state: CompilerState, mut output: QbeOutput)
 	mut index := 0
 	while index < state.scalar_mir.types.size()
 		row := state.scalar_mir.types[index]
-		if row.kind == 6
+		if row.kind == mir_type_kind_nullable()
 			mut fields := "0, l 8"
 			if mir_managed_type(state.scalar_mir, row.element)
 				fields = "1, l 8, l 8"
 			end
-			qbe_output_line(output, "data $trbn_desc_nullable" + integer_string(index + 9) + " = align 8 { l 1, l " + fields + " }")
+			qbe_output_line(output, "data $trbn_desc_nullable" + integer_string(index + mir_type_composite_start()) + " = align 8 { l 1, l " + fields + " }")
 		end
 		index += 1
 	end
@@ -26,18 +30,18 @@ end
 def emit_mir_nullable_instruction(state: CompilerState, types: Array<Integer>, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	result_id := mir_operand_type(types, instruction.result)
 	type_name := mir_storage_type_name(state.scalar_mir, result_id)
-	if instruction.kind == 33
+	if instruction.kind == mir_op_nullable_none()
 		return emitted_value("0", type_name)
 	end
 	first_type := mir_storage_type_name(state.scalar_mir, mir_operand_type(types, instruction.first))
 	result := emit_temporary(context)
-	if instruction.kind == 34
+	if instruction.kind == mir_op_nullable_inject()
 		qbe_output_line(output, "\t" + result + " =l call $trbn_gc_alloc(l $trbn_desc_nullable" + integer_string(result_id) + ", l 8, l 0)")
 		address := emit_address(context, output, result, 8)
 		emit_typed_store(output, first_type, operands[instruction.first], address)
-	elsif instruction.kind == 35
+	elsif instruction.kind == mir_op_nil_test()
 		mut operation := "ceql"
-		if instruction.payload == 1
+		if instruction.payload == mir_nil_test_not_equal()
 			operation = "cnel"
 		end
 		qbe_output_line(output, "\t" + result + " =l " + operation + " " + operands[instruction.first] + ", 0")

@@ -133,6 +133,15 @@ def default_mutation(name: str, source: str) -> list[str] | None:
         literal = re.fullmatch(r"return ([0-9]+)\n", needle)
         if literal and int(literal[1]) < 9007199254740991 and source.count(needle) == 1:
             return [name, needle, f"return {int(literal[1]) + 1}\n"]
+    # Several independent semantic domains can legitimately share every value.
+    # Use the complete nullary definition to select just one literal owner.
+    definition = r"^def [A-Za-z_][A-Za-z_0-9]*\(\): Integer\n[ \t]*return ([0-9]+)\nend\n"
+    for match in re.finditer(STRING + r"|#[^\n]*|" + definition, body, re.MULTILINE):
+        needle = match.group(0)
+        literal = re.fullmatch(definition, needle)
+        if literal and int(literal[1]) < 9007199254740991 and source.count(needle) == 1:
+            replacement = needle[:literal.start(1)] + str(int(literal[1]) + 1) + needle[literal.end(1):]
+            return [name, needle, replacement]
     return None
 
 

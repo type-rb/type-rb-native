@@ -1,3 +1,6 @@
+import { mir_guard_clamp_bounds, mir_guard_enum_variant, mir_guard_slice_size } from mir/model/operation_modes
+import { mir_terminator_branch, mir_terminator_jump, mir_terminator_return } from mir/model/control
+import { mir_op_array_copy, mir_op_array_join, mir_op_array_mutate, mir_op_array_new, mir_op_array_push, mir_op_bytes_valid_utf8, mir_op_callable_new, mir_op_direct_call, mir_op_enum_compare, mir_op_enum_new, mir_op_global_read, mir_op_global_write, mir_op_guard, mir_op_hash_method, mir_op_hash_new, mir_op_indirect_call, mir_op_literal_widen, mir_op_newtype_construct, mir_op_newtype_project, mir_op_nullable_extract, mir_op_nullable_none, mir_op_object_convert, mir_op_object_new, mir_op_object_store, mir_op_puts, mir_op_range_field, mir_op_range_new, mir_op_record_field, mir_op_record_new, mir_op_singleton_literal, mir_op_string_case, mir_op_string_literal, mir_op_string_query, mir_op_string_sequence, mir_op_string_slice, mir_op_string_split, mir_op_string_to_bytes, mir_op_string_trim, mir_op_union_extract, mir_op_union_inject, mir_op_value_copy } from mir/model/instructions
 import { mir_hash_concat_at_producer } from mir/analysis/hash_concats
 import { mir_array_join_elides } from mir/analysis/array_joins
 import { emit_mir_bytes_instruction } from backend/qbe/emit/bytes
@@ -92,7 +95,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 		while index < block.instruction_start + block.instruction_count
 			instruction := state.scalar_mir.instructions[index]
 			mut expanded_push := false
-			if instruction.kind == 24
+			if instruction.kind == mir_op_array_push()
 				expanded_push = types[instruction.second] == "Integer"
 			end
 			mut push_roots := previous_roots
@@ -161,61 +164,61 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 				value = emit_mir_hash_concat(state.scalar_mir, state.scalar_mir.hash_concat_probes[0][hash_concat], operands, context, output)
 			elsif concat >= 0
 				value = emit_mir_string_concat(concats[concat], operands, context, output)
-			elsif instruction.kind >= 67 && instruction.kind <= 72
+			elsif instruction.kind >= mir_op_string_to_bytes() && instruction.kind <= mir_op_bytes_valid_utf8()
 				value = emit_mir_bytes_instruction(state, value_types, instruction, operands, context, output)
-			elsif instruction.kind == 66
+			elsif instruction.kind == mir_op_object_convert()
 				value = emit_object_conversion(state.scalar_mir, instruction, operands, context, output)
-			elsif instruction.kind >= 63 && instruction.kind <= 65
+			elsif instruction.kind >= mir_op_object_new() && instruction.kind <= mir_op_object_store()
 				value = emit_mir_object_instruction(state, value_types, instruction, operands, context, output)
-			elsif instruction.kind == 55 || instruction.kind == 56 || instruction.kind == 58
+			elsif instruction.kind == mir_op_newtype_construct() || instruction.kind == mir_op_newtype_project() || instruction.kind == mir_op_literal_widen()
 				value = emitted_value(operands[instruction.first], types[instruction.result])
-			elsif instruction.kind == 57
+			elsif instruction.kind == mir_op_singleton_literal()
 				mut operand := state.scalar_mir.literal_texts[instruction.payload]
 				if types[instruction.result] == "String"
 					operand = symbols[instruction.payload]
 				end
 				value = emitted_value(operand, types[instruction.result])
-			elsif instruction.kind >= 52 && instruction.kind <= 54
+			elsif instruction.kind >= mir_op_union_inject() && instruction.kind <= mir_op_union_extract()
 				value = emit_mir_union_instruction(state, value_types, instruction, operands, context, output)
-			elsif instruction.kind == 51
+			elsif instruction.kind == mir_op_global_read()
 				value = emit_mir_global_read(state.scalar_mir, instruction, context, output)
-			elsif instruction.kind == 59
+			elsif instruction.kind == mir_op_global_write()
 				emit_mir_global_write(state.scalar_mir, instruction, operands[instruction.first], context, output)
-			elsif instruction.kind == 73
+			elsif instruction.kind == mir_op_value_copy()
 				value = emitted_value(operands[instruction.first], types[instruction.result])
-			elsif instruction.kind == 43
+			elsif instruction.kind == mir_op_guard()
 				valid := emit_label(context)
 				failed := emit_label(context)
 				qbe_output_branch(output, operands[instruction.first], valid, failed)
 				qbe_output_line(output, failed)
-				if instruction.payload == 1
+				if instruction.payload == mir_guard_clamp_bounds()
 					qbe_output_line(output, "\tcall $trbn_fail(l $trbn_clamp_error, l 37)")
-				elsif instruction.payload == 3
+				elsif instruction.payload == mir_guard_slice_size()
 					qbe_output_line(output, "\tcall $trbn_fail(l $trbn_slice_size_error, l 49)")
-				elsif instruction.payload == 4
+				elsif instruction.payload == mir_guard_enum_variant()
 					qbe_output_line(output, "\tcall $trbn_fail(l $trbn_enum_error, l 34)")
 				else
 					qbe_output_line(output, "\tcall $trbn_fail(l $trbn_array_empty_error, l 22)")
 				end
 				qbe_output_line(output, "\tjmp @mir_" + integer_string(instruction.failure))
 				qbe_output_line(output, valid)
-			elsif instruction.kind == 41 || instruction.kind == 42
+			elsif instruction.kind == mir_op_callable_new() || instruction.kind == mir_op_indirect_call()
 				value = emit_mir_callable(state, value_types, instruction, mir_callable_plan_at(state.scalar_mir.callable_plans[0], index), mir_numeric_find(state.scalar_mir.numeric_plans[0], -1, function.id, index), operands, context, output)
-			elsif instruction.kind >= 37 && instruction.kind <= 40
+			elsif instruction.kind >= mir_op_enum_new() && instruction.kind <= mir_op_enum_compare()
 				value = emit_mir_enum_instruction(state, value_types, instruction, operands, context, output)
-			elsif instruction.kind >= 33 && instruction.kind <= 36
+			elsif instruction.kind >= mir_op_nullable_none() && instruction.kind <= mir_op_nullable_extract()
 				value = emit_mir_nullable_instruction(state, value_types, instruction, operands, context, output)
-			elsif instruction.kind == 31 || instruction.kind == 32
+			elsif instruction.kind == mir_op_range_new() || instruction.kind == mir_op_range_field()
 				value = emit_mir_range_instruction(state, value_types, instruction, operands, context, output)
-			elsif instruction.kind >= 27 && instruction.kind <= 30
+			elsif instruction.kind >= mir_op_hash_new() && instruction.kind <= mir_op_hash_method()
 				value = emit_mir_hash_instruction(state, value_types, index, instruction, operands, context, output)
-			elsif instruction.kind == 25 || instruction.kind == 26
+			elsif instruction.kind == mir_op_record_new() || instruction.kind == mir_op_record_field()
 				value = emit_mir_record_instruction(state, value_types, instruction, operands, context, output)
-			elsif(instruction.kind >= 19 && instruction.kind <= 24) || instruction.kind == 47 || instruction.kind == 48
+			elsif(instruction.kind >= mir_op_array_new() && instruction.kind <= mir_op_array_push()) || instruction.kind == mir_op_array_copy() || instruction.kind == mir_op_array_mutate()
 				value = emit_mir_array_instruction(state, value_types, instruction, index, array_loops, array_check_reuse, array_read_guards, operands, context, output)
-			elsif(instruction.kind >= 12 && instruction.kind <= 18) || instruction.kind == 44 || instruction.kind == 45 || instruction.kind == 46 || instruction.kind == 49 || instruction.kind == 50 || (instruction.kind >= 60 && instruction.kind <= 62)
+			elsif(instruction.kind >= mir_op_string_literal() && instruction.kind <= mir_op_puts()) || instruction.kind == mir_op_string_query() || instruction.kind == mir_op_string_sequence() || instruction.kind == mir_op_string_slice() || instruction.kind == mir_op_array_join() || instruction.kind == mir_op_string_trim() || (instruction.kind >= mir_op_string_split() && instruction.kind <= mir_op_string_case())
 				value = emit_mir_string_instruction(state, value_types, instruction, operands, symbols, context, output)
-			elsif instruction.kind == 11
+			elsif instruction.kind == mir_op_direct_call()
 				call_plan := mir_numeric_find(state.scalar_mir.numeric_plans[0], -1, function.id, index)
 				guarded := mir_numeric_guarded(state.scalar_mir.numeric_plans[0], function.id, index)
 				if guarded.size() > 0
@@ -264,9 +267,9 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 			end
 		end
 		emit_mir_array_headers(array_loops, block.id, operands, context, output)
-		if block.terminator == 1
+		if block.terminator == mir_terminator_jump()
 			emit_control_mir_edge(state, function, block.first_target, block.first_argument_start, block.first_argument_count, operands, types, context, output)
-		elsif block.terminator == 2
+		elsif block.terminator == mir_terminator_branch()
 			first := emit_label(context)
 			second := emit_label(context)
 			qbe_output_branch(output, operands[block.condition], first, second)
@@ -274,7 +277,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 			emit_control_mir_edge(state, function, block.first_target, block.first_argument_start, block.first_argument_count, operands, types, context, output)
 			qbe_output_line(output, second)
 			emit_control_mir_edge(state, function, block.second_target, block.second_argument_start, block.second_argument_count, operands, types, context, output)
-		elsif block.terminator == 3
+		elsif block.terminator == mir_terminator_return()
 			if result_type != "Void"
 				emit_typed_store(output, result_type, operands[block.return_value], "%return_value")
 			end

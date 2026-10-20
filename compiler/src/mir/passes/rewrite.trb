@@ -1,3 +1,5 @@
+import { mir_function_control, mir_terminator_trap } from mir/model/control
+import { mir_op_array_position, mir_op_array_store, mir_op_callable_new, mir_op_direct_call, mir_op_enum_new, mir_op_hash_new, mir_op_hash_set, mir_op_indirect_call, mir_op_record_new, mir_op_scalar_binary, mir_op_scalar_literal, mir_op_singleton_literal, mir_op_string_compare, mir_op_string_concat, mir_op_string_index, mir_op_string_literal, mir_op_string_replace } from mir/model/instructions
 import { integer_string } from support/literals
 import { MirBlock, MirCall, MirFunction, MirInstruction, MirModule } from mir/model/module
 import { mir_block } from mir/build/blocks
@@ -26,31 +28,31 @@ def mir_rewrite_instruction(mut native_module: MirModule, instruction: MirInstru
 	mut first := instruction.first
 	mut second := instruction.second
 	mut payload := instruction.payload
-	if kind == 11
+	if kind == mir_op_direct_call()
 		call := native_module.calls[payload]
 		start := mir_rewrite_arguments(native_module, call.argument_start, call.argument_count, values)
 		payload = native_module.calls.size()
 		native_module.calls.push(MirCall.new(callee: call.callee, argument_start: start, argument_count: call.argument_count, effects: call.effects))
-	elsif kind == 25 || kind == 37 || kind == 41
+	elsif kind == mir_op_record_new() || kind == mir_op_enum_new() || kind == mir_op_callable_new()
 		first = mir_rewrite_arguments(native_module, first, second, values)
-	elsif kind == 42
+	elsif kind == mir_op_indirect_call()
 		first = mir_rewrite_value(values, first)
 		payload = mir_rewrite_arguments(native_module, payload, second, values)
-	elsif kind != 6 && kind != 12 && kind != 57 && kind != 27
+	elsif kind != mir_op_scalar_literal() && kind != mir_op_string_literal() && kind != mir_op_singleton_literal() && kind != mir_op_hash_new()
 		first = mir_rewrite_value(values, first)
-		if kind == 7 || kind == 13 || kind == 14 || kind == 16 || kind >= 21
+		if kind == mir_op_scalar_binary() || kind == mir_op_string_concat() || kind == mir_op_string_compare() || kind == mir_op_string_index() || kind >= mir_op_array_position()
 			second = mir_rewrite_value(values, second)
 		end
 	end
-	if kind == 23 || kind == 29 || kind == 61
+	if kind == mir_op_array_store() || kind == mir_op_hash_set() || kind == mir_op_string_replace()
 		payload = mir_rewrite_value(values, payload)
 	end
 	return MirInstruction.new(kind: kind, result: mir_rewrite_value(values, instruction.result), first: first, second: second, payload: payload, failure: mir_rewrite_value(blocks, instruction.failure), source_id: instruction.source_id, line: instruction.line)
 end
 
 def mir_rewrite_block(mut native_module: MirModule, block: MirBlock, values: Hash<String, Integer>, blocks: Hash<String, Integer>, instruction_start: Integer, instruction_count: Integer): MirBlock
-	if block.terminator == 4
-		return mir_block(mir_rewrite_value(blocks, block.id), block.source_id, block.line, 0, 0, instruction_start, instruction_count, 4, -1, -1, -1, 0, 0, 0, 0, -1)
+	if block.terminator == mir_terminator_trap()
+		return mir_block(mir_rewrite_value(blocks, block.id), block.source_id, block.line, 0, 0, instruction_start, instruction_count, mir_terminator_trap(), -1, -1, -1, 0, 0, 0, 0, -1)
 	end
 	parameters := mir_rewrite_arguments(native_module, block.parameter_start, block.parameter_count, values)
 	first := mir_rewrite_arguments(native_module, block.first_argument_start, block.first_argument_count, values)
@@ -59,7 +61,7 @@ def mir_rewrite_block(mut native_module: MirModule, block: MirBlock, values: Has
 end
 
 def mir_rewrite_function(function: MirFunction, start: Integer, count: Integer): MirFunction
-	return MirFunction.new(kind: 3, result_type: function.result_type, integer_guard: 0, id: function.id, entry_block: function.entry_block, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: start, block_count: count)
+	return MirFunction.new(kind: mir_function_control(), result_type: function.result_type, integer_guard: 0, id: function.id, entry_block: function.entry_block, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: start, block_count: count)
 end
 
 def mir_rewrite_next_value(native_module: MirModule, function: MirFunction): Integer

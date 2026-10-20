@@ -1,11 +1,13 @@
+import { mir_type_composite_start, mir_type_float_array, mir_type_integer_array } from mir/model/type_ids
+import { mir_type_kind_class, mir_type_kind_interface } from mir/model/type_kinds
 import { integer_string } from support/literals
 import { MirModule, mir_control_value_type, mir_origin_valid } from mir/model/module
 
 # Nominal identity is retained even though both object families occupy a word.
 def mir_object_id(native_module: MirModule, type_id: Integer): Integer
-	if type_id >= 9 && type_id - 9 < native_module.types.size()
-		row := native_module.types[type_id - 9]
-		if row.kind == 13 || row.kind == 14
+	if type_id >= mir_type_composite_start() && type_id - mir_type_composite_start() < native_module.types.size()
+		row := native_module.types[type_id - mir_type_composite_start()]
+		if row.kind == mir_type_kind_class() || row.kind == mir_type_kind_interface()
 			return row.declaration
 		end
 	end
@@ -19,12 +21,12 @@ def mir_object_types_error(native_module: MirModule): String
 		if row.declaration != owner || mir_object_id(native_module, row.type_id) != owner
 			return "MIR object declaration ownership differs"
 		end
-		type_row := native_module.types[row.type_id - 9]
+		type_row := native_module.types[row.type_id - mir_type_composite_start()]
 		mut expected := "Class#" + integer_string(owner)
-		mut kind := 13
+		mut kind := mir_type_kind_class()
 		if row.interface_type
 			expected = "Interface#" + integer_string(owner)
-			kind = 14
+			kind = mir_type_kind_interface()
 		end
 		if type_row.kind != kind || type_row.name != expected
 			return "MIR object nominal kind differs"
@@ -65,10 +67,10 @@ def mir_object_types_error(native_module: MirModule): String
 				return "MIR object field origin is invalid"
 			end
 			mut valid := false
-			if mir_control_value_type(field.type_id) || field.type_id == 3 || field.type_id == 6
+			if mir_control_value_type(field.type_id) || field.type_id == mir_type_integer_array() || field.type_id == mir_type_float_array()
 				valid = true
 			end
-			if field.type_id >= 9 && field.type_id - 9 < native_module.types.size()
+			if field.type_id >= mir_type_composite_start() && field.type_id - mir_type_composite_start() < native_module.types.size()
 				valid = true
 			end
 			if !valid

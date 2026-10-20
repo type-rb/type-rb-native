@@ -1,3 +1,5 @@
+import { mir_function_control } from mir/model/control
+import { mir_op_direct_call, mir_op_enum_new } from mir/model/instructions
 import { mir_enum_id, mir_managed_type, mir_storage_name } from mir/model/types
 import { mir_enum_stack_result_type, mir_enum_stack_selected, mir_enum_stack_value_type } from mir/analysis/enum_stack
 import { mir_numeric_find } from mir/analysis/numeric
@@ -48,7 +50,7 @@ def emit_function(mut state: CompilerState, function_index: Integer, value_group
 		end
 		parameters += "l %enum_out"
 	end
-	if function.kind == 3
+	if function.kind == mir_function_control()
 		emit_control_mir(state, function_index, result_type, value_groups[mir_index], output.mir_literal_symbols, context, body)
 	else
 		plan := mir_numeric_find(state.scalar_mir.numeric_plans[0], function_index, -1, -1)
@@ -100,7 +102,7 @@ def emit_function(mut state: CompilerState, function_index: Integer, value_group
 	if fragment_capacity > 0
 		qbe_output_line(output, "\t%string_fragments =l alloc8 " + integer_string(fragment_capacity * 8))
 	end
-	if function.kind == 3
+	if function.kind == mir_function_control()
 		# Every join finishes before the next one. Reuse one bounded pointer table.
 		mut join_capacity := 0
 		state.scalar_mir.array_joins[mir_index].each do |plan|
@@ -122,9 +124,9 @@ def emit_function(mut state: CompilerState, function_index: Integer, value_group
 			while instruction_index < block.instruction_start + block.instruction_count
 				instruction := state.scalar_mir.instructions[instruction_index]
 				mut stack_slot := false
-				if instruction.kind == 11
+				if instruction.kind == mir_op_direct_call()
 					stack_slot = mir_enum_stack_selected(state.scalar_mir.enum_stack_functions, state.scalar_mir.calls[instruction.payload].callee)
-				elsif instruction.kind == 37 && enum_stack_type != 0
+				elsif instruction.kind == mir_op_enum_new() && enum_stack_type != 0
 					stack_slot = mir_enum_stack_value_type(state.scalar_mir, function_index, instruction.result) == enum_stack_type
 				end
 				if stack_slot

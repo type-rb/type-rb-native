@@ -1,3 +1,6 @@
+import { mir_type_boolean, mir_type_float, mir_type_integer } from mir/model/type_ids
+import { mir_function_control } from mir/model/control
+import { mir_op_array_load, mir_op_array_position, mir_op_array_store, mir_op_direct_call } from mir/model/instructions
 import { mir_effect_failure, mir_effect_none } from mir/model/effects
 import { integer_string } from support/literals
 import { MirArrayReadGuard, MirFunction, MirModule, MirValue } from mir/model/module
@@ -15,7 +18,7 @@ end
 def mir_function_array_checks(native_module: MirModule, function: MirFunction, values: Array<MirValue>): MirArrayChecks
 	mut reuse: Array<Integer> := []
 	mut guards: Array<MirArrayReadGuard> := []
-	if function.kind != 3
+	if function.kind != mir_function_control()
 		return MirArrayChecks.new(reuse: reuse, guards: guards)
 	end
 	mut primitive: Hash<String, Integer> := {}
@@ -30,13 +33,13 @@ def mir_function_array_checks(native_module: MirModule, function: MirFunction, v
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[index]
-			if instruction.kind == 22 || instruction.kind == 23
+			if instruction.kind == mir_op_array_load() || instruction.kind == mir_op_array_store()
 				key := integer_string(instruction.second)
 				if captured.key?(key) && captured[key] == instruction.first
 					mir_live_add(reuse, index)
 				end
 			end
-			if instruction.kind == 21 || instruction.kind == 22
+			if instruction.kind == mir_op_array_position() || instruction.kind == mir_op_array_load()
 				key := integer_string(instruction.first) + ":" + integer_string(instruction.second)
 				if checked.key?(key)
 					mir_live_add(positions, index)
@@ -49,24 +52,24 @@ def mir_function_array_checks(native_module: MirModule, function: MirFunction, v
 			if effects != mir_effect_none() && effects != mir_effect_failure()
 				captured = {}
 			end
-			if instruction.kind == 11
+			if instruction.kind == mir_op_direct_call()
 				checked = {}
 			elsif effects != mir_effect_none() && effects != mir_effect_failure()
 				# Most functions do not need type membership. Build it only for a
 				# store instead of eagerly scanning every function value.
-				if instruction.kind == 23 && !primitive_ready
+				if instruction.kind == mir_op_array_store() && !primitive_ready
 					values.each do |value|
-						if value.type_id == 1 || value.type_id == 2 || value.type_id == 5
+						if value.type_id == mir_type_integer() || value.type_id == mir_type_boolean() || value.type_id == mir_type_float()
 							primitive[integer_string(value.id)] = 1
 						end
 					end
 					primitive_ready = true
 				end
-				if instruction.kind != 23 || !primitive.key?(integer_string(instruction.payload))
+				if instruction.kind != mir_op_array_store() || !primitive.key?(integer_string(instruction.payload))
 					checked = {}
 				end
 			end
-			if instruction.kind == 21
+			if instruction.kind == mir_op_array_position()
 				captured[integer_string(instruction.result)] = instruction.first
 			end
 			index += 1

@@ -1,3 +1,5 @@
+import { import_kind_module, import_kind_named } from state/import_kinds
+import { token_kind_attribute, token_kind_newline } from state/token_kinds
 import { ObjectDefinition, ObjectField, ObjectMethod } from frontend/types/object_model
 import { object_default_constructor, parse_object_header } from frontend/syntax/object_syntax
 import { NewtypeDefinition } from frontend/types/newtype_model
@@ -61,7 +63,7 @@ def parse_named_import(mut state: CompilerState, mut position: Array<Integer>, l
 				end
 				skip_newlines(state, position)
 			end
-			append_import(state, "", declaration, binding, 0, symbol_line)
+			append_import(state, "", declaration, binding, import_kind_named(), symbol_line)
 			if token_is(state, position[0], ",")
 				advance(position)
 				skip_newlines(state, position)
@@ -82,7 +84,7 @@ def parse_named_import(mut state: CompilerState, mut position: Array<Integer>, l
 		return false
 	end
 	mut path := ""
-	while load_integer(state.source_tokens.token_kinds, position[0]) != 4
+	while load_integer(state.source_tokens.token_kinds, position[0]) != token_kind_newline()
 		if terminal_token(state, position[0])
 			if path == ""
 				diagnostic(state, "TRBN4002", line, "import path is required")
@@ -117,7 +119,7 @@ def parse_bare_import(mut state: CompilerState, mut position: Array<Integer>, li
 		if terminal_token(state, position[0])
 			scanning = false
 		else
-			if load_integer(state.source_tokens.token_kinds, position[0]) == 4
+			if load_integer(state.source_tokens.token_kinds, position[0]) == token_kind_newline()
 				scanning = false
 			else
 				if token_is(state, position[0], "as")
@@ -141,7 +143,7 @@ def parse_bare_import(mut state: CompilerState, mut position: Array<Integer>, li
 			return false
 		end
 	end
-	append_import(state, path, "", binding, 1, line)
+	append_import(state, path, "", binding, import_kind_module(), line)
 	return finish_statement(state, position)
 end
 
@@ -236,12 +238,12 @@ def parse_object_declaration(mut state: CompilerState, mut position: Array<Integ
 				generic_function = generic_start
 			end
 			methods.push(ObjectMethod.new(name: name, class_member: class_member, origin: origin, function: function, generic_function: generic_function))
-		elsif token_is(state, origin, "readonly") || load_integer(state.source_tokens.token_kinds, origin) == 8
+		elsif token_is(state, origin, "readonly") || load_integer(state.source_tokens.token_kinds, origin) == token_kind_attribute()
 			readonly := token_is(state, origin, "readonly")
 			if readonly
 				advance(position)
 			end
-			if load_integer(state.source_tokens.token_kinds, position[0]) != 8
+			if load_integer(state.source_tokens.token_kinds, position[0]) != token_kind_attribute()
 				diagnostic(state, "TRBN4002", line, "expected an instance field")
 				break
 			end
