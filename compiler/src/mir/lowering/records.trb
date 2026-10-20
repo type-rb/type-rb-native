@@ -1,3 +1,5 @@
+import { checked_category_value } from frontend/types/value_categories
+import { mir_op_record_field, mir_op_record_new } from mir/model/instructions
 import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from frontend/checking/body/values
 import { MirBlock, MirFunction, MirInstruction, MirModule, mir_table_span_valid } from mir/model/module
 import { mir_control_active, mir_control_prepare } from mir/build/control
@@ -18,7 +20,7 @@ def mir_checked_record_new(mut state: CompilerState, mut locals: CheckedLocals, 
 		end
 	end
 	if !mir_control_active(locals)
-		return checked_value(type_name, 0, 9007199254740991, 1)
+		return checked_value(type_name, checked_category_value(), 9007199254740991, 1)
 	end
 	definition := state.scalar_mir.records[declaration]
 	start := locals.mir_arguments.size()
@@ -26,7 +28,7 @@ def mir_checked_record_new(mut state: CompilerState, mut locals: CheckedLocals, 
 		locals.mir_arguments.push(value)
 	end
 	result := scalar_mir_value(state, locals, definition.type_id, origin)
-	scalar_mir_instruction(state, locals, 25, result, start, arguments.size(), declaration, -1, load_integer(state.source_tokens.token_lines, origin))
+	scalar_mir_instruction(state, locals, mir_op_record_new(), result, start, arguments.size(), declaration, -1, load_integer(state.source_tokens.token_lines, origin))
 	return mir_checked_value(type_name, result, 9007199254740991, 1)
 end
 
@@ -41,7 +43,7 @@ def mir_checked_record_field(mut state: CompilerState, mut locals: CheckedLocals
 	end
 	row := state.scalar_mir.fields[field]
 	result := scalar_mir_value(state, locals, row.type_id, origin)
-	scalar_mir_instruction(state, locals, 26, result, owner, -1, field, -1, load_integer(state.source_tokens.token_lines, origin))
+	scalar_mir_instruction(state, locals, mir_op_record_field(), result, owner, -1, field, -1, load_integer(state.source_tokens.token_lines, origin))
 	return CheckedValue.new(type_name: type_name, category: -result - 1, origin: 9007199254740991, mutable: receiver.mutable, binding: receiver.binding, readonly: true, immutable_reference: false, nullable_binding: -1, nullable_field: -1, truth: -1, falsity: -1, flow_type: type_name)
 end
 
@@ -50,7 +52,7 @@ def mir_record_instruction_error(flow: MirFlow, native_module: MirModule, functi
 	if instruction.failure != -1
 		return "MIR record failure shape differs"
 	end
-	if instruction.kind == 25
+	if instruction.kind == mir_op_record_new()
 		declaration := mir_record_id(native_module, result)
 		if declaration < 0 || instruction.payload != declaration
 			return "MIR record construction identity differs"

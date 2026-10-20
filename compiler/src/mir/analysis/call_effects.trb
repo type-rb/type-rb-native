@@ -1,82 +1,87 @@
+import { hash_action_copy, hash_action_delete, hash_action_fetch, hash_action_keys, hash_action_update, hash_action_values } from mir/model/hash_actions
+import { mir_adapter_sqrt, mir_signature_ordinary, mir_signature_standard } from mir/model/call_kinds
+import { mir_function_control, mir_function_scalar, mir_terminator_jump, mir_terminator_trap } from mir/model/control
+import { mir_op_array_copy, mir_op_array_join, mir_op_array_load, mir_op_array_mutate, mir_op_array_new, mir_op_array_position, mir_op_array_push, mir_op_array_store, mir_op_bytes_at, mir_op_bytes_concat, mir_op_bytes_to_string, mir_op_callable_new, mir_op_direct_call, mir_op_enum_field, mir_op_enum_new, mir_op_global_read, mir_op_global_write, mir_op_hash_get, mir_op_hash_method, mir_op_hash_new, mir_op_hash_set, mir_op_indirect_call, mir_op_nullable_extract, mir_op_nullable_inject, mir_op_object_convert, mir_op_object_new, mir_op_object_store, mir_op_puts, mir_op_range_new, mir_op_record_new, mir_op_scalar_conversion, mir_op_scalar_literal, mir_op_string_case, mir_op_string_concat, mir_op_string_index, mir_op_string_sequence, mir_op_string_slice, mir_op_string_split, mir_op_string_trim, mir_op_union_extract, mir_op_union_inject, mir_op_value_copy } from mir/model/instructions
 import { mir_effect_allocation_failure, mir_effect_allocation_io_failure, mir_effect_allocation_mutation_failure, mir_effect_conservative, mir_effect_failure, mir_effect_io_failure, mir_effect_mutation, mir_effect_mutation_failure, mir_effect_none } from mir/model/effects
 import { MirCall, MirFunction, MirInstruction, MirModule, MirSignature, mir_function_index, mir_table_span_valid } from mir/model/module
 
 # Effects are allocation, mutation, I/O and failure bits. Runtime-internal
 # terminal failures stay with their operation; they never resume a MIR edge.
 def mir_instruction_effects(native_module: MirModule, instruction: MirInstruction): Integer
-	if instruction.kind == 70 || instruction.kind == 71
+	kind := instruction.kind
+	if kind == mir_op_bytes_concat() || kind == mir_op_bytes_to_string()
 		return mir_effect_allocation_failure()
 	end
-	if instruction.kind == 69
+	if kind == mir_op_bytes_at()
 		return mir_effect_failure()
 	end
-	if instruction.kind >= 60 && instruction.kind <= 62
+	if kind >= mir_op_string_split() && kind <= mir_op_string_case()
 		return mir_effect_allocation_failure()
 	end
-	if instruction.kind == 65
+	if kind == mir_op_object_store()
 		return mir_effect_mutation()
 	end
-	if instruction.kind == 59
+	if kind == mir_op_global_write()
 		return mir_effect_mutation_failure()
 	end
-	if instruction.kind == 48
+	if kind == mir_op_array_mutate()
 		if instruction.payload == 0
 			return mir_effect_allocation_mutation_failure()
 		end
 		return mir_effect_mutation_failure()
 	end
-	if instruction.kind == 41 || instruction.kind == 45 || instruction.kind == 46 || instruction.kind == 47 || instruction.kind == 49 || instruction.kind == 50
+	if kind == mir_op_callable_new() || kind == mir_op_string_sequence() || kind == mir_op_string_slice() || kind == mir_op_array_copy() || kind == mir_op_array_join() || kind == mir_op_string_trim()
 		return mir_effect_allocation_failure()
 	end
-	if instruction.kind == 42
+	if kind == mir_op_indirect_call()
 		return mir_effect_conservative()
 	end
-	if instruction.kind == 34 || instruction.kind == 37 || instruction.kind == 52
+	if kind == mir_op_nullable_inject() || kind == mir_op_enum_new() || kind == mir_op_union_inject()
 		return mir_effect_allocation_failure()
 	end
-	if instruction.kind == 36 || instruction.kind == 39 || instruction.kind == 51 || instruction.kind == 54
+	if kind == mir_op_nullable_extract() || kind == mir_op_enum_field() || kind == mir_op_global_read() || kind == mir_op_union_extract()
 		return mir_effect_failure()
 	end
-	if instruction.kind == 19 || instruction.kind == 25 || instruction.kind == 27 || instruction.kind == 31 || instruction.kind == 63 || instruction.kind == 66
+	if kind == mir_op_array_new() || kind == mir_op_record_new() || kind == mir_op_hash_new() || kind == mir_op_range_new() || kind == mir_op_object_new() || kind == mir_op_object_convert()
 		return mir_effect_allocation_failure()
 	end
-	if instruction.kind == 28
+	if kind == mir_op_hash_get()
 		return mir_effect_failure()
 	end
-	if instruction.kind == 30
+	if kind == mir_op_hash_method()
 		method := instruction.payload
-		if method == 6 || method == 9
+		if method == hash_action_delete() || method == hash_action_update()
 			return mir_effect_allocation_mutation_failure()
 		end
-		if method == 7 || method == 10 || method == 11
+		if method == hash_action_copy() || method == hash_action_keys() || method == hash_action_values()
 			return mir_effect_allocation_failure()
 		end
-		if method == 13
+		if method == hash_action_fetch()
 			return mir_effect_failure()
 		end
 	end
-	if instruction.kind == 24 || instruction.kind == 29
+	if kind == mir_op_array_push() || kind == mir_op_hash_set()
 		return mir_effect_allocation_mutation_failure()
 	end
-	if instruction.kind == 21 || instruction.kind == 22
+	if kind == mir_op_array_position() || kind == mir_op_array_load()
 		return mir_effect_failure()
 	end
-	if instruction.kind == 23
+	if kind == mir_op_array_store()
 		return mir_effect_mutation_failure()
 	end
-	if instruction.kind == 11
+	if kind == mir_op_direct_call()
 		return native_module.calls[instruction.payload].effects
 	end
-	if instruction.kind == 13 || instruction.kind == 16 || (instruction.kind == 17 && (instruction.payload == 1 || instruction.payload == 4))
+	if kind == mir_op_string_concat() || kind == mir_op_string_index() || (kind == mir_op_scalar_conversion() && (instruction.payload == 1 || instruction.payload == 4))
 		return mir_effect_allocation_failure()
 	end
-	if instruction.kind == 17 && instruction.payload == 5
+	if kind == mir_op_scalar_conversion() && instruction.payload == 5
 		return mir_effect_none()
 	end
-	if instruction.kind == 17 || instruction.failure >= 0
+	if kind == mir_op_scalar_conversion() || instruction.failure >= 0
 		return mir_effect_failure()
 	end
-	if instruction.kind == 18
+	if kind == mir_op_puts()
 		if instruction.payload == 1
 			return mir_effect_allocation_io_failure()
 		end
@@ -88,7 +93,7 @@ end
 # Declarations without an inspected ordinary body stay conservative. Only the
 # independently verified standard math adapter has no effects by contract.
 def mir_call_effects(signature: MirSignature): Integer
-	if signature.kind == 3 && signature.adapter == 11
+	if signature.kind == mir_signature_standard() && signature.adapter == mir_adapter_sqrt()
 		return mir_effect_none()
 	end
 	return mir_effect_conservative()
@@ -97,28 +102,28 @@ end
 # Read local effects once and retain reverse dependencies for direct calls.
 # Reaching the conservative class needs no further traversal of this body.
 def mir_body_call_effects(native_module: MirModule, function: MirFunction, caller: Integer, mut callers: Array<Array<Integer>>): Integer
-	if function.kind == 1
+	if function.kind == mir_function_scalar()
 		# Scalar adapters already have a checked no-allocation contract.
 		return mir_effect_failure()
 	end
-	if function.kind != 3 || function.block_count < 1 || !mir_table_span_valid(function.block_start, function.block_count, native_module.blocks.size())
+	if function.kind != mir_function_control() || function.block_count < 1 || !mir_table_span_valid(function.block_start, function.block_count, native_module.blocks.size())
 		return mir_effect_conservative()
 	end
 	mut local := mir_effect_none()
 	mut block_index := function.block_start
 	while block_index < function.block_start + function.block_count
 		block := native_module.blocks[block_index]
-		if block.terminator < 1 || block.terminator > 4 || !mir_table_span_valid(block.instruction_start, block.instruction_count, native_module.instructions.size())
+		if block.terminator < mir_terminator_jump() || block.terminator > mir_terminator_trap() || !mir_table_span_valid(block.instruction_start, block.instruction_count, native_module.instructions.size())
 			return mir_effect_conservative()
 		end
-		if block.terminator == 4
+		if block.terminator == mir_terminator_trap()
 			local = mir_effect_failure()
 		end
 		mut position := block.instruction_start
 		while position < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[position]
 			mut observed := mir_effect_conservative()
-			if instruction.kind == 11
+			if instruction.kind == mir_op_direct_call()
 				if instruction.payload < 0 || instruction.payload >= native_module.calls.size()
 					return mir_effect_conservative()
 				end
@@ -130,7 +135,7 @@ def mir_body_call_effects(native_module: MirModule, function: MirFunction, calle
 				mut incoming := callers[callee]
 				incoming.push(caller)
 				observed = mir_effect_none()
-			elsif instruction.kind >= 6 && instruction.kind <= 73
+			elsif instruction.kind >= mir_op_scalar_literal() && instruction.kind <= mir_op_value_copy()
 				observed = mir_instruction_effects(native_module, instruction)
 			end
 			if observed != mir_effect_none() && observed != mir_effect_failure()
@@ -161,7 +166,7 @@ def mir_call_effect_summaries(native_module: MirModule): Array<Integer>
 	index = 0
 	while index < native_module.signatures.size()
 		signature := native_module.signatures[index]
-		if signature.kind == 0
+		if signature.kind == mir_signature_ordinary()
 			body_index := mir_function_index(native_module, signature.id)
 			if body_index >= 0
 				effects[index] = mir_body_call_effects(native_module, native_module.functions[body_index], index, callers)

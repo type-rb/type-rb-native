@@ -1,3 +1,6 @@
+import { mir_state_failure_block_slot } from state/local_slots
+import { integer_method_abs, integer_method_clamp, integer_method_even, integer_method_max, integer_method_min, integer_method_negative, integer_method_none, integer_method_odd, integer_method_positive, integer_method_to_f, integer_method_zero } from frontend/types/method_kinds
+import { mir_op_guard } from mir/model/instructions
 import { CheckedValue, checked_mir_value, scalar_mir_binary, scalar_mir_convert_float, scalar_mir_instruction, scalar_mir_literal, scalar_mir_unary } from frontend/checking/body/values
 import { mir_control_active, mir_control_prepare } from mir/build/control
 import { mir_value_select } from mir/build/value_control
@@ -8,34 +11,34 @@ import { load_integer } from support/storage
 # Receiver names and arity are shared with ordinary checking and the REPL.
 def integer_method_kind(name: String): Integer
 	if name == "abs"
-		return 1
+		return integer_method_abs()
 	elsif name == "zero?"
-		return 2
+		return integer_method_zero()
 	elsif name == "positive?"
-		return 3
+		return integer_method_positive()
 	elsif name == "negative?"
-		return 4
+		return integer_method_negative()
 	elsif name == "even?"
-		return 5
+		return integer_method_even()
 	elsif name == "odd?"
-		return 6
+		return integer_method_odd()
 	elsif name == "min"
-		return 7
+		return integer_method_min()
 	elsif name == "max"
-		return 8
+		return integer_method_max()
 	elsif name == "clamp"
-		return 9
+		return integer_method_clamp()
 	elsif name == "to_f"
-		return 10
+		return integer_method_to_f()
 	end
-	return 0
+	return integer_method_none()
 end
 
 def integer_method_arity(kind: Integer): Integer
-	if kind == 9
+	if kind == integer_method_clamp()
 		return 2
 	end
-	if kind == 7 || kind == 8
+	if kind == integer_method_min() || kind == integer_method_max()
 		return 1
 	end
 	return 0
@@ -54,39 +57,39 @@ end
 # The guard is an explicit failure operation, independently checked by MIR.
 def mir_integer_method(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, receiver: CheckedValue, arguments: Array<CheckedValue>, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
-	if kind == 10
+	if kind == integer_method_to_f()
 		return scalar_mir_convert_float(state, locals, receiver, origin)
 	end
 	zero := scalar_mir_literal(state, locals, "Integer", origin, "0")
-	if kind == 1
+	if kind == integer_method_abs()
 		negative := scalar_mir_binary(state, locals, "<", receiver, zero, "Boolean", origin)
 		absolute := scalar_mir_unary(state, locals, "-", receiver, "Integer", origin)
 		return mir_value_select(state, locals, negative, absolute, receiver, origin)
 	end
-	if kind >= 2 && kind <= 4
+	if kind >= integer_method_zero() && kind <= integer_method_negative()
 		mut operator := "=="
-		if kind == 3
+		if kind == integer_method_positive()
 			operator = ">"
-		elsif kind == 4
+		elsif kind == integer_method_negative()
 			operator = "<"
 		end
 		return scalar_mir_binary(state, locals, operator, receiver, zero, "Boolean", origin)
 	end
-	if kind == 5 || kind == 6
+	if kind == integer_method_even() || kind == integer_method_odd()
 		two := scalar_mir_literal(state, locals, "Integer", origin, "2")
 		remainder := scalar_mir_binary(state, locals, "%", receiver, two, "Integer", origin)
 		mut operator := "=="
-		if kind == 6
+		if kind == integer_method_odd()
 			operator = "!="
 		end
 		return scalar_mir_binary(state, locals, operator, remainder, zero, "Boolean", origin)
 	end
-	if kind == 7 || kind == 8
-		return mir_integer_bound(state, locals, receiver, arguments[0], kind == 7, origin)
+	if kind == integer_method_min() || kind == integer_method_max()
+		return mir_integer_bound(state, locals, receiver, arguments[0], kind == integer_method_min(), origin)
 	end
 	valid := scalar_mir_binary(state, locals, "<=", arguments[0], arguments[1], "Boolean", origin)
 	if mir_control_active(locals)
-		scalar_mir_instruction(state, locals, 43, -1, checked_mir_value(valid), -1, 1, locals.mir_state[3], load_integer(state.source_tokens.token_lines, origin))
+		scalar_mir_instruction(state, locals, mir_op_guard(), -1, checked_mir_value(valid), -1, 1, locals.mir_state[mir_state_failure_block_slot()], load_integer(state.source_tokens.token_lines, origin))
 	end
 	lower := mir_integer_bound(state, locals, receiver, arguments[0], false, origin)
 	return mir_integer_bound(state, locals, lower, arguments[1], true, origin)

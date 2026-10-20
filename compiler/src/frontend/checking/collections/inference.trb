@@ -1,3 +1,4 @@
+import { hash_action_index_write, hash_action_literal } from mir/model/hash_actions
 import { checked_hash_plan, checked_hash_publish } from frontend/checking/collections/hashes
 import { hash_type, hash_value_type } from frontend/types/hash_types
 import { mir_hash_operation } from mir/model/hashes
@@ -13,7 +14,7 @@ def checked_hash_inference_region(state: CompilerState, locals: CheckedLocals, o
 		return false
 	end
 	plan := checked_hash_plan(state, origin)
-	if plan.kind != 3 || plan.receiver_origin < 0 || plan.receiver_origin >= state.source_tokens.token_count[0] || hash_value_type(plan.type_name) == "" || locals.inference_active_region[0] == 0
+	if plan.kind != hash_action_index_write() || plan.receiver_origin < 0 || plan.receiver_origin >= state.source_tokens.token_count[0] || hash_value_type(plan.type_name) == "" || locals.inference_active_region[0] == 0
 		return false
 	end
 	binding := local_find(locals, load_string(state.source_tokens.token_texts, plan.receiver_origin))
@@ -32,7 +33,7 @@ end
 
 def checked_hash_refine(mut state: CompilerState, mut locals: CheckedLocals, origin: Integer, value_type: String)
 	plan := checked_hash_plan(state, origin)
-	if plan.kind != 3
+	if plan.kind != hash_action_index_write()
 		return
 	end
 	first_store := plan.value_type == ""
@@ -66,12 +67,12 @@ def checked_hash_refine(mut state: CompilerState, mut locals: CheckedLocals, ori
 	end
 	literal_origin := load_integer(locals.hash_literal_origins, binding) - 1
 	literal := checked_hash_plan(state, literal_origin)
-	if literal.kind != 1
+	if literal.kind != hash_action_literal()
 		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "empty Hash requires a typed binding")
 		return
 	end
-	checked_hash_publish(state, mir_hash_operation(1, literal.origin, literal.finish, literal.receiver_origin, type_name, true, 0))
-	checked_hash_publish(state, mir_hash_operation(3, plan.origin, plan.finish, plan.receiver_origin, type_name, plan.mutable, 0))
+	checked_hash_publish(state, mir_hash_operation(hash_action_literal(), literal.origin, literal.finish, literal.receiver_origin, type_name, true, 0))
+	checked_hash_publish(state, mir_hash_operation(hash_action_index_write(), plan.origin, plan.finish, plan.receiver_origin, type_name, plan.mutable, 0))
 end
 
 def checked_array_refine(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, element_type: String): String

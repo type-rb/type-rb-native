@@ -93,6 +93,45 @@ iteration have separate body owners; `lambdas.trb` owns lambda body checking.
 Their explicit imports may be mutually recursive; there are no forwarding
 copies. Checking constructs independently verified MIR; QBE consumes those facts.
 
+## Semantic names and numeric encodings
+
+Use names at both the producer and consumer of a semantic tag. Equal numbers
+do not imply equal meanings: source operators, specialized MIR operators,
+receiver methods, checked plans and type identities have independent owners.
+Keep the mapping in that owner, including ordered group boundaries and offsets.
+For example, `mir_op_string_index()` identifies an instruction, while
+`string_method_slice()` identifies a checked receiver method. Neither is a
+replacement for an arbitrary `instruction.payload` with the same value.
+
+The compiler currently expresses these names as ordinary nullary functions
+returning a nonnegative Integer literal. Verified MIR folds eligible calls;
+the language has no new constant or enum syntax for this convention. Check the
+generated code and compiler cost when introducing a different representation.
+In particular, a helper returning a negative expression does not automatically
+receive the same fold.
+
+| Semantic domain | Definition owner |
+| --- | --- |
+| Token, parsed control, default and checking phase tags | `state/*_kinds`, `state/checking_phases` |
+| Shared checked-state slot indices and packed use obligations | `state/local_slots`, `state/binding_kinds` |
+| Source operators, checked operator plans, declaration receivers and methods | `frontend/types/operators`, `operator_plans`, `value_categories`, `method_kinds` |
+| Declaration, generic, attribute, iteration and transform kinds | Corresponding `frontend/types/*_kinds` modules |
+| MIR instructions, types, control, calls, Hash actions and numeric proofs | Corresponding `mir/model` modules |
+| Parsed JSON node categories | `project/json_kinds` |
+
+Name shared-array indices without changing alias ownership: writes must remain
+visible to the other holders of the same state cell. A sole `[0]` cell, ordinary
+counts, source positions and SSA identities remain numbers. Negative checked
+categories encode `-value_id - 1`; nullable replacement barriers and unknown
+analysis states need their own explanations, not a shared "invalid" constant.
+
+Keep ABI layouts, generated catalogs, protocol versions, Unicode tables and
+algorithm data at their existing boundaries. Tests that independently assert an
+encoding or deliberately forge invalid MIR may retain literal values. Such
+fixtures should not derive their expected value from the implementation being
+tested. Regenerate recovery inventories with `tools/recovery_layout_sync.py`
+after moving or adding an owner; do not maintain a second mapping in recovery.
+
 Recovery has its own `recovery/trbconfig.jsonc`, project name
 `type-rb-native-recovery`, and Go module
 `github.com/type-rb/type-rb-native/recovery`. Compiler production code cannot

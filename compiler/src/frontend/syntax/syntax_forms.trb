@@ -1,3 +1,6 @@
+import { loop_transfer_break, loop_transfer_continue, loop_transfer_none } from state/control_kinds
+import { binary_add, binary_add_assign, binary_and, binary_and_assign, binary_divide, binary_divide_assign, binary_equal, binary_greater, binary_greater_equal, binary_invalid, binary_less, binary_less_equal, binary_multiply, binary_multiply_assign, binary_not_equal, binary_or, binary_or_assign, binary_power, binary_remainder, binary_subtract, binary_subtract_assign } from frontend/types/operators
+import { token_kind_identifier, token_kind_newline, token_kind_symbol } from state/token_kinds
 import { transform_kind } from frontend/types/transform_model
 import { token_is } from frontend/syntax/syntax_tokens
 import { CompilerState } from state/state
@@ -7,7 +10,7 @@ def declaration_start(state: CompilerState, index: Integer): Boolean
 	if token_is(state, index, "mut")
 		return true
 	end
-	if load_integer(state.source_tokens.token_kinds, index) != 1
+	if load_integer(state.source_tokens.token_kinds, index) != token_kind_identifier()
 		return false
 	end
 	if token_is(state, index + 1, ":=")
@@ -18,8 +21,8 @@ end
 
 def syntax_block_end(state: CompilerState, index: Integer): Boolean
 	kind := load_integer(state.source_tokens.token_kinds, index)
-	if kind != 1
-		if kind != 5
+	if kind != token_kind_identifier()
+		if kind != token_kind_symbol()
 			return false
 		end
 	end
@@ -49,32 +52,32 @@ def syntax_expression_precedence(operator: String): Integer
 	end
 	# Keep scalar spelling recognition in the shared operator catalog.
 	identity := binary_operator_id(operator)
-	if identity == 0
+	if identity == binary_invalid()
 		return 0
 	end
-	if identity <= 2
+	if identity <= binary_subtract()
 		return 6
 	end
-	if identity <= 5
+	if identity <= binary_remainder()
 		return 7
 	end
-	if identity <= 7
+	if identity <= binary_not_equal()
 		return 4
 	end
-	if identity <= 11
+	if identity <= binary_greater_equal()
 		return 5
 	end
-	if identity == 12
+	if identity == binary_or()
 		return 1
 	end
-	if identity == 13
+	if identity == binary_and()
 		return 2
 	end
 	return 0
 end
 
 def parse_argument_label(state: CompilerState, mut position: Array<Integer>): String
-	if load_integer(state.source_tokens.token_kinds, position[0]) == 1 && token_is(state, position[0] + 1, ":")
+	if load_integer(state.source_tokens.token_kinds, position[0]) == token_kind_identifier() && token_is(state, position[0] + 1, ":")
 		label := load_string(state.source_tokens.token_texts, position[0])
 		position[0] += 2
 		return label
@@ -151,7 +154,7 @@ def syntax_transform_suffix(state: CompilerState, origin: Integer): Integer
 end
 
 def syntax_statement_boundary(state: CompilerState, origin: Integer): Boolean
-	if load_integer(state.source_tokens.token_kinds, origin) == 4
+	if load_integer(state.source_tokens.token_kinds, origin) == token_kind_newline()
 		return true
 	end
 	return token_is(state, origin, "}")
@@ -159,75 +162,75 @@ end
 
 def syntax_loop_transfer_kind(state: CompilerState, origin: Integer): Integer
 	if token_is(state, origin, "break")
-		return 1
+		return loop_transfer_break()
 	end
 	if token_is(state, origin, "next")
-		return 2
+		return loop_transfer_continue()
 	end
-	return 0
+	return loop_transfer_none()
 end
 
 def binary_operator_id(operator: String): Integer
 	if operator == "+"
-		return 1
+		return binary_add()
 	end
 	if operator == "-"
-		return 2
+		return binary_subtract()
 	end
 	if operator == "*"
-		return 3
+		return binary_multiply()
 	end
 	if operator == "/"
-		return 4
+		return binary_divide()
 	end
 	if operator == "%"
-		return 5
+		return binary_remainder()
 	end
 	if operator == "=="
-		return 6
+		return binary_equal()
 	end
 	if operator == "!="
-		return 7
+		return binary_not_equal()
 	end
 	if operator == "<"
-		return 8
+		return binary_less()
 	end
 	if operator == "<="
-		return 9
+		return binary_less_equal()
 	end
 	if operator == ">"
-		return 10
+		return binary_greater()
 	end
 	if operator == ">="
-		return 11
+		return binary_greater_equal()
 	end
 	if operator == "||"
-		return 12
+		return binary_or()
 	end
 	if operator == "&&"
-		return 13
+		return binary_and()
 	end
 	if operator == "**"
-		return 14
+		return binary_power()
 	end
 	# The high tag identifies supported compound assignments.
 	if operator == "+="
-		return 17
+		return binary_add_assign()
 	end
 	if operator == "-="
-		return 18
+		return binary_subtract_assign()
 	end
 	if operator == "*="
-		return 19
+		return binary_multiply_assign()
 	end
 	if operator == "/="
-		return 20
+		return binary_divide_assign()
 	end
 	if operator == "||="
-		return 21
+		return binary_or_assign()
 	end
 	if operator == "&&="
-		return 22
+		return binary_and_assign()
 	end
-	return 0
+	return binary_invalid()
 end

@@ -1,3 +1,6 @@
+import { hash_action_has_key } from mir/model/hash_actions
+import { mir_terminator_branch, mir_terminator_jump } from mir/model/control
+import { mir_op_hash_get, mir_op_hash_method } from mir/model/instructions
 import { MirFunction, MirHashMembershipReuse, MirModule, mir_type_id } from mir/model/module
 import { MirFlow, mir_build_flow, mir_flow_alias, mir_flow_aliases, mir_flow_block_index, mir_flow_blocks, mir_flow_position, mir_flow_type, mir_instruction_occurrences } from mir/analysis/flow
 import { mir_hash_lookup_preserves } from mir/analysis/hash_lookup
@@ -40,7 +43,7 @@ def mir_hash_membership_lookup(native_module: MirModule, function: MirFunction, 
 			if occurrences[cursor] != 1
 				return -1
 			end
-			if instruction.kind == 28
+			if instruction.kind == mir_op_hash_get()
 				if mir_flow_alias(aliases, instruction.first) == owner && mir_flow_alias(aliases, instruction.second) == key
 					return cursor
 				end
@@ -51,7 +54,7 @@ def mir_hash_membership_lookup(native_module: MirModule, function: MirFunction, 
 			end
 			cursor += 1
 		end
-		if block.terminator != 1
+		if block.terminator != mir_terminator_jump()
 			return -1
 		end
 		previous = position
@@ -69,11 +72,11 @@ def mir_hash_membership_plans(native_module: MirModule): Array<MirHashMembership
 		mut index := 0
 		while index < function.block_count
 			guard := native_module.blocks[function.block_start + index]
-			if guard.terminator == 2 && guard.first_target != guard.second_target
+			if guard.terminator == mir_terminator_branch() && guard.first_target != guard.second_target
 				mut cursor := guard.instruction_start
 				while cursor < guard.instruction_start + guard.instruction_count
 					instruction := native_module.instructions[cursor]
-					if instruction.result == guard.condition && instruction.kind == 30 && instruction.payload == 5 && occurrences[cursor] == 1
+					if instruction.result == guard.condition && instruction.kind == mir_op_hash_method() && instruction.payload == hash_action_has_key() && occurrences[cursor] == 1
 						candidates.push(index)
 					end
 					cursor += 1
@@ -85,11 +88,11 @@ def mir_hash_membership_plans(native_module: MirModule): Array<MirHashMembership
 			flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
 			candidates.each do |index|
 				guard := native_module.blocks[function.block_start + index]
-				if flow.ranks[index] >= 0 && guard.terminator == 2 && guard.first_target != guard.second_target
+				if flow.ranks[index] >= 0 && guard.terminator == mir_terminator_branch() && guard.first_target != guard.second_target
 					membership := mir_flow_position(flow, guard.condition)
 					if membership >= guard.instruction_start && membership < guard.instruction_start + guard.instruction_count
 						instruction := native_module.instructions[membership]
-						if occurrences[membership] == 1 && instruction.kind == 30 && instruction.payload == 5
+						if occurrences[membership] == 1 && instruction.kind == mir_op_hash_method() && instruction.payload == hash_action_has_key()
 							lookup := mir_hash_membership_lookup(native_module, function, flow, index, membership, occurrences)
 							if lookup >= 0
 								plans.push(MirHashMembershipReuse.new(membership: membership, lookup: lookup))

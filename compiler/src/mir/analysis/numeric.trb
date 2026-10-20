@@ -1,7 +1,14 @@
+import { mir_numeric_checked_mode, mir_numeric_default_mode, mir_numeric_guarded_add_mode, mir_numeric_guarded_multiply_mode, mir_numeric_left_nonnegative_add_mode, mir_numeric_power_division_mode, mir_numeric_power_remainder_mode, mir_numeric_proven_arithmetic_mode, mir_numeric_reciprocal_remainder_mode, mir_numeric_remainder_test_mode, mir_numeric_right_nonnegative_add_mode } from mir/model/numeric_modes
+import { mir_scalar_inline_add, mir_scalar_inline_multiply } from mir/model/scalar_operators
+import { binary_add, binary_divide, binary_equal, binary_multiply, binary_not_equal, binary_remainder, binary_subtract, unary_positive } from frontend/types/operators
+import { mir_type_integer } from mir/model/type_ids
+import { mir_signature_interface, mir_signature_ordinary } from mir/model/call_kinds
+import { mir_function_control, mir_function_scalar, mir_terminator_branch, mir_terminator_jump } from mir/model/control
+import { mir_op_direct_call, mir_op_indirect_call, mir_op_scalar_binary, mir_op_scalar_literal, mir_op_scalar_unary } from mir/model/instructions
 import { mir_callable_plan_at } from mir/analysis/callables
 import { mir_numeric_interface_function, mir_numeric_interface_targets } from mir/analysis/numeric_interface
 import { integer_string } from support/literals
-import { MirFunction, MirModule, MirNumericOperation, MirNumericPlan, mir_block_index, mir_function_index, mir_numeric_power_division_mode, mir_numeric_remainder_test_mode, mir_value_type } from mir/model/module
+import { MirFunction, MirModule, MirNumericOperation, MirNumericPlan, mir_block_index, mir_function_index, mir_value_type } from mir/model/module
 import { mir_guarded_increment_proven, mir_nonnegative_value, mir_nonnegative_values, mir_parameter_subtraction_proven, mir_scalar_literal } from mir/analysis/ranges
 import { MirFlow, MirFlowAliases, mir_build_flow, mir_flow_aliases, mir_flow_block_index, mir_flow_blocks, mir_flow_dominates, mir_flow_position } from mir/analysis/flow
 
@@ -39,17 +46,17 @@ def mir_numeric_loops(native_module: MirModule, function: MirFunction, flow: Mir
 		predecessors.push([])
 		index += 1
 	end
-	if function.kind != 3
+	if function.kind != mir_function_control()
 		return members
 	end
 	index = 0
 	while index < function.block_count
 		block := native_module.blocks[function.block_start + index]
 		mut targets: Array<Integer> := []
-		if block.terminator == 1 || block.terminator == 2
+		if block.terminator == mir_terminator_jump() || block.terminator == mir_terminator_branch()
 			targets.push(block.first_target)
 		end
-		if block.terminator == 2
+		if block.terminator == mir_terminator_branch()
 			targets.push(block.second_target)
 		end
 		targets.each do |target|
@@ -109,10 +116,10 @@ def mir_numeric_small(native_module: MirModule, function: MirFunction, arguments
 			while position < block.instruction_start + block.instruction_count
 				instruction := native_module.instructions[position]
 				mut known := false
-				if instruction.kind == 6 && instruction.first == 1
+				if instruction.kind == mir_op_scalar_literal() && instruction.first == 1
 					known = true
 				end
-				if instruction.kind == 8 && instruction.payload == 3
+				if instruction.kind == mir_op_scalar_unary() && instruction.payload == unary_positive()
 					known = small.key?(integer_string(instruction.first))
 				end
 				if known && !small.key?(integer_string(instruction.result))
@@ -128,36 +135,36 @@ def mir_numeric_small(native_module: MirModule, function: MirFunction, arguments
 end
 
 def mir_numeric_mode(operator: Integer, left_small: Boolean, right_small: Boolean, left_nonnegative: Boolean, right_nonnegative: Boolean, inline: Boolean, mut budget: Array<Integer>, loop: Integer): Integer
-	if operator == 13 && inline && !left_small && !right_small
-		return 4
+	if operator == mir_scalar_inline_add() && inline && !left_small && !right_small
+		return mir_numeric_guarded_add_mode()
 	end
 	mut eligible := false
-	if operator == 1 || operator == 2 || operator == 4 || operator == 5 || operator == 13
+	if operator == binary_add() || operator == binary_subtract() || operator == binary_divide() || operator == binary_remainder() || operator == mir_scalar_inline_add()
 		eligible = true
 	end
-	if (operator == 3 || operator == 12) && right_small
+	if (operator == binary_multiply() || operator == mir_scalar_inline_multiply()) && right_small
 		eligible = true
 	end
 	if eligible && budget[loop] > 0
 		budget[loop] -= 1
-		if operator == 1 || operator == 13
+		if operator == binary_add() || operator == mir_scalar_inline_add()
 			# Preserve existing small-operand selections when both proofs apply.
 			if left_small
-				return 3
+				return mir_numeric_left_nonnegative_add_mode()
 			elsif right_small
-				return 2
+				return mir_numeric_right_nonnegative_add_mode()
 			elsif right_nonnegative
-				return 2
+				return mir_numeric_right_nonnegative_add_mode()
 			elsif left_nonnegative
-				return 3
+				return mir_numeric_left_nonnegative_add_mode()
 			end
 		end
-		return 1
+		return mir_numeric_checked_mode()
 	end
-	if operator == 12 && inline
-		return 5
+	if operator == mir_scalar_inline_multiply() && inline
+		return mir_numeric_guarded_multiply_mode()
 	end
-	return 0
+	return mir_numeric_default_mode()
 end
 
 # Divide a power of two without constructing it outside portable Integer range.
@@ -191,11 +198,11 @@ def mir_numeric_selection(native_module: MirModule, function: MirFunction, flow:
 	mut reciprocal := 0
 	mut shift := 0
 	instruction := native_module.instructions[index]
-	if mode == 1 && instruction.kind == 7 && (instruction.payload == 4 || instruction.payload == 5) && instruction.failure >= 0
+	if mode == mir_numeric_checked_mode() && instruction.kind == mir_op_scalar_binary() && (instruction.payload == binary_divide() || instruction.payload == binary_remainder()) && instruction.failure >= 0
 		position := mir_flow_position(flow, instruction.second)
 		if position >= 0
 			literal := native_module.instructions[position]
-			if literal.kind == 6 && literal.payload >= 0 && literal.payload < native_module.literal_texts.size()
+			if literal.kind == mir_op_scalar_literal() && literal.payload >= 0 && literal.payload < native_module.literal_texts.size()
 				value := mir_scalar_literal(native_module.literal_texts[literal.payload])
 				if value >= 1 && value <= 4503599627370496
 					mut power := 1
@@ -205,14 +212,14 @@ def mir_numeric_selection(native_module: MirModule, function: MirFunction, flow:
 						bits += 1
 					end
 					if power == value
-						selected = 8
-						if instruction.payload == 4
+						selected = mir_numeric_power_remainder_mode()
+						if instruction.payload == binary_divide()
 							selected = mir_numeric_power_division_mode()
 						end
 						divisor = value
 						shift = bits
-					elsif instruction.payload == 5 && value <= 4294967295
-						selected = 6
+					elsif instruction.payload == binary_remainder() && value <= 4294967295
+						selected = mir_numeric_reciprocal_remainder_mode()
 						divisor = value
 						shift = 31 + bits
 						reciprocal = mir_numeric_reciprocal(value, shift)
@@ -231,7 +238,7 @@ end
 def mir_numeric_remainder_tests(native_module: MirModule, function: MirFunction, flow: MirFlow, mut operations: Array<MirNumericOperation>)
 	mut needed := false
 	operations.each do |operation|
-		if operation.mode == 8
+		if operation.mode == mir_numeric_power_remainder_mode()
 			needed = true
 		end
 	end
@@ -244,7 +251,7 @@ def mir_numeric_remainder_tests(native_module: MirModule, function: MirFunction,
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[index]
-			if instruction.kind == 7 && (instruction.payload == 6 || instruction.payload == 7)
+			if instruction.kind == mir_op_scalar_binary() && (instruction.payload == binary_equal() || instruction.payload == binary_not_equal())
 				mut side := 0
 				while side < 2
 					mut remainder := instruction.first
@@ -256,10 +263,10 @@ def mir_numeric_remainder_tests(native_module: MirModule, function: MirFunction,
 					position := mir_flow_position(flow, zero)
 					if position >= 0
 						literal := native_module.instructions[position]
-						if literal.kind == 6 && mir_value_type(native_module, function.id, zero) == 1 && mir_scalar_literal(native_module.literal_texts[literal.payload]) == 0
+						if literal.kind == mir_op_scalar_literal() && mir_value_type(native_module, function.id, zero) == mir_type_integer() && mir_scalar_literal(native_module.literal_texts[literal.payload]) == 0
 							definition := mir_flow_position(flow, remainder)
 							operations.each do |operation|
-								if operation.instruction == definition && operation.mode == 8
+								if operation.instruction == definition && operation.mode == mir_numeric_power_remainder_mode()
 									dividend := native_module.instructions[definition].first
 									tests.push(MirNumericOperation.new(instruction: index, mode: mir_numeric_remainder_test_mode(), tested_value: dividend, divisor: operation.divisor, reciprocal: 0, shift: 0))
 								end
@@ -290,7 +297,7 @@ def mir_numeric_leaf(native_module: MirModule, function: MirFunction, caller: In
 	mut index := block.instruction_start
 	while index < block.instruction_start + block.instruction_count
 		instruction := native_module.instructions[index]
-		if instruction.kind == 7 && mir_value_type(native_module, function.id, instruction.result) == 1
+		if instruction.kind == mir_op_scalar_binary() && mir_value_type(native_module, function.id, instruction.result) == mir_type_integer()
 			left_small := small.key?(integer_string(instruction.first))
 			right_small := small.key?(integer_string(instruction.second))
 			mut left_nonnegative := left_small
@@ -302,7 +309,7 @@ def mir_numeric_leaf(native_module: MirModule, function: MirFunction, caller: In
 				right_nonnegative = mir_nonnegative_value(nonnegative, instruction.second)
 			end
 			mode := mir_numeric_mode(instruction.payload, left_small, right_small, left_nonnegative, right_nonnegative, true, budget, 0)
-			if mode > 0
+			if mode > mir_numeric_default_mode()
 				operations.push(mir_numeric_selection(native_module, function, flow, index, mode))
 			end
 		end
@@ -314,7 +321,7 @@ end
 
 # Share the ordinary scalar leaf and code-size contract with callable sites.
 def mir_numeric_inline_leaf(native_module: MirModule, function: MirFunction): Boolean
-	if function.kind != 1
+	if function.kind != mir_function_scalar()
 		return false
 	end
 	entry := mir_block_index(native_module, function, function.entry_block)
@@ -404,7 +411,7 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 			mut position := block.instruction_start
 			while position < block.instruction_start + block.instruction_count
 				instruction := native_module.instructions[position]
-				if instruction.kind == 7 && mir_value_type(native_module, function.id, instruction.result) == 1
+				if instruction.kind == mir_op_scalar_binary() && mir_value_type(native_module, function.id, instruction.result) == mir_type_integer()
 					left_small := small.key?(integer_string(instruction.first))
 					right_small := small.key?(integer_string(instruction.second))
 					mut left_nonnegative := left_small
@@ -416,31 +423,31 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 						right_nonnegative = mir_nonnegative_value(nonnegative, instruction.second)
 					end
 					mut mode := mir_numeric_mode(instruction.payload, left_small, right_small, left_nonnegative, right_nonnegative, false, budget, loop)
-					if mode > 0 && (instruction.payload == 1 || instruction.payload == 13)
+					if mode > mir_numeric_default_mode() && (instruction.payload == binary_add() || instruction.payload == mir_scalar_inline_add())
 						if mir_guarded_increment_proven(native_module, function, flow, block_index - function.block_start, instruction)
-							mode = 7
+							mode = mir_numeric_proven_arithmetic_mode()
 						end
 					end
-					if mode == 1 && instruction.payload == 2
+					if mode == mir_numeric_checked_mode() && instruction.payload == binary_subtract()
 						if !aliases_ready
 							aliases = mir_flow_aliases(native_module, function, flow, native_module.blocks[function.block_start + flow.entry])
 							aliases_ready = true
 						end
 						if mir_parameter_subtraction_proven(native_module, function, flow, aliases, block_index - function.block_start, instruction)
-							mode = 7
+							mode = mir_numeric_proven_arithmetic_mode()
 						end
 					end
-					if mode > 0
+					if mode > mir_numeric_default_mode()
 						operations.push(mir_numeric_selection(native_module, function, flow, position, mode))
 					end
-				elsif instruction.kind == 42 && loop == 0 && budget[2] > 0
+				elsif instruction.kind == mir_op_indirect_call() && loop == 0 && budget[2] > 0
 					plan := mir_numeric_callable_expansion(native_module, function, position, small, budget)
 					if plan.function_id >= 0
 						plans.push(plan)
 					end
-				elsif instruction.kind == 11 && loop == 0 && budget[2] > 0
+				elsif instruction.kind == mir_op_direct_call() && loop == 0 && budget[2] > 0
 					call := native_module.calls[instruction.payload]
-					if native_module.signatures[call.callee].kind == 4
+					if native_module.signatures[call.callee].kind == mir_signature_interface()
 						mut arguments: Array<Integer> := []
 						mut argument := 0
 						while argument < call.argument_count
@@ -462,7 +469,7 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 						end
 					end
 					callee := mir_function_index(native_module, call.callee)
-					if callee >= 0 && native_module.signatures[call.callee].kind == 0
+					if callee >= 0 && native_module.signatures[call.callee].kind == mir_signature_ordinary()
 						leaf := native_module.functions[callee]
 						if mir_numeric_inline_leaf(native_module, leaf)
 							mut arguments: Array<Integer> := []
@@ -534,7 +541,7 @@ def mir_numeric_operation(plan: MirNumericPlan, instruction: Integer): Integer
 			return operation.mode
 		end
 	end
-	return 0
+	return mir_numeric_default_mode()
 end
 
 # The caller retains its original call and root plan for every fallback path.

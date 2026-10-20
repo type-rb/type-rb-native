@@ -1,3 +1,7 @@
+import { mir_type_composite_start } from mir/model/type_ids
+import { mir_type_kind_newtype, mir_type_kind_record } from mir/model/type_kinds
+import { mir_adapter_argv, mir_signature_standard } from mir/model/call_kinds
+import { mir_op_callable_new, mir_op_direct_call, mir_op_global_read, mir_op_global_write, mir_op_indirect_call } from mir/model/instructions
 import { integer_string } from support/literals
 import { MirModule, mir_function_index } from mir/model/module
 
@@ -25,7 +29,7 @@ def mir_initializer_dependencies(native_module: MirModule, initializer: Integer)
 		signature := native_module.signatures[callee]
 		body := mir_function_index(native_module, callee)
 		if body < 0
-			if signature.kind != 3 || signature.adapter != 10
+			if signature.kind != mir_signature_standard() || signature.adapter != mir_adapter_argv()
 				opaque = true
 			end
 			next
@@ -37,11 +41,11 @@ def mir_initializer_dependencies(native_module: MirModule, initializer: Integer)
 			mut operation := block.instruction_start
 			while operation < block.instruction_start + block.instruction_count
 				instruction := native_module.instructions[operation]
-				if instruction.kind == 51 || instruction.kind == 59
+				if instruction.kind == mir_op_global_read() || instruction.kind == mir_op_global_write()
 					values.push(instruction.payload)
-				elsif instruction.kind == 11
+				elsif instruction.kind == mir_op_direct_call()
 					pending.push(native_module.calls[instruction.payload].callee)
-				elsif instruction.kind == 42
+				elsif instruction.kind == mir_op_indirect_call()
 					mut known := false
 					mut candidate_block := function.block_start
 					while candidate_block < function.block_start + function.block_count
@@ -49,7 +53,7 @@ def mir_initializer_dependencies(native_module: MirModule, initializer: Integer)
 						mut position := candidate.instruction_start
 						while position < candidate.instruction_start + candidate.instruction_count
 							creation := native_module.instructions[position]
-							if creation.kind == 41 && creation.result == instruction.first
+							if creation.kind == mir_op_callable_new() && creation.result == instruction.first
 								pending.push(creation.payload)
 								known = true
 							end
@@ -76,15 +80,15 @@ def mir_inline_reaches(native_module: MirModule, type_id: Integer, target: Integ
 	if type_id == target
 		return true
 	end
-	if type_id < 9 || visited.key?(integer_string(type_id))
+	if type_id < mir_type_composite_start() || visited.key?(integer_string(type_id))
 		return false
 	end
 	visited[integer_string(type_id)] = 1
-	row := native_module.types[type_id - 9]
-	if row.kind == 11
+	row := native_module.types[type_id - mir_type_composite_start()]
+	if row.kind == mir_type_kind_newtype()
 		return mir_inline_reaches(native_module, native_module.newtypes[row.declaration].representation, target, visited)
 	end
-	if row.kind == 2
+	if row.kind == mir_type_kind_record()
 		definition := native_module.records[row.declaration]
 		mut field := definition.field_start
 		while field < definition.field_start + definition.field_count

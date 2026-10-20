@@ -1,3 +1,7 @@
+import { checked_category_value } from frontend/types/value_categories
+import { mir_control_parameter_count_slot } from state/local_slots
+import { mir_type_boolean, mir_type_none } from mir/model/type_ids
+import { mir_op_nil_test, mir_op_nullable_extract, mir_op_nullable_inject, mir_op_nullable_none, mir_op_union_extract, mir_op_union_inject, mir_op_union_test } from mir/model/instructions
 import { mir_object_coerce } from mir/lowering/object_dispatch
 import { object_value_assignable } from frontend/types/object_types
 import { literal_scalar_type } from frontend/checking/nominal/literal_cases
@@ -20,10 +24,10 @@ import { load_integer } from support/storage
 def mir_checked_nullable(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, value: CheckedValue, type_name: String, payload: Integer, origin: Integer): CheckedValue
 	result := scalar_mir_value(state, locals, mir_semantic_type_id(state.scalar_mir, type_name), origin)
 	if result < 0
-		return checked_value(type_name, 0, origin, value.mutable)
+		return checked_value(type_name, checked_category_value(), origin, value.mutable)
 	end
 	mut first := checked_mir_value(value)
-	if kind == 33
+	if kind == mir_op_nullable_none()
 		first = -1
 	end
 	scalar_mir_instruction(state, locals, kind, result, first, -1, payload, -1, load_integer(state.source_tokens.token_lines, origin))
@@ -42,7 +46,7 @@ def mir_nullable_coerce(mut state: CompilerState, mut locals: CheckedLocals, mut
 		return scalar_mir_convert_float(state, locals, value, origin)
 	end
 	if expected == "Any"
-		return mir_union_operation(state, locals, 52, value, value.type_name, expected, origin)
+		return mir_union_operation(state, locals, mir_op_union_inject(), value, value.type_name, expected, origin)
 	end
 	# Inferred collections can retain an exact optional or Nil alternative even
 	# where the reference rejects the same outer annotated argument conversion.
@@ -56,7 +60,7 @@ def mir_nullable_coerce(mut state: CompilerState, mut locals: CheckedLocals, mut
 		end
 		if selected != ""
 			converted := mir_nullable_coerce(state, locals, value, selected, origin)
-			return mir_union_operation(state, locals, 52, converted, selected, expected, origin)
+			return mir_union_operation(state, locals, mir_op_union_inject(), converted, selected, expected, origin)
 		end
 	end
 	if !object_value_assignable(state, value.type_name, expected)
@@ -72,11 +76,11 @@ def mir_nullable_coerce(mut state: CompilerState, mut locals: CheckedLocals, mut
 		return mir_nullable_widen(state, locals, value, expected, origin)
 	end
 	if value.type_name == "Nil"
-		result := mir_checked_nullable(state, locals, 33, value, expected, 0, origin)
+		result := mir_checked_nullable(state, locals, mir_op_nullable_none(), value, expected, 0, origin)
 		return checked_flow(checked_view(value, expected, result.category), "Nil")
 	end
 	present := mir_nullable_coerce(state, locals, value, nullable_element(expected), origin)
-	result := mir_checked_nullable(state, locals, 34, present, expected, 0, origin)
+	result := mir_checked_nullable(state, locals, mir_op_nullable_inject(), present, expected, 0, origin)
 	return checked_flow(checked_view(value, expected, result.category), present.type_name)
 end
 
@@ -86,11 +90,11 @@ def mir_nullable_instruction_error(flow: MirFlow, native_module: MirModule, func
 	if instruction.second != -1 || instruction.failure != -1
 		return "MIR nullable instruction shape differs"
 	end
-	if instruction.kind == 33
+	if instruction.kind == mir_op_nullable_none()
 		if instruction.first != -1 || instruction.payload != 0
 			return "MIR none instruction shape differs"
 		end
-		if mir_nullable_element(native_module, result) == 0 && mir_semantic_type_name(native_module, result) != "Nil"
+		if mir_nullable_element(native_module, result) == mir_type_none() && mir_semantic_type_name(native_module, result) != "Nil"
 			return "MIR none result type differs"
 		end
 		return ""
@@ -98,11 +102,11 @@ def mir_nullable_instruction_error(flow: MirFlow, native_module: MirModule, func
 	if !mir_value_available(flow, block, index, instruction.first)
 		return "MIR nullable operand is unavailable"
 	end
-	if instruction.kind == 35
-		if result != 2 || instruction.payload < 0 || instruction.payload > 1
+	if instruction.kind == mir_op_nil_test()
+		if result != mir_type_boolean() || instruction.payload < 0 || instruction.payload > 1
 			return "MIR nil test result or mode differs"
 		end
-		if mir_nullable_element(native_module, first) == 0 && mir_semantic_type_name(native_module, first) != "Nil"
+		if mir_nullable_element(native_module, first) == mir_type_none() && mir_semantic_type_name(native_module, first) != "Nil"
 			return "MIR nil test operand type differs"
 		end
 		return ""
@@ -110,12 +114,12 @@ def mir_nullable_instruction_error(flow: MirFlow, native_module: MirModule, func
 	if instruction.payload != 0
 		return "MIR nullable payload mode differs"
 	end
-	if instruction.kind == 34
-		if mir_nullable_element(native_module, result) != first || first == 0
+	if instruction.kind == mir_op_nullable_inject()
+		if mir_nullable_element(native_module, result) != first || first == mir_type_none()
 			return "MIR nullable injection payload type differs"
 		end
-	elsif instruction.kind == 36
-		if mir_nullable_element(native_module, first) != result || result == 0
+	elsif instruction.kind == mir_op_nullable_extract()
+		if mir_nullable_element(native_module, first) != result || result == mir_type_none()
 			return "MIR nullable extraction payload type differs"
 		end
 	else
@@ -130,17 +134,17 @@ end
 def mir_nullable_widen(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, expected: String, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
-		return checked_view(value, expected, 0)
+		return checked_view(value, expected, checked_category_value())
 	end
 	line := load_integer(state.source_tokens.token_lines, origin)
-	mut condition := checked_value("Boolean", 0, origin, 0)
+	mut condition := checked_value("Boolean", checked_category_value(), origin, 0)
 	if value.type_name == "Any"
-		condition = mir_union_operation(state, locals, 53, value, "Nil", "Boolean", origin)
+		condition = mir_union_operation(state, locals, mir_op_union_test(), value, "Nil", "Boolean", origin)
 	else
-		condition = mir_checked_nullable(state, locals, 35, value, "Boolean", 0, origin)
+		condition = mir_checked_nullable(state, locals, mir_op_nil_test(), value, "Boolean", 0, origin)
 	end
 	alternate := mir_control_branch(state, locals, condition, line)
-	absent := mir_checked_nullable(state, locals, 33, value, expected, 0, origin)
+	absent := mir_checked_nullable(state, locals, mir_op_nullable_none(), value, expected, 0, origin)
 	join := mir_control_allocate(locals)
 	none_arguments := mir_control_arguments(locals, locals.count[0])
 	locals.mir_arguments.push(checked_mir_value(absent))
@@ -148,17 +152,17 @@ def mir_nullable_widen(mut state: CompilerState, mut locals: CheckedLocals, valu
 	mir_control_enter(state, locals, alternate, line)
 	mut payload := checked_view(value, value.type_name, value.category)
 	if nullable_element(value.type_name) != ""
-		payload = mir_checked_nullable(state, locals, 36, value, nullable_element(value.type_name), 0, origin)
+		payload = mir_checked_nullable(state, locals, mir_op_nullable_extract(), value, nullable_element(value.type_name), 0, origin)
 	end
 	converted := mir_nullable_coerce(state, locals, payload, nullable_element(expected), origin)
-	present := mir_checked_nullable(state, locals, 34, converted, expected, 0, origin)
+	present := mir_checked_nullable(state, locals, mir_op_nullable_inject(), converted, expected, 0, origin)
 	arguments := mir_control_arguments(locals, locals.count[0])
 	locals.mir_arguments.push(checked_mir_value(present))
 	mir_control_jump_arguments(state, locals, join, arguments, locals.count[0] + 1)
 	mir_control_enter(state, locals, join, line)
 	result := mir_add_value(state, locals, mir_semantic_type_id(state.scalar_mir, expected), line)
 	locals.mir_arguments.push(result)
-	locals.mir_control[5] += 1
+	locals.mir_control[mir_control_parameter_count_slot()] += 1
 	return checked_view(value, expected, -result - 1)
 end
 
@@ -167,7 +171,7 @@ end
 def mir_union_coerce(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, expected: String, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
-		return checked_view(value, expected, 0)
+		return checked_view(value, expected, checked_category_value())
 	end
 	line := load_integer(state.source_tokens.token_lines, origin)
 	join := mir_control_allocate(locals)
@@ -177,10 +181,10 @@ def mir_union_coerce(mut state: CompilerState, mut locals: CheckedLocals, value:
 		alternative := alternatives[index]
 		mut next_branch := -1
 		if index + 1 < alternatives.size()
-			condition := mir_union_operation(state, locals, 53, value, alternative, "Boolean", origin)
+			condition := mir_union_operation(state, locals, mir_op_union_test(), value, alternative, "Boolean", origin)
 			next_branch = mir_control_branch(state, locals, condition, line)
 		end
-		payload := mir_union_operation(state, locals, 54, value, alternative, alternative, origin)
+		payload := mir_union_operation(state, locals, mir_op_union_extract(), value, alternative, alternative, origin)
 		converted := mir_nullable_coerce(state, locals, payload, expected, origin)
 		arguments := mir_control_arguments(locals, locals.count[0])
 		locals.mir_arguments.push(checked_mir_value(converted))
@@ -193,7 +197,7 @@ def mir_union_coerce(mut state: CompilerState, mut locals: CheckedLocals, value:
 	mir_control_enter(state, locals, join, line)
 	result := mir_add_value(state, locals, mir_semantic_type_id(state.scalar_mir, expected), line)
 	locals.mir_arguments.push(result)
-	locals.mir_control[5] += 1
+	locals.mir_control[mir_control_parameter_count_slot()] += 1
 	return checked_view(value, expected, -result - 1)
 end
 
@@ -210,11 +214,11 @@ end
 def mir_union_narrow(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, expected: String, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
-		return checked_view(value, expected, 0)
+		return checked_view(value, expected, checked_category_value())
 	end
 	alternatives := union_parts(expected)
 	if alternatives.size() == 0
-		return mir_union_operation(state, locals, 54, value, expected, expected, origin)
+		return mir_union_operation(state, locals, mir_op_union_extract(), value, expected, expected, origin)
 	end
 	line := load_integer(state.source_tokens.token_lines, origin)
 	join := mir_control_allocate(locals)
@@ -223,11 +227,11 @@ def mir_union_narrow(mut state: CompilerState, mut locals: CheckedLocals, value:
 		alternative := alternatives[index]
 		mut next_branch := -1
 		if index + 1 < alternatives.size()
-			condition := mir_union_operation(state, locals, 53, value, alternative, "Boolean", origin)
+			condition := mir_union_operation(state, locals, mir_op_union_test(), value, alternative, "Boolean", origin)
 			next_branch = mir_control_branch(state, locals, condition, line)
 		end
-		payload := mir_union_operation(state, locals, 54, value, alternative, alternative, origin)
-		converted := mir_union_operation(state, locals, 52, payload, alternative, expected, origin)
+		payload := mir_union_operation(state, locals, mir_op_union_extract(), value, alternative, alternative, origin)
+		converted := mir_union_operation(state, locals, mir_op_union_inject(), payload, alternative, expected, origin)
 		arguments := mir_control_arguments(locals, locals.count[0])
 		locals.mir_arguments.push(checked_mir_value(converted))
 		mir_control_jump_arguments(state, locals, join, arguments, locals.count[0] + 1)
@@ -239,6 +243,6 @@ def mir_union_narrow(mut state: CompilerState, mut locals: CheckedLocals, value:
 	mir_control_enter(state, locals, join, line)
 	result := mir_add_value(state, locals, mir_semantic_type_id(state.scalar_mir, expected), line)
 	locals.mir_arguments.push(result)
-	locals.mir_control[5] += 1
+	locals.mir_control[mir_control_parameter_count_slot()] += 1
 	return checked_view(value, expected, -result - 1)
 end

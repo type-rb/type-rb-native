@@ -1,3 +1,5 @@
+import { mir_function_control } from mir/model/control
+import { mir_op_literal_widen, mir_op_singleton_literal, mir_op_string_literal, mir_op_string_split } from mir/model/instructions
 import { MirFunction, MirLiteralData, MirModule, MirStringSplit, MirValue } from mir/model/module
 import { mir_build_flow_with_values, mir_flow_blocks } from mir/analysis/flow
 import { mir_string_literal_data } from mir/analysis/literal_data
@@ -18,7 +20,7 @@ end
 
 def mir_function_string_splits(native_module: MirModule, function: MirFunction, values: Array<MirValue>): Array<MirStringSplit>
 	mut plans: Array<MirStringSplit> := []
-	if function.kind != 3 || values.size() > 4096 || function.block_count > 256
+	if function.kind != mir_function_control() || values.size() > 4096 || function.block_count > 256
 		return plans
 	end
 	mut found := false
@@ -27,7 +29,7 @@ def mir_function_string_splits(native_module: MirModule, function: MirFunction, 
 		block := native_module.blocks[block_index]
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
-			if native_module.instructions[index].kind == 60
+			if native_module.instructions[index].kind == mir_op_string_split()
 				found = true
 			end
 			index += 1
@@ -55,9 +57,9 @@ def mir_function_string_splits(native_module: MirModule, function: MirFunction, 
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[index]
-			if instruction.kind == 12 || (instruction.kind == 57 && instruction.first == 8)
+			if instruction.kind == mir_op_string_literal() || (instruction.kind == mir_op_singleton_literal() && instruction.first == 8)
 				literals[integer_string(instruction.result)] = instruction.payload
-			elsif instruction.kind == 58
+			elsif instruction.kind == mir_op_literal_widen()
 				literals[integer_string(instruction.result)] = -2
 			end
 			index += 1
@@ -90,7 +92,7 @@ def mir_function_string_splits(native_module: MirModule, function: MirFunction, 
 			mut index := block.instruction_start
 			while index < block.instruction_start + block.instruction_count
 				instruction := native_module.instructions[index]
-				if instruction.kind == 58
+				if instruction.kind == mir_op_literal_widen()
 					key := integer_string(instruction.result)
 					literal := mir_literal_meet(literals[key], literals[integer_string(instruction.first)])
 					if literals[key] != literal
@@ -114,7 +116,7 @@ def mir_function_string_splits(native_module: MirModule, function: MirFunction, 
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[index]
-			if instruction.kind == 60
+			if instruction.kind == mir_op_string_split()
 				first := literals[integer_string(instruction.first)]
 				second := literals[integer_string(instruction.second)]
 				if first >= 0 && second >= 0

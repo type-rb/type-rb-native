@@ -1,3 +1,5 @@
+import { mir_numeric_checked_mode, mir_numeric_default_mode, mir_numeric_guarded_add_mode, mir_numeric_guarded_multiply_mode, mir_numeric_left_nonnegative_add_mode, mir_numeric_proven_arithmetic_mode, mir_numeric_right_nonnegative_add_mode } from mir/model/numeric_modes
+import { binary_add, binary_divide, binary_greater, binary_greater_equal, binary_less, binary_less_equal, binary_multiply, binary_not_equal, binary_power, binary_remainder, binary_subtract } from frontend/types/operators
 import { integer_string } from support/literals
 import { QbeEmitContext, QbeValue, emit_label, emit_temporary } from backend/qbe/context
 import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
@@ -198,35 +200,35 @@ def lower_binary_operand(
 		end
 	end
 	if result_type == "Float"
-		if operator_id == 14
+		if operator_id == binary_power()
 			qbe_output_line(output, "\t" + result + " =d call $pow(d " + left_operand + ", d " + right_operand + ")")
 			return result
 		end
 		mut operation := "add"
-		if operator_id == 2
+		if operator_id == binary_subtract()
 			operation = "sub"
 		end
-		if operator_id == 3
+		if operator_id == binary_multiply()
 			operation = "mul"
 		end
-		if operator_id == 4
+		if operator_id == binary_divide()
 			operation = "div"
 		end
 		qbe_output_line(output, "\t" + result + " =d " + operation + " " + left_operand + ", " + right_operand)
 		return result
 	end
-	if operator_id == 1
-		if mode == 7
+	if operator_id == binary_add()
+		if mode == mir_numeric_proven_arithmetic_mode()
 			qbe_output_line(output, "\t" + result + " =l add " + left_operand + ", " + right_operand)
-		elsif mode == 4
+		elsif mode == mir_numeric_guarded_add_mode()
 			emit_expanded_integer_add(context, output, result, left_operand, right_operand)
-		elsif mode > 0
-			if mode == 3
+		elsif mode > mir_numeric_default_mode()
+			if mode == mir_numeric_left_nonnegative_add_mode()
 				left_operand = right.operand
 				right_operand = left.operand
 			end
-			mut nonnegative := mode == 2
-			if mode == 3
+			mut nonnegative := mode == mir_numeric_right_nonnegative_add_mode()
+			if mode == mir_numeric_left_nonnegative_add_mode()
 				nonnegative = true
 			end
 			emit_checked_integer_operation(context, output, result, left_operand, right_operand, "add", nonnegative)
@@ -235,64 +237,64 @@ def lower_binary_operand(
 		end
 		return result
 	end
-	if operator_id == 2
-		if mode == 7
+	if operator_id == binary_subtract()
+		if mode == mir_numeric_proven_arithmetic_mode()
 			qbe_output_line(output, "\t" + result + " =l sub " + left_operand + ", " + right_operand)
 		else
 			emit_checked_integer_operation(context, output, result, left_operand, right_operand, "sub", false)
 		end
 		return result
 	end
-	if operator_id == 3
-		if mode == 1
+	if operator_id == binary_multiply()
+		if mode == mir_numeric_checked_mode()
 			emit_checked_integer_operation(context, output, result, left_operand, right_operand, "mul", false)
-		elsif mode == 5
+		elsif mode == mir_numeric_guarded_multiply_mode()
 			emit_guarded_integer_multiply(context, output, result, left_operand, right_operand)
 		else
 			emit_integer_call(output, result, "mul", left_operand, right_operand)
 		end
 		return result
 	end
-	if operator_id == 14
+	if operator_id == binary_power()
 		output.runtime_flags[7] = 1
 		emit_integer_call(output, result, "power", left_operand, right_operand)
 		return result
 	end
-	if operator_id <= 5
+	if operator_id <= binary_remainder()
 		mut operation := "div"
 		mut helper := "divide"
-		if operator_id == 5
+		if operator_id == binary_remainder()
 			operation = "rem"
 			helper = "remainder"
 		end
-		if mode == 1
+		if mode == mir_numeric_checked_mode()
 			emit_checked_integer_division(context, output, result, left_operand, right_operand, operation)
 		else
 			emit_integer_call(output, result, helper, left_operand, right_operand)
 		end
 		return result
 	end
-	different := operator_id == 7
+	different := operator_id == binary_not_equal()
 	mut comparison := "eq"
 	if different
 		comparison = "ne"
 	end
-	if operator_id == 8
+	if operator_id == binary_less()
 		comparison = "lt"
 	end
-	if operator_id == 9
+	if operator_id == binary_less_equal()
 		comparison = "le"
 	end
-	if operator_id == 10
+	if operator_id == binary_greater()
 		comparison = "gt"
 	end
-	if operator_id == 11
+	if operator_id == binary_greater_equal()
 		comparison = "ge"
 	end
 	if float_operands
 		comparison = "c" + comparison + "d"
 	else
-		if operator_id >= 8
+		if operator_id >= binary_less()
 			comparison = "s" + comparison
 		end
 		comparison = "c" + comparison + "l"

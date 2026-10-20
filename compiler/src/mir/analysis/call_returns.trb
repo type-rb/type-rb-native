@@ -1,3 +1,5 @@
+import { mir_function_control, mir_terminator_branch, mir_terminator_return } from mir/model/control
+import { mir_op_direct_call, mir_op_scalar_binary, mir_op_scalar_literal } from mir/model/instructions
 import { MirCallReturnGuard, MirFunction, MirModule, mir_block_index, mir_type_id, mir_value_type } from mir/model/module
 import { mir_build_flow, mir_flow_alias, mir_flow_aliases, mir_flow_block_index, mir_flow_blocks } from mir/analysis/flow
 import { mir_scalar_literal } from mir/analysis/ranges
@@ -6,7 +8,7 @@ import { mir_scalar_literal } from mir/analysis/ranges
 # function. Every other path still executes the original call, with its effects.
 def mir_call_return_guard(native_module: MirModule, function: MirFunction): MirCallReturnGuard
 	none := MirCallReturnGuard.new(function_id: -1, comparison: 0, bound: 0)
-	if function.kind != 3 || function.parameter_count != 1 || function.result_type != "Integer"
+	if function.kind != mir_function_control() || function.parameter_count != 1 || function.result_type != "Integer"
 		return none
 	end
 	parameter := native_module.arguments[function.parameter_start]
@@ -18,19 +20,19 @@ def mir_call_return_guard(native_module: MirModule, function: MirFunction): MirC
 		return none
 	end
 	entry := native_module.blocks[entry_index]
-	if entry.parameter_count != 0 || entry.instruction_count != 2 || entry.terminator != 2 || entry.first_target == entry.second_target
+	if entry.parameter_count != 0 || entry.instruction_count != 2 || entry.terminator != mir_terminator_branch() || entry.first_target == entry.second_target
 		return none
 	end
 	literal := native_module.instructions[entry.instruction_start]
 	comparison := native_module.instructions[entry.instruction_start + 1]
-	if literal.kind != 6 || literal.payload < 0 || literal.payload >= native_module.literal_texts.size()
+	if literal.kind != mir_op_scalar_literal() || literal.payload < 0 || literal.payload >= native_module.literal_texts.size()
 		return none
 	end
 	if mir_value_type(native_module, function.id, literal.result) != mir_type_id("Integer")
 		return none
 	end
 	bound := mir_scalar_literal(native_module.literal_texts[literal.payload])
-	if bound < 0 || comparison.kind != 7 || comparison.payload < 8 || comparison.payload > 11 || comparison.failure != -1
+	if bound < 0 || comparison.kind != mir_op_scalar_binary() || comparison.payload < 8 || comparison.payload > 11 || comparison.failure != -1
 		return none
 	end
 	if comparison.first != parameter || comparison.second != literal.result || entry.condition != comparison.result
@@ -42,7 +44,7 @@ def mir_call_return_guard(native_module: MirModule, function: MirFunction): MirC
 		return none
 	end
 	returned := native_module.blocks[function.block_start + successor]
-	if returned.instruction_count != 0 || returned.terminator != 3
+	if returned.instruction_count != 0 || returned.terminator != mir_terminator_return()
 		return none
 	end
 	aliases := mir_flow_aliases(native_module, function, flow, entry)
@@ -56,7 +58,7 @@ def mir_call_return_guard(native_module: MirModule, function: MirFunction): MirC
 		mut cursor := block.instruction_start
 		while cursor < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[cursor]
-			if instruction.kind == 11 && native_module.calls[instruction.payload].callee == function.id
+			if instruction.kind == mir_op_direct_call() && native_module.calls[instruction.payload].callee == function.id
 				recursive = true
 			end
 			cursor += 1

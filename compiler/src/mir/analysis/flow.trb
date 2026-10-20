@@ -1,3 +1,5 @@
+import { mir_type_none } from mir/model/type_ids
+import { mir_terminator_branch, mir_terminator_jump } from mir/model/control
 import { integer_string } from support/literals
 import { MirBlock, MirFunction, MirModule, MirValue } from mir/model/module
 
@@ -81,12 +83,12 @@ def mir_flow_graph_error(native_module: MirModule, function: MirFunction, blocks
 		if blocks[integer_string(block.id)] != index
 			return "MIR block identifier is duplicated"
 		end
-		if block.terminator == 1 || block.terminator == 2
+		if block.terminator == mir_terminator_jump() || block.terminator == mir_terminator_branch()
 			if !blocks.key?(integer_string(block.first_target))
 				return "MIR terminator target does not exist"
 			end
 		end
-		if block.terminator == 2 && !blocks.key?(integer_string(block.second_target))
+		if block.terminator == mir_terminator_branch() && !blocks.key?(integer_string(block.second_target))
 			return "MIR terminator target does not exist"
 		end
 		index += 1
@@ -244,12 +246,12 @@ def mir_build_flow_with_values(native_module: MirModule, function: MirFunction, 
 	while index < function.block_count
 		block := native_module.blocks[function.block_start + index]
 		mut edges := successors[index]
-		if block.terminator == 1 || block.terminator == 2
+		if block.terminator == mir_terminator_jump() || block.terminator == mir_terminator_branch()
 			target := blocks[integer_string(block.first_target)]
 			edges.push(target)
 			incoming_starts[target].push(block.first_argument_start)
 		end
-		if block.terminator == 2
+		if block.terminator == mir_terminator_branch()
 			target := blocks[integer_string(block.second_target)]
 			edges.push(target)
 			incoming_starts[target].push(block.second_argument_start)
@@ -397,13 +399,13 @@ def mir_flow_type(flow: MirFlow, value: Integer): Integer
 		if value >= 0 && value < flow.dense_types.size()
 			return flow.dense_types[value]
 		end
-		return 0
+		return mir_type_none()
 	end
 	key := integer_string(value)
 	if flow.types.key?(key)
 		return flow.types[key]
 	end
-	return 0
+	return mir_type_none()
 end
 
 # Dominance and unanimous aliases are derived only from verified CFG/SSA.

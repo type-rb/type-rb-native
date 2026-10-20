@@ -1,3 +1,8 @@
+import { checked_category_math, checked_category_value } from frontend/types/value_categories
+import { mir_state_enabled_slot } from state/local_slots
+import { mir_adapter_host, mir_adapter_none, mir_signature_compiler_runtime, mir_signature_host, mir_signature_interface, mir_signature_ordinary, mir_signature_standard } from mir/model/call_kinds
+import { mir_function_fixture } from mir/model/control
+import { mir_op_direct_call } from mir/model/instructions
 import { object_abstract_function } from frontend/types/object_types
 import { mir_semantic_type_id, mir_semantic_type_name, mir_semantic_value_type } from mir/model/types
 import { nullable_capture_call } from frontend/checking/nominal/nullable_flow
@@ -37,10 +42,10 @@ def mir_declare_signatures(mut state: CompilerState)
 			parameter += 1
 		end
 		source := load_integer(state.declarations.function_modules, index)
-		mut kind := 0
-		mut adapter := 0
+		mut kind := mir_signature_ordinary()
+		mut adapter := mir_adapter_none()
 		if object_abstract_function(state, index)
-			kind = 4
+			kind = mir_signature_interface()
 			mut method_index := 0
 			state.scalar_mir.object_methods.each do |method|
 				if method.function == index
@@ -51,12 +56,12 @@ def mir_declare_signatures(mut state: CompilerState)
 		end
 		name := load_string(state.declarations.function_names, index)
 		if compiler_runtime_intrinsic(state, index)
-			kind = 1
+			kind = mir_signature_compiler_runtime()
 			adapter = mir_runtime_adapter(name)
 		end
 		if compiler_host_intrinsic(state, index)
-			kind = 2
-			adapter = 9
+			kind = mir_signature_host()
+			adapter = mir_adapter_host()
 		end
 		mir_semantic_type_id(state.scalar_mir, load_string(state.declarations.function_result_types, index))
 		state.scalar_mir.signatures.push(MirSignature.new(id: index, kind: kind, name: name, adapter: adapter, source_id: source, line: load_integer(state.declarations.function_lines, index), parameter_types: types, parameter_mutable: mutable, result_type: load_string(state.declarations.function_result_types, index)))
@@ -82,13 +87,13 @@ end
 # The resolver has already bound the package identity, including import aliases.
 # Standard APIs have their own signature kind, separate from compiler privileges.
 def mir_checked_standard_call(mut state: CompilerState, mut locals: CheckedLocals, category: Integer, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
-	if locals.mir_state[0] == 0
-		return checked_value(result_type, 0, 9007199254740991, 0)
+	if locals.mir_state[mir_state_enabled_slot()] == 0
+		return checked_value(result_type, checked_category_value(), 9007199254740991, 0)
 	end
 	adapter := category + 6
 	mut callee := state.declarations.function_count[0]
 	while callee < state.scalar_mir.signatures.size()
-		if state.scalar_mir.signatures[callee].kind == 3 && state.scalar_mir.signatures[callee].adapter == adapter
+		if state.scalar_mir.signatures[callee].kind == mir_signature_standard() && state.scalar_mir.signatures[callee].adapter == adapter
 			break
 		end
 		callee += 1
@@ -97,13 +102,13 @@ def mir_checked_standard_call(mut state: CompilerState, mut locals: CheckedLocal
 		mut name := "trb/std/process.argv"
 		mut parameters: Array<String> := []
 		mut mutable: Array<Integer> := []
-		if category == 5
+		if category == checked_category_math()
 			name = "trb/std/math.sqrt"
 			parameters = ["Float"]
 			mutable = [0]
 		end
 		mir_semantic_type_id(state.scalar_mir, result_type)
-		state.scalar_mir.signatures.push(MirSignature.new(id: callee, kind: 3, name: name, adapter: adapter, source_id: state.module_graph.active_module[0], line: load_integer(state.source_tokens.token_lines, origin), parameter_types: parameters, parameter_mutable: mutable, result_type: result_type))
+		state.scalar_mir.signatures.push(MirSignature.new(id: callee, kind: mir_signature_standard(), name: name, adapter: adapter, source_id: state.module_graph.active_module[0], line: load_integer(state.source_tokens.token_lines, origin), parameter_types: parameters, parameter_mutable: mutable, result_type: result_type))
 	end
 	return mir_checked_call(state, locals, callee, arguments, result_type, origin)
 end
@@ -112,7 +117,7 @@ def mir_checked_call(mut state: CompilerState, mut locals: CheckedLocals, callee
 	nullable_capture_call(state, locals)
 	if callee < 0 || callee >= state.scalar_mir.signatures.size()
 		scalar_mir_disable(locals)
-		return checked_value(result_type, 0, 9007199254740991, 0)
+		return checked_value(result_type, checked_category_value(), 9007199254740991, 0)
 	end
 	signature := state.scalar_mir.signatures[callee]
 	if result_type != "Void" && !mir_call_value_type(state.scalar_mir, result_type)
@@ -130,7 +135,7 @@ def mir_checked_call(mut state: CompilerState, mut locals: CheckedLocals, callee
 	end
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
-		return checked_value(result_type, 0, 9007199254740991, 0)
+		return checked_value(result_type, checked_category_value(), 9007199254740991, 0)
 	end
 	start := locals.mir_arguments.size()
 	arguments.each do |value|
@@ -142,9 +147,9 @@ def mir_checked_call(mut state: CompilerState, mut locals: CheckedLocals, callee
 	if result_type != "Void"
 		result = scalar_mir_value(state, locals, mir_semantic_type_id(state.scalar_mir, result_type), origin)
 	end
-	scalar_mir_instruction(state, locals, 11, result, -1, -1, call, -1, load_integer(state.source_tokens.token_lines, origin))
+	scalar_mir_instruction(state, locals, mir_op_direct_call(), result, -1, -1, call, -1, load_integer(state.source_tokens.token_lines, origin))
 	if result < 0
-		return checked_value(result_type, 0, 9007199254740991, 0)
+		return checked_value(result_type, checked_category_value(), 9007199254740991, 0)
 	end
 	return mir_checked_value(result_type, result, 9007199254740991, 0)
 end
@@ -178,7 +183,7 @@ def mir_signatures_error(native_module: MirModule): String
 	mut index := 0
 	while index < native_module.signatures.size()
 		signature := native_module.signatures[index]
-		if signature.id != index || signature.kind < 0 || signature.kind > 4
+		if signature.id != index || signature.kind < mir_signature_ordinary() || signature.kind > mir_signature_interface()
 			return "MIR declaration identity is invalid"
 		end
 		if !mir_origin_valid(signature.source_id, signature.line, native_module.source_count[0])
@@ -208,14 +213,14 @@ def mir_signatures_error(native_module: MirModule): String
 end
 
 def mir_function_signature_error(native_module: MirModule, function: MirFunction): String
-	if function.kind == 0
+	if function.kind == mir_function_fixture()
 		return ""
 	end
 	if function.id < 0 || function.id >= native_module.signatures.size()
 		return "MIR function declaration is missing"
 	end
 	signature := native_module.signatures[function.id]
-	if signature.kind == 3 || signature.kind == 4
+	if signature.kind == mir_signature_standard() || signature.kind == mir_signature_interface()
 		return "MIR abstract or standard call cannot have a function body"
 	end
 	if function.source_id != signature.source_id || function.line != signature.line || function.result_type != signature.result_type || function.parameter_count != signature.parameter_types.size()

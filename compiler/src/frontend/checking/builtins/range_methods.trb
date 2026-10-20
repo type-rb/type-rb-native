@@ -1,3 +1,6 @@
+import { checked_category_value } from frontend/types/value_categories
+import { mir_control_loop_depth_slot } from state/local_slots
+import { mir_op_array_new, mir_op_array_push } from mir/model/instructions
 import { CheckedValue, checked_mir_value, checked_value, scalar_mir_binary, scalar_mir_literal } from frontend/checking/body/values
 import { mir_checked_array_operation } from mir/lowering/arrays
 import { mir_binding_initialize, mir_binding_read } from mir/build/bindings
@@ -13,7 +16,7 @@ import { load_integer, store_integer } from support/storage
 def mir_range_array(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
-		return checked_value("Array<Integer>", 0, origin, 1)
+		return checked_value("Array<Integer>", checked_category_value(), origin, 1)
 	end
 	outer := locals.count[0]
 	line := load_integer(state.source_tokens.token_lines, origin)
@@ -22,17 +25,17 @@ def mir_range_array(mut state: CompilerState, mut locals: CheckedLocals, receive
 	first := mir_checked_range_field(state, locals, checked_mir_value(receiver), 0, origin)
 	cursor := local_bind_temporary(locals, "$range.cursor", "Integer", 1)
 	mir_binding_initialize(state, locals, cursor, first, origin)
-	empty := mir_checked_array_operation(state, locals, 19, -1, -1, 0, "Array<Integer>", origin)
+	empty := mir_checked_array_operation(state, locals, mir_op_array_new(), -1, -1, 0, "Array<Integer>", origin)
 	result_slot := local_bind_temporary(locals, "$range.result", "Array<Integer>", 1)
 	mir_binding_initialize(state, locals, result_slot, empty, origin)
 	exit := mir_control_loop_begin(state, locals, origin, line)
-	frame := locals.mir_loops[locals.mir_control[8] - 1]
+	frame := locals.mir_loops[locals.mir_control[mir_control_loop_depth_slot()] - 1]
 	body := mir_control_allocate(locals)
 	mir_iteration_range_test(state, locals, frame, body, owner)
 	mir_control_enter(state, locals, body, line)
 	result := mir_binding_read(state, locals, result_slot, origin)
 	current := mir_binding_read(state, locals, cursor, origin)
-	mir_checked_array_operation(state, locals, 24, checked_mir_value(result), checked_mir_value(current), 0, "Void", origin)
+	mir_checked_array_operation(state, locals, mir_op_array_push(), checked_mir_value(result), checked_mir_value(current), 0, "Void", origin)
 	span := mir_binding_read(state, locals, owner, origin)
 	bound := mir_checked_range_field(state, locals, checked_mir_value(span), 1, origin)
 	last := scalar_mir_binary(state, locals, "==", current, bound, "Boolean", origin)

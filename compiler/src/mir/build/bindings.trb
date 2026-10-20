@@ -1,3 +1,6 @@
+import { checked_category_value } from frontend/types/value_categories
+import { mir_state_enabled_slot } from state/local_slots
+import { mir_op_array_load, mir_op_array_store } from mir/model/instructions
 import { LambdaCapture } from frontend/types/callable_types
 import { mir_global_assign } from mir/lowering/globals
 import { CheckedValue, checked_bound_value, checked_mir_value, scalar_mir_disable, scalar_mir_literal } from frontend/checking/body/values
@@ -10,7 +13,7 @@ import { array_type } from frontend/resolution/type_resolution
 # Storage is chosen before entering the body, using analyzed declaration IDs.
 # Creating a cell at the later capture expression would be path-dependent.
 def mir_binding_initialize(mut state: CompilerState, mut locals: CheckedLocals, slot: Integer, value: CheckedValue, origin: Integer)
-	if locals.mir_state[0] != 1
+	if locals.mir_state[mir_state_enabled_slot()] != 1
 		return
 	end
 	mut operand := checked_mir_value(value)
@@ -36,11 +39,11 @@ end
 def mir_binding_read(mut state: CompilerState, mut locals: CheckedLocals, slot: Integer, origin: Integer): CheckedValue
 	mut operand := load_integer(locals.mir_values, slot) - 1
 	type_name := load_string(locals.types, slot)
-	mut category := 0
-	if locals.mir_state[0] == 1 && operand >= 0
+	mut category := checked_category_value()
+	if locals.mir_state[mir_state_enabled_slot()] == 1 && operand >= 0
 		if load_string(locals.mir_cell_types, slot) != ""
 			zero := scalar_mir_literal(state, locals, "Integer", origin, "0")
-			value := mir_checked_array_operation(state, locals, 22, operand, checked_mir_value(zero), 0, type_name, origin)
+			value := mir_checked_array_operation(state, locals, mir_op_array_load(), operand, checked_mir_value(zero), 0, type_name, origin)
 			operand = checked_mir_value(value)
 		end
 		category = -operand - 1
@@ -52,7 +55,7 @@ end
 
 # Direct bindings advance SSA values; shared bindings replace cell contents.
 def mir_binding_assign(mut state: CompilerState, mut locals: CheckedLocals, target: CheckedValue, value: CheckedValue)
-	if locals.mir_state[0] != 1
+	if locals.mir_state[mir_state_enabled_slot()] != 1
 		return
 	end
 	if target.origin < 0 || target.origin >= state.source_tokens.token_count[0]
@@ -73,7 +76,7 @@ def mir_binding_assign(mut state: CompilerState, mut locals: CheckedLocals, targ
 	if load_string(locals.mir_cell_types, slot) != ""
 		owner := load_integer(locals.mir_values, slot) - 1
 		zero := scalar_mir_literal(state, locals, "Integer", target.origin, "0")
-		mir_checked_array_operation(state, locals, 23, owner, checked_mir_value(zero), operand, "Void", target.origin)
+		mir_checked_array_operation(state, locals, mir_op_array_store(), owner, checked_mir_value(zero), operand, "Void", target.origin)
 	else
 		store_integer(locals.mir_values, slot, operand + 1)
 	end
@@ -86,7 +89,7 @@ def mir_binding_capture(mut state: CompilerState, locals: CheckedLocals, capture
 		if load_string(locals.names, slot) == capture.name && load_string(locals.types, slot) == capture.type_name && load_integer(locals.mutable, slot) == capture.mutable
 			if capture.mutable == 0 || load_string(locals.mir_cell_types, slot) == array_type(capture.type_name)
 				value := load_integer(locals.mir_values, slot) - 1
-				if locals.mir_state[0] == 1 && value >= 0
+				if locals.mir_state[mir_state_enabled_slot()] == 1 && value >= 0
 					return value
 				end
 			end

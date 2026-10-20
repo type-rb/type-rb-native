@@ -1,3 +1,12 @@
+import { checked_logical_operator_offset } from frontend/types/operator_plans
+import { declaration_object } from frontend/types/declaration_kinds
+import { control_syntax_case, control_syntax_guarded_transfer, control_syntax_if, control_syntax_ternary, loop_transfer_none } from state/control_kinds
+import { transform_all, transform_any, transform_find, transform_find_index, transform_map, transform_none, transform_reduce, transform_select, transform_sort_by, transform_sort_by_descending } from frontend/types/transform_kinds
+import { iteration_source_array, iteration_source_hash, iteration_source_range } from frontend/types/iteration_kinds
+import { hash_action_copy, hash_action_delete, hash_action_empty, hash_action_fetch, hash_action_has_key, hash_action_index_write, hash_action_keys, hash_action_merge, hash_action_none, hash_action_size, hash_action_update } from mir/model/hash_actions
+import { array_method_concat, array_method_include, array_method_index, array_method_join, array_method_none, array_method_unshift, bytes_method_none, float_method_none, integer_method_none, result_method_float, result_method_integer, result_method_key, result_method_slice, string_method_none, string_method_split } from frontend/types/method_kinds
+import { binary_add_assign } from frontend/types/operators
+import { token_kind_attribute, token_kind_number, token_kind_string } from state/token_kinds
 import { bytes_method_kind, bytes_method_arity, bytes_method_argument_type } from mir/lowering/bytes
 import { repl_bytes_method } from repl/bytes
 import { nominal_application_end } from frontend/syntax/generic_syntax
@@ -449,7 +458,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	mut text := load_string(state.source_tokens.token_texts, position[0])
 	kind := load_integer(state.source_tokens.token_kinds, position[0])
 	position[0] += 1
-	if kind == 8
+	if kind == token_kind_attribute()
 		self_binding := repl_find(environment, "self")
 		if self_binding < 0
 			store.error[0] = "instance field has no checked receiver"
@@ -460,13 +469,13 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		field := object_field_index(state, owner, text)
 		return ReplReference.new(value: store.children[receiver][field], binding: -1, container: receiver, slot: field)
 	end
-	if kind == 2
+	if kind == token_kind_number()
 		if number_is_float(text)
 			return repl_reference(repl_float(store, native_cli_float(number_without_underscores(text))))
 		end
 		return repl_reference(repl_integer(store, repl_number(text)))
 	end
-	if kind == 3
+	if kind == token_kind_string()
 		return repl_reference(repl_string(store, text))
 	end
 	if text == "nil"
@@ -729,7 +738,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	if text == "self"
 		object_type = object_static_self_type(state)
 	end
-	if find_visible_declaration(state, state.module_graph.active_module[0], text, 9) >= 0 && find_object_type(state, object_type) < 0
+	if find_visible_declaration(state, state.module_graph.active_module[0], text, declaration_object()) >= 0 && find_object_type(state, object_type) < 0
 		object_type = resolve_type_name(state, state.module_graph.active_module[0], text, false)
 	end
 	if find_object_type(state, object_type) >= 0 && token_is(state, position[0], ".")
@@ -908,7 +917,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					return repl_reference(environment.flow[1])
 				end
 				position[0] += 1
-				if plan.kind == 3
+				if plan.kind == hash_action_index_write()
 					result = ReplReference.new(value: 0, binding: -1, container: result.value, slot: key.value)
 				else
 					result = repl_reference(repl_hash_get(store, result.value, key.value))
@@ -1022,20 +1031,20 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					if builtin_result_method(value.type_name, member) > 0
 						origin := position[0]
 						kind := builtin_result_method(value.type_name, member)
-						if kind == 4 || kind == 5
+						if kind == result_method_integer() || kind == result_method_float()
 							position[0] += 1
 							skip_newlines(state, position)
 							position[0] += 1
-							result = repl_reference(repl_builtin_number_parse(state, store, result.value, kind == 5, load_string(state.callables.checked[0].builtin_result_types, origin)))
+							result = repl_reference(repl_builtin_number_parse(state, store, result.value, kind == result_method_float(), load_string(state.callables.checked[0].builtin_result_types, origin)))
 							if safe_origin >= 0 && store.error[0] == ""
 								result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 							end
 							next
 						end
 						mut argument_type := "Integer"
-						if kind == 2
+						if kind == result_method_slice()
 							argument_type = "Range<Integer>"
-						elsif kind == 3
+						elsif kind == result_method_key()
 							argument_type = hash_key_type(value.type_name)
 						end
 						position[0] += 1
@@ -1077,18 +1086,18 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						next
 					end
-					if (array_element_type(value.type_name) != "" || (value.type_name == "Array" && (member == "empty?" || member == "unshift"))) && array_method_kind(member) > 0
+					if (array_element_type(value.type_name) != "" || (value.type_name == "Array" && (member == "empty?" || member == "unshift"))) && array_method_kind(member) > array_method_none()
 						kind := array_method_kind(member)
 						position[0] += 1
 						skip_newlines(state, position)
 						mut argument := -1
 						if array_method_arity(kind) == 1
 							mut argument_type := "Range<Integer>"
-							if kind == 7 || (kind >= 10 && kind <= 12)
+							if kind == array_method_unshift() || (kind >= array_method_include() && kind <= array_method_index())
 								argument_type = array_element_type(value.type_name)
-							elsif kind == 14
+							elsif kind == array_method_concat()
 								argument_type = value.type_name
-							elsif kind == 15
+							elsif kind == array_method_join()
 								argument_type = "String"
 							end
 							checked_argument := repl_expression(state, position, store, environment, 1, argument_type)
@@ -1112,7 +1121,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						next
 					end
-					if bytes_method_kind(value.type_name, member) > 0
+					if bytes_method_kind(value.type_name, member) > bytes_method_none()
 						kind := bytes_method_kind(value.type_name, member)
 						position[0] += 1
 						skip_newlines(state, position)
@@ -1139,7 +1148,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						next
 					end
-					if value.type_name == "String" && string_method_kind(member) > 0
+					if value.type_name == "String" && string_method_kind(member) > string_method_none()
 						kind := string_method_kind(member)
 						position[0] += 1
 						skip_newlines(state, position)
@@ -1162,7 +1171,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 							end
 						end
 						position[0] += 1
-						if kind >= 14
+						if kind >= string_method_split()
 							result = repl_reference(repl_string_transform(store, kind, result.value, arguments))
 						else
 							result = repl_reference(repl_string_method(store, kind, result.value, argument))
@@ -1172,7 +1181,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						next
 					end
-					if value.type_name == "Float" && float_method_kind(member) > 0
+					if value.type_name == "Float" && float_method_kind(member) > float_method_none()
 						position[0] += 1
 						skip_newlines(state, position)
 						position[0] += 1
@@ -1182,7 +1191,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						next
 					end
-					if value.type_name == "Integer" && integer_method_kind(member) > 0
+					if value.type_name == "Integer" && integer_method_kind(member) > integer_method_none()
 						kind := integer_method_kind(member)
 						position[0] += 1
 						skip_newlines(state, position)
@@ -1271,7 +1280,7 @@ def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut 
 			if precedence <= 2
 				plan := load_integer(state.callables.checked[0].checked_operator_plans, origin)
 				short_value := mir_logical_short_value(plan)
-				if short_value < 0 || plan - 64 != binary_operator_id(operator)
+				if short_value < 0 || plan - checked_logical_operator_offset() != binary_operator_id(operator)
 					store.error[0] = "invalid checked logical plan"
 					return repl_reference(0)
 				end
@@ -1412,14 +1421,14 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 	mut ordinal := 0
 	mut bound := 0
 	mut exclusive := 0
-	if plan.source_kind == 2
+	if plan.source_kind == iteration_source_range()
 		cursor = store.integers[store.children[receiver][0]]
 		bound = store.integers[store.children[receiver][1]]
 		exclusive = store.integers[store.children[receiver][2]]
 	end
 	mut keys: Array<Integer> := []
 	mut values: Array<Integer> := []
-	if plan.source_kind == 3
+	if plan.source_kind == iteration_source_hash()
 		table := store.hashes[store.integers[receiver]]
 		mut slot := 0
 		while slot < table.keys.size()
@@ -1434,14 +1443,14 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 	mut result := 0
 	while true
 		if slice_size > 0
-			if !repl_slice_available(store, receiver, plan.source_kind == 2, slice_cursor)
+			if !repl_slice_available(store, receiver, plan.source_kind == iteration_source_range(), slice_cursor)
 				break
 			end
-		elsif plan.source_kind == 3
+		elsif plan.source_kind == iteration_source_hash()
 			if cursor >= keys.size()
 				break
 			end
-		elsif plan.source_kind == 1
+		elsif plan.source_kind == iteration_source_array()
 			if cursor >= store.children[receiver].size()
 				break
 			end
@@ -1451,10 +1460,10 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		environment.count[0] = saved
 		mut element := 0
 		if slice_size > 0
-			element = repl_slice_next(store, receiver, plan.source_kind == 2, plan.element_type, slice_size, slice_cursor)
-		elsif plan.source_kind == 1
+			element = repl_slice_next(store, receiver, plan.source_kind == iteration_source_range(), plan.element_type, slice_size, slice_cursor)
+		elsif plan.source_kind == iteration_source_array()
 			element = store.children[receiver][cursor]
-		elsif plan.source_kind == 3
+		elsif plan.source_kind == iteration_source_hash()
 			element = keys[cursor]
 		else
 			element = repl_integer(store, cursor)
@@ -1462,7 +1471,7 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		repl_bind(environment, load_string(state.source_tokens.token_texts, plan.syntax.element_origin), element, 1)
 		if plan.syntax.second_origin >= 0
 			mut second := 0
-			if plan.source_kind == 3
+			if plan.source_kind == iteration_source_hash()
 				second = values[cursor]
 			else
 				second = repl_integer(store, ordinal)
@@ -1483,7 +1492,7 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 			break
 		end
 		if slice_size > 0
-			if !repl_slice_available(store, receiver, plan.source_kind == 2, slice_cursor)
+			if !repl_slice_available(store, receiver, plan.source_kind == iteration_source_range(), slice_cursor)
 				break
 			end
 			if plan.syntax.second_origin >= 0
@@ -1494,12 +1503,12 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 				ordinal += 1
 			end
 		else
-			if plan.source_kind == 2 && cursor == bound
+			if plan.source_kind == iteration_source_range() && cursor == bound
 				break
 			end
-			if plan.source_kind != 3 && plan.syntax.second_origin >= 0
+			if plan.source_kind != iteration_source_hash() && plan.syntax.second_origin >= 0
 				# There is no next ordinal when the exclusive endpoint is next.
-				if plan.source_kind == 2 && exclusive == 1 && cursor + 1 == bound
+				if plan.source_kind == iteration_source_range() && exclusive == 1 && cursor + 1 == bound
 					break
 				end
 				if ordinal == 9007199254740991
@@ -1529,7 +1538,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 			position[0] += 2
 			return 0
 		end
-		if token_is(state, collection_origin, "{") && token_is(state, collection_origin + 1, "}") && checked_hash_plan(state, collection_origin).kind == 0
+		if token_is(state, collection_origin, "{") && token_is(state, collection_origin + 1, "}") && checked_hash_plan(state, collection_origin).kind == hash_action_none()
 			position[0] += 2
 			return 0
 		end
@@ -1573,7 +1582,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 		position[0] = finish + 1
 		return result
 	end
-	if syntax_loop_transfer_kind(state, position[0]) > 0
+	if syntax_loop_transfer_kind(state, position[0]) > loop_transfer_none()
 		kind := checked_loop_transfer_kind(state, position[0], loop_origin)
 		if kind == 0
 			store.error[0] = "invalid checked loop transfer target"
@@ -1632,7 +1641,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 	end
 	operator := load_string(state.source_tokens.token_texts, position[0])
 	mut assignment := operator == "="
-	if binary_operator_id(operator) >= 17
+	if binary_operator_id(operator) >= binary_add_assign()
 		assignment = true
 	end
 	if assignment
@@ -1736,13 +1745,13 @@ def repl_hash_method(mut state: CompilerState, mut position: Array<Integer>, mut
 	position[0] += 1
 	repl_set_type(store, receiver, plan.type_name)
 	mut argument := 0
-	if plan.kind == 5 || plan.kind == 6 || plan.kind == 13
+	if plan.kind == hash_action_has_key() || plan.kind == hash_action_delete() || plan.kind == hash_action_fetch()
 		argument = repl_expression(state, position, store, environment, 1, plan.key_type).value
 		if environment.flow[0] != 0
 			return environment.flow[1]
 		end
 	end
-	if plan.kind == 8 || plan.kind == 9
+	if plan.kind == hash_action_merge() || plan.kind == hash_action_update()
 		argument = repl_expression(state, position, store, environment, 1, plan.type_name).value
 		if environment.flow[0] != 0
 			return environment.flow[1]
@@ -1754,23 +1763,23 @@ def repl_hash_method(mut state: CompilerState, mut position: Array<Integer>, mut
 		return 0
 	end
 	table := store.hashes[store.integers[receiver]]
-	if plan.kind == 4
+	if plan.kind == hash_action_size()
 		return repl_integer(store, table.sizes[0])
-	elsif plan.kind == 12
+	elsif plan.kind == hash_action_empty()
 		return repl_boolean(store, table.sizes[0] == 0)
-	elsif plan.kind == 5
+	elsif plan.kind == hash_action_has_key()
 		return repl_boolean(store, repl_hash_slot(store, table, argument) >= 0)
-	elsif plan.kind == 13
+	elsif plan.kind == hash_action_fetch()
 		return repl_hash_get(store, receiver, argument)
-	elsif plan.kind == 6
+	elsif plan.kind == hash_action_delete()
 		return repl_hash_delete(store, receiver, argument)
-	elsif plan.kind == 9
+	elsif plan.kind == hash_action_update()
 		repl_hash_update(store, receiver, argument)
 		return 0
-	elsif plan.kind == 7 || plan.kind == 8
+	elsif plan.kind == hash_action_copy() || plan.kind == hash_action_merge()
 		copy := repl_hash_new(store, plan.type_name, table.keys.size())
 		repl_hash_update(store, copy, receiver)
-		if plan.kind == 8
+		if plan.kind == hash_action_merge()
 			repl_hash_update(store, copy, argument)
 		end
 		return copy
@@ -1779,7 +1788,7 @@ def repl_hash_method(mut state: CompilerState, mut position: Array<Integer>, mut
 	mut index := 0
 	while index < table.keys.size()
 		if table.keys[index] > 0
-			if plan.kind == 10
+			if plan.kind == hash_action_keys()
 				children.push(table.keys[index])
 			else
 				children.push(table.values[index])
@@ -1788,7 +1797,7 @@ def repl_hash_method(mut state: CompilerState, mut position: Array<Integer>, mut
 		index += 1
 	end
 	mut element := plan.value_type
-	if plan.kind == 10
+	if plan.kind == hash_action_keys()
 		element = plan.key_type
 	end
 	return repl_value(store, "Array<" + element + ">", 0, 0.0, "", children)
@@ -1800,7 +1809,7 @@ def repl_statement(mut state: CompilerState, mut position: Array<Integer>, mut s
 	origin := position[0]
 	environment.result_origin[0] = origin
 	guard := sparse_integer_at(state.parsed.control_origins, position[0])
-	if guard > 0 && state.parsed.controls[guard - 1].kind == 4
+	if guard > 0 && state.parsed.controls[guard - 1].kind == control_syntax_guarded_transfer()
 		control := state.parsed.controls[guard - 1]
 		position[0] = control.selector
 		condition := repl_expression(state, position, store, environment, 1, "Boolean")
@@ -1838,7 +1847,7 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	control := state.parsed.controls[sparse_integer_at(state.parsed.control_origins, origin) - 1]
 	saved := environment.count[0]
 	mut selector := predicate
-	if control.kind == 2
+	if control.kind == control_syntax_case()
 		position[0] = control.selector
 		selector = repl_expression(state, position, store, environment, 1, "").value
 	end
@@ -1847,20 +1856,20 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	while index < control.branches.size() && environment.flow[0] == 0 && store.error[0] == ""
 		branch := control.branches[index]
 		mut selected := branch.condition < 0
-		if control.kind == 3 && index == 0
+		if control.kind == control_syntax_ternary() && index == 0
 			selected = store.integers[predicate] != 0
-		elsif control.kind == 1 && branch.condition >= 0
+		elsif control.kind == control_syntax_if() && branch.condition >= 0
 			position[0] = branch.condition
 			condition := repl_expression(state, position, store, environment, 1, "Boolean")
 			selected = store.integers[condition.value] != 0
-		elsif control.kind == 2 && branch.condition >= 0 && sparse_integer_at(state.callables.checked[0].union_pattern_origins, branch.condition) > 0
+		elsif control.kind == control_syntax_case() && branch.condition >= 0 && sparse_integer_at(state.callables.checked[0].union_pattern_origins, branch.condition) > 0
 			pattern := state.callables.checked[0].union_patterns[sparse_integer_at(state.callables.checked[0].union_pattern_origins, branch.condition) - 1]
 			payload := store.children[selector][0]
 			selected = repl_type(store, payload) == pattern.type_name
 			if selected
 				repl_bind(environment, load_string(state.source_tokens.token_texts, pattern.binding), payload, 0)
 			end
-		elsif control.kind == 2 && branch.condition >= 0 && find_enum_type(state, repl_type(store, selector)) >= 0
+		elsif control.kind == control_syntax_case() && branch.condition >= 0 && find_enum_type(state, repl_type(store, selector)) >= 0
 			pattern := state.callables.checked[0].enum_patterns[sparse_integer_at(state.callables.checked[0].enum_pattern_origins, branch.condition) - 1]
 			selected = repl_variant(store, selector) == pattern.variant
 			if selected
@@ -1870,7 +1879,7 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					slot += 1
 				end
 			end
-		elsif control.kind == 2 && branch.condition >= 0
+		elsif control.kind == control_syntax_case() && branch.condition >= 0
 			position[0] = branch.condition
 			while position[0] < branch.condition_finish && !selected
 				pattern := repl_expression(state, position, store, environment, 1, repl_type(store, selector))
@@ -1886,7 +1895,7 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		end
 		if selected
 			position[0] = branch.body
-			if control.kind == 3
+			if control.kind == control_syntax_ternary()
 				result = repl_expression(state, position, store, environment, 1, "").value
 			else
 				result = repl_block(state, position, store, environment, environment.flow, environment.flow[2])
@@ -1945,11 +1954,11 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 	end
 	mut result := 0
 	mut keys: Array<Integer> := []
-	if syntax.kind == 7 || syntax.kind == 8
+	if syntax.kind == transform_find() || syntax.kind == transform_find_index()
 		result = repl_none(store, plan.type_name)
-	elsif syntax.kind >= 4 && syntax.kind <= 6
-		result = repl_boolean(store, syntax.kind != 4)
-	elsif syntax.kind == 3
+	elsif syntax.kind >= transform_any() && syntax.kind <= transform_none()
+		result = repl_boolean(store, syntax.kind != transform_any())
+	elsif syntax.kind == transform_reduce()
 		position[0] = syntax.initial_start
 		result = repl_expression(state, position, store, environment, 1, plan.type_name).value
 		if store.error[0] != "" || environment.flow[0] != 0
@@ -1963,14 +1972,14 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 	mut ordinal := 0
 	mut bound := 0
 	mut exclusive := 0
-	if plan.iteration.source_kind == 2
+	if plan.iteration.source_kind == iteration_source_range()
 		cursor = store.integers[store.children[receiver][0]]
 		bound = store.integers[store.children[receiver][1]]
 		exclusive = store.integers[store.children[receiver][2]]
 	end
 	mut flow := [0]
 	while store.error[0] == ""
-		if plan.iteration.source_kind == 1
+		if plan.iteration.source_kind == iteration_source_array()
 			if cursor >= store.children[receiver].size()
 				break
 			end
@@ -1979,12 +1988,12 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 		end
 		environment.count[0] = saved
 		mut element := 0
-		if plan.iteration.source_kind == 1
+		if plan.iteration.source_kind == iteration_source_array()
 			element = store.children[receiver][cursor]
 		else
 			element = repl_integer(store, cursor)
 		end
-		if syntax.kind == 3
+		if syntax.kind == transform_reduce()
 			repl_bind(environment, load_string(state.source_tokens.token_texts, syntax.accumulator_origin), result, 1)
 		end
 		repl_bind(environment, load_string(state.source_tokens.token_texts, shape.element_origin), element, 1)
@@ -1996,42 +2005,42 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 		if store.error[0] != "" || flow[0] != 0 || environment.flow[0] != 0
 			break
 		end
-		if syntax.kind >= 9
+		if syntax.kind >= transform_sort_by()
 			store.children[result].push(element)
 			keys.push(repl_coerce(store, yielded, plan.key_type))
-		elsif syntax.kind == 1
+		elsif syntax.kind == transform_map()
 			store.children[result].push(repl_coerce(store, yielded, array_element_type(plan.type_name)))
-		elsif syntax.kind == 2
+		elsif syntax.kind == transform_select()
 			if store.integers[yielded] != 0
 				store.children[result].push(element)
 			end
-		elsif syntax.kind >= 7
+		elsif syntax.kind >= transform_find()
 			if store.integers[yielded] != 0
 				mut selected := element
-				if syntax.kind == 8
+				if syntax.kind == transform_find_index()
 					selected = repl_integer(store, ordinal)
 				end
 				result = repl_coerce(store, selected, plan.type_name)
 				break
 			end
-		elsif syntax.kind >= 4
+		elsif syntax.kind >= transform_any()
 			truth := store.integers[yielded] != 0
 			mut answer := truth
-			if syntax.kind == 6
+			if syntax.kind == transform_none()
 				answer = !truth
 			end
 			result = repl_boolean(store, answer)
-			if (syntax.kind == 5 && !truth) || (syntax.kind != 5 && truth)
+			if (syntax.kind == transform_all() && !truth) || (syntax.kind != transform_all() && truth)
 				break
 			end
 		else
 			result = repl_coerce(store, yielded, plan.type_name)
 		end
-		if plan.iteration.source_kind == 2 && cursor == bound
+		if plan.iteration.source_kind == iteration_source_range() && cursor == bound
 			break
 		end
-		if shape.second_origin >= 0 || syntax.kind == 8
-			if plan.iteration.source_kind == 2 && exclusive == 1 && cursor + 1 == bound
+		if shape.second_origin >= 0 || syntax.kind == transform_find_index()
+			if plan.iteration.source_kind == iteration_source_range() && exclusive == 1 && cursor + 1 == bound
 				break
 			end
 			if ordinal == 9007199254740991
@@ -2044,8 +2053,8 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 	end
 	environment.count[0] = saved
 	position[0] = shape.finish
-	if syntax.kind >= 9 && store.error[0] == "" && flow[0] == 0 && environment.flow[0] == 0
-		return repl_array_sort_keys(store, result, keys, syntax.kind == 10)
+	if syntax.kind >= transform_sort_by() && store.error[0] == "" && flow[0] == 0 && environment.flow[0] == 0
+		return repl_array_sort_keys(store, result, keys, syntax.kind == transform_sort_by_descending())
 	end
 	return result
 end

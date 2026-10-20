@@ -1,3 +1,4 @@
+import { mir_op_array_copy, mir_op_array_load, mir_op_array_mutate, mir_op_array_new, mir_op_array_position, mir_op_array_push, mir_op_array_size, mir_op_array_store } from mir/model/instructions
 import { integer_string } from support/literals
 import { MirArrayLoop, MirArrayReadGuard, MirInstruction } from mir/model/module
 import { mir_element_type, mir_managed_type, mir_operand_type, mir_storage_type_name } from mir/model/types
@@ -162,7 +163,7 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 	type_id := mir_operand_type(value_types, instruction.result)
 	type_name := mir_storage_type_name(state.scalar_mir, type_id)
 	result := emit_temporary(context)
-	if kind == 19
+	if kind == mir_op_array_new()
 		mut descriptor := "$trbn_desc_array_scalar"
 		if mir_managed_type(state.scalar_mir, mir_element_type(state.scalar_mir, type_id))
 			descriptor = "$trbn_desc_array_managed"
@@ -194,7 +195,7 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		return emitted_value(result, type_name)
 	end
 	owner := operands[instruction.first]
-	if kind == 48
+	if kind == mir_op_array_mutate()
 		if instruction.payload == 0
 			mut value := operands[instruction.second]
 			if mir_storage_type_name(state.scalar_mir, mir_operand_type(value_types, instruction.second)) == "Float"
@@ -215,7 +216,7 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		end
 		return emitted_value(result, type_name)
 	end
-	if kind == 47
+	if kind == mir_op_array_copy()
 		mut descriptor := "$trbn_desc_array_scalar"
 		if mir_managed_type(state.scalar_mir, mir_element_type(state.scalar_mir, type_id))
 			descriptor = "$trbn_desc_array_managed"
@@ -232,11 +233,11 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 	mut cached_data := ""
 	mut nonnegative := false
 	plans.each do |plan|
-		if kind == 20 && plan.length == instruction_index
+		if kind == mir_op_array_size() && plan.length == instruction_index
 			selected = plan.header
 		end
 		plan.accesses.each do |access|
-			if (kind == 21 || kind == 22 || kind == 23) && access == instruction_index
+			if (kind == mir_op_array_position() || kind == mir_op_array_load() || kind == mir_op_array_store()) && access == instruction_index
 				selected = plan.header
 			end
 		end
@@ -251,13 +252,13 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 			end
 		end
 	end
-	if kind == 20 && selected >= 0
+	if kind == mir_op_array_size() && selected >= 0
 		return emitted_value("%mir_array_length" + integer_string(selected), "Integer")
 	end
-	if kind == 20 && cached_length != ""
+	if kind == mir_op_array_size() && cached_length != ""
 		return emitted_value(cached_length, "Integer")
 	end
-	if kind == 20
+	if kind == mir_op_array_size()
 		address := emit_temporary(context)
 		qbe_output_line(output, "\t" + address + " =l add " + owner + ", 8")
 		qbe_output_line(output, "\t" + result + " =l loadl " + address)
@@ -265,22 +266,22 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 	end
 	mut second := operands[instruction.second]
 	mut checked_name := ""
-	if kind == 22 && array_read_guard_used(read_guards, instruction_index)
+	if kind == mir_op_array_load() && array_read_guard_used(read_guards, instruction_index)
 		checked_name = "%mir_array_checked_index" + integer_string(instruction_index)
 	end
 	guard_source := array_read_guard_source(read_guards, instruction_index)
 	if guard_source >= 0
 		guard := state.scalar_mir.instructions[guard_source]
-		if guard.kind == 21
+		if guard.kind == mir_op_array_position()
 			second = operands[guard.result]
 		else
 			second = "%mir_array_checked_index" + integer_string(guard_source)
 		end
-		if kind == 21
+		if kind == mir_op_array_position()
 			return emitted_value(second, "Integer")
 		end
 	end
-	if kind == 24
+	if kind == mir_op_array_push()
 		element := mir_element_type(state.scalar_mir, mir_operand_type(value_types, instruction.first))
 		if mir_storage_type_name(state.scalar_mir, element) == "Float"
 			output.runtime_flags[0] = 1
@@ -290,7 +291,7 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		end
 		return emitted_value("", "Void")
 	end
-	if (kind == 22 || kind == 23) && selected >= 0
+	if (kind == mir_op_array_load() || kind == mir_op_array_store()) && selected >= 0
 		if checked_name != ""
 			qbe_output_line(output, "\t" + checked_name + " =l copy " + second)
 		end
@@ -298,7 +299,7 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		address := emit_temporary(context)
 		qbe_output_line(output, "\t" + offset + " =l shl " + second + ", 3")
 		qbe_output_line(output, "\t" + address + " =l add %mir_array_data" + integer_string(selected) + ", " + offset)
-		if kind == 22
+		if kind == mir_op_array_load()
 			emit_typed_load(output, result, type_name, address)
 			return emitted_value(result, type_name)
 		end
@@ -306,13 +307,13 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		emit_typed_store(output, mir_storage_type_name(state.scalar_mir, element), operands[instruction.payload], address)
 		return emitted_value("", "Void")
 	end
-	if kind == 21 && selected >= 0
+	if kind == mir_op_array_position() && selected >= 0
 		# The verified zero-origin, unit-step loop guard proves this index is
 		# already a nonnegative logical position for the guarded owner.
 		return emitted_value(second, "Integer")
 	end
 	mut address := ""
-	if (kind == 22 || kind == 23) && (guard_source >= 0 || array_check_reusable(check_reuse, instruction_index))
+	if (kind == mir_op_array_load() || kind == mir_op_array_store()) && (guard_source >= 0 || array_check_reusable(check_reuse, instruction_index))
 		# The verified plan proves `second` is a checked logical index for this
 		# exact owner with no intervening length change. Reload storage after RHS.
 		if checked_name != ""
@@ -330,11 +331,11 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		qbe_output_line(output, "\t" + offset + " =l shl " + second + ", 3")
 		qbe_output_line(output, "\t" + address + " =l add " + data + ", " + offset)
 	else
-		address = emit_checked_array_access(owner, second, kind == 21, nonnegative, cached_length, cached_data, checked_name, context, output)
+		address = emit_checked_array_access(owner, second, kind == mir_op_array_position(), nonnegative, cached_length, cached_data, checked_name, context, output)
 	end
-	if kind == 21
+	if kind == mir_op_array_position()
 		return emitted_value(address, type_name)
-	elsif kind == 22
+	elsif kind == mir_op_array_load()
 		emit_typed_load(output, result, type_name, address)
 	else
 		element := mir_element_type(state.scalar_mir, mir_operand_type(value_types, instruction.first))

@@ -1,3 +1,8 @@
+import { mir_type_composite_start } from mir/model/type_ids
+import { mir_type_kind_callable } from mir/model/type_kinds
+import { mir_signature_ordinary } from mir/model/call_kinds
+import { mir_function_fixture, mir_terminator_branch, mir_terminator_jump } from mir/model/control
+import { mir_op_callable_new, mir_op_direct_call, mir_op_indirect_call } from mir/model/instructions
 import { mir_effect_conservative } from mir/model/effects
 import { mir_call_effect_summaries, mir_instruction_effects } from mir/analysis/call_effects
 import { integer_string } from support/literals
@@ -87,7 +92,7 @@ def mir_callable_plans(native_module: MirModule): Array<MirCallablePlan>
 	mut result: Array<MirCallablePlan> := []
 	mut needed := false
 	native_module.instructions.each do |instruction|
-		if instruction.kind == 42
+		if instruction.kind == mir_op_indirect_call()
 			needed = true
 		end
 	end
@@ -96,7 +101,7 @@ def mir_callable_plans(native_module: MirModule): Array<MirCallablePlan>
 	end
 	mut flow := MirCallableFlow.new(values: {}, edges: [], callees: [], captures: [], pending: [])
 	native_module.values.each do |value|
-		if value.type_id >= 9 && native_module.types[value.type_id - 9].kind == 9
+		if value.type_id >= mir_type_composite_start() && native_module.types[value.type_id - mir_type_composite_start()].kind == mir_type_kind_callable()
 			key := mir_identity_key(value.function_id, value.id)
 			flow.values[key] = flow.callees.size()
 			flow.callees.push(-1)
@@ -110,7 +115,7 @@ def mir_callable_plans(native_module: MirModule): Array<MirCallablePlan>
 	end
 	mut indirect: Hash<String, Integer> := {}
 	native_module.instructions.each do |instruction|
-		if instruction.kind == 41
+		if instruction.kind == mir_op_callable_new()
 			indirect[integer_string(native_module.signatures[instruction.payload].id)] = 1
 		end
 	end
@@ -118,7 +123,7 @@ def mir_callable_plans(native_module: MirModule): Array<MirCallablePlan>
 		indirect[integer_string(native_module.signatures[method.function].id)] = 1
 	end
 	native_module.functions.each.with_index do |function, function_index|
-		if function.kind == 0 || indirect.key?(integer_string(function.id))
+		if function.kind == mir_function_fixture() || indirect.key?(integer_string(function.id))
 			mut parameter := 0
 			while parameter < function.parameter_count
 				vertex := mir_callable_vertex(flow, function.id, native_module.arguments[function.parameter_start + parameter])
@@ -133,15 +138,15 @@ def mir_callable_plans(native_module: MirModule): Array<MirCallablePlan>
 			while index < block.instruction_start + block.instruction_count
 				instruction := native_module.instructions[index]
 				vertex := mir_callable_vertex(flow, function.id, instruction.result)
-				if instruction.kind == 41
+				if instruction.kind == mir_op_callable_new()
 					mir_callable_join(flow, vertex, instruction.payload, instruction.second)
 				else
 					mir_callable_join(flow, vertex, -2, 0)
 				end
-				if instruction.kind == 11
+				if instruction.kind == mir_op_direct_call()
 					call := native_module.calls[instruction.payload]
 					signature := native_module.signatures[call.callee]
-					if signature.kind == 0 && bodies.key?(integer_string(signature.id))
+					if signature.kind == mir_signature_ordinary() && bodies.key?(integer_string(signature.id))
 						callee := native_module.functions[bodies[integer_string(signature.id)]]
 						mut argument := 0
 						while argument < call.argument_count
@@ -154,10 +159,10 @@ def mir_callable_plans(native_module: MirModule): Array<MirCallablePlan>
 				end
 				index += 1
 			end
-			if block.terminator == 1 || block.terminator == 2
+			if block.terminator == mir_terminator_jump() || block.terminator == mir_terminator_branch()
 				mir_callable_block_edge(native_module, function_index, block.first_target, block.first_argument_start, block.first_argument_count, flow)
 			end
-			if block.terminator == 2
+			if block.terminator == mir_terminator_branch()
 				mir_callable_block_edge(native_module, function_index, block.second_target, block.second_argument_start, block.second_argument_count, flow)
 			end
 			block_index += 1
@@ -183,7 +188,7 @@ def mir_callable_plans(native_module: MirModule): Array<MirCallablePlan>
 			index = block.instruction_start
 			while index < block.instruction_start + block.instruction_count
 				instruction := native_module.instructions[index]
-				if instruction.kind == 42
+				if instruction.kind == mir_op_indirect_call()
 					vertex := mir_callable_vertex(flow, function.id, instruction.first)
 					if vertex >= 0 && flow.callees[vertex] >= 0
 						plans[integer_string(index)] = vertex
@@ -244,7 +249,7 @@ end
 # Consumers run after canonical plan verification or fresh plan construction.
 # Keep unknown invocation and primitive operation effects with their owner.
 def mir_planned_instruction_effects(native_module: MirModule, instruction: MirInstruction, position: Integer): Integer
-	if instruction.kind == 42 && native_module.callable_plans.size() == 1
+	if instruction.kind == mir_op_indirect_call() && native_module.callable_plans.size() == 1
 		return mir_callable_plan_at(native_module.callable_plans[0], position).effects
 	end
 	return mir_instruction_effects(native_module, instruction)

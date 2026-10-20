@@ -1,3 +1,5 @@
+import { hash_action_copy, hash_action_delete, hash_action_empty, hash_action_has_key, hash_action_keys, hash_action_size, hash_action_update, hash_action_values } from mir/model/hash_actions
+import { mir_op_hash_get, mir_op_hash_method, mir_op_hash_new, mir_op_hash_set } from mir/model/instructions
 import { mir_hash_concat_at_membership } from mir/analysis/hash_concats
 import { mir_hash_membership_find } from mir/analysis/hash_membership
 import { hash_read_suffix } from backend/qbe/runtime/hash_runtime
@@ -17,7 +19,7 @@ def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>,
 	result_type := mir_storage_type_name(native_module, mir_operand_type(value_types, instruction.result))
 	qbe_require_hash(output, "generic")
 	result := emit_temporary(context)
-	if instruction.kind == 27
+	if instruction.kind == mir_op_hash_new()
 		type_id := mir_operand_type(value_types, instruction.result)
 		mut flags := mir_hash_key_flags(native_module, type_id)
 		if mir_managed_type(native_module, mir_hash_value_type(native_module, type_id))
@@ -32,7 +34,7 @@ def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>,
 		argument = operands[instruction.second]
 	end
 	mut key_mode := "generic"
-	if instruction.kind == 28 || (instruction.kind == 30 && instruction.payload == 5)
+	if instruction.kind == mir_op_hash_get() || (instruction.kind == mir_op_hash_method() && instruction.payload == hash_action_has_key())
 		owner_type := mir_operand_type(value_types, instruction.first)
 		if mir_hash_integer_key(native_module, owner_type)
 			key_mode = "integer"
@@ -42,7 +44,7 @@ def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>,
 		qbe_require_hash(output, key_mode)
 	end
 	suffix := hash_read_suffix(key_mode)
-	if instruction.kind == 29
+	if instruction.kind == mir_op_hash_set()
 		value_type := mir_storage_type_name(native_module, mir_operand_type(value_types, instruction.payload))
 		bits := emit_hash_bits(context, output, operands[instruction.payload], value_type)
 		producer := mir_hash_lookup_find(native_module.hash_lookup_reuse[0], index, false)
@@ -55,7 +57,7 @@ def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>,
 		return emitted_value("", "Void")
 	end
 	concat := mir_hash_concat_at_membership(native_module.hash_concat_probes[0], index)
-	if instruction.kind == 30 && instruction.payload == 5 && (concat >= 0 || mir_hash_membership_find(native_module.hash_membership_reuse[0], index, true) >= 0)
+	if instruction.kind == mir_op_hash_method() && instruction.payload == hash_action_has_key() && (concat >= 0 || mir_hash_membership_find(native_module.hash_membership_reuse[0], index, true) >= 0)
 		slot := "%hash_membership_" + integer_string(index)
 		if concat >= 0
 			producer := native_module.hash_concat_probes[0][concat].concat
@@ -67,7 +69,7 @@ def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>,
 		return emitted_value(result, result_type)
 	end
 	membership := mir_hash_membership_find(native_module.hash_membership_reuse[0], index, false)
-	if instruction.kind == 28 && (membership >= 0 || mir_hash_lookup_find(native_module.hash_lookup_reuse[0], index, true) >= 0)
+	if instruction.kind == mir_op_hash_get() && (membership >= 0 || mir_hash_lookup_find(native_module.hash_lookup_reuse[0], index, true) >= 0)
 		slot := "%hash_slot_" + integer_string(index)
 		if membership >= 0
 			qbe_output_line(output, "\t" + slot + " =l copy %hash_membership_" + integer_string(membership))
@@ -84,29 +86,29 @@ def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>,
 		return emitted_value(result, result_type)
 	end
 	method := instruction.payload
-	if instruction.kind == 30 && (method == 4 || method == 12)
+	if instruction.kind == mir_op_hash_method() && (method == hash_action_size() || method == hash_action_empty())
 		address := emit_address(context, output, owner, 8)
 		qbe_output_line(output, "\t" + result + " =l loadl " + address)
-		if method == 12
+		if method == hash_action_empty()
 			empty := emit_temporary(context)
 			qbe_output_line(output, "\t" + empty + " =l ceql " + result + ", 0")
 			return emitted_value(empty, result_type)
 		end
-	elsif instruction.kind == 30 && method == 7
+	elsif instruction.kind == mir_op_hash_method() && method == hash_action_copy()
 		address := emit_address(context, output, owner, 16)
 		capacity := emit_temporary(context)
 		qbe_output_line(output, "\t" + capacity + " =l loadl " + address)
 		qbe_output_line(output, "\t" + result + " =l call $trbn_hash_copy(l " + owner + ", l " + capacity + ")")
-	elsif instruction.kind == 30 && method == 9
+	elsif instruction.kind == mir_op_hash_method() && method == hash_action_update()
 		qbe_output_line(output, "\tcall $trbn_hash_update(l " + owner + ", l " + argument + ")")
 		return emitted_value("", "Void")
-	elsif instruction.kind == 30 && (method == 10 || method == 11)
+	elsif instruction.kind == mir_op_hash_method() && (method == hash_action_keys() || method == hash_action_values())
 		qbe_output_line(output, "\t" + result + " =l call $trbn_hash_entries(l " + owner + ", l " + integer_string(method - 10) + ")")
 	else
 		mut operation := "get"
-		if instruction.kind == 30 && method == 5
+		if instruction.kind == mir_op_hash_method() && method == hash_action_has_key()
 			operation = "contains"
-		elsif instruction.kind == 30 && method == 6
+		elsif instruction.kind == mir_op_hash_method() && method == hash_action_delete()
 			operation = "delete"
 		end
 		qbe_output_line(output, "\t" + result + " =l call $trbn_hash_" + operation + suffix + "(l " + owner + ", l " + argument + ")")

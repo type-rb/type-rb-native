@@ -1,3 +1,6 @@
+import { mir_op_direct_call, mir_op_integer_to_float, mir_op_scalar_literal, mir_op_value_copy } from mir/model/instructions
+import { mir_type_boolean, mir_type_integer, mir_type_none, mir_type_string } from mir/model/type_ids
+import { mir_function_control, mir_function_fixture, mir_function_scalar, mir_terminator_branch, mir_terminator_jump, mir_terminator_return, mir_terminator_trap } from mir/model/control
 import { mir_hash_concat_plans, mir_hash_concats_equal } from mir/analysis/hash_concats
 import { mir_call_return_equal, mir_call_return_plans } from mir/analysis/call_returns
 import { mir_hash_membership_equal, mir_hash_membership_plans } from mir/analysis/hash_membership
@@ -73,7 +76,7 @@ def mir_terminator_error(
 		block: MirBlock,
 	): String
 	kind := block.terminator
-	if kind == 1
+	if kind == mir_terminator_jump()
 		if block.condition == -1
 			if block.second_target == -1
 				if block.second_argument_count == 0
@@ -93,7 +96,7 @@ def mir_terminator_error(
 		end
 		return "MIR jump shape differs"
 	end
-	if kind == 2
+	if kind == mir_terminator_branch()
 		condition_type := mir_flow_type(flow, block.condition)
 		condition_available := mir_value_available(
 			flow,
@@ -102,7 +105,7 @@ def mir_terminator_error(
 			block.condition,
 		)
 		if condition_available
-			if condition_type == 2
+			if condition_type == mir_type_boolean()
 				if block.return_value == -1
 					first := mir_target_arguments_error(
 						flow,
@@ -130,7 +133,7 @@ def mir_terminator_error(
 		end
 		return "MIR branch shape differs"
 	end
-	if kind == 3
+	if kind == mir_terminator_return()
 		if block.return_value < -1
 			return "MIR return shape differs"
 		end
@@ -164,7 +167,7 @@ def mir_terminator_error(
 		end
 		return "MIR return shape differs"
 	end
-	if kind == 4
+	if kind == mir_terminator_trap()
 		if block.condition == -1
 			if block.first_target == -1
 				if block.second_target == -1
@@ -218,10 +221,10 @@ def mir_function_structure_error(native_module: MirModule, function: MirFunction
 end
 
 def mir_adapter_error(flow: MirFlow, native_module: MirModule, function: MirFunction): String
-	if function.kind == 0
+	if function.kind == mir_function_fixture()
 		return ""
 	end
-	if function.kind == 1
+	if function.kind == mir_function_scalar()
 		if function.block_count != 2
 			return "MIR scalar adapter shape differs"
 		end
@@ -230,32 +233,32 @@ def mir_adapter_error(flow: MirFlow, native_module: MirModule, function: MirFunc
 			return "MIR scalar adapter shape differs"
 		end
 		entry := native_module.blocks[entry_index]
-		if entry.terminator != 3 || entry.parameter_count != 0
+		if entry.terminator != mir_terminator_return() || entry.parameter_count != 0
 			return "MIR scalar adapter shape differs"
 		end
 	end
-	mut returned_type := 0
+	mut returned_type := mir_type_none()
 	mut block_index := function.block_start
 	while block_index < function.block_start + function.block_count
 		block := native_module.blocks[block_index]
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			kind := native_module.instructions[index].kind
-			if (kind < 6 || kind > 9) && (function.kind != 3 || kind < 11 || kind > 73)
+			if (kind < mir_op_scalar_literal() || kind > mir_op_integer_to_float()) && (function.kind != mir_function_control() || kind < mir_op_direct_call() || kind > mir_op_value_copy())
 				return "MIR scalar control operation is unsupported"
 			end
 			index += 1
 		end
-		if block.terminator == 3
+		if block.terminator == mir_terminator_return()
 			type_id := mir_flow_type(flow, block.return_value)
-			if function.kind == 3 && type_id != 0 && !mir_semantic_value_type(native_module, type_id)
+			if function.kind == mir_function_control() && type_id != mir_type_none() && !mir_semantic_value_type(native_module, type_id)
 				return "MIR scalar return type differs"
 			end
-			if returned_type != 0 && returned_type != type_id
+			if returned_type != mir_type_none() && returned_type != type_id
 				return "MIR scalar return type differs"
 			end
 			returned_type = type_id
-		elsif function.kind == 1 && block.terminator != 4
+		elsif function.kind == mir_function_scalar() && block.terminator != mir_terminator_trap()
 			return "MIR scalar adapter shape differs"
 		end
 		block_index += 1
@@ -264,10 +267,10 @@ def mir_adapter_error(flow: MirFlow, native_module: MirModule, function: MirFunc
 end
 
 def mir_function_error(native_module: MirModule, function: MirFunction, values: Array<MirValue>, call_effects: Array<Integer>): String
-	if function.kind < 0 || function.kind > 3 || function.kind == 2
+	if function.kind < mir_function_fixture() || function.kind > mir_function_control() || function.kind == 2
 		return "MIR function adapter kind is invalid"
 	end
-	if function.kind == 3
+	if function.kind == mir_function_control()
 		values.each do |value|
 			if value.function_id == function.id
 				if !mir_semantic_value_type(native_module, value.type_id)
@@ -292,7 +295,7 @@ def mir_function_error(native_module: MirModule, function: MirFunction, values: 
 	mut index := function.parameter_start
 	mut finish := index + function.parameter_count
 	while index < finish
-		if mir_flow_type(flow, native_module.arguments[index]) == 0
+		if mir_flow_type(flow, native_module.arguments[index]) == mir_type_none()
 			return "MIR function parameter is undefined"
 		end
 		index += 1
@@ -307,7 +310,7 @@ def mir_function_error(native_module: MirModule, function: MirFunction, values: 
 		index = block.parameter_start
 		finish = index + block.parameter_count
 		while index < finish
-			if mir_flow_type(flow, native_module.arguments[index]) == 0
+			if mir_flow_type(flow, native_module.arguments[index]) == mir_type_none()
 				return "MIR block parameter is undefined"
 			end
 			index += 1
@@ -493,10 +496,10 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 		if value.id < 0
 			return "MIR value identity is invalid"
 		end
-		if value.type_id < 1
+		if value.type_id < mir_type_integer()
 			return "MIR value type is invalid"
 		end
-		if value.type_id > 8 && !mir_semantic_value_type(native_module, value.type_id)
+		if value.type_id > mir_type_string() && !mir_semantic_value_type(native_module, value.type_id)
 			return "MIR value type is invalid"
 		end
 		if !mir_origin_valid(value.source_id, value.line, native_module.source_count[0])

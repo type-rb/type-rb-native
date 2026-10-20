@@ -1,3 +1,7 @@
+import { checked_category_enum, checked_category_function, checked_category_initializer, checked_category_newtype, checked_category_object, checked_category_readonly, checked_category_record, checked_category_system, checked_category_value } from frontend/types/value_categories
+import { mir_state_enabled_slot, nullable_state_head_slot } from state/local_slots
+import { binary_add_assign } from frontend/types/operators
+import { mir_op_newtype_construct, mir_op_newtype_project, mir_op_nullable_extract, mir_op_nullable_none, mir_op_string_index } from mir/model/instructions
 import { checked_object_field } from frontend/checking/nominal/object_fields
 import { find_object_type, object_field_index, object_function_owner } from frontend/types/object_types
 import { generic_arguments } from frontend/types/generic_arguments
@@ -36,7 +40,7 @@ import { check_call, check_callable_call, check_method_call, check_record_new } 
 import { check_transform } from frontend/checking/body/iteration
 
 def check_never_postfix(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, value: CheckedValue): CheckedValue
-	saved_mir := locals.mir_state[0]
+	saved_mir := locals.mir_state[mir_state_enabled_slot()]
 	scalar_mir_disable(locals)
 	mut scanning := true
 	while scanning && !has_diagnostic(state)
@@ -70,7 +74,7 @@ def check_never_postfix(mut state: CompilerState, mut position: Array<Integer>, 
 			scanning = false
 		end
 	end
-	locals.mir_state[0] = saved_mir
+	locals.mir_state[mir_state_enabled_slot()] = saved_mir
 	return value
 end
 
@@ -82,7 +86,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 	if find_newtype_type(state, value.type_name) >= 0
 		return check_newtype_member(state, position, locals, value, member)
 	end
-	if value.category == 6
+	if value.category == checked_category_enum()
 		owner := find_enum_type(state, value.type_name)
 		raw_type := raw_enum_type(state, owner)
 		origin := position[0]
@@ -112,9 +116,9 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 	if token_is(state, position[0], "(")
 		# Checked dispatch owns receiver admission and diagnostics. Concrete
 		# bodies still require independently verified MIR before emission.
-		if value.category >= 4
+		if value.category >= checked_category_system()
 			mut expected_member := "sqrt"
-			if value.category == 4
+			if value.category == checked_category_system()
 				expected_member = "argv"
 			end
 			if member != expected_member
@@ -125,7 +129,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 				)
 			end
 		else
-			if value.category == 2
+			if value.category == checked_category_record()
 				if member == "new"
 					value = check_record_new(
 						state,
@@ -216,12 +220,12 @@ def check_postfix(
 				next
 			end
 			if value.category < 0
-				value = checked_value(value.type_name, 0, value.origin, value.mutable)
+				value = checked_value(value.type_name, checked_category_value(), value.origin, value.mutable)
 			end
-			if value.category == 3
-				value = checked_value(value.type_name, 0, value.origin, value.mutable)
+			if value.category == checked_category_readonly()
+				value = checked_value(value.type_name, checked_category_value(), value.origin, value.mutable)
 			end
-			if value.category == 0
+			if value.category == checked_category_value()
 				value = type_diagnostic(
 					state,
 					load_integer(state.source_tokens.token_lines, position[0]),
@@ -268,16 +272,16 @@ def check_postfix(
 					end
 					index_id := checked_mir_value(index)
 					mut lowered := false
-					if locals.mir_state[0] == 1 && array_element_type(value.type_name) != ""
+					if locals.mir_state[mir_state_enabled_slot()] == 1 && array_element_type(value.type_name) != ""
 						mut assignment := token_is(state, position[0] + 1, "=")
-						if binary_operator_id(load_string(state.source_tokens.token_texts, position[0] + 1)) >= 17
+						if binary_operator_id(load_string(state.source_tokens.token_texts, position[0] + 1)) >= binary_add_assign()
 							assignment = true
 						end
 						value = mir_checked_array_index(state, locals, value, index, array_element_type(value.type_name), index_origin, assignment)
 						lowered = true
 					end
 					if !lowered && value.type_name == "String"
-						value = mir_checked_string_operation(state, locals, 16, receiver_id, index_id, 0, "String", index_origin)
+						value = mir_checked_string_operation(state, locals, mir_op_string_index(), receiver_id, index_id, 0, "String", index_origin)
 						lowered = true
 					end
 					if !lowered
@@ -286,7 +290,7 @@ def check_postfix(
 					expect(state, position, "]")
 					if !lowered
 						if value.type_name == "String"
-							value = checked_value("String", 0, 9007199254740991, 0)
+							value = checked_value("String", checked_category_value(), 9007199254740991, 0)
 						else
 							element_type := array_element_type(value.type_name)
 							if element_type == ""
@@ -297,7 +301,7 @@ def check_postfix(
 								)
 								scanning = false
 							else
-								value = checked_bound_value(element_type, 0, index_origin, value.mutable, value.binding)
+								value = checked_bound_value(element_type, checked_category_value(), index_origin, value.mutable, value.binding)
 							end
 						end
 					end
@@ -335,12 +339,12 @@ def check_safe_member(mut state: CompilerState, mut position: Array<Integer>, mu
 		store_string(state.callables.checked[0].safe_types, origin, value.type_name)
 		return value
 	end
-	flow_parent := locals.nullable_state[0]
+	flow_parent := locals.nullable_state[nullable_state_head_slot()]
 	flow_first := locals.nullable_facts.size()
 	condition := nullable_nil_condition(state, locals, receiver, true, origin)
 	alternate := mir_control_branch(state, locals, condition, line)
 	nullable_apply(locals, condition.truth)
-	payload := mir_checked_nullable(state, locals, 36, receiver, element, 0, origin)
+	payload := mir_checked_nullable(state, locals, mir_op_nullable_extract(), receiver, element, 0, origin)
 	value := check_safe_present_member(state, position, locals, checked_view(receiver, element, payload.category))
 	nullable_finish(locals, flow_parent, flow_first, locals.count[0])
 	mut result_type := nullable_type(value.type_name)
@@ -360,12 +364,12 @@ def check_safe_member(mut state: CompilerState, mut position: Array<Integer>, mu
 		mir_value_exit(state, locals, join, value)
 	end
 	mir_control_enter(state, locals, alternate, line)
-	mut result := checked_value("Void", 0, 9007199254740991, 0)
+	mut result := checked_value("Void", checked_category_value(), 9007199254740991, 0)
 	if result_type == "Void"
 		mir_control_jump(state, locals, join.target, locals.count[0])
 		mir_control_enter(state, locals, join.target, line)
 	else
-		none := mir_checked_nullable(state, locals, 33, receiver, result_type, 0, origin)
+		none := mir_checked_nullable(state, locals, mir_op_nullable_none(), receiver, result_type, 0, origin)
 		mir_value_exit(state, locals, join, none)
 		result = mir_value_complete(state, locals, join, result_type, origin)
 	end
@@ -379,7 +383,7 @@ def check_newtype_member(mut state: CompilerState, mut position: Array<Integer>,
 	definition := state.nominal.newtypes[owner]
 	origin := position[0]
 	line := load_integer(state.source_tokens.token_lines, origin)
-	class_method := receiver.category == 7
+	class_method := receiver.category == checked_category_newtype()
 	if !token_is(state, origin, "(")
 		return type_diagnostic(state, line, "newtype member requires an explicit call")
 	end
@@ -399,22 +403,22 @@ def check_newtype_member(mut state: CompilerState, mut position: Array<Integer>,
 		if value.type_name == "Never"
 			return value
 		end
-		return mir_newtype_operation(state, locals, 55, value, owner, newtype_type(owner), origin)
+		return mir_newtype_operation(state, locals, mir_op_newtype_construct(), value, owner, newtype_type(owner), origin)
 	end
 	if !class_method && member == "value"
 		advance(position)
 		skip_newlines(state, position)
 		expect(state, position, ")")
-		return mir_newtype_operation(state, locals, 56, receiver, owner, definition.representation, origin)
+		return mir_newtype_operation(state, locals, mir_op_newtype_project(), receiver, owner, definition.representation, origin)
 	end
 	function := newtype_method_function(state, receiver.type_name, member, class_method)
 	if function < 0
 		return type_diagnostic(state, line, "newtype " + definition.name + " has no matching member " + member)
 	end
 	if !namespace_member_access(state, definition.source_id, definition.name + "::" + member, origin)
-		return checked_value("Invalid", 0, origin, 0)
+		return checked_value("Invalid", checked_category_value(), origin, 0)
 	end
-	return check_call(state, position, locals, 1, "", function, checked_mir_value(receiver), !class_method)
+	return check_call(state, position, locals, checked_category_function(), "", function, checked_mir_value(receiver), !class_method)
 end
 
 # Capture receiver and authored argument once before the live bounds/key query.
@@ -424,7 +428,7 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 	owner := find_object_type(state, receiver.type_name)
 	instance := state.nominal.object_instances[owner]
 	definition := state.nominal.objects[instance.definition]
-	if definition.interface_type && receiver.category == 8
+	if definition.interface_type && receiver.category == checked_category_object()
 		return type_diagnostic(state, line, "interface cannot be constructed or used as a class receiver")
 	end
 	mut method_arguments: Array<String> := []
@@ -438,7 +442,7 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 	end
 	if !token_is(state, position[0], "(")
 		field := object_field_index(state, owner, "@" + member)
-		if receiver.category != 8 && field >= 0
+		if receiver.category != checked_category_object() && field >= 0
 			mut internal := false
 			if receiver.origin >= 0 && receiver.origin < state.source_tokens.token_count[0] && token_is(state, receiver.origin, "self") && state.global_bindings.declaration_owner[0] == definition.name && state.module_graph.active_module[0] == definition.source_id
 				internal = true
@@ -447,7 +451,7 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 		end
 		return type_diagnostic(state, line, "unknown class field or missing method call")
 	end
-	class_member := receiver.category == 8
+	class_member := receiver.category == checked_category_object()
 	if class_member && member == "new"
 		if method_arguments.size() > 0
 			return type_diagnostic(state, line, "constructor type arguments belong to the class")
@@ -458,7 +462,7 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 				return type_diagnostic(state, line, "class initializer must return Void")
 			end
 			store_integer(state.callables.checked[0].generic_calls, position[0], initializer + 1)
-			return check_call(state, position, locals, 9, "initialize", initializer, owner, true)
+			return check_call(state, position, locals, checked_category_initializer(), "initialize", initializer, owner, true)
 		else
 			advance(position)
 			skip_newlines(state, position)
@@ -473,8 +477,8 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 	declaring_owner := object_function_owner(state, function)
 	declaring := state.nominal.objects[declaring_owner]
 	if !namespace_member_access(state, declaring.source_id, declaring.name + "::" + member, origin)
-		return checked_value("Invalid", 0, origin, 0)
+		return checked_value("Invalid", checked_category_value(), origin, 0)
 	end
 	store_integer(state.callables.checked[0].generic_calls, position[0], function + 1)
-	return check_call(state, position, locals, 1, "", function, checked_mir_value(receiver), true)
+	return check_call(state, position, locals, checked_category_function(), "", function, checked_mir_value(receiver), true)
 end

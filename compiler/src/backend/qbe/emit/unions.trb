@@ -1,3 +1,6 @@
+import { mir_type_boolean, mir_type_composite_start, mir_type_float, mir_type_float_array, mir_type_integer, mir_type_integer_array, mir_type_string } from mir/model/type_ids
+import { mir_type_kind_any, mir_type_kind_array, mir_type_kind_bytes, mir_type_kind_hash, mir_type_kind_nil, mir_type_kind_union } from mir/model/type_kinds
+import { mir_op_puts, mir_op_union_inject, mir_op_union_test } from mir/model/instructions
 import { integer_string } from support/literals
 import { MirInstruction } from mir/model/module
 import { mir_managed_type, mir_operand_type, mir_storage_type_name } from mir/model/types
@@ -10,7 +13,7 @@ import { CompilerState } from state/state
 def emit_union_descriptors(state: CompilerState, mut output: QbeOutput)
 	mut has_any := false
 	state.scalar_mir.types.each do |row|
-		if row.kind == 16
+		if row.kind == mir_type_kind_any()
 			has_any = true
 		end
 	end
@@ -26,7 +29,7 @@ def emit_union_descriptors(state: CompilerState, mut output: QbeOutput)
 	if has_any
 		mut emitted: Array<Integer> := []
 		state.scalar_mir.instructions.each do |instruction|
-			if instruction.kind == 52
+			if instruction.kind == mir_op_union_inject()
 				mut found := false
 				emitted.each do |type_id|
 					if type_id == instruction.payload
@@ -57,14 +60,14 @@ def emit_any_output_runtime(state: CompilerState, mut output: QbeOutput)
 	mut used := false
 	mut any_type := 0
 	state.scalar_mir.instructions.each do |instruction|
-		if instruction.kind == 18 && instruction.payload == 1
+		if instruction.kind == mir_op_puts() && instruction.payload == 1
 			used = true
 		end
 	end
 	mut index := 0
 	while index < state.scalar_mir.types.size()
-		if state.scalar_mir.types[index].kind == 16
-			any_type = index + 9
+		if state.scalar_mir.types[index].kind == mir_type_kind_any()
+			any_type = index + mir_type_composite_start()
 		end
 		index += 1
 	end
@@ -79,7 +82,7 @@ def emit_any_output_runtime(state: CompilerState, mut output: QbeOutput)
 	qbe_output_line(output, "data $trbn_any_bytes_open = { b \"[\" }")
 	emit_any_float_writer(output)
 	mut type_id := 1
-	while type_id < state.scalar_mir.types.size() + 9
+	while type_id < state.scalar_mir.types.size() + mir_type_composite_start()
 		emit_any_type_writer(state, type_id, output)
 		type_id += 1
 	end
@@ -96,49 +99,49 @@ end
 def emit_any_type_writer(state: CompilerState, type_id: Integer, mut output: QbeOutput)
 	name := "$trbn_any_write_type_" + integer_string(type_id)
 	qbe_output_line(output, "\nfunction " + name + "(l %value) {\n@start")
-	if type_id == 1
+	if type_id == mir_type_integer()
 		qbe_output_line(output, " call $trbn_any_write_integer(l %value)\n ret\n}\n")
 		return
 	end
-	if type_id == 2
+	if type_id == mir_type_boolean()
 		qbe_output_line(output, " jnz %value, @true, @false\n@true\n call $write(w 1, l $trbn_any_true, l 4)\n ret\n@false\n call $write(w 1, l $trbn_any_false, l 5)\n ret\n}\n")
 		return
 	end
-	if type_id == 5
+	if type_id == mir_type_float()
 		qbe_output_line(output, " call $trbn_any_write_float(l %value)\n ret\n}\n")
 		return
 	end
-	if type_id == 8
+	if type_id == mir_type_string()
 		qbe_output_line(output, " call $trbn_any_write_string(l %value)\n ret\n}\n")
 		return
 	end
-	if type_id == 3 || type_id == 6
+	if type_id == mir_type_integer_array() || type_id == mir_type_float_array()
 		mut element := 1
-		if type_id == 6
+		if type_id == mir_type_float_array()
 			element = 5
 		end
 		emit_any_array_writer(element, output)
 		return
 	end
-	if type_id >= 9
-		row := state.scalar_mir.types[type_id - 9]
-		if row.kind == 17
+	if type_id >= mir_type_composite_start()
+		row := state.scalar_mir.types[type_id - mir_type_composite_start()]
+		if row.kind == mir_type_kind_bytes()
 			qbe_output_line(output, " call $write(w 1, l $trbn_any_bytes_open, l 1)\n %lenp =l add %value, 8\n %length =l loadl %lenp\n %data =l add %value, 24\n jmp @loop\n@loop\n %index =l phi @start 0, @next %following\n %done =w ceql %index, %length\n jnz %done, @close, @item\n@item\n %first =w ceql %index, 0\n jnz %first, @byte, @space\n@space\n call $write(w 1, l $trbn_any_space, l 1)\n jmp @byte\n@byte\n %address =l add %data, %index\n %raw =w loadub %address\n %byte =l extuw %raw\n call $trbn_any_write_integer(l %byte)\n jmp @next\n@next\n %following =l add %index, 1\n jmp @loop\n@close\n call $write(w 1, l $trbn_any_close, l 1)\n ret\n}\n")
 			return
 		end
-		if row.kind == 1
+		if row.kind == mir_type_kind_array()
 			emit_any_array_writer(row.element, output)
 			return
 		end
-		if row.kind == 3 && (row.key == 1 || row.key == 8)
+		if row.kind == mir_type_kind_hash() && (row.key == 1 || row.key == 8)
 			emit_any_hash_writer(row.key, row.element, output)
 			return
 		end
-		if row.kind == 7
+		if row.kind == mir_type_kind_nil()
 			qbe_output_line(output, " call $write(w 1, l $trbn_any_nil, l 5)\n ret\n}\n")
 			return
 		end
-		if row.kind == 16 || row.kind == 10
+		if row.kind == mir_type_kind_any() || row.kind == mir_type_kind_union()
 			emit_any_tagged_writer(state, output)
 			return
 		end
@@ -153,25 +156,25 @@ end
 def emit_any_hash_writer(key_type: Integer, value_type: Integer, mut output: QbeOutput)
 	qbe_require_hash(output, "generic")
 	qbe_output_line(output, " call $write(w 1, l $trbn_any_hash_open, l 4)\n %capacity_address =l add %value, 16\n %capacity =l loadl %capacity_address\n %empty =w ceql %capacity, 0\n jnz %empty, @close, @prepare\n@prepare\n %keys_address =l add %value, 24\n %keys =l loadl %keys_address\n %key_data_address =l add %keys, 24\n %key_data =l loadl %key_data_address\n %values_address =l add %value, 32\n %values =l loadl %values_address\n %value_data_address =l add %values, 24\n %value_data =l loadl %value_data_address\n %count_address =l add %value, 8\n %count =l loadl %count_address\n %printed_slot =l alloc8 8\n %last_slot =l alloc8 8\n %best_slot =l alloc8 8\n %best_key_slot =l alloc8 8\n %scan_slot =l alloc8 8\n storel 0, %printed_slot\n jmp @outer\n@outer\n %printed =l loadl %printed_slot\n %done =w cslel %count, %printed\n jnz %done, @close, @scan_prepare\n@scan_prepare\n storel -1, %best_slot\n storel 0, %scan_slot\n jmp @scan\n@scan\n %index =l loadl %scan_slot\n %scan_done =w cslel %capacity, %index\n jnz %scan_done, @selected, @entry\n@entry\n %offset =l mul %index, 8\n %key_address =l add %key_data, %offset\n %stored =l loadl %key_address\n %vacant =w ceql %stored, 0\n")
-	if key_type == 1
+	if key_type == mir_type_integer()
 		qbe_output_line(output, " %deleted =w ceql %stored, -1")
 	else
 		qbe_output_line(output, " %deleted =w ceql %stored, $trbn_hash_tombstone")
 	end
 	qbe_output_line(output, " %skip =w or %vacant, %deleted\n jnz %skip, @scan_next, @candidate\n@candidate\n %prior =l loadl %printed_slot\n jnz %prior, @after_last, @best_check\n@after_last\n %last =l loadl %last_slot")
-	if key_type == 1
+	if key_type == mir_type_integer()
 		qbe_output_line(output, " %greater =w csltl %last, %stored")
 	else
 		qbe_output_line(output, " %greater_word =l call $trbn_string_before(l %last, l %stored)\n %greater =w cnel %greater_word, 0")
 	end
 	qbe_output_line(output, " jnz %greater, @best_check, @scan_next\n@best_check\n %best =l loadl %best_slot\n %none =w ceql %best, -1\n jnz %none, @save, @compare\n@compare\n %best_key =l loadl %best_key_slot")
-	if key_type == 1
+	if key_type == mir_type_integer()
 		qbe_output_line(output, " %smaller =w csltl %stored, %best_key")
 	else
 		qbe_output_line(output, " %smaller_word =l call $trbn_string_before(l %stored, l %best_key)\n %smaller =w cnel %smaller_word, 0")
 	end
 	qbe_output_line(output, " jnz %smaller, @save, @scan_next\n@save\n storel %index, %best_slot\n storel %stored, %best_key_slot\n jmp @scan_next\n@scan_next\n %following =l add %index, 1\n storel %following, %scan_slot\n jmp @scan\n@selected\n %chosen =l loadl %best_slot\n %missing =w ceql %chosen, -1\n jnz %missing, @close, @item\n@item\n %already =l loadl %printed_slot\n jnz %already, @space, @key\n@space\n call $write(w 1, l $trbn_any_space, l 1)\n jmp @key\n@key\n %selected_offset =l mul %chosen, 8\n %selected_key_address =l add %key_data, %selected_offset\n %selected_key =l loadl %selected_key_address")
-	if key_type == 1
+	if key_type == mir_type_integer()
 		qbe_output_line(output, " %key =l sub %selected_key, 9007199254740992")
 	else
 		qbe_output_line(output, " %key =l copy %selected_key")
@@ -182,7 +185,7 @@ end
 def emit_any_tagged_writer(state: CompilerState, mut output: QbeOutput)
 	qbe_output_line(output, " %tag_address =l add %value, 8\n %tag =l loadl %tag_address\n %payload_address =l add %value, 16\n %payload =l loadl %payload_address\n jmp @check1")
 	mut type_id := 1
-	limit := state.scalar_mir.types.size() + 9
+	limit := state.scalar_mir.types.size() + mir_type_composite_start()
 	while type_id < limit
 		qbe_output_line(output, "@check" + integer_string(type_id) + "\n %match" + integer_string(type_id) + " =w ceql %tag, " + integer_string(type_id) + "\n jnz %match" + integer_string(type_id) + ", @case" + integer_string(type_id) + ", @check" + integer_string(type_id + 1) + "\n@case" + integer_string(type_id) + "\n call $trbn_any_write_type_" + integer_string(type_id) + "(l %payload)\n ret")
 		type_id += 1
@@ -194,7 +197,7 @@ def emit_mir_union_instruction(state: CompilerState, types: Array<Integer>, inst
 	result_type := mir_operand_type(types, instruction.result)
 	type_name := mir_storage_type_name(state.scalar_mir, result_type)
 	result := emit_temporary(context)
-	if instruction.kind == 52
+	if instruction.kind == mir_op_union_inject()
 		mut descriptor := "$trbn_desc_union" + integer_string(result_type) + "_" + integer_string(instruction.payload)
 		if type_name == "Any"
 			descriptor = "$trbn_desc_any_" + integer_string(instruction.payload)
@@ -209,7 +212,7 @@ def emit_mir_union_instruction(state: CompilerState, types: Array<Integer>, inst
 	address := emit_address(context, output, operands[instruction.first], 8)
 	tag := emit_temporary(context)
 	qbe_output_line(output, "\t" + tag + " =l loadl " + address)
-	if instruction.kind == 53
+	if instruction.kind == mir_op_union_test()
 		qbe_output_line(output, "\t" + result + " =l ceql " + tag + ", " + integer_string(instruction.payload))
 	else
 		valid := emit_temporary(context)
