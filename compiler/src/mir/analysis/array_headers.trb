@@ -107,6 +107,19 @@ def mir_array_stable_headers(native_module: MirModule, flow: MirFlow, header: Mi
 	return headers
 end
 
+# A stable parameter keeps the object passed on entry on every backedge.
+# Generated guards may name that entry object directly instead of forwarding
+# the parameter. Unknown or conflicting aliases cannot establish this equality.
+def mir_array_header_matches(header: MirArrayHeader, aliases: MirFlowAliases, identity: Integer): Boolean
+	if identity < 0
+		return false
+	end
+	if identity == header.identity
+		return true
+	end
+	return identity == mir_flow_alias(aliases, header.owner)
+end
+
 # Storage invariance needs no counted induction. Keep ordinary index checks,
 # and inspect only paths that can continue around this natural loop. An
 # allocating return outside those paths cannot invalidate a later iteration.
@@ -142,7 +155,7 @@ def mir_array_header_loop(native_module: MirModule, function: MirFunction, flow:
 			if instruction.kind >= mir_op_array_size() && instruction.kind <= mir_op_array_store()
 				identity := mir_flow_alias(aliases, instruction.first)
 				headers.each do |candidate|
-					if candidate.identity == identity
+					if mir_array_header_matches(candidate, aliases, identity)
 						mir_live_add(candidate.accesses, position)
 						if instruction.kind >= mir_op_array_position() && mir_nonnegative_value(nonnegative, instruction.second)
 							mir_live_add(candidate.nonnegative_accesses, position)

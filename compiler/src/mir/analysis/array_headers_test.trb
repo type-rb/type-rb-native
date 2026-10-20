@@ -1,6 +1,7 @@
 import { emit_qbe } from compiler
 import { optimize_verified_mir } from mir/passes/optimize
 import { mir_array_loops_equal } from mir/analysis/array_loops
+import { mir_op_array_size } from mir/model/instructions
 import { verify_mir } from mir/verify/module
 import { array_loop_mir_check } from testing/mir/array_loops
 import { control_test_output } from testing/mir/control
@@ -11,6 +12,69 @@ import trb/std/process
 import trb/std/result
 
 describe("MIR general Array header loops") do
+	test("keeps changing entry owners distinct across repeated inner loops") do
+		state := array_loop_mir_check("def sum(mut values: Array<Integer>, mut other: Array<Integer>, rounds: Integer): Integer\nmut active := values\nmut total := 0\nmut round := 0\nwhile true\nif round >= rounds\nreturn total\nend\nlimit := active[0]\nmut index := 0\nwhile index < limit\ntotal += active[index]\nindex += 1\nend\nactive = other\nround += 1\nend\nreturn total\nend\ndef main()\nputs(sum([3, 4000, 5000], [2, 7000], 2))\nputs(sum([], [], 0))\nend\n")
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("16005\n0\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
+	test("reuses a stable entry Array in an inner version guard") do
+		mut state := array_loop_mir_check("def sum(values: Array<Integer>, rounds: Integer): Integer\nmut total := 0\nmut round := 0\nwhile true\nif round >= rounds\nreturn total\nend\nlimit := values[0]\nmut index := 0\nwhile index < limit\ntotal += values[index]\nindex += 1\nend\nround += 1\nend\nreturn total\nend\ndef main()\nputs(sum([3, 4000, 5000], 2))\nputs(sum([], 0))\nend\n")
+		function := state.scalar_mir.functions[0]
+		mut sizes := 0
+		mut uncached := 0
+		mut block_index := function.block_start
+		while block_index < function.block_start + function.block_count
+			block := state.scalar_mir.blocks[block_index]
+			mut position := block.instruction_start
+			while position < block.instruction_start + block.instruction_count
+				if state.scalar_mir.instructions[position].kind == mir_op_array_size()
+					sizes += 1
+					mut cached := false
+					state.scalar_mir.array_loops[0].each do |plan|
+						plan.headers.each do |header|
+							header.accesses.each do |access|
+								if access == position
+									cached = true
+								end
+							end
+						end
+					end
+					if !cached
+						uncached += 1
+					end
+				end
+				position += 1
+			end
+			block_index += 1
+		end
+		expect(sizes > 0).to_be_true()
+		expect(uncached).to_equal(0)
+		before := control_test_output(emit_qbe(state))
+		intrinsic_mir_erase(state)
+		optimize_verified_mir(state.scalar_mir)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, before)
+			when Result::Ok(actual)
+				expect(actual).to_equal("18006\n0\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("caches an unbounded non-unit loop with an allocating exit") do
 		mut state := array_loop_mir_check("def sum(values: Array<Integer>, limit: Integer): String\nmut total := 0\nmut index := 0\nwhile true\nif index >= limit\nreturn total.to_s()\nend\ntotal += values[index]\nindex += 2\nend\nreturn \"unreachable\"\nend\ndef main()\nmut values := [3000, 4000, 5000, 6000]\nputs(sum(values, 4))\nputs(values[0])\nputs(sum([], 0))\nend\n")
 		expect(state.scalar_mir.array_loops[0].size()).to_equal(1)
