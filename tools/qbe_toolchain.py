@@ -22,7 +22,7 @@ def backend_identity(root=ROOT):
     backend = json.loads((root / "tools/qbe/backend.json").read_text())
     if set(backend) != {"name", "version", "sourceURL", "sourceSHA256", "variant", "patches"}:
         raise ValueError("invalid QBE identity shape")
-    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-arm64-memory-v1":
+    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-arm64-memory-v3":
         raise ValueError("unsupported QBE identity")
     if not backend["sourceURL"].startswith("https://") or not re.fullmatch(r"[0-9a-f]{64}", backend["sourceSHA256"]):
         raise ValueError("invalid QBE source identity")
@@ -42,7 +42,13 @@ def check_capability(binary):
               "export function l $integer(l %x) {\n@start\n %a =l add %x, 7\n"
               " %b =l and %a, 65535\n %c =l sar %b, 65\n ret %c\n}\n"
               "export function l $memory(l %p) {\n@start\n %a =l add %p, 8\n"
-              " %x =l loadl %a\n %b =l add %p, 16\n storel %x, %b\n ret %x\n}\n")
+              " %x =l loadl %a\n %b =l add %p, 16\n storel %x, %b\n ret %x\n}\n"
+              "export function l $indexed(l %p, l %i, l %j) {\n@start\n"
+              " %offset =l shl %i, 3\n %a =l add %p, %offset\n %x =l loadl %a\n"
+              " %small =l shl %j, 2\n %b =l add %p, %small\n storew %x, %b\n ret %x\n}\n"
+              "export function l $shared_memory(l %p, l %i, l %v) {\n@start\n"
+              " %offset =l shl %i, 3\n %a =l add %p, %offset\n %old =l loadl %a\n"
+              " storel %v, %a\n ret %old\n}\n")
     for target, instruction in (("arm64_apple", "fsqrt"), ("arm64", "fsqrt"), ("amd64_sysv", "sqrtsd")):
         result = subprocess.run([str(binary), "-t", target], input=source, text=True,
                                 capture_output=True, timeout=30)
@@ -55,6 +61,14 @@ def check_capability(binary):
             for operation, offset in (("ldr", "8"), ("str", "16")):
                 if not re.search(rf"\b{operation}\s+[^\n]*\[x\d+, #{offset}\]", result.stdout):
                     raise ValueError(f"QBE lacks the required {target} memory operand selection")
+            for operation, shift in (("ldr", "3"), ("str", "2")):
+                if not re.search(rf"\b{operation}\s+[^\n]*\[x\d+, x\d+, lsl #{shift}\]", result.stdout):
+                    raise ValueError(f"QBE lacks the required {target} indexed memory operand selection")
+            shared = re.split(r"(?m)^_?shared_memory:\s*$", result.stdout)
+            if len(shared) != 2 or any(not re.search(
+                    rf"\b{operation}\s+[^\n]*\[x\d+, x\d+, lsl #3\]", shared[1])
+                    for operation in ("ldr", "str")):
+                raise ValueError(f"QBE lacks the required {target} shared memory operand selection")
 
 
 def build(output, archive=None):

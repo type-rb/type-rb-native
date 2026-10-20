@@ -40,7 +40,10 @@ storage = re.findall(r'^data \$trbn_storage_available = [^\n]+', decoded, re.M)
 assert len(storage) == 1
 integer_strings = re.findall(r'^data \$trbn_small_integer_strings = [^\n]+\n.*?^\}', decoded, re.M | re.S)
 assert len(integer_strings) == 1
-il = 'export ' + error[0] + '\n' + storage[0] + '\n' + integer_strings[0] + '\n' + '\n'.join(bodies)
+decimal_pairs = re.findall(r'^data \$trbn_decimal_pairs = [^\n]+', decoded, re.M)
+assert len(decimal_pairs) == 1
+il = ('export ' + error[0] + '\n' + storage[0] + '\n' + integer_strings[0] +
+      '\n' + decimal_pairs[0] + '\n' + '\n'.join(bodies))
 observer = r'''
 #include <assert.h>
 #include <stdint.h>
@@ -248,7 +251,8 @@ int main(int argc, char **argv) {
         assert(trbn_gc_temp_count == 0);
     }
     fail_allocation = 0;
-    int64_t values[] = {-9007199254740991LL, -123, -1, 100, 123, 9007199254740991LL};
+    int64_t values[] = {-9007199254740991LL, -10001, -10000, -1000, -123, -1,
+                        100, 101, 123, 1000, 10000, 10001, 9007199254740991LL};
     for (unsigned i = 0; i < sizeof values / sizeof *values; ++i) {
         char buffer[32]; int size = snprintf(buffer, sizeof buffer, "%lld", (long long)values[i]);
         expect(trbn_integer_to_string(values[i]), buffer, size, size); clear();
@@ -269,9 +273,9 @@ with tempfile.TemporaryDirectory(prefix='native-string-allocation-') as temporar
     (root / 'runtime.ssa').write_text(il)
     (root / 'observer.c').write_text(observer)
     subprocess.run([str(args.qbe.resolve()), '-o', str(root / 'runtime.s'), str(root / 'runtime.ssa')],
-                   check=True, capture_output=True, timeout=30)
+                   check=True, timeout=30)
     subprocess.run(['/usr/bin/cc', '-O2', str(root / 'runtime.s'), str(root / 'observer.c'),
-                    '-o', str(root / 'probe')], check=True, capture_output=True, timeout=30)
+                    '-o', str(root / 'probe')], check=True, timeout=30)
     result = subprocess.run([str(root / 'probe')], capture_output=True, timeout=30)
     assert result.returncode == 0 and result.stderr == b'', result
     for descriptor in ['string', 'other']:

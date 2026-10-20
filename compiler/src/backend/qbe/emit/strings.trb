@@ -7,7 +7,6 @@ import { mir_operand_type, mir_storage_type_name } from mir/model/types
 import { MirInstruction, MirStringConcat, MirStringSplit } from mir/model/module
 import { QbeEmitContext, QbeValue, emit_temporary, emitted_value } from backend/qbe/context
 import { QbeOutput, qbe_output_line } from backend/qbe/output
-import { MirArrayJoin } from mir/model/module
 import { CompilerState } from state/state
 
 def emit_mir_string_concat(plan: MirStringConcat, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
@@ -135,25 +134,6 @@ def emit_utf8_runtime(mut output: QbeOutput)
 	qbe_output_line(output, "\nfunction l $trbn_string_bytes(l %string) {\n@start\n %length_address =l add %string, 8\n %length =l loadl %length_address\n %data =l add %string, 24\n %array =l call $trbn_array_new(l $trbn_desc_array_scalar)\n jmp @loop\n@loop\n %index =l phi @start 0, @advance %next\n %done =w cslel %length, %index\n jnz %done, @finish, @read\n@read\n %address =l add %data, %index\n %byte_word =w loadub %address\n %byte =l extuw %byte_word\n call $trbn_array_push(l %array, l %byte)\n %next =l add %index, 1\n jmp @advance\n@advance\n jmp @loop\n@finish\n ret %array\n}")
 	qbe_output_line(output, "\nfunction l $trbn_string_is_utf8(l %string) {\n@start\n %length_address =l add %string, 8\n %length =l loadl %length_address\n %data =l add %string, 24\n jmp @loop\n@loop\n %offset =l phi @start 0, @advance %next\n %done =w cslel %length, %offset\n jnz %done, @valid, @read\n@read\n %address =l add %data, %offset\n %remaining =l sub %length, %offset\n %width =l call $trbn_utf8_width(l %address, l %remaining)\n %byte =w loadub %address\n %nonascii =w cugtw %byte, 127\n %single =w ceql %width, 1\n %bad =w and %nonascii, %single\n jnz %bad, @invalid, @advance\n@advance\n %next =l add %offset, %width\n jmp @loop\n@valid\n ret 1\n@invalid\n ret 0\n}")
 	return
-end
-
-# Consume verified elements, never reconstruct semantic uses in the adapter.
-# Storage is reserved once by the function prologue, including loop bodies.
-def emit_mir_array_join(plan: MirArrayJoin, separator: String, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
-	storage := "%join_fragments"
-	mut index := 0
-	while index < plan.elements.size()
-		mut target := storage
-		if index > 0
-			target = emit_temporary(context)
-			qbe_output_line(output, "\t" + target + " =l add " + storage + ", " + integer_string(index * 8))
-		end
-		qbe_output_line(output, "\tstorel " + operands[plan.elements[index]] + ", " + target)
-		index += 1
-	end
-	result := emit_temporary(context)
-	qbe_output_line(output, "\t" + result + " =l call $trbn_string_join(l " + storage + ", l " + integer_string(plan.elements.size()) + ", l " + separator + ")")
-	return emitted_value(result, "String")
 end
 
 # The canonical split safe point retains its normal roots and fresh result.

@@ -47,6 +47,41 @@ def guarded_interface_run(state: CompilerState, expected: String)
 end
 
 describe("MIR guarded interface expansion") do
+	test("publishes fallback roots and republishes after nonallocating alternatives") do
+		source := guarded_interface_source().split("total += item.apply(index)").join("delta := item.apply(index)\nlabel := (index + 100).to_s()\ntotal += delta + label.size() - 3")
+		state := guarded_interface_check(source)
+		expect(guarded_interface_count(state)).to_equal(2)
+		emitted := control_test_output(emit_qbe(state))
+		mut forced := ""
+		mut ordinary := false
+		mut hooks := 0
+		emitted.split("\n").each do |line|
+			if line.start_with?("function ")
+				ordinary = line.include?("$trbnf")
+			elsif line == "}"
+				ordinary = false
+			end
+			# These actual allocation sites cover both an unselected witness
+			# and the allocation immediately following a selected scalar body.
+			if ordinary && (line.include?("call $trbn_gc_alloc(") || line.include?("call $trbn_array_new(") || line.include?("call $trbn_array_push_paced(") || line.include?("call $trbn_integer_to_string("))
+				forced += "\tcall $trbn_gc_collect(w 0)\n"
+				hooks += 1
+			end
+			forced += line + "\n"
+		end
+		expect(hooks >= 10).to_be_true()
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, forced)
+			when Result::Ok(actual)
+				expect(actual).to_equal("92\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("guards two exact witnesses and retains scalar and allocating fallback") do
 		state := guarded_interface_check(guarded_interface_source())
 		expect(guarded_interface_count(state)).to_equal(2)

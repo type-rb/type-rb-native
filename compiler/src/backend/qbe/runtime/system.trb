@@ -14,7 +14,6 @@ import { emit_string_sequence_runtime } from backend/qbe/runtime/string_sequence
 import { emit_string_query_runtime } from backend/qbe/runtime/string_queries
 import { emit_utf8_runtime } from backend/qbe/emit/strings
 import { string_starts_with } from support/path
-import { integer_string } from support/literals
 import { QbeOutput, qbe_output_line } from backend/qbe/output
 
 def project_runtime_qbe_line(value: String): Boolean
@@ -160,26 +159,6 @@ def emit_process_runtime(mut output: QbeOutput)
 	qbe_output_line(
 		output,
 		"\ndata $trbn_process_argc = align 8 { l 0 }\ndata $trbn_process_argv_pointer = align 8 { l 0 }\n\nfunction l $trbn_process_argv() {\n@start\n\t%array =l call $trbn_array_new(l $trbn_desc_array_managed)\n\t%argc =l loadl $trbn_process_argc\n\t%argv =l loadl $trbn_process_argv_pointer\n\tjmp @loop\n@loop\n\t%index =l phi @start 1, @append %next\n\t%done =w cslel %argc, %index\n\tjnz %done, @finish, @load\n@load\n\t%offset =l mul %index, 8\n\t%cell =l add %argv, %offset\n\t%source =l loadl %cell\n\t%string =l call $trbn_string_from_c(l %source)\n\tcall $trbn_array_push_paced(l %array, l %string)\n\tjmp @append\n@append\n\t%next =l add %index, 1\n\tjmp @loop\n@finish\n\tret %array\n}",
-	)
-	return
-end
-
-def emit_integer_to_string_runtime(mut output: QbeOutput)
-	# Immutable decimal strings use 32-byte slots: three header words, ASCII,
-	# a zero terminator and padding. A zero descriptor excludes them from GC.
-	qbe_output_line(output, "data $trbn_small_integer_strings = align 8 {")
-	mut value := 0
-	while value < 100
-		decimal := integer_string(value)
-		length := integer_string(decimal.size())
-		padding := integer_string(8 - decimal.size())
-		qbe_output_line(output, "l 0, l " + length + ", l " + length + ", b \"" + decimal + "\", z " + padding + ",")
-		value += 1
-	end
-	qbe_output_line(output, "}")
-	qbe_output_line(
-		output,
-		"\nfunction l $trbn_integer_to_string(l %value) {\n@start\n\t%buffer =l alloc8 32\n\t%end =l add %buffer, 32\n\t%cursor_slot =l alloc8 8\n\t%cached =w cultl %value, 100\n\tjnz %cached, @cached, @format\n@cached\n\t%cache_offset =l shl %value, 5\n\t%cache_entry =l add $trbn_small_integer_strings, %cache_offset\n\tret %cache_entry\n@format\n\tstorel %end, %cursor_slot\n\t%negative =w csltl %value, 0\n\tjnz %negative, @negative_value, @positive_value\n@negative_value\n\t%negative_magnitude =l sub 0, %value\n\tjmp @magnitude\n@positive_value\n\t%positive_magnitude =l copy %value\n\tjmp @magnitude\n@magnitude\n\t%magnitude_value =l phi @negative_value %negative_magnitude, @positive_value %positive_magnitude\n\t%zero =w ceql %magnitude_value, 0\n\tjnz %zero, @zero_digit, @digits\n@zero_digit\n\t%zero_cursor =l sub %end, 1\n\tstoreb 48, %zero_cursor\n\tstorel %zero_cursor, %cursor_slot\n\tjmp @sign\n@digits\n\t%current =l phi @magnitude %magnitude_value, @digit %remaining\n\t%done =w ceql %current, 0\n\tjnz %done, @sign, @digit\n@digit\n\t%remainder =l rem %current, 10\n\t%digit_value =l add %remainder, 48\n\t%digit_byte =w copy %digit_value\n\t%cursor =l loadl %cursor_slot\n\t%next_cursor =l sub %cursor, 1\n\tstoreb %digit_byte, %next_cursor\n\tstorel %next_cursor, %cursor_slot\n\t%remaining =l div %current, 10\n\tjmp @digits\n@sign\n\tjnz %negative, @negative_sign, @finish\n@negative_sign\n\t%sign_cursor =l loadl %cursor_slot\n\t%before_sign =l sub %sign_cursor, 1\n\tstoreb 45, %before_sign\n\tstorel %before_sign, %cursor_slot\n\tjmp @finish\n@finish\n\t%start =l loadl %cursor_slot\n\t%length =l sub %end, %start\n\t%size =l add %length, 17\n\t%string =l call $trbn_string_alloc(l %size)\n\t%length_address =l add %string, 8\n\tstorel %length, %length_address\n\t%data =l add %string, 24\n\tcall $memcpy(l %data, l %start, l %length)\n\t%terminator =l add %data, %length\n\tstoreb 0, %terminator\n\t%points_address =l add %string, 16\n\tstorel %length, %points_address\n\tret %string\n}",
 	)
 	return
 end

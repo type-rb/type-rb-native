@@ -1,0 +1,44 @@
+import { QbeOutput, qbe_output_line } from backend/qbe/output
+import { integer_string } from support/literals
+
+def emit_integer_string_tables(mut output: QbeOutput)
+	# A zero descriptor makes these immutable 32-byte String slots GC-exempt.
+	qbe_output_line(output, "data $trbn_small_integer_strings = align 8 {")
+	mut pairs := ""
+	mut value := 0
+	while value < 100
+		decimal := integer_string(value)
+		length := integer_string(decimal.size())
+		padding := integer_string(8 - decimal.size())
+		qbe_output_line(output, "l 0, l " + length + ", l " + length + ", b \"" + decimal + "\", z " + padding + ",")
+		if value < 10
+			pairs += "0"
+		end
+		pairs += decimal
+		value += 1
+	end
+	qbe_output_line(output, "}\ndata $trbn_decimal_pairs = align 2 { b \"" + pairs + "\" }\n")
+end
+
+def emit_integer_to_string_runtime(mut output: QbeOutput)
+	emit_integer_string_tables(output)
+	qbe_output_line(output, "function l $trbn_integer_to_string(l %value) {\n@start\n %buffer =l alloc8 32\n %end =l add %buffer, 32\n %cached =w cultl %value, 100\n jnz %cached, @cached, @format\n")
+	qbe_output_line(output, "@cached\n %cache_offset =l shl %value, 5\n %cache_entry =l add $trbn_small_integer_strings, %cache_offset\n ret %cache_entry\n")
+	qbe_output_line(output, "@format\n %negative =w csltl %value, 0\n jnz %negative, @negative_value, @positive_value\n")
+	qbe_output_line(output, "@negative_value\n %negative_magnitude =l sub 0, %value\n jmp @magnitude\n")
+	qbe_output_line(output, "@positive_value\n jmp @magnitude\n")
+	qbe_output_line(output, "@magnitude\n %magnitude =l phi @negative_value %negative_magnitude, @positive_value %value\n jmp @pairs\n")
+	# One division emits two digits. Derive the remainder from its quotient so
+	# the backend never needs a second division. Interior groups include a zero
+	# prefix; only the leading group may contain one digit.
+	qbe_output_line(output, "@pairs\n %current =l phi @magnitude %magnitude, @pair %remaining\n %cursor =l phi @magnitude %end, @pair %next_cursor\n %leading =w cultl %current, 100\n jnz %leading, @leading, @pair\n")
+	qbe_output_line(output, "@pair\n %remaining =l udiv %current, 100\n %hundreds =l mul %remaining, 100\n %remainder =l sub %current, %hundreds\n %pair_offset =l shl %remainder, 1\n %pair_address =l add $trbn_decimal_pairs, %pair_offset\n %pair =w loaduh %pair_address\n %next_cursor =l sub %cursor, 2\n storeh %pair, %next_cursor\n jmp @pairs\n")
+	qbe_output_line(output, "@leading\n %two_digits =w cugel %current, 10\n jnz %two_digits, @leading_pair, @leading_single\n")
+	qbe_output_line(output, "@leading_pair\n %leading_offset =l shl %current, 1\n %leading_address =l add $trbn_decimal_pairs, %leading_offset\n %leading_pair =w loaduh %leading_address\n %pair_start =l sub %cursor, 2\n storeh %leading_pair, %pair_start\n jmp @sign\n")
+	qbe_output_line(output, "@leading_single\n %digit =l add %current, 48\n %digit_byte =w copy %digit\n %single_start =l sub %cursor, 1\n storeb %digit_byte, %single_start\n jmp @sign\n")
+	qbe_output_line(output, "@sign\n %digits_start =l phi @leading_pair %pair_start, @leading_single %single_start\n jnz %negative, @negative_sign, @finish\n")
+	qbe_output_line(output, "@negative_sign\n %sign_start =l sub %digits_start, 1\n storeb 45, %sign_start\n jmp @finish\n")
+	# Portable Integer magnitudes fit in 16 decimal digits. The 32-byte stack
+	# buffer also has room for the sign. ASCII byte and codepoint lengths agree.
+	qbe_output_line(output, "@finish\n %start =l phi @sign %digits_start, @negative_sign %sign_start\n %length =l sub %end, %start\n %size =l add %length, 17\n %string =l call $trbn_string_alloc(l %size)\n %length_address =l add %string, 8\n storel %length, %length_address\n %data =l add %string, 24\n call $memcpy(l %data, l %start, l %length)\n %terminator =l add %data, %length\n storeb 0, %terminator\n %points_address =l add %string, 16\n storel %length, %points_address\n ret %string\n}\n")
+end

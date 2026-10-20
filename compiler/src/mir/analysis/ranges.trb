@@ -1,3 +1,4 @@
+import { mir_local_integer_arrays } from mir/analysis/array_local
 import { mir_scalar_inline_add, mir_scalar_inline_multiply } from mir/model/scalar_operators
 import { binary_add, binary_divide, binary_greater, binary_greater_equal, binary_less, binary_less_equal, binary_multiply, binary_subtract } from frontend/types/operators
 import { mir_type_boolean, mir_type_integer } from mir/model/type_ids
@@ -145,15 +146,48 @@ def mir_nonnegative_values(native_module: MirModule, function: MirFunction, flow
 		end
 	end
 	mut values := MirNonnegative.new(dense: dense, sparse: sparse)
+	# Fresh Arrays begin empty. Closed load/store cycles preserve nonnegative
+	# contents inductively, provided every external writer has the same proof.
+	# Remove unsupported Array and scalar facts together; a later negative
+	# writer invalidates even earlier loads. Bounds/failure checks are separate.
+	arrays := mir_local_integer_arrays(native_module, function, flow)
+	mut valid: Array<Integer> := []
+	mut loads: Hash<String, Integer> := {}
+	mut array_index := 0
+	while array_index < arrays.size()
+		valid.push(1)
+		arrays[array_index].loads.each do |value|
+			loads[integer_string(value)] = array_index
+		end
+		array_index += 1
+	end
 	mut changed := true
 	while changed
 		changed = false
+		array_index = 0
+		while array_index < arrays.size()
+			if valid[array_index] == 1
+				arrays[array_index].writes.each do |value|
+					if !mir_nonnegative_value(values, value)
+						valid[array_index] = 0
+						changed = true
+					end
+				end
+			end
+			array_index += 1
+		end
 		integers.each do |value|
 			if mir_nonnegative_value(values, value)
 				position := mir_flow_position(flow, value)
 				mut proven := false
 				if position >= 0
 					proven = mir_nonnegative_instruction(native_module, native_module.instructions[position], values)
+					if arrays.size() > 0
+						key := integer_string(value)
+						if loads.key?(key)
+							proven = valid[loads[key]] == 1
+						end
+					end
 				else
 					proven = mir_nonnegative_block_parameter(native_module, function, flow, value, values)
 				end

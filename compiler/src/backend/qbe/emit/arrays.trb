@@ -7,6 +7,7 @@ import { mir_element_type, mir_managed_type, mir_operand_type, mir_storage_type_
 import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emit_typed_load, emit_typed_store, emitted_value } from backend/qbe/context
 import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
 import { emit_mir_roots } from backend/qbe/emit/roots
+import { qbe_array_cache_name } from backend/qbe/emit/array_caches
 import { CompilerState } from state/state
 
 def array_read_guard_source(guards: Array<MirArrayReadGuard>, instruction: Integer): Integer
@@ -120,26 +121,29 @@ end
 
 # The direct store cannot collect. Publish the verified live-before roots only
 # on growth, before the existing slow path performs GC and backing accounting.
-def emit_integer_array_push(owner: String, value: String, roots: Array<Integer>, root_prefix: Integer, root_capacity: Integer, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
+def emit_integer_array_push(owner: String, value: String, reserved: Boolean, roots: Array<Integer>, root_prefix: Integer, root_capacity: Integer, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
 	length_slot := emit_temporary(context)
 	length := emit_temporary(context)
-	capacity_slot := emit_temporary(context)
-	capacity := emit_temporary(context)
-	full := emit_temporary(context)
-	grow := emit_label(context)
-	store := emit_label(context)
-	finish := emit_label(context)
+	mut finish := ""
 	qbe_output_line(output, "\t" + length_slot + " =l add " + owner + ", 8")
 	qbe_output_line(output, "\t" + length + " =l loadl " + length_slot)
-	qbe_output_line(output, "\t" + capacity_slot + " =l add " + owner + ", 16")
-	qbe_output_line(output, "\t" + capacity + " =l loadl " + capacity_slot)
-	qbe_output_line(output, "\t" + full + " =w ceql " + length + ", " + capacity)
-	qbe_output_branch(output, full, grow, store)
-	qbe_output_line(output, grow)
-	emit_mir_roots(roots, root_prefix, root_capacity, operands, context, output)
-	qbe_output_line(output, "\tcall $trbn_array_grow_paced(l " + owner + ", l " + value + ", l " + length + ", l " + capacity + ")")
-	qbe_output_line(output, "\tjmp " + finish)
-	qbe_output_line(output, store)
+	if !reserved
+		capacity_slot := emit_temporary(context)
+		capacity := emit_temporary(context)
+		full := emit_temporary(context)
+		grow := emit_label(context)
+		store := emit_label(context)
+		finish = emit_label(context)
+		qbe_output_line(output, "\t" + capacity_slot + " =l add " + owner + ", 16")
+		qbe_output_line(output, "\t" + capacity + " =l loadl " + capacity_slot)
+		qbe_output_line(output, "\t" + full + " =w ceql " + length + ", " + capacity)
+		qbe_output_branch(output, full, grow, store)
+		qbe_output_line(output, grow)
+		emit_mir_roots(roots, root_prefix, root_capacity, operands, context, output)
+		qbe_output_line(output, "\tcall $trbn_array_grow_paced(l " + owner + ", l " + value + ", l " + length + ", l " + capacity + ")")
+		qbe_output_line(output, "\tjmp " + finish)
+		qbe_output_line(output, store)
+	end
 	new_length := emit_temporary(context)
 	data_slot := emit_temporary(context)
 	data := emit_temporary(context)
@@ -152,8 +156,10 @@ def emit_integer_array_push(owner: String, value: String, roots: Array<Integer>,
 	qbe_output_line(output, "\t" + offset + " =l shl " + length + ", 3")
 	qbe_output_line(output, "\t" + target + " =l add " + data + ", " + offset)
 	qbe_output_line(output, "\tstorel " + value + ", " + target)
-	qbe_output_line(output, "\tjmp " + finish)
-	qbe_output_line(output, finish)
+	if !reserved
+		qbe_output_line(output, "\tjmp " + finish)
+		qbe_output_line(output, finish)
+	end
 	return
 end
 
@@ -164,6 +170,44 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 	kind := instruction.kind
 	type_id := mir_operand_type(value_types, instruction.result)
 	type_name := mir_storage_type_name(state.scalar_mir, type_id)
+	if kind == mir_op_array_load() || kind == mir_op_array_store()
+		plans.each do |plan|
+			mut slot := 0
+			while slot < plan.cached_values.size()
+				cache := plan.cached_values[slot]
+				name := qbe_array_cache_name(plan.header, slot)
+				if kind == mir_op_array_load() && array_check_reusable(cache.loads, instruction_index)
+					if array_read_guard_used(read_guards, instruction_index)
+						qbe_output_line(output, "\t%mir_array_checked_index" + integer_string(instruction_index) + " =l copy " + operands[instruction.second])
+					end
+					# Capture this SSA read before a later store changes the cache.
+					captured := emit_temporary(context)
+					mut width := "l"
+					if type_name == "Float"
+						width = "d"
+					end
+					qbe_output_line(output, "\t" + captured + " =" + width + " copy " + name)
+					return emitted_value(captured, type_name)
+				end
+				if kind == mir_op_array_store() && array_check_reusable(cache.stores, instruction_index)
+					mut width := "l"
+					if mir_storage_type_name(state.scalar_mir, cache.type_id) == "Float"
+						width = "d"
+					end
+					qbe_output_line(output, "\t" + name + " =" + width + " copy " + operands[instruction.payload])
+					return emitted_value("", "Void")
+				end
+				slot += 1
+			end
+		end
+	end
+	if kind == mir_op_array_load()
+		read_guards.each do |guard|
+			if guard.instruction == instruction_index && guard.loaded_value >= 0
+				return emitted_value(operands[guard.loaded_value], type_name)
+			end
+		end
+	end
 	result := emit_temporary(context)
 	if kind == mir_op_array_new()
 		mut descriptor := "$trbn_desc_array_scalar"
@@ -234,6 +278,7 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 	mut cached_length := ""
 	mut cached_data := ""
 	mut nonnegative := false
+	mut bounded := false
 	plans.each do |plan|
 		if kind == mir_op_array_size() && plan.length == instruction_index
 			selected = plan.header
@@ -250,6 +295,7 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 					cached_length = "%mir_array_length" + name
 					cached_data = "%mir_array_data" + name
 					nonnegative = array_check_reusable(header.nonnegative_accesses, instruction_index)
+					bounded = array_check_reusable(header.bounded_accesses, instruction_index)
 				end
 			end
 		end
@@ -309,13 +355,12 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		emit_typed_store(output, mir_storage_type_name(state.scalar_mir, element), operands[instruction.payload], address)
 		return emitted_value("", "Void")
 	end
-	if kind == mir_op_array_position() && selected >= 0
-		# The verified zero-origin, unit-step loop guard proves this index is
-		# already a nonnegative logical position for the guarded owner.
+	if kind == mir_op_array_position() && (selected >= 0 || bounded || array_check_reusable(check_reuse, instruction_index))
+		# The verified plan proves a nonnegative logical position for this owner.
 		return emitted_value(second, "Integer")
 	end
 	mut address := ""
-	if (kind == mir_op_array_load() || kind == mir_op_array_store()) && (guard_source >= 0 || array_check_reusable(check_reuse, instruction_index))
+	if (kind == mir_op_array_load() || kind == mir_op_array_store()) && (guard_source >= 0 || bounded || array_check_reusable(check_reuse, instruction_index))
 		# The verified plan proves `second` is a checked logical index for this
 		# exact owner with no intervening length change. Reload storage after RHS.
 		if checked_name != ""
@@ -350,6 +395,9 @@ end
 def emit_mir_array_headers(plans: Array<MirArrayLoop>, block: Integer, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
 	plans.each do |plan|
 		if plan.preheader == block
+			if plan.cached_values.size() > 0
+				qbe_output_line(output, "\t%mir_array_ready_" + integer_string(plan.header) + " =w copy 0")
+			end
 			if plan.owner >= 0
 				owner := operands[plan.owner]
 				length := emit_temporary(context)

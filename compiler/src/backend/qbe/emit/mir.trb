@@ -1,4 +1,5 @@
-import { mir_numeric_default_mode, mir_numeric_power_division_mode, mir_numeric_power_remainder_mode, mir_numeric_reciprocal_remainder_mode, mir_numeric_remainder_test_mode } from mir/model/numeric_modes
+import { emit_mir_roots } from backend/qbe/emit/roots
+import { mir_numeric_default_mode, mir_numeric_nonnegative_power_division_mode, mir_numeric_nonnegative_power_remainder_mode, mir_numeric_power_division_mode, mir_numeric_power_remainder_mode, mir_numeric_reciprocal_remainder_mode, mir_numeric_remainder_test_mode } from mir/model/numeric_modes
 import { mir_scalar_inline_add, mir_scalar_inline_multiply } from mir/model/scalar_operators
 import { binary_add, binary_divide, binary_multiply, binary_not_equal, unary_negate, unary_not } from frontend/types/operators
 import { mir_op_direct_call, mir_op_object_field, mir_op_object_store, mir_op_scalar_binary, mir_op_scalar_literal, mir_op_scalar_unary } from mir/model/instructions
@@ -68,10 +69,14 @@ def emit_mir_scalar_instruction(
 			mut operand := ""
 			if mode == mir_numeric_reciprocal_remainder_mode()
 				operand = emit_constant_integer_remainder(context, output, operands[left_id], divisor, reciprocal, shift)
-			elsif mode == mir_numeric_power_remainder_mode()
-				operand = emit_power_integer_remainder(context, output, operands[left_id], divisor)
-			elsif mode == mir_numeric_power_division_mode()
-				operand = emit_power_integer_division(context, output, operands[left_id], divisor, shift, safe)
+			elsif mode == mir_numeric_power_remainder_mode() || mode == mir_numeric_nonnegative_power_remainder_mode()
+				operand = emit_power_integer_remainder(context, output, operands[left_id], divisor, mode == mir_numeric_nonnegative_power_remainder_mode())
+			elsif mode == mir_numeric_power_division_mode() || mode == mir_numeric_nonnegative_power_division_mode()
+				mut nonnegative := safe
+				if mode == mir_numeric_nonnegative_power_division_mode()
+					nonnegative = true
+				end
+				operand = emit_power_integer_division(context, output, operands[left_id], divisor, shift, nonnegative)
 			elsif mode == mir_numeric_remainder_test_mode()
 				masked := emit_temporary(context)
 				operand = emit_temporary(context)
@@ -236,6 +241,9 @@ def emit_guarded_interface_mir(
 		operands: Array<String>,
 		types: Array<String>,
 		plans: Array<MirNumericPlan>,
+		roots: Array<Integer>,
+		root_prefix: Integer,
+		root_capacity: Integer,
 		mut context: QbeEmitContext,
 		mut output: QbeOutput,
 	): QbeValue
@@ -272,6 +280,9 @@ def emit_guarded_interface_mir(
 		qbe_output_line(output, "\tjmp " + complete)
 		qbe_output_line(output, next_guard)
 	end
+	# Every selected MIR alternative has a verified scalar no-allocation body.
+	# Only the unchanged interface fallback needs the original live-before roots.
+	emit_mir_roots(roots, root_prefix, root_capacity, operands, context, output)
 	fallback := emit_mir_call(state, instruction, operands, context, output)
 	qbe_output_line(output, "\t" + result + " =" + width + " copy " + fallback.operand)
 	qbe_output_line(output, "\tjmp " + complete)

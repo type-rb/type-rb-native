@@ -1,3 +1,4 @@
+import { mir_scalar_boolean_and, mir_scalar_boolean_or } from mir/model/scalar_operators
 import { qbe_runtime_integer_power_slot } from backend/qbe/runtime_slots
 import { mir_numeric_checked_mode, mir_numeric_default_mode, mir_numeric_guarded_add_mode, mir_numeric_guarded_multiply_mode, mir_numeric_left_nonnegative_add_mode, mir_numeric_proven_arithmetic_mode, mir_numeric_right_nonnegative_add_mode } from mir/model/numeric_modes
 import { binary_add, binary_divide, binary_greater, binary_greater_equal, binary_less, binary_less_equal, binary_multiply, binary_not_equal, binary_power, binary_remainder, binary_subtract } from frontend/types/operators
@@ -188,6 +189,14 @@ def lower_binary_operand(
 	result := emit_temporary(context)
 	mut left_operand := left.operand
 	mut right_operand := right.operand
+	if operator_id == mir_scalar_boolean_and() || operator_id == mir_scalar_boolean_or()
+		mut operation := "and"
+		if operator_id == mir_scalar_boolean_or()
+			operation = "or"
+		end
+		qbe_output_line(output, "\t" + result + " =l " + operation + " " + left_operand + ", " + right_operand)
+		return result
+	end
 	if float_operands
 		if !left_float
 			converted_left := emit_temporary(context)
@@ -334,7 +343,12 @@ end
 # For d=2^k, bias is d-1 exactly when x<0. Masking x+bias and subtracting
 # bias implements truncation toward zero, including negative portable endpoints.
 # MIR supplies a verified positive power of two; zero division is impossible.
-def emit_power_integer_remainder(mut context: QbeEmitContext, mut output: QbeOutput, left: String, divisor: Integer): String
+def emit_power_integer_remainder(mut context: QbeEmitContext, mut output: QbeOutput, left: String, divisor: Integer, nonnegative: Boolean): String
+	if nonnegative
+		result := emit_temporary(context)
+		qbe_output_line(output, "\t" + result + " =l and " + left + ", " + integer_string(divisor - 1))
+		return result
+	end
 	sign := emit_temporary(context)
 	bias := emit_temporary(context)
 	adjusted := emit_temporary(context)
