@@ -1,17 +1,18 @@
+import { checked_retained_presentation } from frontend/checking/program/submission
 import { checked_category_value } from frontend/types/value_categories
 import { mir_signature_ordinary } from mir/model/call_kinds
 import { mir_op_direct_call, mir_op_global_read, mir_op_global_write } from mir/model/instructions
 import { module_is_cyclic } from frontend/resolution/module_components
 import { mir_initializer_dependencies } from mir/analysis/initialization
 import { integer_string } from support/literals
-import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_instruction, scalar_mir_value } from frontend/checking/body/values
+import { CheckedValue, checked_mir_value, checked_presentation, checked_value, mir_checked_value, scalar_mir_instruction, scalar_mir_value } from frontend/checking/body/values
 import { MirGlobal, MirInstruction, MirModule, mir_function_index, mir_origin_valid } from mir/model/module
 import { mir_control_active, mir_control_prepare } from mir/build/control
 import { mir_managed_type, mir_semantic_type_id, mir_semantic_type_name, mir_semantic_value_type } from mir/model/types
 import { nullable_read } from frontend/checking/nominal/nullable_flow
 import { CompilerState, diagnostic } from state/state
 import { CheckedLocals } from state/local_state
-import { load_integer, store_integer } from support/storage
+import { load_integer, sparse_string_at, store_integer } from support/storage
 
 def mir_global_index(native_module: MirModule, identity: Integer): Integer
 	mut index := 0
@@ -59,7 +60,16 @@ def checked_global_read(mut state: CompilerState, mut locals: CheckedLocals, ide
 		scalar_mir_instruction(state, locals, mir_op_global_read(), result, -1, -1, identity, -1, load_integer(state.source_tokens.token_lines, origin))
 		value = mir_checked_value(type_name, result, origin, 0)
 	end
-	value = CheckedValue.new(type_name: type_name, category: value.category, origin: origin, mutable: mutable, binding: true, readonly: false, immutable_reference: false, nullable_binding: -1, nullable_field: -1, truth: -1, falsity: -1, flow_type: type_name)
+	value = CheckedValue.new(presentation: "", type_name: type_name, category: value.category, origin: origin, mutable: mutable, binding: true, readonly: false, immutable_reference: false, nullable_binding: -1, nullable_field: -1, truth: -1, falsity: -1, flow_type: type_name)
+	row := state.global_bindings.globals[identity]
+	if state.submissions.size() > 0
+		mut presentation := sparse_string_at(state.submissions[0].presentations, row.origin)
+		retained := checked_retained_presentation(state, row.source_id, row.line, row.name)
+		if retained != ""
+			presentation = retained
+		end
+		value = checked_presentation(value, presentation)
+	end
 	return nullable_read(state, locals, value, -identity - 2, -1, origin)
 end
 
