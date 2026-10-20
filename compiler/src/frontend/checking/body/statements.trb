@@ -1,4 +1,5 @@
 import { checked_category_value } from frontend/types/value_categories
+import { block_collection_escape, inferred_collection_context, pending_collection_declaration } from frontend/checking/collections/context_analysis
 import { binding_use_catch, binding_use_local, binding_use_result } from state/binding_kinds
 import { mir_state_enabled_slot, nullable_state_head_slot } from state/local_slots
 import { control_syntax_guarded_transfer, loop_transfer_none } from state/control_kinds
@@ -103,7 +104,13 @@ def check_declaration(
 		end
 	end
 	expect(state, position, ":=")
+	if mutable == 1 && declared_type == ""
+		declared_type = inferred_collection_context(state, origin)
+	end
 	value := check_statement_value(state, position, locals, declared_type)
+	if declared_type == ""
+		block_collection_escape(state, locals, value)
+	end
 	value_type := value.type_name
 	if mutable == 1
 		if checked_readonly_reference_binding(state, locals, value)
@@ -130,6 +137,9 @@ def check_declaration(
 	end
 	if added
 		nullable_replace(locals, locals.count[0] - 1, local_type)
+		if state.callables.collection_inference_only[0] && locals.collection_region_count[0] >= 2
+			store_integer(locals.collection_scopes, locals.count[0] - 1, locals.collection_statement_regions[locals.collection_region_count[0] - 2])
+		end
 	end
 	if added && local_type == "Hash"
 		if checked_hash_plan(state, value.origin).kind != hash_action_literal()
@@ -211,6 +221,14 @@ def check_simple_statement(
 			right_expected = "Array<Any>"
 		end
 		right := check_statement_value(state, position, locals, right_expected)
+		if state.callables.collection_inference_only[0] && pending_collection_declaration(state, locals, left) >= 0
+			if pending_collection_declaration(state, locals, right) >= 0
+				block_collection_escape(state, locals, left)
+				block_collection_escape(state, locals, right)
+			else
+				checked_collection_context(state, locals, left, right.type_name)
+			end
+		end
 		if right.type_name == "Never"
 			finish_statement(state, position)
 			return right
@@ -368,6 +386,7 @@ def checked_discarded_empty_collection(state: CompilerState, position: Array<Int
 end
 
 def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, loop_origin: Integer, wants_value: Boolean, expected: String, scope_start: Integer): CheckedValue
+	inference_scope := position[0] + 1
 	saved_scope := locals.scope_start[0]
 	locals.scope_start[0] = scope_start
 	saved_loop := locals.lexical_loop[0]
@@ -382,6 +401,21 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 			break
 		end
 		statement_origin := position[0]
+		inference_region := locals.inference_active_region[0]
+		if state.callables.collection_inference_only[0]
+			depth := locals.collection_region_count[0]
+			if depth == locals.collection_statement_regions.size()
+				locals.collection_statement_regions.push(inference_scope)
+				locals.collection_statement_regions.push(statement_origin + 1)
+			else
+				locals.collection_statement_regions[depth] = inference_scope
+				locals.collection_statement_regions[depth + 1] = statement_origin + 1
+			end
+			locals.collection_region_count[0] += 2
+			if inference_region == 0
+				locals.inference_active_region[0] = statement_origin + 1
+			end
+		end
 		# Only the final value inherits context; earlier statements and explicit
 		# returns keep their own expression/function boundaries.
 		mut contextual := ""
@@ -473,6 +507,18 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 		end
 		if result.type_name == "Never"
 			diverged = true
+		end
+		if state.callables.collection_inference_only[0]
+			# A provisional read may lack its eventual element type. Continue at
+			# the owned statement boundary; the ordinary pass checks every error.
+			after := sparse_integer_at(state.parsed.statement_finishes, statement_origin)
+			if has_diagnostic(state) && after > statement_origin
+				state.diagnostics.codes.used[0] = 0
+				position[0] = after
+				skip_newlines(state, position)
+			end
+			locals.inference_active_region[0] = inference_region
+			locals.collection_region_count[0] -= 2
 		end
 		if has_diagnostic(state)
 			break

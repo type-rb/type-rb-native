@@ -1,4 +1,5 @@
 import { checked_category_value } from frontend/types/value_categories
+import { record_collection_capture } from frontend/checking/collections/context_analysis
 import { binding_use_parameter } from state/binding_kinds
 import { mir_state_function_slot, nullable_state_head_slot } from state/local_slots
 import { checking_discovery, checking_lowering } from state/checking_phases
@@ -28,6 +29,15 @@ def lambda_locals(mut state: CompilerState, parent: CheckedLocals, syntax: Lambd
 			declared := load_string(parent.types, slot)
 			mutable := load_integer(parent.mutable, slot)
 			inherited := local_bind(locals, name, declared, mutable)
+			if state.callables.collection_inference_only[0]
+				store_integer(locals.array_literal_origins, inherited, load_integer(parent.array_literal_origins, slot))
+				store_integer(locals.array_declaration_origins, inherited, load_integer(parent.array_declaration_origins, slot))
+				store_integer(locals.array_inference_regions, inherited, load_integer(parent.array_inference_regions, slot))
+				store_integer(locals.hash_literal_origins, inherited, load_integer(parent.hash_literal_origins, slot))
+				store_integer(locals.hash_declaration_origins, inherited, load_integer(parent.hash_declaration_origins, slot))
+				store_integer(locals.hash_inference_regions, inherited, load_integer(parent.hash_inference_regions, slot))
+				store_integer(locals.collection_scopes, inherited, load_integer(parent.collection_scopes, slot))
+			end
 			if mutable == 0
 				flow := nullable_lookup(parent, slot, -1, declared)
 				if flow != declared
@@ -41,6 +51,14 @@ def lambda_locals(mut state: CompilerState, parent: CheckedLocals, syntax: Lambd
 			end
 		end
 		slot += 1
+	end
+	if state.callables.collection_inference_only[0]
+		mut region := 0
+		while region < parent.collection_region_count[0]
+			locals.collection_statement_regions.push(parent.collection_statement_regions[region])
+			region += 1
+		end
+		locals.collection_region_count[0] = parent.collection_region_count[0]
 	end
 	parts := callable_parts(type_name)
 	if parts.size() != syntax.parameters.size() + 1
@@ -90,6 +108,7 @@ def lambda_captures(mut state: CompilerState, mut parent: CheckedLocals, locals:
 				diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "fn capture is outside its lexical parent")
 				return captures
 			end
+			record_collection_capture(state, parent, slot)
 			if load_integer(parent.mutable, slot) > 0
 				mut planned := false
 				state.callables.checked[0].shared_bindings.each do |binding|
@@ -145,6 +164,9 @@ def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, m
 	state.callables.checked_bodies.push(checked_body_new(-1, syntax.body_start, syntax.body_finish + 1))
 	state.callables.checked[0] = state.callables.checked_bodies[body]
 	state.callables.checked[0].generic_binding[0] = previous.generic_binding[0]
+	state.callables.checked[0].collection_contexts[0] = previous.collection_contexts[0]
+	state.callables.checked[0].collection_context_regions[0] = previous.collection_context_regions[0]
+	state.callables.checked[0].collection_contexts_checked[0] = previous.collection_contexts_checked[0]
 	mut names := lambda_names(locals, state.source_tokens.token_count[0] + 1)
 	if resolve_body_names(state, syntax.body_start, syntax.body_finish, names)
 		declare_default_functions(state)

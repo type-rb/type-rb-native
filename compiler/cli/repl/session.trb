@@ -2,7 +2,7 @@ import { repl_input_accepted, repl_input_cancelled, repl_input_eof, repl_input_t
 import { repl_flow_kind_slot, repl_flow_normal } from repl/flow_kinds
 import { repl_style_callable, repl_style_comment, repl_style_keyword, repl_style_plain, repl_style_string, repl_style_type } from repl/display_kinds
 import { repl_initialize_globals, repl_link_globals } from repl/globals
-import { repl_binding_witnesses, repl_refine_pending_arrays, repl_loaded_bindings, repl_projected_globals, repl_lines, repl_is_declaration } from repl/projection
+import { repl_binding_witnesses, repl_refine_pending_collections, repl_refines_nullable_collection, repl_loaded_bindings, repl_projected_globals, repl_lines, repl_is_declaration } from repl/projection
 import { skip_newlines } from frontend/syntax/syntax_tokens
 import { repl_checked, repl_checked_input } from repl/check
 import { ReplProject, repl_project, repl_type_name } from repl/project
@@ -104,7 +104,7 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 	end
 	repl_activate(session.store, state)
 	repl_link_globals(state, session.store, session.environment)
-	repl_refine_pending_arrays(state, session.store, session.environment)
+	repl_refine_pending_collections(state, session.store, session.environment)
 	if !repl_initialize_globals(state, session.store)
 		native_cli_write(repl_error_text(session.store.error[0]) + "\n", 2)
 		return false
@@ -225,7 +225,8 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 	mut captured: Array<String> := []
 	mut binding := 0
 	while binding < session.environment.count[0]
-		if session.environment.mutable[binding] > 0
+		type_name := repl_type(session.store, repl_binding_value(session.store, session.environment, binding))
+		if session.environment.mutable[binding] > 0 && type_name != "Array" && type_name != "Hash"
 			captured.push(session.environment.names[binding])
 		end
 		binding += 1
@@ -238,6 +239,13 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 		end
 		repl_diagnostic(state, offset - repl_session_lines(session))
 		return false
+	end
+	if !declarations && repl_refines_nullable_collection(state, session.store, session.environment)
+		# A newly inferred optional declaration also governs earlier authored
+		# reads. Validate history before publishing the type or running effects.
+		if !repl_validate_inputs(session.project, authored, session.resets, session.text[2])
+			return false
+		end
 	end
 	if declarations
 		if type_only

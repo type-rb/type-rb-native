@@ -1,4 +1,5 @@
 import { checked_category_enum, checked_category_function, checked_category_newtype, checked_category_object, checked_category_record, checked_category_value } from frontend/types/value_categories
+import { provisional_collection_nil_test } from frontend/checking/collections/context_analysis
 import { mir_state_enabled_slot, nullable_state_head_slot } from state/local_slots
 import { checking_single_pass } from state/checking_phases
 import { declaration_namespace, declaration_object } from frontend/types/declaration_kinds
@@ -363,7 +364,7 @@ def check_expression_value(
 				if value.type_name == "Nil"
 					subject = right
 				end
-				if (operator != "==" && operator != "!=") || (nullable_element(subject.type_name) == "" && subject.type_name != "Nil")
+				if (operator != "==" && operator != "!=") || (nullable_element(subject.type_name) == "" && subject.type_name != "Nil" && !provisional_collection_nil_test(state, locals, subject))
 					return type_diagnostic(state, line, "nil comparison requires a nullable operand and == or !=")
 				end
 				value = nullable_nil_condition(state, locals, subject, operator == "!=", operator_origin)
@@ -421,7 +422,7 @@ def check_expression(
 	expression_origin := position[0]
 	line := load_integer(state.source_tokens.token_lines, expression_origin)
 	mut value := check_expression_value(state, position, locals, minimum_precedence, expected)
-	if expected != "" && (value.type_name == "Array" || value.type_name == "Hash" || expected == "Array<Float>")
+	if expected != ""
 		value = checked_collection_context(state, locals, value, expected)
 	end
 	value = mir_literal_context(state, locals, value, expected, expression_origin, position[0])
