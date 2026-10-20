@@ -1,0 +1,179 @@
+import { mir_array_loop } from mir/analysis/array_loops
+import { mir_loop_entry_operand } from mir/analysis/array_bounds
+import { mir_array_primitive_value, mir_array_values_disjoint } from mir/analysis/array_values
+import { mir_planned_instruction_effects } from mir/analysis/callables
+import { MirFlow, MirFlowAliases, mir_build_flow, mir_flow_aliases, mir_flow_block_index, mir_flow_blocks, mir_flow_dominates, mir_flow_type, mir_value_available } from mir/analysis/flow
+import { mir_natural_loop } from mir/analysis/loops
+import { mir_nonnegative_values } from mir/analysis/ranges
+import { mir_live_add, mir_managed_contains } from mir/analysis/roots
+import { mir_function_control } from mir/model/control
+import { mir_effect_failure, mir_effect_none } from mir/model/effects
+import { mir_op_array_load, mir_op_array_store } from mir/model/instructions
+import { MirFunction, MirInstruction, MirModule } from mir/model/module
+import { mir_function_body_size } from mir/passes/inline_calls
+import { mir_rewrite_block, mir_rewrite_function } from mir/passes/rewrite
+import { integer_string } from support/literals
+
+record MirArrayReadBounds
+	body: Integer
+	members: Array<Integer>
+	accesses: Array<Integer>
+end
+
+record MirArrayReadHoist
+	position: Integer
+	preheader: Integer
+	owner: Integer
+	index: Integer
+end
+
+# Use each outer loop's own proof. Final Array plans can transfer bounds from
+# nested loops and do not prove that a load is safe before an inner loop starts.
+def mir_array_read_bounds(native_module: MirModule, function: MirFunction, flow: MirFlow): Array<MirArrayReadBounds>
+	nonnegative := mir_nonnegative_values(native_module, function, flow)
+	mut bounds: Array<MirArrayReadBounds> := []
+	mut header := 0
+	while header < function.block_count
+		plan := mir_array_loop(native_module, function, flow, nonnegative, header)
+		if plan.header >= 0
+			loop := mir_natural_loop(native_module, function, flow, header)
+			mut accesses: Array<Integer> := []
+			plan.accesses.each do |position|
+				mir_live_add(accesses, position)
+			end
+			plan.headers.each do |candidate|
+				candidate.bounded_accesses.each do |position|
+					mir_live_add(accesses, position)
+				end
+			end
+			if accesses.size() > 0 && loop.preheader >= 0
+				body := mir_flow_block_index(flow, native_module.blocks[function.block_start + header].first_target)
+				bounds.push(MirArrayReadBounds.new(body: body, members: loop.members, accesses: accesses))
+			end
+		end
+		header += 1
+	end
+	return bounds
+end
+
+def mir_array_read_destination_safe(flow: MirFlow, bounds: Array<MirArrayReadBounds>, destination: Integer, position: Integer): Boolean
+	bounds.each do |bound|
+		if mir_managed_contains(bound.members, destination) && mir_flow_dominates(flow, bound.body, destination) && mir_managed_contains(bound.accesses, position)
+			return true
+		end
+	end
+	return false
+end
+
+def mir_array_read_stable(native_module: MirModule, function: MirFunction, flow: MirFlow, origins: MirFlowAliases, members: Array<Integer>, destination: Integer, owner: Integer): Boolean
+	members.each do |member|
+		block := native_module.blocks[function.block_start + member]
+		mut position := block.instruction_start
+		while position < block.instruction_start + block.instruction_count
+			instruction := native_module.instructions[position]
+			if instruction.kind == mir_op_array_store()
+				if !mir_array_values_disjoint(native_module, function, flow, origins, destination, owner, instruction.first)
+					return false
+				end
+			else
+				effects := mir_planned_instruction_effects(native_module, instruction, position)
+				if effects != mir_effect_none() && effects != mir_effect_failure()
+					return false
+				end
+			end
+			position += 1
+		end
+	end
+	return true
+end
+
+def mir_hoist_function_array_reads(mut native_module: MirModule, function_index: Integer): Boolean
+	function := native_module.functions[function_index]
+	flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
+	bounds := mir_array_read_bounds(native_module, function, flow)
+	if bounds.size() == 0
+		return false
+	end
+	origins := mir_flow_aliases(native_module, function, flow, native_module.blocks[function.block_start + flow.entry])
+	mut selected: Array<MirArrayReadHoist> := []
+	mut positions: Hash<String, Integer> := {}
+	mut header_index := 0
+	while header_index < function.block_count
+		loop := mir_natural_loop(native_module, function, flow, header_index)
+		if loop.preheader >= 0
+			header := native_module.blocks[function.block_start + header_index]
+			preheader := native_module.blocks[function.block_start + loop.preheader]
+			aliases := mir_flow_aliases(native_module, function, flow, header)
+			available := preheader.instruction_start + preheader.instruction_count
+			loop.members.each do |member|
+				block := native_module.blocks[function.block_start + member]
+				mut position := block.instruction_start
+				while position < block.instruction_start + block.instruction_count
+					instruction := native_module.instructions[position]
+					if instruction.kind == mir_op_array_load() && mir_array_primitive_value(mir_flow_type(flow, instruction.result)) && mir_array_read_destination_safe(flow, bounds, loop.preheader, position)
+						owner := mir_loop_entry_operand(native_module, flow, aliases, header, preheader, instruction.first)
+						index := mir_loop_entry_operand(native_module, flow, aliases, header, preheader, instruction.second)
+						if owner >= 0 && index >= 0 && mir_value_available(flow, preheader, available, owner) && mir_value_available(flow, preheader, available, index) && mir_array_read_stable(native_module, function, flow, origins, loop.members, loop.preheader, owner)
+							key := integer_string(position)
+							candidate := MirArrayReadHoist.new(position: position, preheader: loop.preheader, owner: owner, index: index)
+							if positions.key?(key)
+								if flow.ranks[loop.preheader] < flow.ranks[selected[positions[key]].preheader]
+									selected[positions[key]] = candidate
+								end
+							elsif selected.size() < 16
+								positions[key] = selected.size()
+								selected.push(candidate)
+							end
+						end
+					end
+					position += 1
+				end
+			end
+		end
+		header_index += 1
+	end
+	if selected.size() == 0
+		return false
+	end
+	start := native_module.blocks.size()
+	mut block_index := 0
+	while block_index < function.block_count
+		block := native_module.blocks[function.block_start + block_index]
+		instruction_start := native_module.instructions.size()
+		mut position := block.instruction_start
+		while position < block.instruction_start + block.instruction_count
+			if !positions.key?(integer_string(position))
+				native_module.instructions.push(native_module.instructions[position])
+			end
+			position += 1
+		end
+		selected.each do |candidate|
+			if candidate.preheader == block_index
+				instruction := native_module.instructions[candidate.position]
+				native_module.instructions.push(MirInstruction.new(kind: instruction.kind, result: instruction.result, first: candidate.owner, second: candidate.index, payload: instruction.payload, failure: instruction.failure, source_id: instruction.source_id, line: instruction.line))
+			end
+		end
+		native_module.blocks.push(mir_rewrite_block(native_module, block, {}, {}, instruction_start, native_module.instructions.size() - instruction_start))
+		block_index += 1
+	end
+	native_module.functions[function_index] = mir_rewrite_function(function, start, function.block_count)
+	return true
+end
+
+def mir_hoist_loop_array_reads(mut native_module: MirModule): Boolean
+	if native_module.functions.size() > 96
+		return false
+	end
+	mut changed := false
+	mut index := 0
+	while index < native_module.functions.size()
+		function := native_module.functions[index]
+		if function.kind == mir_function_control() && function.block_count <= 64 && mir_function_body_size(native_module, function) <= 512
+			if mir_hoist_function_array_reads(native_module, index)
+				changed = true
+			end
+		end
+		index += 1
+	end
+	return changed
+end
