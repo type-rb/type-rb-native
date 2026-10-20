@@ -1,13 +1,54 @@
 import { hash_action_index_write, hash_action_literal } from mir/model/hash_actions
 import { checked_hash_plan, checked_hash_publish } from frontend/checking/collections/hashes
-import { hash_type, hash_value_type } from frontend/types/hash_types
+import { hash_key_type, hash_type, hash_value_type } from frontend/types/hash_types
 import { mir_hash_operation } from mir/model/hashes
-import { CheckedValue, checked_mir_value, scalar_mir_convert_float } from frontend/checking/body/values
+import { CheckedValue, checked_mir_value, checked_view, scalar_mir_convert_float } from frontend/checking/body/values
 import { mir_checked_array_refine } from mir/lowering/arrays
+import { mir_checked_hash_refine } from mir/lowering/hashes
 import { CheckedLocals, local_find } from state/local_state
 import { CompilerState, diagnostic } from state/state
-import { array_type, common_array_element_type } from frontend/resolution/type_resolution
+import { array_element_type, array_type, common_array_element_type } from frontend/resolution/type_resolution
 import { load_integer, load_string, store_integer, store_string } from support/storage
+
+# A typed boundary constrains the original fresh mutable binding. Retain its
+# source and mutation capability; unrelated values and immutable empty literals
+# cannot acquire a type through this path.
+def checked_collection_context(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, expected: String): CheckedValue
+	if expected == "" || value.mutable == 0 || !value.binding || value.nullable_field != -1
+		return value
+	end
+	binding := value.nullable_binding
+	if binding < 0 || binding >= locals.count[0]
+		return value
+	end
+	mut pending_array := value.type_name == "Array"
+	if expected == "Array<Float>" && checked_array_numeric_region(state, locals, value)
+		pending_array = true
+	end
+	if pending_array && array_element_type(expected) != "" && load_integer(locals.array_literal_origins, binding) > 0
+		error := checked_array_refine(state, locals, value, array_element_type(expected))
+		if error != ""
+			diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, value.origin), error)
+			return value
+		end
+		# An exact context fixes the type, even inside its first statement.
+		store_integer(locals.array_inference_regions, binding, 0)
+		return checked_view(value, expected, value.category)
+	end
+	if value.type_name == "Hash" && hash_key_type(expected) != "" && hash_value_type(expected) != "" && load_integer(locals.hash_literal_origins, binding) > 0
+		literal := checked_hash_plan(state, load_integer(locals.hash_literal_origins, binding) - 1)
+		if literal.kind != hash_action_literal() || literal.entries != 0
+			return value
+		end
+		store_string(locals.types, binding, expected)
+		store_string(state.callables.checked[0].local_types, load_integer(locals.hash_declaration_origins, binding) - 1, expected)
+		store_integer(locals.hash_inference_regions, binding, 0)
+		checked_hash_publish(state, mir_hash_operation(hash_action_literal(), literal.origin, literal.finish, literal.receiver_origin, expected, literal.mutable, literal.entries))
+		mir_checked_hash_refine(state, locals, checked_mir_value(value), expected)
+		return checked_view(value, expected, value.category)
+	end
+	return value
+end
 
 def checked_hash_inference_region(state: CompilerState, locals: CheckedLocals, origin: Integer): Boolean
 	if origin < 0 || origin >= state.source_tokens.token_count[0]

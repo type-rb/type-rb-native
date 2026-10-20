@@ -8,7 +8,7 @@ Each count describes registered probes, not language coverage percentages.
 | Strings and UTF-8 | basic | 2 / 182 | Reference output-mode Unicode case differences (TypeRB #791); Embedded-expression boundaries beyond the reviewed interpolation probes | Literal, InterpolatedString |
 | Immutable Bytes | basic | 0 / 22 | Bytes values across remaining nominal wrappers and imported declarations |  |
 | Numeric and Boolean operations | basic | 1 / 50 | Remaining operators and assignment forms; mixed widening and portable failure boundaries; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
-| Bindings, constants and mutation | basic | 5 / 128 | Contextual empty collection inference beyond constant literals; qualified namespace binding members (TypeRB #787) | VariableStatement, AssignmentStatement |
+| Bindings, constants and mutation | basic | 5 / 128 | Nullable contexts and broader first-statement constraints for pending collections; qualified namespace binding members (TypeRB #787) | VariableStatement, AssignmentStatement |
 | Function declarations and calls | basic | 0 / 49 | none registered | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
 | Defaults and named arguments | basic | 0 / 13 | Method, function-value and payload-enum argument parity |  |
 | Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
@@ -23,8 +23,8 @@ Each count describes registered probes, not language coverage percentages.
 | Generic declarations and applications | basic | 3 / 83 | Remaining method-specific generic combinations and deferred generic class methods; Wider constraints and type applications | GenericExpression |
 | Union values, literal types and discriminated unions | basic | 9 / 198 | Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference |  |
 | Function values and lexical capture | basic | 0 / 57 | Callable equality, method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
-| Arrays and checked indexes | basic | 5 / 244 | Remaining receiver combinations and contextual empty collection inference; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
-| Hash values and operations | basic | 2 / 40 | Wider key/value representations, dynamic Any operations, empty inference and managed lifetime combinations | HashLiteral |
+| Arrays and checked indexes | basic | 6 / 260 | Remaining receiver combinations; nullable contexts and broader first-statement constraints for pending Arrays; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
+| Hash values and operations | basic | 2 / 47 | Wider key/value representations, dynamic Any operations, nullable contexts and broader first-statement constraints for pending Hashes and managed lifetime combinations | HashLiteral |
 | Structured and value-producing iteration | basic | 0 / 176 | Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
 | Range values and boundaries | basic | 0 / 19 | none registered | RangeExpression |
 | Result and typed propagation | basic | 0 / 81 | General union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |

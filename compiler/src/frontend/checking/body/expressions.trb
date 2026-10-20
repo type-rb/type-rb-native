@@ -27,6 +27,7 @@ import { nullable_element } from frontend/types/nullable_types
 import { argument_binding_slot } from frontend/resolution/argument_binding
 import { mir_checked_range_new } from mir/lowering/ranges
 import { binary_result_type, check_expected, numeric_type, type_diagnostic } from frontend/checking/body/types
+import { checked_collection_context } from frontend/checking/collections/inference
 import { CheckedValue, checked_mir_value, checked_value, checked_view, scalar_mir_binary, scalar_mir_disable, scalar_mir_literal, scalar_mir_unary } from frontend/checking/body/values
 import { checked_range_require } from frontend/checking/collections/iteration
 import { MirRangeConstruction } from mir/model/iteration
@@ -420,6 +421,9 @@ def check_expression(
 	expression_origin := position[0]
 	line := load_integer(state.source_tokens.token_lines, expression_origin)
 	mut value := check_expression_value(state, position, locals, minimum_precedence, expected)
+	if expected != "" && (value.type_name == "Array" || value.type_name == "Hash" || expected == "Array<Float>")
+		value = checked_collection_context(state, locals, value, expected)
+	end
 	value = mir_literal_context(state, locals, value, expected, expression_origin, position[0])
 	check_expected(state, value.type_name, expected, line)
 	value = mir_nullable_coerce(state, locals, value, expected, expression_origin)
