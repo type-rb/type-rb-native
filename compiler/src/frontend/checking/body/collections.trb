@@ -1,4 +1,6 @@
+import { union_type } from frontend/types/union_types
 import { checked_category_value } from frontend/types/value_categories
+import { collection_inference_region, pending_collection_declaration, record_collection_capture, record_collection_witness } from frontend/checking/collections/context_analysis
 import { mir_state_enabled_slot } from state/local_slots
 import { checking_lowering } from state/checking_phases
 import { hash_action_delete, hash_action_empty, hash_action_fetch, hash_action_has_key, hash_action_index_read, hash_action_index_write, hash_action_keys, hash_action_literal, hash_action_merge, hash_action_none, hash_action_size, hash_action_update, hash_action_values } from mir/model/hash_actions
@@ -8,12 +10,12 @@ import { nullable_element } from frontend/types/nullable_types
 import { mir_checked_hash_index, mir_checked_hash_literal, mir_checked_hash_method } from mir/lowering/hashes
 import { mir_checked_array_literal } from mir/lowering/arrays
 import { check_expected, type_diagnostic } from frontend/checking/body/types
-import { CheckedValue, checked_mir_value, checked_value, scalar_mir_disable } from frontend/checking/body/values
+import { CheckedValue, checked_mir_value, checked_presentation, checked_value, scalar_mir_disable } from frontend/checking/body/values
 import { checked_hash_binding_target, checked_hash_method, checked_hash_publish } from frontend/checking/collections/hashes
 import { mir_hash_operation } from mir/model/hashes
 import { hash_key_type, hash_scalar_key, hash_type, hash_value_type } from frontend/types/hash_types
 import { binary_operator_id } from frontend/syntax/syntax_forms
-import { array_element_type, array_type, common_array_element_type } from frontend/resolution/type_resolution
+import { array_element_type, array_type, common_array_element_type, type_display } from frontend/resolution/type_resolution
 import { CompilerState } from state/state
 import { CheckedLocals } from state/local_state
 import { load_integer, load_string, sparse_string_at, store_integer, store_string } from support/storage
@@ -59,6 +61,9 @@ def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>,
 			return checked_value("Invalid", checked_category_value(), origin, 0)
 		end
 		value := check_expression(state, position, locals, 1, hash_value_type(context))
+		if hash_value_type(context) == "" && value.binding && value.nullable_field == -1
+			record_collection_capture(state, locals, value.nullable_binding)
+		end
 		if value.type_name == "Never"
 			diverged = true
 			scalar_mir_disable(locals)
@@ -90,7 +95,12 @@ def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>,
 		type_name = hash_type(key_type, value_type)
 	end
 	checked_hash_publish(state, mir_hash_operation(hash_action_literal(), origin, finish, origin, type_name, true, entries))
-	return mir_checked_hash_literal(state, locals, type_name, value_type, origin, keys, values)
+	mut presentation := ""
+	element_presentation := checked_collection_presentation(state, values)
+	if context == "" && element_presentation != ""
+		presentation = "Hash<" + type_display(state, key_type) + ", " + element_presentation + ">"
+	end
+	return checked_presentation(mir_checked_hash_literal(state, locals, type_name, value_type, origin, keys, values), presentation)
 end
 
 def checked_hash_index(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue): CheckedValue
@@ -140,7 +150,11 @@ def checked_hash_call(mut state: CompilerState, mut position: Array<Integer>, mu
 	if kind == hash_action_none()
 		return type_diagnostic(state, line, "unsupported Hash method " + method)
 	end
-	if receiver.type_name == "Hash" && kind != hash_action_size() && kind != hash_action_empty()
+	mut inference_update := false
+	if kind == hash_action_update() && pending_collection_declaration(state, locals, receiver) >= 0
+		inference_update = true
+	end
+	if receiver.type_name == "Hash" && kind != hash_action_size() && kind != hash_action_empty() && !inference_update
 		return type_diagnostic(state, line, "Hash method requires a concrete Hash<K, V> type")
 	end
 	if kind == hash_action_delete() || kind == hash_action_update()
@@ -159,9 +173,19 @@ def checked_hash_call(mut state: CompilerState, mut position: Array<Integer>, mu
 		result_type = hash_value_type(receiver.type_name)
 	end
 	if kind == hash_action_merge() || kind == hash_action_update()
-		value := check_expression(state, position, locals, 1, receiver.type_name)
+		mut expected := receiver.type_name
+		if inference_update
+			expected = ""
+		end
+		value := check_expression(state, position, locals, 1, expected)
 		argument = checked_mir_value(value)
 		diverged = value.type_name == "Never"
+		if inference_update && hash_key_type(value.type_name) != ""
+			binding := receiver.nullable_binding
+			inferred := record_collection_witness(state, locals, binding, value.type_name)
+			store_string(locals.types, binding, inferred)
+			store_integer(locals.hash_inference_regions, binding, collection_inference_region(state, locals, binding))
+		end
 	end
 	if kind == hash_action_size()
 		result_type = "Integer"
@@ -213,6 +237,9 @@ def check_array_literal(
 			finished = true
 		else
 			value := check_expression(state, position, locals, 1, contextual_element_type)
+			if contextual_element_type == "" && value.binding && value.nullable_field == -1
+				record_collection_capture(state, locals, value.nullable_binding)
+			end
 			if value.type_name == "Never"
 				diverged = true
 				scalar_mir_disable(locals)
@@ -255,5 +282,30 @@ def check_array_literal(
 		return type_diagnostic(state, line, "unsupported Array element type " + element_type)
 	end
 	store_string(state.callables.checked[0].array_literal_types, origin, result_type)
-	return mir_checked_array_literal(state, locals, result_type, element_type, origin, values)
+	mut presentation := ""
+	element_presentation := checked_collection_presentation(state, values)
+	if context == "" && element_presentation != ""
+		presentation = "Array<" + element_presentation + ">"
+	end
+	return checked_presentation(mir_checked_array_literal(state, locals, result_type, element_type, origin, values), presentation)
+end
+
+def checked_collection_presentation(state: CompilerState, values: Array<CheckedValue>): String
+	if state.submissions.size() == 0
+		return ""
+	end
+	mut names: Array<String> := []
+	mut has_alias := false
+	values.each do |value|
+		if value.presentation != ""
+			has_alias = true
+			names.push(value.presentation)
+		else
+			names.push(type_display(state, value.type_name))
+		end
+	end
+	if !has_alias
+		return ""
+	end
+	return type_display(state, union_type(names))
 end

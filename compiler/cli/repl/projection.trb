@@ -2,7 +2,9 @@ import { loop_transfer_none } from state/control_kinds
 import { token_kind_identifier } from state/token_kinds
 import { CompilerState, compiler_new, terminal_token, has_diagnostic } from state/state
 import { ReplStore, ReplEnvironment, repl_type, repl_set_type } from repl/model
-import { repl_binding_value } from repl/values
+import { repl_assign_binding, repl_binding_value, repl_coerce } from repl/values
+import { nullable_element } from frontend/types/nullable_types
+import { hash_key_type } from frontend/types/hash_types
 import { repl_default } from repl/defaults
 import { repl_witness_type_name } from repl/project
 import { lex } from frontend/syntax/lexer
@@ -37,29 +39,53 @@ def repl_binding_witnesses(state: CompilerState, store: ReplStore, environment: 
 	return source
 end
 
-# A fresh Array remains untyped in the retained witness. The next checked
-# submission may resolve it through an entire conditional or loop statement.
-def repl_refine_pending_arrays(state: CompilerState, mut store: ReplStore, environment: ReplEnvironment)
+# Pending collection cells acquire the checked declaration type, including its
+# optional wrapper. Payload identity remains shared with newly created aliases.
+def repl_pending_collection_type(state: CompilerState, name: String): String
+	if state.submissions.size() == 0
+		return ""
+	end
+	mut origin := 0
+	while origin < state.submissions[0].start
+		if token_is(state, origin, "mut") && load_string(state.source_tokens.token_texts, origin + 1) == name
+			resolved := sparse_string_at(state.callables.checked[0].local_types, origin)
+			if resolved != ""
+				return resolved
+			end
+		end
+		origin += 1
+	end
+	return ""
+end
+
+def repl_refines_nullable_collection(state: CompilerState, store: ReplStore, environment: ReplEnvironment): Boolean
+	mut binding := 0
+	while binding < environment.count[0]
+		type_name := repl_type(store, repl_binding_value(store, environment, binding))
+		if (type_name == "Array" || type_name == "Hash") && nullable_element(repl_pending_collection_type(state, environment.names[binding])) != ""
+			return true
+		end
+		binding += 1
+	end
+	return false
+end
+
+def repl_refine_pending_collections(state: CompilerState, mut store: ReplStore, mut environment: ReplEnvironment)
 	if state.submissions.size() == 0
 		return
 	end
 	mut binding := 0
 	while binding < environment.count[0]
 		id := repl_binding_value(store, environment, binding)
-		if repl_type(store, id) == "Array"
-			mut origin := 0
-			mut found := false
-			while origin < state.submissions[0].start && !found
-				if token_is(state, origin, "mut") && load_string(state.source_tokens.token_texts, origin + 1) == environment.names[binding]
-					resolved := sparse_string_at(state.callables.checked[0].local_types, origin)
-					if resolved != ""
-						if array_element_type(resolved) != ""
-							repl_set_type(store, id, resolved)
-						end
-						found = true
-					end
-				end
-				origin += 1
+		if repl_type(store, id) == "Array" || repl_type(store, id) == "Hash"
+			resolved := repl_pending_collection_type(state, environment.names[binding])
+			mut payload := resolved
+			if nullable_element(payload) != ""
+				payload = nullable_element(payload)
+			end
+			if array_element_type(payload) != "" || hash_key_type(payload) != ""
+				repl_set_type(store, id, payload)
+				repl_assign_binding(store, environment, binding, repl_coerce(store, id, resolved))
 			end
 		end
 		binding += 1

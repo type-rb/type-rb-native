@@ -1,4 +1,5 @@
 import { checked_category_enum, checked_category_function, checked_category_newtype, checked_category_object, checked_category_record, checked_category_value } from frontend/types/value_categories
+import { provisional_collection_nil_test } from frontend/checking/collections/context_analysis
 import { mir_state_enabled_slot, nullable_state_head_slot } from state/local_slots
 import { checking_single_pass } from state/checking_phases
 import { declaration_namespace, declaration_object } from frontend/types/declaration_kinds
@@ -21,14 +22,14 @@ import { checked_result_try, result_operation } from frontend/checking/nominal/r
 import { advance, expect, expect_identifier, skip_newlines, token_is } from frontend/syntax/syntax_tokens
 import { mir_enum_construct, mir_enum_operation } from mir/lowering/enums
 import { enum_argument_bindings, enum_type, find_enum_type, find_enum_variant } from frontend/types/enum_types
-import { checked_submission_result } from frontend/checking/program/submission
+import { checked_enum_presentation, checked_submission_result } from frontend/checking/program/submission
 import { nullable_apply, nullable_finish, nullable_nil_condition, nullable_read } from frontend/checking/nominal/nullable_flow
 import { nullable_element } from frontend/types/nullable_types
 import { argument_binding_slot } from frontend/resolution/argument_binding
 import { mir_checked_range_new } from mir/lowering/ranges
 import { binary_result_type, check_expected, numeric_type, type_diagnostic } from frontend/checking/body/types
 import { checked_collection_context } from frontend/checking/collections/inference
-import { CheckedValue, checked_mir_value, checked_value, checked_view, scalar_mir_binary, scalar_mir_disable, scalar_mir_literal, scalar_mir_unary } from frontend/checking/body/values
+import { CheckedValue, checked_mir_value, checked_presentation, checked_value, checked_view, scalar_mir_binary, scalar_mir_disable, scalar_mir_literal, scalar_mir_unary } from frontend/checking/body/values
 import { checked_range_require } from frontend/checking/collections/iteration
 import { MirRangeConstruction } from mir/model/iteration
 import { float_literal_in_range, integer_literal_in_range, number_is_float } from support/literals
@@ -215,7 +216,7 @@ def check_primary(
 			lambda_use_binding(locals, local_index)
 			store_integer(locals.binding_use_counts, local_index, sparse_integer_at(locals.binding_use_counts, local_index) + 1)
 			value := mir_binding_read(state, locals, local_index, origin)
-			return nullable_read(state, locals, value, local_index, -1, origin)
+			return checked_presentation(nullable_read(state, locals, value, local_index, -1, origin), load_string(locals.presentations, local_index))
 		end
 		if name == "value" && token_is(state, position[0], "(")
 			self_slot := local_find(locals, "self")
@@ -363,7 +364,7 @@ def check_expression_value(
 				if value.type_name == "Nil"
 					subject = right
 				end
-				if (operator != "==" && operator != "!=") || (nullable_element(subject.type_name) == "" && subject.type_name != "Nil")
+				if (operator != "==" && operator != "!=") || (nullable_element(subject.type_name) == "" && subject.type_name != "Nil" && !provisional_collection_nil_test(state, locals, subject))
 					return type_diagnostic(state, line, "nil comparison requires a nullable operand and == or !=")
 				end
 				value = nullable_nil_condition(state, locals, subject, operator == "!=", operator_origin)
@@ -421,7 +422,7 @@ def check_expression(
 	expression_origin := position[0]
 	line := load_integer(state.source_tokens.token_lines, expression_origin)
 	mut value := check_expression_value(state, position, locals, minimum_precedence, expected)
-	if expected != "" && (value.type_name == "Array" || value.type_name == "Hash" || expected == "Array<Float>")
+	if expected != ""
 		value = checked_collection_context(state, locals, value, expected)
 	end
 	value = mir_literal_context(state, locals, value, expected, expression_origin, position[0])
@@ -433,7 +434,10 @@ def check_expression(
 	if value.nullable_binding >= 0 && value.nullable_field == -1 && value.mutable > 0
 		displayed_mutable = 1
 	end
-	checked_submission_result(state, expression_origin, value.type_name, displayed_mutable)
+	if expected != ""
+		value = checked_presentation(value, "")
+	end
+	checked_submission_result(state, expression_origin, value.type_name, displayed_mutable, value.presentation)
 	return value
 end
 
@@ -461,7 +465,7 @@ def check_enum_constructor(mut state: CompilerState, mut position: Array<Integer
 		if token_is(state, position[0], "(")
 			return type_diagnostic(state, line, "payloadless enum variant is not callable")
 		end
-		return mir_enum_construct(state, locals, variant, [], origin)
+		return checked_presentation(mir_enum_construct(state, locals, variant, [], origin), checked_enum_presentation(state, origin))
 	end
 	mut bindings := enum_argument_bindings(state, variant)
 	if !expect(state, position, "(")
@@ -503,7 +507,7 @@ def check_enum_constructor(mut state: CompilerState, mut position: Array<Integer
 		locals.mir_state[mir_state_enabled_slot()] = saved
 		return checked_value("Never", checked_category_value(), origin, 0)
 	end
-	return mir_enum_construct(state, locals, variant, bindings.values, origin)
+	return checked_presentation(mir_enum_construct(state, locals, variant, bindings.values, origin), checked_enum_presentation(state, origin))
 end
 
 # Check one Result and lower both outcomes with the existing enum/CFG machinery.

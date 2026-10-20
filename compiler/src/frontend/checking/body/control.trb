@@ -106,6 +106,7 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 	end
 	mut immutable_reference := false
 	mut common := "Never"
+	mut common_presentation := ""
 	mut completing := 0
 	mut otherwise := false
 	mut branch_index := 0
@@ -192,10 +193,16 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 				if value.type_name == "Void"
 					return type_diagnostic(state, line, "control expression branch must end with a value or transfer")
 				end
+				if completing == 1
+					common_presentation = value.presentation
+				elsif common_presentation != value.presentation
+					common_presentation = ""
+				end
 				if common == "Never"
 					common = value.type_name
 				elsif common != value.type_name
 					common = nullable_common(common, value.type_name)
+					common_presentation = ""
 					if common == ""
 						return type_diagnostic(state, line, "control expression branches have incompatible types")
 					end
@@ -235,8 +242,11 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 	end
 	if wants_value
 		store_string(state.callables.checked[0].control_types, origin, common)
+		if expected != ""
+			common_presentation = ""
+		end
 		value := mir_value_complete(state, locals, join, common, origin)
-		return CheckedValue.new(type_name: value.type_name, category: value.category, origin: value.origin, mutable: value.mutable, binding: false, readonly: false, immutable_reference: immutable_reference, nullable_binding: value.nullable_binding, nullable_field: value.nullable_field, truth: value.truth, falsity: value.falsity, flow_type: value.flow_type)
+		return CheckedValue.new(presentation: common_presentation, type_name: value.type_name, category: value.category, origin: value.origin, mutable: value.mutable, binding: false, readonly: false, immutable_reference: immutable_reference, nullable_binding: value.nullable_binding, nullable_field: value.nullable_field, truth: value.truth, falsity: value.falsity, flow_type: value.flow_type)
 	end
 	store_string(state.callables.checked[0].control_types, origin, "Void")
 	if completing == 0

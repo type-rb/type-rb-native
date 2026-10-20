@@ -1,4 +1,6 @@
 import { hash_action_index_write, hash_action_literal } from mir/model/hash_actions
+import { block_collection_escape, collection_inference_region, pending_collection_declaration, record_collection_context, record_collection_witness } from frontend/checking/collections/context_analysis
+import { nullable_element } from frontend/types/nullable_types
 import { checked_hash_plan, checked_hash_publish } from frontend/checking/collections/hashes
 import { hash_key_type, hash_type, hash_value_type } from frontend/types/hash_types
 import { mir_hash_operation } from mir/model/hashes
@@ -21,31 +23,47 @@ def checked_collection_context(mut state: CompilerState, mut locals: CheckedLoca
 	if binding < 0 || binding >= locals.count[0]
 		return value
 	end
+	mut context := expected
+	if state.callables.collection_inference_only[0] && nullable_element(context) != ""
+		context = nullable_element(context)
+	end
+	pending := pending_collection_declaration(state, locals, value)
 	mut pending_array := value.type_name == "Array"
-	if expected == "Array<Float>" && checked_array_numeric_region(state, locals, value)
+	if (pending >= 0 && load_integer(locals.array_literal_origins, binding) > 0) || (context == "Array<Float>" && checked_array_numeric_region(state, locals, value))
 		pending_array = true
 	end
-	if pending_array && array_element_type(expected) != "" && load_integer(locals.array_literal_origins, binding) > 0
-		error := checked_array_refine(state, locals, value, array_element_type(expected))
+	if pending_array && array_element_type(context) != "" && load_integer(locals.array_literal_origins, binding) > 0
+		record_collection_context(state, locals, value, expected)
+		error := checked_array_refine(state, locals, value, array_element_type(context))
 		if error != ""
 			diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, value.origin), error)
 			return value
 		end
 		# An exact context fixes the type, even inside its first statement.
 		store_integer(locals.array_inference_regions, binding, 0)
-		return checked_view(value, expected, value.category)
+		return checked_view(value, context, value.category)
 	end
-	if value.type_name == "Hash" && hash_key_type(expected) != "" && hash_value_type(expected) != "" && load_integer(locals.hash_literal_origins, binding) > 0
+	if (value.type_name == "Hash" || pending >= 0) && hash_key_type(context) != "" && hash_value_type(context) != "" && load_integer(locals.hash_literal_origins, binding) > 0
+		if state.callables.collection_inference_only[0] && pending >= 0
+			record_collection_context(state, locals, value, expected)
+			store_string(locals.types, binding, context)
+			store_integer(locals.hash_inference_regions, binding, 0)
+			return checked_view(value, context, value.category)
+		end
 		literal := checked_hash_plan(state, load_integer(locals.hash_literal_origins, binding) - 1)
 		if literal.kind != hash_action_literal() || literal.entries != 0
 			return value
 		end
-		store_string(locals.types, binding, expected)
-		store_string(state.callables.checked[0].local_types, load_integer(locals.hash_declaration_origins, binding) - 1, expected)
+		record_collection_context(state, locals, value, expected)
+		store_string(locals.types, binding, context)
+		store_string(state.callables.checked[0].local_types, load_integer(locals.hash_declaration_origins, binding) - 1, context)
 		store_integer(locals.hash_inference_regions, binding, 0)
-		checked_hash_publish(state, mir_hash_operation(hash_action_literal(), literal.origin, literal.finish, literal.receiver_origin, expected, literal.mutable, literal.entries))
-		mir_checked_hash_refine(state, locals, checked_mir_value(value), expected)
-		return checked_view(value, expected, value.category)
+		checked_hash_publish(state, mir_hash_operation(hash_action_literal(), literal.origin, literal.finish, literal.receiver_origin, context, literal.mutable, literal.entries))
+		mir_checked_hash_refine(state, locals, checked_mir_value(value), context)
+		return checked_view(value, context, value.category)
+	end
+	if pending >= 0
+		block_collection_escape(state, locals, value)
 	end
 	return value
 end
@@ -59,7 +77,7 @@ def checked_hash_inference_region(state: CompilerState, locals: CheckedLocals, o
 		return false
 	end
 	binding := local_find(locals, load_string(state.source_tokens.token_texts, plan.receiver_origin))
-	if binding < 0 || load_integer(locals.hash_literal_origins, binding) == 0 || load_integer(locals.hash_inference_regions, binding) != locals.inference_active_region[0]
+	if binding < 0 || load_integer(locals.hash_literal_origins, binding) == 0 || load_integer(locals.hash_inference_regions, binding) != collection_inference_region(state, locals, binding)
 		return false
 	end
 	return true
@@ -97,14 +115,17 @@ def checked_hash_refine(mut state: CompilerState, mut locals: CheckedLocals, ori
 		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "empty Hash requires a typed binding")
 		return
 	end
-	type_name := hash_type(plan.key_type, resolved)
+	type_name := record_collection_witness(state, locals, binding, hash_type(plan.key_type, resolved))
 	store_string(locals.types, binding, type_name)
 	if first_store
-		store_integer(locals.hash_inference_regions, binding, locals.inference_active_region[0])
+		store_integer(locals.hash_inference_regions, binding, collection_inference_region(state, locals, binding))
 	end
 	declaration := load_integer(locals.hash_declaration_origins, binding)
 	if declaration > 0
 		store_string(state.callables.checked[0].local_types, declaration - 1, type_name)
+	end
+	if state.callables.collection_inference_only[0]
+		return
 	end
 	literal_origin := load_integer(locals.hash_literal_origins, binding) - 1
 	literal := checked_hash_plan(state, literal_origin)
@@ -121,7 +142,7 @@ def checked_array_refine(mut state: CompilerState, mut locals: CheckedLocals, re
 	if binding < 0 || load_integer(locals.array_literal_origins, binding) == 0
 		return "cannot infer an untyped Array after its value escapes"
 	end
-	inferred := array_type(element_type)
+	inferred := record_collection_witness(state, locals, binding, array_type(element_type))
 	if inferred == ""
 		return "unsupported inferred Array element type " + element_type
 	end
@@ -129,7 +150,7 @@ def checked_array_refine(mut state: CompilerState, mut locals: CheckedLocals, re
 	store_string(state.callables.checked[0].array_literal_types, load_integer(locals.array_literal_origins, binding) - 1, inferred)
 	store_string(state.callables.checked[0].local_types, load_integer(locals.array_declaration_origins, binding) - 1, inferred)
 	if receiver.type_name == "Array"
-		store_integer(locals.array_inference_regions, binding, locals.inference_active_region[0])
+		store_integer(locals.array_inference_regions, binding, collection_inference_region(state, locals, binding))
 	end
 	mir_checked_array_refine(state, locals, receiver, inferred)
 	return ""
@@ -143,7 +164,7 @@ def checked_array_numeric_region(state: CompilerState, locals: CheckedLocals, re
 		return false
 	end
 	binding := local_find(locals, load_string(state.source_tokens.token_texts, receiver.origin))
-	if binding < 0 || load_integer(locals.array_literal_origins, binding) == 0 || load_integer(locals.array_inference_regions, binding) != locals.inference_active_region[0]
+	if binding < 0 || load_integer(locals.array_literal_origins, binding) == 0 || load_integer(locals.array_inference_regions, binding) != collection_inference_region(state, locals, binding)
 		return false
 	end
 	return true
