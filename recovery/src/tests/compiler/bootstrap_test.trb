@@ -1420,6 +1420,14 @@ end
 # A controlled missing dependency keeps this exact diagnostic independent of
 # canonical import order; the full compiler entry remains the probe's body.
 def _recovery_require_compiler_imports(executable: String, entry: String): Result<Boolean, String>
+	# Keep the unmodified entry as a negative control too: a compiler-source
+	# shortcut must not bypass import checking for the canonical text.
+	original := try _recovery_process(executable, ["--source-content", "check", entry])
+	missing_import := original.stdout.start_with?("TRBN4003:") && original.stdout.include?(":module does not export ")
+	single_diagnostic := original.stdout.split("\n").size() == 2 && original.stdout.end_with?("\n")
+	if original.status != 0 || !original.stderr.empty?() || !missing_import || !single_diagnostic
+		return Result<Boolean, String>::Err("isolated canonical compiler did not reject its missing imports: " + original.stdout)
+	end
 	isolated := "import { recovery_missing_dependency } from recovery_probe_missing\n" + entry
 	hidden := try _recovery_process(executable, ["--source-content", "check", isolated])
 	if hidden.status != 0 || !hidden.stderr.empty?()
