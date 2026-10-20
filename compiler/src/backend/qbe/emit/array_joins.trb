@@ -28,9 +28,12 @@ def emit_mir_join_fragment_size(native_module: MirModule, plan: MirArrayJoin, op
 	return emitted_value("%join_size_points" + suffix, "Integer")
 end
 
-# Match ordinary join's item-then-separator byte checks, without allocating a
-# joined String. Each point consumes a byte, so the checked byte sum also bounds
-# the point sum. The verified separator prevents decoding across boundaries.
+# Check every byte count and the total without allocating a joined String.
+# The plan has at most four items. OR preserves any count's bits above the
+# portable limit, even if an invalid header makes the sum wrap. When all counts
+# fit, their bounded sum cannot wrap and one final check also rejects every
+# overflowing prefix. Only headers are read; the separator prevents decoding
+# across boundaries, and each point consumes a byte.
 def emit_mir_array_join_size(native_module: MirModule, plan: MirArrayJoin, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	if plan.elements.size() == 0
 		return emitted_value("0", "Integer")
@@ -49,6 +52,7 @@ def emit_mir_array_join_size(native_module: MirModule, plan: MirArrayJoin, opera
 	finish := emit_label(context)
 	mut bytes := "0"
 	mut points := "0"
+	mut count_bits := integer_string(separator.bytes.size())
 	plan.elements.each.with_index do |element, index|
 		mut virtual := false
 		if plan.size_concat >= 0
@@ -68,13 +72,9 @@ def emit_mir_array_join_size(native_module: MirModule, plan: MirArrayJoin, opera
 			qbe_output_line(output, "\t" + length + " =l loadl " + length_address)
 			qbe_output_line(output, "\t" + item_points + " =l loadl " + points_address)
 		end
-		room := emit_temporary(context)
-		overflow := emit_temporary(context)
-		accepted := emit_label(context)
-		qbe_output_line(output, "\t" + room + " =l sub 9007199254740991, " + bytes)
-		qbe_output_line(output, "\t" + overflow + " =w cugtl " + length + ", " + room)
-		qbe_output_line(output, "\tjnz " + overflow + ", " + failure + ", " + accepted)
-		qbe_output_line(output, accepted)
+		with_count_bits := emit_temporary(context)
+		qbe_output_line(output, "\t" + with_count_bits + " =l or " + count_bits + ", " + length)
+		count_bits = with_count_bits
 		with_item := emit_temporary(context)
 		qbe_output_line(output, "\t" + with_item + " =l add " + bytes + ", " + length)
 		bytes = with_item
@@ -82,12 +82,6 @@ def emit_mir_array_join_size(native_module: MirModule, plan: MirArrayJoin, opera
 		qbe_output_line(output, "\t" + with_points + " =l add " + points + ", " + item_points)
 		points = with_points
 		if index > 0
-			separator_overflow := emit_temporary(context)
-			separator_accepted := emit_label(context)
-			limit := integer_string(9007199254740991 - separator.bytes.size())
-			qbe_output_line(output, "\t" + separator_overflow + " =w cugtl " + bytes + ", " + limit)
-			qbe_output_line(output, "\tjnz " + separator_overflow + ", " + failure + ", " + separator_accepted)
-			qbe_output_line(output, separator_accepted)
 			with_separator := emit_temporary(context)
 			with_separator_points := emit_temporary(context)
 			qbe_output_line(output, "\t" + with_separator + " =l add " + bytes + ", " + integer_string(separator.bytes.size()))
@@ -96,7 +90,11 @@ def emit_mir_array_join_size(native_module: MirModule, plan: MirArrayJoin, opera
 			points = with_separator_points
 		end
 	end
-	qbe_output_line(output, "\tjmp " + finish)
+	checked_bits := emit_temporary(context)
+	overflow := emit_temporary(context)
+	qbe_output_line(output, "\t" + checked_bits + " =l or " + bytes + ", " + count_bits)
+	qbe_output_line(output, "\t" + overflow + " =w cugtl " + checked_bits + ", 9007199254740991")
+	qbe_output_line(output, "\tjnz " + overflow + ", " + failure + ", " + finish)
 	qbe_output_line(output, failure)
 	qbe_output_line(output, "\tcall $trbn_fail(l $trbn_allocation_error, l 25)\n\thlt")
 	qbe_output_line(output, finish)
