@@ -1,96 +1,97 @@
+import { mir_effect_allocation_failure, mir_effect_allocation_io_failure, mir_effect_allocation_mutation_failure, mir_effect_conservative, mir_effect_failure, mir_effect_io_failure, mir_effect_mutation, mir_effect_mutation_failure, mir_effect_none } from mir/model/effects
 import { MirCall, MirFunction, MirInstruction, MirModule, MirSignature, mir_function_index, mir_table_span_valid } from mir/model/module
 
 # Effects are allocation, mutation, I/O and failure bits. Runtime-internal
 # terminal failures stay with their operation; they never resume a MIR edge.
 def mir_instruction_effects(native_module: MirModule, instruction: MirInstruction): Integer
 	if instruction.kind == 70 || instruction.kind == 71
-		return 9
+		return mir_effect_allocation_failure()
 	end
 	if instruction.kind == 69
-		return 8
+		return mir_effect_failure()
 	end
 	if instruction.kind >= 60 && instruction.kind <= 62
-		return 9
+		return mir_effect_allocation_failure()
 	end
 	if instruction.kind == 65
-		return 2
+		return mir_effect_mutation()
 	end
 	if instruction.kind == 59
-		return 10
+		return mir_effect_mutation_failure()
 	end
 	if instruction.kind == 48
 		if instruction.payload == 0
-			return 11
+			return mir_effect_allocation_mutation_failure()
 		end
-		return 10
+		return mir_effect_mutation_failure()
 	end
 	if instruction.kind == 41 || instruction.kind == 45 || instruction.kind == 46 || instruction.kind == 47 || instruction.kind == 49 || instruction.kind == 50
-		return 9
+		return mir_effect_allocation_failure()
 	end
 	if instruction.kind == 42
-		return 15
+		return mir_effect_conservative()
 	end
 	if instruction.kind == 34 || instruction.kind == 37 || instruction.kind == 52
-		return 9
+		return mir_effect_allocation_failure()
 	end
 	if instruction.kind == 36 || instruction.kind == 39 || instruction.kind == 51 || instruction.kind == 54
-		return 8
+		return mir_effect_failure()
 	end
 	if instruction.kind == 19 || instruction.kind == 25 || instruction.kind == 27 || instruction.kind == 31 || instruction.kind == 63 || instruction.kind == 66
-		return 9
+		return mir_effect_allocation_failure()
 	end
 	if instruction.kind == 28
-		return 8
+		return mir_effect_failure()
 	end
 	if instruction.kind == 30
 		method := instruction.payload
 		if method == 6 || method == 9
-			return 11
+			return mir_effect_allocation_mutation_failure()
 		end
 		if method == 7 || method == 10 || method == 11
-			return 9
+			return mir_effect_allocation_failure()
 		end
 		if method == 13
-			return 8
+			return mir_effect_failure()
 		end
 	end
 	if instruction.kind == 24 || instruction.kind == 29
-		return 11
+		return mir_effect_allocation_mutation_failure()
 	end
 	if instruction.kind == 21 || instruction.kind == 22
-		return 8
+		return mir_effect_failure()
 	end
 	if instruction.kind == 23
-		return 10
+		return mir_effect_mutation_failure()
 	end
 	if instruction.kind == 11
 		return native_module.calls[instruction.payload].effects
 	end
 	if instruction.kind == 13 || instruction.kind == 16 || (instruction.kind == 17 && (instruction.payload == 1 || instruction.payload == 4))
-		return 9
+		return mir_effect_allocation_failure()
 	end
 	if instruction.kind == 17 && instruction.payload == 5
-		return 0
+		return mir_effect_none()
 	end
 	if instruction.kind == 17 || instruction.failure >= 0
-		return 8
+		return mir_effect_failure()
 	end
 	if instruction.kind == 18
 		if instruction.payload == 1
-			return 13
+			return mir_effect_allocation_io_failure()
 		end
-		return 12
+		return mir_effect_io_failure()
 	end
-	return 0
+	return mir_effect_none()
 end
 
 # Declarations without an inspected ordinary body stay conservative. Only the
 # independently verified standard math adapter has no effects by contract.
 def mir_call_effects(signature: MirSignature): Integer
 	if signature.kind == 3 && signature.adapter == 11
-		return 0
+		return mir_effect_none()
 	end
-	return 15
+	return mir_effect_conservative()
 end
 
 # Read local effects once and retain reverse dependencies for direct calls.
@@ -98,45 +99,45 @@ end
 def mir_body_call_effects(native_module: MirModule, function: MirFunction, caller: Integer, mut callers: Array<Array<Integer>>): Integer
 	if function.kind == 1
 		# Scalar adapters already have a checked no-allocation contract.
-		return 8
+		return mir_effect_failure()
 	end
 	if function.kind != 3 || function.block_count < 1 || !mir_table_span_valid(function.block_start, function.block_count, native_module.blocks.size())
-		return 15
+		return mir_effect_conservative()
 	end
-	mut local := 0
+	mut local := mir_effect_none()
 	mut block_index := function.block_start
 	while block_index < function.block_start + function.block_count
 		block := native_module.blocks[block_index]
 		if block.terminator < 1 || block.terminator > 4 || !mir_table_span_valid(block.instruction_start, block.instruction_count, native_module.instructions.size())
-			return 15
+			return mir_effect_conservative()
 		end
 		if block.terminator == 4
-			local = 8
+			local = mir_effect_failure()
 		end
 		mut position := block.instruction_start
 		while position < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[position]
-			mut observed := 15
+			mut observed := mir_effect_conservative()
 			if instruction.kind == 11
 				if instruction.payload < 0 || instruction.payload >= native_module.calls.size()
-					return 15
+					return mir_effect_conservative()
 				end
 				callee := native_module.calls[instruction.payload].callee
 				if callee < 0 || callee >= callers.size()
-					return 15
+					return mir_effect_conservative()
 				end
 				# Ignore the stored effects, including on recursive edges.
 				mut incoming := callers[callee]
 				incoming.push(caller)
-				observed = 0
+				observed = mir_effect_none()
 			elsif instruction.kind >= 6 && instruction.kind <= 73
 				observed = mir_instruction_effects(native_module, instruction)
 			end
-			if observed != 0 && observed != 8
-				return 15
+			if observed != mir_effect_none() && observed != mir_effect_failure()
+				return mir_effect_conservative()
 			end
-			if observed == 8
-				local = 8
+			if observed == mir_effect_failure()
+				local = mir_effect_failure()
 			end
 			position += 1
 		end
@@ -173,7 +174,7 @@ def mir_call_effect_summaries(native_module: MirModule): Array<Integer>
 	mut pending: Array<Integer> := []
 	index = 0
 	while index < effects.size()
-		if effects[index] > 0
+		if effects[index] > mir_effect_none()
 			pending.push(index)
 		end
 		index += 1

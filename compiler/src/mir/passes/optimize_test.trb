@@ -88,16 +88,17 @@ describe("Native TypeRB frontend") do
 		expect(output_source(emit_qbe(delegating)).include?("call $trbnf1")).to_be_true()
 	end
 
-	test("retains caller range checks after the literal-return inline budget") do
-		# Exercise the ordinary MIR path.
-		source := "def one(): Integer\n\treturn 1\nend\n\ndef main()\n\t_retained := {1 => 1}\n\t_owner := [1]\n\tmut value := 7\n\tmut index := 0\n\twhile index < 1\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tindex += 1\n\tend\n\tputs(value.to_s())\n\treturn\nend\n"
+	test("retains caller range checks after the general scalar inline budget") do
+		# A parameter excludes exact literal-call folding. This still exercises
+		# the independent scalar inlining budget and caller range checks.
+		source := "def one(_value: Integer): Integer\n\treturn 1\nend\n\ndef main()\n\t_retained := {1 => 1}\n\t_owner := [1]\n\tmut value := 7\n\tmut index := 0\n\twhile index < 1\n\t\tvalue += one(index)\n\t\tvalue += one(index)\n\t\tvalue += one(index)\n\t\tindex += 1\n\tend\n\tputs(value.to_s())\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
 		qbe := output_source(emit_qbe(state))
-		expect(occurrence_count(qbe, "call $trbnf0()")).to_equal(1)
+		expect(occurrence_count(qbe, "call $trbnf0(")).to_equal(1)
 		# Inlining does not invent caller range facts from the emitted operand.
 		# All three call results retain range checks until MIR proves them.
 		expect(occurrence_count(qbe, " =w cugtl %t")).to_equal(3)
