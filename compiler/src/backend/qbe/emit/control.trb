@@ -32,22 +32,36 @@ import { emit_mir_string_concat, emit_mir_string_instruction, emit_mir_string_sp
 import { CompilerState } from state/state
 
 # The adapter consumes block parameters and typed operands. Edge copies are
-# parallel assignments: capture every source before changing a destination.
+# parallel assignments: capture sources that another assignment overwrites
+# before changing any destination. Identity copies need no instruction.
 def emit_control_mir_edge(state: CompilerState, function: MirFunction, target: Integer, label: String, start: Integer, count: Integer, operands: Array<String>, types: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
 	block := state.scalar_mir.blocks[mir_block_index(state.scalar_mir, function, target)]
 	mut captured: Array<String> := []
 	mut index := 0
 	while index < count
 		value := state.scalar_mir.arguments[start + index]
-		temporary := emit_temporary(context)
-		qbe_output_line(output, "\t" + temporary + " =" + qbe_type(types[value]) + " copy " + operands[value])
-		captured.push(temporary)
+		mut source := operands[value]
+		if value != state.scalar_mir.arguments[block.parameter_start + index]
+			mut other := 0
+			while other < count
+				destination := state.scalar_mir.arguments[block.parameter_start + other]
+				if destination == value && state.scalar_mir.arguments[start + other] != destination
+					source = emit_temporary(context)
+					qbe_output_line(output, "\t" + source + " =" + qbe_type(types[value]) + " copy " + operands[value])
+					break
+				end
+				other += 1
+			end
+		end
+		captured.push(source)
 		index += 1
 	end
 	index = 0
 	while index < count
 		value := state.scalar_mir.arguments[block.parameter_start + index]
-		qbe_output_line(output, "\t" + operands[value] + " =" + qbe_type(types[value]) + " copy " + captured[index])
+		if value != state.scalar_mir.arguments[start + index]
+			qbe_output_line(output, "\t" + operands[value] + " =" + qbe_type(types[value]) + " copy " + captured[index])
+		end
 		index += 1
 	end
 	qbe_output_line(output, "\tjmp " + label)
