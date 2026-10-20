@@ -70,7 +70,7 @@ def backend_identity(root=ROOT):
     backend = json.loads((root / "tools/qbe/backend.json").read_text())
     if set(backend) != {"name", "version", "sourceURL", "sourceSHA256", "variant", "patches"}:
         raise ValueError("invalid QBE identity shape")
-    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-float-contraction-v1":
+    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-float-contraction-v2":
         raise ValueError("unsupported QBE identity")
     if not backend["sourceURL"].startswith("https://") or not re.fullmatch(r"[0-9a-f]{64}", backend["sourceSHA256"]):
         raise ValueError("invalid QBE source identity")
@@ -86,17 +86,23 @@ def backend_identity(root=ROOT):
 
 
 def check_contraction(binary):
-    source = ("export function d $contract(d %a, d %b, d %c) {\n@start\n"
-              " %product =d mulc %a, %b\n %result =d add %product, %c\n ret %result\n}\n")
+    sources = [
+        ("export function d $contract(d %a, d %b, d %c) {\n@start\n"
+         " %product =d mulc %a, %b\n %result =d add %product, %c\n ret %result\n}\n"),
+        ("export function d $live(d %a, d %b, d %c, l %out) {\n@start\n"
+         " %product =d mulc %a, %b\n %result =d add %product, %c\n"
+         " stored %result, %out\n %next =l add %out, 8\n stored %b, %next\n ret %product\n}\n"),
+    ]
     for target in ("arm64", "arm64_apple", "amd64_sysv"):
-        for permitted in (True, False):
-            probe = source if permitted else source.replace(" mulc ", " mul ")
-            result = subprocess.run([str(binary), "-t", target], input=probe,
-                                    text=True, capture_output=True, timeout=30)
-            fused = bool(re.search(r"\bfmadd\b", result.stdout))
-            expected = permitted and target.startswith("arm64")
-            if result.returncode or fused != expected:
-                raise ValueError(f"QBE lacks the required {target} Float contraction behavior")
+        for source in sources:
+            for permitted in (True, False):
+                probe = source if permitted else source.replace(" mulc ", " mul ")
+                result = subprocess.run([str(binary), "-t", target], input=probe,
+                                        text=True, capture_output=True, timeout=30)
+                fused = bool(re.search(r"\bfmadd\b", result.stdout))
+                expected = permitted and target.startswith("arm64")
+                if result.returncode or fused != expected:
+                    raise ValueError(f"QBE lacks the required {target} Float contraction behavior")
 
 
 def check_capability(binary):

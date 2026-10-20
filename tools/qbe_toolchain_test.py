@@ -23,12 +23,22 @@ class BackendTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Float contraction"):
                     qbe.check_contraction(Path("synthetic-contraction-qbe"))
 
+    def test_backend_without_live_product_contraction_is_rejected(self):
+        def previous_variant(command, *, input, **kwargs):
+            fused = command[-1].startswith("arm64") and " mulc " in input and "$live(" not in input
+            assembly = "fmadd d0, d0, d1, d2\n" if fused else "fmul d0, d0, d1\n"
+            return subprocess.CompletedProcess(command, 0, assembly, "")
+
+        with patch.object(qbe.subprocess, "run", side_effect=previous_variant):
+            with self.assertRaisesRegex(ValueError, "Float contraction"):
+                qbe.check_contraction(Path("synthetic-previous-variant"))
+
     def test_identity_and_patch_tampering(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             shutil.copytree(qbe.ROOT / "tools/qbe", root / "tools/qbe")
             original = qbe.backend_identity(root)
-            self.assertEqual(original["variant"], "typerb-float-contraction-v1")
+            self.assertEqual(original["variant"], "typerb-float-contraction-v2")
             manifest = root / "tools/qbe/backend.json"
             for key, value in (("variant", "stock"), ("version", "1.4"),
                                ("patches", []), ("patches", original["patches"][::-1]),

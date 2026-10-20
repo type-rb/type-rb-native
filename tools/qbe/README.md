@@ -74,9 +74,11 @@ Unlike the ARM64 selector patches alone, this patch can change AMD64 emission.
 `fma.patch` adds the floating-point `mulc` operation: ordinary multiplication
 whose use in addition or subtraction may be contracted to one rounding.
 Plain `mul` retains separate rounding. On ARM64, a late emission check combines
-an adjacent `mulc` and `add`/`sub` only when the product register is overwritten
-by the consumer or provably overwritten before any further read in that block.
-Calls and block exits stop that proof. Other targets and unproved pairs emit
+an adjacent `mulc` and `add`/`sub`. It omits the rounded product when its register
+is overwritten by the consumer or provably overwritten before any further read
+in that block. Calls and block exits stop that proof. Otherwise it retains the
+rounded product, computing the fused result first only when that result does
+not overwrite either multiplication input. Other targets and unsafe pairs emit
 ordinary multiplication. The patch does not add a third operand to generic QBE
 instructions, alter register allocation, reassociate expressions, or assume
 finite values. Independently observed products retain their rounded value.
