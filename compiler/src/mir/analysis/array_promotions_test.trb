@@ -40,10 +40,28 @@ def array_promotion_run(output: String, expected: String)
 end
 
 describe("MIR Array loop value promotion") do
+	test("holds readonly elements without separating readers or writing them back") do
+		source := "def pairs(values: Array<Float>, peer: Array<Float>): Float\nmut total := 0.0\nmut index := 0\nwhile index < values.size()\nmut other := index + 1\nwhile other < values.size()\ntotal += values[index] * peer[other]\nother += 1\nend\nindex += 1\nend\nreturn total\nend\ndef main()\nvalues := [2.0, 3.0, 5.0]\nputs(pairs(values, values))\nputs(pairs([], []))\nputs(pairs([7.0], []))\nputs(values[0])\nend\n"
+		mut state := array_loop_mir_check(source)
+		expect(array_promotion_count(state) > 0).to_be_true()
+		state.scalar_mir.array_loops[0].each do |plan|
+			plan.cached_values.each do |cache|
+				expect(cache.stores.size()).to_equal(0)
+			end
+		end
+		before := control_test_output(emit_qbe(state))
+		expect(before.include?("stored %mir_array_cached_")).to_be_false()
+		intrinsic_mir_erase(state)
+		optimize_verified_mir(state.scalar_mir)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		array_promotion_run(before, "31.0\n0.0\n0.0\n2.0\n")
+	end
+
 	test("caches distinct primitive elements and keeps every alias on its original path") do
 		source := array_promotion_source("index + 1", "", "mut left := [10.0, 20.0, 30.0]\nmut right := [1.0, 2.0, 3.0]\nstep([2.0, 3.0, 5.0], left, right)\nputs(left[0].to_i())\nputs(left[1].to_i())\nputs(left[2].to_i())\nputs(right[0].to_i())\nputs(right[1].to_i())\nputs(right[2].to_i())\nmut shared := [10.0, 20.0, 30.0]\nstep([2.0, 3.0, 5.0], shared, shared)\nputs(shared[0].to_i())\nputs(shared[1].to_i())\nputs(shared[2].to_i())\nmut read := [2.0, 3.0, 5.0]\nmut other := [1.0, 2.0, 3.0]\nstep(read, read, other)\nputs(read[0].to_i())\nputs(read[1].to_i())\nputs(read[2].to_i())\nstep([], [], [])\nstep([1.0], [], [])")
 		mut state := array_loop_mir_check(source)
-		expect(array_promotion_count(state)).to_equal(2)
+		expect(array_promotion_count(state)).to_equal(3)
 		before := control_test_output(emit_qbe(state))
 		expect(before.include?("@mir_array_initialize_")).to_be_true()
 		expect(before.include?("%mir_array_ready_")).to_be_false()
@@ -85,7 +103,7 @@ describe("MIR Array loop value promotion") do
 
 	test("rederives cache proofs after source erasure and physical block reordering") do
 		mut state := array_loop_mir_check(array_promotion_source("index + 1", "", "mut left := [1.0, 2.0]\nstep([3.0, 4.0], left, [0.0, 0.0])\nputs(left[0].to_i())"))
-		expect(array_promotion_count(state)).to_equal(2)
+		expect(array_promotion_count(state)).to_equal(3)
 		intrinsic_mir_erase(state)
 		state.scalar_mir.functions.each do |function|
 			mut left := function.block_start
@@ -100,13 +118,13 @@ describe("MIR Array loop value promotion") do
 		end
 		optimize_verified_mir(state.scalar_mir)
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
-		expect(array_promotion_count(state)).to_equal(2)
+		expect(array_promotion_count(state)).to_equal(3)
 		array_promotion_run(control_test_output(emit_qbe(state)), "5\n")
 	end
 
 	test("rejects cached facts when a successful conjunction becomes a disjunction") do
 		mut state := array_loop_mir_check(array_promotion_source("index + 1", "", ""))
-		expect(array_promotion_count(state)).to_equal(2)
+		expect(array_promotion_count(state)).to_equal(3)
 		mut index := 0
 		while index < state.scalar_mir.instructions.size()
 			instruction := state.scalar_mir.instructions[index]
@@ -126,7 +144,7 @@ describe("MIR Array loop value promotion") do
 		base := array_promotion_source("index + 1", "right[index] += saved", "mut left := [1.0, 2.0, 3.0]\nmut right := [0.0, 0.0, 0.0]\nstep([3.0, 4.0, 5.0], left, right)\nputs(left[0].to_i())\nputs(left[1].to_i())\nputs(left[2].to_i())\nputs(right[0].to_i())\nputs(right[1].to_i())\nputs(right[2].to_i())\nmut rounded := [10000000000000000.0, 0.0, 0.0]\nstep([0.0, 1.0, -10000000000000000.0], rounded, [0.0, 0.0, 0.0])\nputs(rounded[0])")
 		source := base.split("left[index] += read[other]").join("saved := left[index]\nleft[index] += read[other]")
 		state := array_loop_mir_check(source)
-		expect(array_promotion_count(state)).to_equal(2)
+		expect(array_promotion_count(state)).to_equal(3)
 		array_promotion_run(control_test_output(emit_qbe(state)), "10\n4\n-4\n15\n1\n-7\n0.0\n")
 	end
 
@@ -163,7 +181,7 @@ describe("MIR Array loop value promotion") do
 					else
 						exit_block = cache.body
 					end
-					caches := [MirArrayCachedValue.new(owner: owner, index: index, type_id: cache.type_id, body: cache.body, exit: exit_block, loads: loads, stores: stores), plan.cached_values[1]]
+					caches := [MirArrayCachedValue.new(owner: owner, index: index, type_id: cache.type_id, body: cache.body, exit: exit_block, loads: loads, stores: stores), plan.cached_values[1], plan.cached_values[2]]
 					state.scalar_mir.array_loops[0][slot] = MirArrayLoop.new(header: plan.header, preheader: plan.preheader, owner: plan.owner, length: plan.length, accesses: plan.accesses, headers: plan.headers, reserved_pushes: plan.reserved_pushes, cached_values: caches, peel_body: plan.peel_body)
 					changed = true
 				end
@@ -173,14 +191,14 @@ describe("MIR Array loop value promotion") do
 			expect(verify_mir(state.scalar_mir, true)).to_equal("MIR Array-loop plan differs")
 			optimize_verified_mir(state.scalar_mir)
 			expect(verify_mir(state.scalar_mir, true)).to_equal("")
-			expect(array_promotion_count(state)).to_equal(2)
+			expect(array_promotion_count(state)).to_equal(3)
 			mode += 1
 		end
 	end
 
 	test("writes back before collection and retains the original short-array failure") do
 		state := array_loop_mir_check(array_promotion_source("index + 1", "", "mut left := [1.0, 2.0]\nstep([3.0, 4.0], left, [0.0, 0.0])\ntext := left[0].to_i().to_s()\nputs(text + left[1].to_i().to_s())"))
-		expect(array_promotion_count(state)).to_equal(2)
+		expect(array_promotion_count(state)).to_equal(3)
 		output := control_test_output(emit_qbe(state))
 		allocation := "function l $trbn_string_alloc(l %size) {\n@start\n"
 		expect(output.split(allocation).size()).to_equal(2)
