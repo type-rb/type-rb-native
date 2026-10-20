@@ -56,10 +56,11 @@ def mir_array_headers_across_pushes(native_module: MirModule, function: MirFunct
 	return stable
 end
 
-# Retain Array owners whose header parameter has exactly the same identity on
-# every backedge. This proves stable length and backing data, but does not
-# equate their lengths to a separate loop guard or scalar bound.
-def mir_array_stable_headers(native_module: MirModule, flow: MirFlow, header: MirBlock, header_index: Integer, preheader_start: Integer, aliases: MirFlowAliases, preheader: MirBlock): Array<MirArrayHeader>
+# Discover Array owners with a stable object identity: unchanged header
+# parameters or direct values available before entry. The caller separately
+# proves storage stability and bounds before retaining any access.
+def mir_array_stable_headers(native_module: MirModule, function: MirFunction, flow: MirFlow, header_index: Integer, members: Array<Integer>, aliases: MirFlowAliases, preheader: MirBlock): Array<MirArrayHeader>
+	header := native_module.blocks[function.block_start + header_index]
 	mut headers: Array<MirArrayHeader> := []
 	mut slot := 0
 	while slot < header.parameter_count
@@ -78,23 +79,35 @@ def mir_array_stable_headers(native_module: MirModule, flow: MirFlow, header: Mi
 				edge += 1
 			end
 			if stable
-				owner := native_module.arguments[preheader_start + slot]
+				owner := native_module.arguments[preheader.first_argument_start + slot]
 				headers.push(MirArrayHeader.new(identity: identity, owner: owner, accesses: [], nonnegative_accesses: [], bounded_accesses: []))
 			end
 		end
 		slot += 1
 	end
-	# Inlined bodies may refer directly to an Array read in the preheader,
-	# without forwarding it through the original loop's parameter list.
-	mut position := preheader.instruction_start
-	while position < preheader.instruction_start + preheader.instruction_count
-		value := native_module.instructions[position].result
-		if value >= 0 && mir_element_type(native_module, mir_flow_type(flow, value)) != mir_type_none()
-			# A forwarded owner is already represented. Adding a second
-			# identity would also obscure fresh-output alias proofs.
+	# Inlined bodies can name an Array defined before an empty guard preheader.
+	# Discover actual loop operands, then require availability at the entry.
+	# This does not prove storage stability; the caller still checks effects.
+	mut owners: Array<Integer> := []
+	members.each do |member|
+		block := native_module.blocks[function.block_start + member]
+		mut position := block.instruction_start
+		while position < block.instruction_start + block.instruction_count
+			instruction := native_module.instructions[position]
+			if instruction.kind >= mir_op_array_size() && instruction.kind <= mir_op_array_push()
+				identity := mir_flow_alias(aliases, instruction.first)
+				if identity >= 0
+					mir_live_add(owners, identity)
+				end
+			end
+			position += 1
+		end
+	end
+	owners.each do |value|
+		if mir_element_type(native_module, mir_flow_type(flow, value)) != mir_type_none() && mir_value_available(flow, preheader, preheader.instruction_start + preheader.instruction_count, value)
 			mut represented := false
 			headers.each do |candidate|
-				if candidate.owner == value
+				if mir_array_header_matches(candidate, aliases, value)
 					represented = true
 				end
 			end
@@ -102,7 +115,6 @@ def mir_array_stable_headers(native_module: MirModule, flow: MirFlow, header: Mi
 				headers.push(MirArrayHeader.new(identity: value, owner: value, accesses: [], nonnegative_accesses: [], bounded_accesses: []))
 			end
 		end
-		position += 1
 	end
 	return headers
 end
@@ -132,7 +144,7 @@ def mir_array_header_loop(native_module: MirModule, function: MirFunction, flow:
 	header := native_module.blocks[function.block_start + header_index]
 	preheader := native_module.blocks[function.block_start + loop.preheader]
 	aliases := mir_flow_aliases(native_module, function, flow, header)
-	headers := mir_array_stable_headers(native_module, flow, header, header_index, preheader.first_argument_start, aliases, preheader)
+	headers := mir_array_stable_headers(native_module, function, flow, header_index, loop.members, aliases, preheader)
 	if headers.size() == 0
 		return empty
 	end
