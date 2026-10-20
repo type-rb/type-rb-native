@@ -1,7 +1,7 @@
 import { mir_callable_plan_at } from mir/analysis/callables
 import { mir_numeric_interface_function, mir_numeric_interface_targets } from mir/analysis/numeric_interface
 import { integer_string } from support/literals
-import { MirFunction, MirModule, MirNumericOperation, MirNumericPlan, mir_block_index, mir_function_index, mir_numeric_remainder_test_mode, mir_value_type } from mir/model/module
+import { MirFunction, MirModule, MirNumericOperation, MirNumericPlan, mir_block_index, mir_function_index, mir_numeric_power_division_mode, mir_numeric_remainder_test_mode, mir_value_type } from mir/model/module
 import { mir_guarded_increment_proven, mir_nonnegative_value, mir_nonnegative_values, mir_parameter_subtraction_proven, mir_scalar_literal } from mir/analysis/ranges
 import { MirFlow, MirFlowAliases, mir_build_flow, mir_flow_aliases, mir_flow_block_index, mir_flow_blocks, mir_flow_dominates, mir_flow_position } from mir/analysis/flow
 
@@ -178,7 +178,9 @@ def mir_numeric_reciprocal(divisor: Integer, shift: Integer): Integer
 	return quotient + 1
 end
 
-# Refine only an already budgeted remainder selection. Let s=31+ceil(log2(d))
+# Refine only an already budgeted division or remainder selection. Both use the
+# same exact positive power-of-two proof. Other divisors refine only remainder:
+# let s=31+ceil(log2(d))
 # and m=ceil(2^s/d). For 0<=n<2^31, e=m*d-2^s<d<=2^(s-31), so n*e<2^s.
 # Even at a remainder of d-1, that error cannot raise floor(n*m/2^s).
 # Thus the quotient is exact without correction, and n*m<2^63 because m<2^32.
@@ -189,7 +191,7 @@ def mir_numeric_selection(native_module: MirModule, function: MirFunction, flow:
 	mut reciprocal := 0
 	mut shift := 0
 	instruction := native_module.instructions[index]
-	if mode == 1 && instruction.kind == 7 && instruction.payload == 5 && instruction.failure >= 0
+	if mode == 1 && instruction.kind == 7 && (instruction.payload == 4 || instruction.payload == 5) && instruction.failure >= 0
 		position := mir_flow_position(flow, instruction.second)
 		if position >= 0
 			literal := native_module.instructions[position]
@@ -204,9 +206,12 @@ def mir_numeric_selection(native_module: MirModule, function: MirFunction, flow:
 					end
 					if power == value
 						selected = 8
+						if instruction.payload == 4
+							selected = mir_numeric_power_division_mode()
+						end
 						divisor = value
 						shift = bits
-					elsif value <= 4294967295
+					elsif instruction.payload == 5 && value <= 4294967295
 						selected = 6
 						divisor = value
 						shift = 31 + bits

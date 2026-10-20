@@ -20,10 +20,11 @@ class BackendTest(unittest.TestCase):
             root = Path(temporary)
             shutil.copytree(qbe.ROOT / "tools/qbe", root / "tools/qbe")
             original = qbe.backend_identity(root)
-            self.assertEqual(original["variant"], "typerb-sqrt-v1")
+            self.assertEqual(original["variant"], "typerb-arm64-memory-v1")
             manifest = root / "tools/qbe/backend.json"
             for key, value in (("variant", "stock"), ("version", "1.4"),
-                               ("patches", []), ("sourceSHA256", "invalid")):
+                               ("patches", []), ("patches", original["patches"][::-1]),
+                               ("patches", [original["patches"][0]] * 2), ("sourceSHA256", "invalid")):
                 with self.subTest(key=key):
                     changed = copy.deepcopy(original)
                     changed[key] = value
@@ -31,10 +32,13 @@ class BackendTest(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         qbe.backend_identity(root)
             manifest.write_text(json.dumps(original))
-            with (root / "tools/qbe/sqrt.patch").open("a") as stream:
-                stream.write("changed\n")
-            with self.assertRaisesRegex(ValueError, "patch digest"):
-                qbe.backend_identity(root)
+            for item in original["patches"]:
+                path = root / item["path"]
+                text = path.read_text()
+                path.write_text(text + "changed\n")
+                with self.assertRaisesRegex(ValueError, "patch digest"):
+                    qbe.backend_identity(root)
+                path.write_text(text)
 
     def test_corrupt_archive_is_rejected_before_unpacking(self):
         with tempfile.TemporaryDirectory() as temporary:

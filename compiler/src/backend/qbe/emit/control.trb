@@ -1,3 +1,4 @@
+import { mir_hash_concat_at_producer } from mir/analysis/hash_concats
 import { mir_array_join_elides } from mir/analysis/array_joins
 import { emit_mir_bytes_instruction } from backend/qbe/emit/bytes
 import { emit_object_conversion } from backend/qbe/emit/object_dispatch
@@ -9,7 +10,7 @@ import { emit_mir_callable } from backend/qbe/emit/callables
 import { emit_mir_enum_instruction } from backend/qbe/emit/enums
 import { emit_mir_nullable_instruction } from backend/qbe/emit/nullable
 import { emit_mir_range_instruction } from backend/qbe/emit/ranges
-import { emit_mir_hash_instruction } from backend/qbe/emit/hashes
+import { emit_mir_hash_concat, emit_mir_hash_instruction } from backend/qbe/emit/hashes
 import { emit_mir_record_instruction } from backend/qbe/emit/records
 import { emit_integer_array_push, emit_mir_array_headers, emit_mir_array_instruction } from backend/qbe/emit/arrays
 import { mir_storage_type_name } from mir/model/types
@@ -146,6 +147,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 					selected_split = slot
 				end
 			end
+			hash_concat := mir_hash_concat_at_producer(state.scalar_mir.hash_concat_probes[0], index)
 			mut value := emitted_value("", "Void")
 			if elided
 				# No managed Array object or SSA pointer is materialized.
@@ -155,6 +157,8 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 				value = emit_mir_string_split(function.id, splits[selected_split], context, output)
 			elsif selected_join >= 0
 				value = emit_mir_array_join(joins[selected_join], operands[instruction.second], operands, context, output)
+			elsif hash_concat >= 0
+				value = emit_mir_hash_concat(state.scalar_mir, state.scalar_mir.hash_concat_probes[0][hash_concat], operands, context, output)
 			elsif concat >= 0
 				value = emit_mir_string_concat(concats[concat], operands, context, output)
 			elsif instruction.kind >= 67 && instruction.kind <= 72
