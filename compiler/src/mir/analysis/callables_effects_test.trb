@@ -1,4 +1,5 @@
 import { emit_qbe } from compiler
+import { mir_effect_failure } from mir/model/effects
 import { mir_callable_plans, mir_callable_plans_equal, mir_planned_instruction_effects } from mir/analysis/callables
 import { MirCallablePlan, mir_function_index } from mir/model/module
 import { optimize_verified_mir } from mir/passes/optimize
@@ -51,28 +52,23 @@ describe("MIR singleton callable effects") do
 		end
 	end
 
-	test("selects the unchanged Closures callback without roots or redundant Array checks") do
+	test("retains failure-only effects after inlining the Closures callback") do
 		root := Process.environment("TYPE_RB_NATIVE_ROOT")
 		if root != nil
 			state := array_loop_mir_check(array_mir_test_read(root + "/benchmarks/features/closures/src/main.trb"))
-			expect(state.scalar_mir.callable_plans[0].size()).to_equal(1)
-			plan := state.scalar_mir.callable_plans[0][0]
-			expect(plan.effects).to_equal(8)
-			expect(callable_effect_point(state, plan.instruction)).to_be_false()
-			apply := mir_function_index(state.scalar_mir, 0)
-			expect(state.scalar_mir.array_loops[apply].size()).to_equal(1)
-			expect(state.scalar_mir.root_plans[apply].capacity).to_equal(0)
-			mut inside := false
-			control_test_output(emit_qbe(state)).split("\n").each do |line|
-				if line.include?("function l $trbnf0(")
-					inside = true
-				elsif line == "}"
-					inside = false
-				elsif inside
-					expect(line.include?("$trbn_gc_temp_")).to_be_false()
-					expect(line.include?("$trbn_bounds_error")).to_be_false()
+			expect(state.scalar_mir.callable_plans[0].size()).to_equal(0)
+			mut found := 0
+			state.scalar_mir.numeric_plans[0].each do |plan|
+				if plan.function_id == 3 && plan.caller == 1 && plan.call_instruction >= 0
+					instruction := state.scalar_mir.instructions[plan.call_instruction]
+					expect(mir_planned_instruction_effects(state.scalar_mir, instruction, plan.call_instruction)).to_equal(mir_effect_failure())
+					expect(callable_effect_point(state, plan.call_instruction)).to_be_false()
+					found += 1
 				end
 			end
+			expect(found).to_equal(1)
+			expect(state.scalar_mir.array_loops[mir_function_index(state.scalar_mir, 1)].size() > 0).to_be_true()
+			expect(control_test_output(emit_qbe(state)).include?("call $trbnf0(")).to_be_false()
 		end
 	end
 

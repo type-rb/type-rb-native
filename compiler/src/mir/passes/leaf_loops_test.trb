@@ -81,6 +81,23 @@ describe("MIR leaf loop calls") do
 		end
 	end
 
+	test("retains invariant scalar calls so their results can be reused") do
+		state := array_loop_mir_check("def sum(values: Array<Integer>): Integer\nmut total := 0\nvalues.each do |value|\ntotal += value\nend\nreturn total\nend\ndef main()\nvalues := [3, 5, 7]\nmut index := 0\nmut total := 0\nwhile index < 4\ntotal += sum(values)\nindex += 1\nend\nputs(total)\nend\n")
+		expect(state.scalar_mir.loop_calls[1].size()).to_equal(1)
+		output := control_test_output(emit_qbe(state))
+		expect(output.include?("call $trbnf0(")).to_be_true()
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, output)
+			when Result::Ok(actual)
+				expect(actual).to_equal("60\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("keeps bounds and portable overflow failures in the expanded body") do
 		bodies := ["values[-2] = 7", "values[0] += index"]
 		bodies.each.with_index do |body, choice|
