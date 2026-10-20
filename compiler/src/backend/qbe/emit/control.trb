@@ -1,5 +1,5 @@
 import { emit_mir_array_join, emit_mir_join_fragment_size } from backend/qbe/emit/array_joins
-import { emit_mir_array_cache_boundary } from backend/qbe/emit/array_caches
+import { emit_mir_array_cache_boundaries } from backend/qbe/emit/array_caches
 import { qbe_mir_block_label, qbe_mir_edge_label } from backend/qbe/emit/loop_peels
 import { mir_guard_clamp_bounds, mir_guard_enum_variant, mir_guard_slice_size } from mir/model/operation_modes
 import { mir_terminator_branch, mir_terminator_jump, mir_terminator_return } from mir/model/control
@@ -107,6 +107,8 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 		if plan.peel_body >= 0
 			peel_blocks.push(state.scalar_mir.blocks[mir_block_index(state.scalar_mir, function, plan.header)])
 			peel_blocks.push(state.scalar_mir.blocks[mir_block_index(state.scalar_mir, function, plan.peel_body)])
+		elsif plan.cached_values.size() > 0
+			peel_blocks.push(state.scalar_mir.blocks[mir_block_index(state.scalar_mir, function, plan.header)])
 		end
 	end
 	mut block_index := 0
@@ -119,7 +121,6 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 			block = state.scalar_mir.blocks[function.block_start + block_index]
 		end
 		qbe_output_line(output, qbe_mir_block_label(block.id, peeled))
-		emit_mir_array_cache_boundary(state.scalar_mir, array_loops, block.id, operands, context, output)
 		index = block.instruction_start
 		mut point := qbe_root_plan_start(roots.instructions, index)
 		mut previous_roots: Array<Integer> := []
@@ -345,4 +346,5 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 		end
 		block_index += 1
 	end
+	emit_mir_array_cache_boundaries(state.scalar_mir, array_loops, operands, context, output)
 end
