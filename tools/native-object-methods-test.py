@@ -83,11 +83,15 @@ with tempfile.TemporaryDirectory(prefix='native-object-methods-') as temporary:
                 ordinary = '$trbnf' in line
             if line == '}':
                 ordinary = False
-            if ordinary and ('call $trbn_gc_alloc(' in line or 'call $trbnf' in line or 'call $trbn_hash_' in line):
+            # A literal-return static call can fold away while its allocating
+            # Integer-to-String conversion remains a collection boundary.
+            if ordinary and any(marker in line for marker in (
+                    'call $trbn_gc_alloc(', 'call $trbnf', 'call $trbn_hash_',
+                    'call $trbn_integer_to_string(')):
                 forced.append('\tcall $trbn_gc_collect(w 0)')
                 hooks += 1
             forced.append(line)
-        assert hooks > 0
+        assert hooks > 0, name
         il, assembly, program = [root / item for item in ('program.ssa', 'program.s', 'program')]
         il.write_text('\n'.join(forced) + '\n')
         run([binary.with_name('qbe'), '-o', assembly, il])
