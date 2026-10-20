@@ -5,6 +5,7 @@ import { mir_function_control, mir_terminator_branch, mir_terminator_jump } from
 import { mir_op_array_new, mir_op_array_position, mir_op_array_push, mir_op_array_size, mir_op_array_store, mir_op_direct_call, mir_op_indirect_call, mir_op_integer_to_float, mir_op_scalar_binary, mir_op_scalar_literal } from mir/model/instructions
 import { mir_effect_failure, mir_effect_none } from mir/model/effects
 import { mir_planned_instruction_effects } from mir/analysis/callables
+import { mir_array_reserved_pushes } from mir/analysis/array_appends
 import { integer_string } from support/literals
 import { MirArrayHeader, MirArrayLoop, MirBlock, MirFunction, MirModule } from mir/model/module
 import { MirNonnegative, mir_exact_integer_literal, mir_nonnegative_value, mir_nonnegative_values } from mir/analysis/ranges
@@ -36,7 +37,7 @@ def mir_loop_parameter(native_module: MirModule, header: MirBlock, value: Intege
 end
 
 def mir_no_array_loop(): MirArrayLoop
-	return MirArrayLoop.new(header: -1, preheader: -1, owner: -1, length: -1, accesses: [], headers: [])
+	return MirArrayLoop.new(header: -1, preheader: -1, owner: -1, length: -1, accesses: [], headers: [], reserved_pushes: [])
 end
 
 # A fresh output allocated in the unique preheader cannot alias any value
@@ -220,9 +221,9 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 		return mir_no_array_loop()
 	end
 	mut accesses: Array<Integer> := []
-	mut headers := mir_array_stable_headers(native_module, flow, header, header_index, preheader_start, aliases)
+	candidates := mir_array_stable_headers(native_module, flow, header, header_index, preheader_start, aliases)
 	preheader_block := native_module.blocks[function.block_start + mir_flow_block_index(flow, preheader)]
-	headers = mir_array_headers_across_pushes(native_module, function, flow, aliases, members, preheader_block, guard_owner, headers)
+	headers := mir_array_headers_across_pushes(native_module, function, flow, aliases, members, preheader_block, guard_owner, candidates)
 	if headers.size() == 0
 		return mir_no_array_loop()
 	end
@@ -294,7 +295,8 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 	if accesses.size() == 0 && reused.size() == 0
 		return mir_no_array_loop()
 	end
-	return MirArrayLoop.new(header: header.id, preheader: preheader, owner: owner, length: length_index, accesses: accesses, headers: reused)
+	pushes := mir_array_reserved_pushes(native_module, function, flow, aliases, header, index_slot, preheader_block, owner, members, candidates)
+	return MirArrayLoop.new(header: header.id, preheader: preheader, owner: owner, length: length_index, accesses: accesses, headers: reused, reserved_pushes: pushes)
 end
 
 def mir_function_array_loops(native_module: MirModule, function: MirFunction): Array<MirArrayLoop>
@@ -362,7 +364,7 @@ def mir_array_loops_equal(left: Array<MirArrayLoop>, right: Array<MirArrayLoop>)
 	while index < left.size()
 		a := left[index]
 		b := right[index]
-		if a.header != b.header || a.preheader != b.preheader || a.owner != b.owner || a.length != b.length || !mir_live_equal(a.accesses, b.accesses) || a.headers.size() != b.headers.size()
+		if a.header != b.header || a.preheader != b.preheader || a.owner != b.owner || a.length != b.length || !mir_live_equal(a.accesses, b.accesses) || a.headers.size() != b.headers.size() || !mir_live_equal(a.reserved_pushes, b.reserved_pushes)
 			return false
 		end
 		mut header := 0

@@ -120,26 +120,29 @@ end
 
 # The direct store cannot collect. Publish the verified live-before roots only
 # on growth, before the existing slow path performs GC and backing accounting.
-def emit_integer_array_push(owner: String, value: String, roots: Array<Integer>, root_prefix: Integer, root_capacity: Integer, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
+def emit_integer_array_push(owner: String, value: String, reserved: Boolean, roots: Array<Integer>, root_prefix: Integer, root_capacity: Integer, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
 	length_slot := emit_temporary(context)
 	length := emit_temporary(context)
-	capacity_slot := emit_temporary(context)
-	capacity := emit_temporary(context)
-	full := emit_temporary(context)
-	grow := emit_label(context)
-	store := emit_label(context)
-	finish := emit_label(context)
+	mut finish := ""
 	qbe_output_line(output, "\t" + length_slot + " =l add " + owner + ", 8")
 	qbe_output_line(output, "\t" + length + " =l loadl " + length_slot)
-	qbe_output_line(output, "\t" + capacity_slot + " =l add " + owner + ", 16")
-	qbe_output_line(output, "\t" + capacity + " =l loadl " + capacity_slot)
-	qbe_output_line(output, "\t" + full + " =w ceql " + length + ", " + capacity)
-	qbe_output_branch(output, full, grow, store)
-	qbe_output_line(output, grow)
-	emit_mir_roots(roots, root_prefix, root_capacity, operands, context, output)
-	qbe_output_line(output, "\tcall $trbn_array_grow_paced(l " + owner + ", l " + value + ", l " + length + ", l " + capacity + ")")
-	qbe_output_line(output, "\tjmp " + finish)
-	qbe_output_line(output, store)
+	if !reserved
+		capacity_slot := emit_temporary(context)
+		capacity := emit_temporary(context)
+		full := emit_temporary(context)
+		grow := emit_label(context)
+		store := emit_label(context)
+		finish = emit_label(context)
+		qbe_output_line(output, "\t" + capacity_slot + " =l add " + owner + ", 16")
+		qbe_output_line(output, "\t" + capacity + " =l loadl " + capacity_slot)
+		qbe_output_line(output, "\t" + full + " =w ceql " + length + ", " + capacity)
+		qbe_output_branch(output, full, grow, store)
+		qbe_output_line(output, grow)
+		emit_mir_roots(roots, root_prefix, root_capacity, operands, context, output)
+		qbe_output_line(output, "\tcall $trbn_array_grow_paced(l " + owner + ", l " + value + ", l " + length + ", l " + capacity + ")")
+		qbe_output_line(output, "\tjmp " + finish)
+		qbe_output_line(output, store)
+	end
 	new_length := emit_temporary(context)
 	data_slot := emit_temporary(context)
 	data := emit_temporary(context)
@@ -152,8 +155,10 @@ def emit_integer_array_push(owner: String, value: String, roots: Array<Integer>,
 	qbe_output_line(output, "\t" + offset + " =l shl " + length + ", 3")
 	qbe_output_line(output, "\t" + target + " =l add " + data + ", " + offset)
 	qbe_output_line(output, "\tstorel " + value + ", " + target)
-	qbe_output_line(output, "\tjmp " + finish)
-	qbe_output_line(output, finish)
+	if !reserved
+		qbe_output_line(output, "\tjmp " + finish)
+		qbe_output_line(output, finish)
+	end
 	return
 end
 
