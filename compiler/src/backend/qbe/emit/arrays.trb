@@ -8,7 +8,6 @@ import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emit_typed_load, 
 import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
 import { emit_mir_roots } from backend/qbe/emit/roots
 import { qbe_array_cache_name } from backend/qbe/emit/array_caches
-import { emit_mir_array_storage, qbe_array_storage_header } from backend/qbe/emit/array_storage
 import { CompilerState } from state/state
 
 def array_read_guard_source(guards: Array<MirArrayReadGuard>, instruction: Integer): Integer
@@ -398,13 +397,22 @@ def emit_mir_array_headers(plans: Array<MirArrayLoop>, block: Integer, operands:
 		if plan.preheader == block
 			if plan.owner >= 0
 				owner := operands[plan.owner]
-				reused := qbe_array_storage_header(plans, plan.length, plan.header)
-				emit_mir_array_storage(integer_string(plan.header), owner, reused, context, output)
+				length := emit_temporary(context)
+				data := emit_temporary(context)
+				qbe_output_line(output, "\t" + length + " =l add " + owner + ", 8")
+				qbe_output_line(output, "\t%mir_array_length" + integer_string(plan.header) + " =l loadl " + length)
+				qbe_output_line(output, "\t" + data + " =l add " + owner + ", 24")
+				qbe_output_line(output, "\t%mir_array_data" + integer_string(plan.header) + " =l loadl " + data)
 			end
 			plan.headers.each do |header|
 				extra_owner := operands[header.owner]
 				name := integer_string(plan.header) + "_" + integer_string(header.identity)
-				emit_mir_array_storage(name, extra_owner, "", context, output)
+				extra_length := emit_temporary(context)
+				extra_data := emit_temporary(context)
+				qbe_output_line(output, "\t" + extra_length + " =l add " + extra_owner + ", 8")
+				qbe_output_line(output, "\t%mir_array_length" + name + " =l loadl " + extra_length)
+				qbe_output_line(output, "\t" + extra_data + " =l add " + extra_owner + ", 24")
+				qbe_output_line(output, "\t%mir_array_data" + name + " =l loadl " + extra_data)
 			end
 		end
 	end
