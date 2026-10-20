@@ -1,12 +1,12 @@
 # Native QBE variant
 
-`backend.json` pins the QBE 1.3 release archive and all four patch digests.
+`backend.json` pins the QBE 1.3 release archive and all five patch digests.
 `python3 tools/qbe_toolchain.py /path/to/qbe-1.3` verifies them, applies the
 patches without fuzz, builds QBE and checks supported-target instruction emission.
 The binary's receipt records upstream, patch, builder and C compiler identities.
 Checkout builds include those tracked inputs in their content cache. An explicit
 `TRBN_QBE` override must support the same operations, ARM64 operand selection
-and expression-motion behavior.
+and expression-motion and Float-contraction behavior.
 
 The six added upstream lines define a unary single/double floating-point `sqrt`
 and select `fsqrt`, `sqrtss` or `sqrtsd`. Native uses the double form only for
@@ -71,7 +71,23 @@ for six-target emission checks and an independent native oracle for shared
 predicates, signed boundaries, zero-trip loops and invariant memory addresses.
 Unlike the ARM64 selector patches alone, this patch can change AMD64 emission.
 
-Maintenance is four small pinned patches, one acquisition helper and target/edge tests.
+`fma.patch` adds the floating-point `mulc` operation: ordinary multiplication
+whose use in addition or subtraction may be contracted to one rounding.
+Plain `mul` retains separate rounding. On ARM64, a late emission check combines
+an adjacent `mulc` and `add`/`sub` only when the product register is overwritten
+by the consumer or provably overwritten before any further read in that block.
+Calls and block exits stop that proof. Other targets and unproved pairs emit
+ordinary multiplication. The patch does not add a third operand to generic QBE
+instructions, alter register allocation, reassociate expressions, or assume
+finite values. Independently observed products retain their rounded value.
+Native emits `mulc` only for verified Float multiplication, including operands
+already widened from Integer. Checked Integer multiplication is unchanged.
+Run `python3 tools/qbe_fma_test.py --qbe /path/to/qbe` for both scalar widths,
+six-target emission, a libm `fma` oracle, strict multiplication, signed zero,
+subnormals, nonfinite values, random bit patterns, product reuse, calls and
+branches. `--baseline /path/to/previous/qbe` verifies rejection of the new IL.
+
+Maintenance is five pinned patches, one acquisition helper and target/edge tests.
 A QBE upgrade must rebase the patches, run upstream tests, run these controls on
 each supported host, and repeat ordinary compiler validation. Historical seed
 manifests and their replay workflows retain their original stock QBE identity;

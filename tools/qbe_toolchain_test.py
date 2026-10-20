@@ -15,12 +15,20 @@ import qbe_toolchain as qbe
 
 
 class BackendTest(unittest.TestCase):
+    def test_missing_or_unconditional_contraction_is_rejected(self):
+        for assembly in ("fmul d0, d0, d1\nfadd d0, d0, d2\n", "fmadd d0, d0, d1, d2\n"):
+            with self.subTest(assembly=assembly), patch.object(
+                    qbe.subprocess, "run", return_value=subprocess.CompletedProcess(
+                        [], 0, assembly, "")):
+                with self.assertRaisesRegex(ValueError, "Float contraction"):
+                    qbe.check_contraction(Path("synthetic-contraction-qbe"))
+
     def test_identity_and_patch_tampering(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             shutil.copytree(qbe.ROOT / "tools/qbe", root / "tools/qbe")
             original = qbe.backend_identity(root)
-            self.assertEqual(original["variant"], "typerb-code-motion-v1")
+            self.assertEqual(original["variant"], "typerb-float-contraction-v1")
             manifest = root / "tools/qbe/backend.json"
             for key, value in (("variant", "stock"), ("version", "1.4"),
                                ("patches", []), ("patches", original["patches"][::-1]),
