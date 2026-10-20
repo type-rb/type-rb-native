@@ -1,4 +1,5 @@
 import { checked_category_value } from frontend/types/value_categories
+import { record_collection_capture } from frontend/checking/collections/context_analysis
 import { mir_state_enabled_slot } from state/local_slots
 import { checking_lowering } from state/checking_phases
 import { hash_action_delete, hash_action_empty, hash_action_fetch, hash_action_has_key, hash_action_index_read, hash_action_index_write, hash_action_keys, hash_action_literal, hash_action_merge, hash_action_none, hash_action_size, hash_action_update, hash_action_values } from mir/model/hash_actions
@@ -59,6 +60,9 @@ def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>,
 			return checked_value("Invalid", checked_category_value(), origin, 0)
 		end
 		value := check_expression(state, position, locals, 1, hash_value_type(context))
+		if hash_value_type(context) == "" && value.binding && value.nullable_field == -1
+			record_collection_capture(state, locals, value.nullable_binding)
+		end
 		if value.type_name == "Never"
 			diverged = true
 			scalar_mir_disable(locals)
@@ -213,6 +217,9 @@ def check_array_literal(
 			finished = true
 		else
 			value := check_expression(state, position, locals, 1, contextual_element_type)
+			if contextual_element_type == "" && value.binding && value.nullable_field == -1
+				record_collection_capture(state, locals, value.nullable_binding)
+			end
 			if value.type_name == "Never"
 				diverged = true
 				scalar_mir_disable(locals)
