@@ -70,7 +70,7 @@ def backend_identity(root=ROOT):
     backend = json.loads((root / "tools/qbe/backend.json").read_text())
     if set(backend) != {"name", "version", "sourceURL", "sourceSHA256", "variant", "patches"}:
         raise ValueError("invalid QBE identity shape")
-    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-float-contraction-v1":
+    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-float-contraction-v3":
         raise ValueError("unsupported QBE identity")
     if not backend["sourceURL"].startswith("https://") or not re.fullmatch(r"[0-9a-f]{64}", backend["sourceSHA256"]):
         raise ValueError("invalid QBE source identity")

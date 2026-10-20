@@ -53,6 +53,60 @@ export function {width} ${width}_branch({width} %a, {width} %b, {width} %c, w %w
 @product
  ret %product
 }}
+export function {width} ${width}_return_product({width} %a, {width} %b, {width} %c, l %out) {{
+@start
+ %product ={width} mulc %a, %b
+ %result ={width} add %product, %c
+ store{width} %result, %out
+ ret %product
+}}
+export function {width} ${width}_successor({width} %a, {width} %b, {width} %c, w %which, l %out) {{
+@start
+ %product ={width} mulc %a, %b
+ %result ={width} add %product, %c
+ jnz %which, @observe, @done
+@observe
+ store{width} %product, %out
+ jmp @done
+@done
+ ret %result
+}}
+export function {width} ${width}_carried({width} %a, {width} %b, {width} %c, l %count, l %out) {{
+@start
+ jmp @loop
+@loop
+ %i =l phi @start 0, @body %next
+ %previous ={width} phi @start %a, @body %product
+ %more =w csltl %i, %count
+ jnz %more, @body, @done
+@body
+ %product ={width} mulc %previous, %b
+ %result ={width} add %product, %c
+ store{width} %result, %out
+ %next =l add %i, 1
+ jmp @loop
+@done
+ ret %previous
+}}
+export function {width} ${width}_accumulate(l %values, l %count, {width} %b, {width} %c) {{
+@start
+ jmp @loop
+@loop
+ %i =l phi @start 0, @body %next
+ %sum ={width} phi @start %c, @body %result
+ %more =w csltl %i, %count
+ jnz %more, @body, @done
+@body
+ %offset =l mul %i, {8 if width == "d" else 4}
+ %address =l add %values, %offset
+ %value ={width} load{width} %address
+ %product ={width} mulc %value, %b
+ %result ={width} add %sum, %product
+ %next =l add %i, 1
+ jmp @loop
+@done
+ ret %sum
+}}
 export function {width} ${width}_constant() {{
 @start
  %product ={width} mulc {width}_2.0, {width}_3.0
@@ -85,6 +139,10 @@ extern Scalar @W@_reuse(Scalar, Scalar, Scalar, Scalar *);
 extern Scalar @W@_twice(Scalar, Scalar);
 extern Scalar @W@_call(Scalar, Scalar, Scalar);
 extern Scalar @W@_branch(Scalar, Scalar, Scalar, int);
+extern Scalar @W@_return_product(Scalar, Scalar, Scalar, Scalar *);
+extern Scalar @W@_successor(Scalar, Scalar, Scalar, int, Scalar *);
+extern Scalar @W@_carried(Scalar, Scalar, Scalar, long long, Scalar *);
+extern Scalar @W@_accumulate(Scalar *, long long, Scalar, Scalar);
 extern Scalar @W@_constant(void);
 Scalar echo_@W@(Scalar value) { return value; }
 static int same(Scalar a, Scalar b) {
@@ -119,6 +177,31 @@ static int check(Scalar a, Scalar b, Scalar c) {
     if (!same(@W@_branch(a, b, c, 0), product)) return 34;
     result = @W@_branch(a, b, c, 1);
     if (!same(result, separate[0]) && !same(result, fused[0])) return 35;
+    result = @W@_return_product(a, b, c, &observed);
+    if (!same(result, product)) return 40;
+    if (!same(observed, separate[0]) && !same(observed, fused[0])) return 41;
+    result = @W@_successor(a, b, c, 1, &observed);
+    if (!same(observed, product)) return 42;
+    if (!same(result, separate[0]) && !same(result, fused[0])) return 43;
+    volatile Scalar carried = a;
+    Scalar previous = a;
+    for (int i = 0; i < 3; ++i) {
+        previous = carried;
+        carried = previous * b;
+    }
+    result = @W@_carried(a, b, c, 3, &observed);
+    if (!same(result, carried)) return 44;
+    if (!same(observed, carried + c) && !same(observed, @FMA@(previous, b, c))) return 45;
+    Scalar values[] = {a, b, c}, sum = c;
+    for (int i = 0; i < 3; ++i) {
+        volatile Scalar rounded = values[i] * b;
+        sum = HOST_FUSES ? @FMA@(values[i], b, sum) : sum + rounded;
+    }
+    if (!same(@W@_accumulate(values, 3, b, c), sum)) return 46;
+    observed = 7.0;
+    if (!same(@W@_carried(a, b, c, 0, &observed), a)) return 47;
+    if (observed != 7.0) return 48;
+    if (!same(@W@_accumulate(values, 0, b, c), c)) return 49;
     return 0;
 }
 int check_@W@(void) {
@@ -135,7 +218,7 @@ int check_@W@(void) {
             fprintf(stderr, "@W@ edge %u/%u/%u failed check %d\n", a, b, c, status);
             return status;
         }
-        checks += 14;
+        checks += 24;
     }
     uint64_t state = UINT64_C(0x384028ccab71e107);
     for (unsigned n = 0; n < 4096; ++n) {
@@ -150,7 +233,7 @@ int check_@W@(void) {
             fprintf(stderr, "@W@ random %u failed check %d\n", n, status);
             return status;
         }
-        checks += 14;
+        checks += 24;
     }
     printf("@W@ contraction: %u checks passed\n", checks);
     return 0;
@@ -180,6 +263,9 @@ def main():
                         body = body.split("/* end function")[0]
                         fused = bool(re.search(r"\bf(?:madd|msub|nmsub)\b", body))
                         assert fused == (target.startswith("arm64") and not prefix), (target, symbol)
+                body = re.split(rf"(?m)^_?{width}_accumulate:\s*$", result.stdout)[1]
+                body = body.split("/* end function")[0]
+                assert bool(re.search(r"\bfmadd\b", body)) == target.startswith("arm64"), (target, width)
         machine = platform.machine()
         arm64 = machine in ("arm64", "aarch64")
         if arm64:
@@ -213,7 +299,7 @@ def main():
     if args.baseline:
         result = subprocess.run([str(args.baseline.resolve())], input=source, text=True, capture_output=True)
         assert result.returncode != 0 and "mulc" in result.stderr, "previous backend accepted the new opcode"
-    print("QBE Float contraction, strict multiplication, reuse, calls and branches passed on six emission targets")
+    print("QBE Float contraction, strict multiplication, reuse, calls, returns, successors and loop-carried products passed on six emission targets")
 
 
 if __name__ == "__main__":

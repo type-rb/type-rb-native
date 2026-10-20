@@ -39,25 +39,43 @@
  	{ Odiv,    Ki, "sdiv %=, %0, %1" },
  	{ Odiv,    Ka, "fdiv %=, %0, %1" },
  	{ Oudiv,   Ki, "udiv %=, %0, %1" },
-@@ -564,6 +565,55 @@
+@@ -564,6 +565,79 @@
  
  */
  
++/* Recompute physical liveness after allocation inserted copies and spill slots.
++ * Functions without permitted Float multiplication need no extra analysis.
++ */
++static void
++contractlive(Fn *fn)
++{
++	Blk *b;
++	Ins *i;
++
++	for (b=fn->start; b; b=b->link)
++		for (i=b->ins; i!=&b->ins[b->nins]; i++)
++			if (i->op == Omulc) {
++				filllive(fn);
++				return;
++			}
++}
++
 +/* Contract only an explicitly permitted multiply and its adjacent consumer.
-+ * No operand can change between them. The rounded product must either be
-+ * overwritten by that consumer or killed before its next use in this block.
-+ * Calls and block exits stop the proof, including implicit ABI register uses.
++ * No operand can change between them. The rounded product must be overwritten
++ * before reuse, or dead at the block exit. Calls stop the local proof; successor
++ * liveness and ABI return registers preserve observations at block boundaries.
 + * Keeping this after register allocation avoids a third generic IR operand.
 + */
 +static int
-+emitcontract(Ins *mul, Ins *end, E *e)
++emitcontract(Ins *mul, Blk *b, E *e)
 +{
-+	Ins *add, *next;
++	Ins *add, *next, *end;
 +	Ref other;
 +	char *op;
 +	char reg;
-+	int product;
++	int product, nr[2];
 +
++	end = &b->ins[b->nins];
 +	if (mul->op != Omulc || mul + 1 == end)
 +		return 0;
 +	add = mul + 1;
@@ -78,8 +96,14 @@
 +			if (req(next->to, mul->to))
 +				break;
 +		}
-+		if (next == end)
-+			return 0;
++		if (next == end) {
++			if (bshas(b->out, mul->to.val) || req(b->jmp.arg, mul->to))
++				return 0;
++			/* Return values are implicit uses, separate from successors. */
++			if (rtype(b->jmp.arg) == RCall
++			&& (T.retregs(b->jmp.arg, nr) & BIT(mul->to.val)))
++				return 0;
++		}
 +	}
 +	op = "fmadd";
 +	if (add->op == Osub)
@@ -95,12 +119,17 @@
  void
  arm64_emitfn(Fn *fn, FILE *out)
  {
-@@ -633,7 +683,10 @@
+@@ -629,11 +703,15 @@
+ 			emitins(i, e);
+ 		}
+ 
++	contractlive(fn);
+ 	for (lbl=0, b=e->fn->start; b; b=b->link) {
  		if (lbl || b->npred > 1)
  			fprintf(e->f, "%s%d:\n", T.asloc, id0+b->id);
  		for (i=b->ins; i!=&b->ins[b->nins]; i++)
 -			emitins(i, e);
-+			if (emitcontract(i, &b->ins[b->nins], e))
++			if (emitcontract(i, b, e))
 +				i++;
 +			else
 +				emitins(i, e);
@@ -138,3 +167,16 @@
  	{ Oand,    Ki, "and %=, %0, %1" },
  	{ Oor,     Ki, "or %=, %0, %1" },
  	{ Oxor,    Ki, "xor %=, %0, %1" },
+--- a/live.c
++++ b/live.c
+@@ -99,7 +99,9 @@
+ 					nlv[k] += m[k];
+ 				}
+ 			}
+-			if (!req(i->to, R)) {
++			/* Allocated copies can write a stack slot rather than a
++			 * temporary. Such writes do not kill a register value. */
++			if (!req(i->to, R) && rtype(i->to) != RSlot) {
+ 				assert(rtype(i->to) == RTmp);
+ 				t = i->to.val;
+ 				if (bshas(b->in, t))

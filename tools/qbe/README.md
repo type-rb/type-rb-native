@@ -75,8 +75,11 @@ Unlike the ARM64 selector patches alone, this patch can change AMD64 emission.
 whose use in addition or subtraction may be contracted to one rounding.
 Plain `mul` retains separate rounding. On ARM64, a late emission check combines
 an adjacent `mulc` and `add`/`sub` only when the product register is overwritten
-by the consumer or provably overwritten before any further read in that block.
-Calls and block exits stop that proof. Other targets and unproved pairs emit
+by the consumer, overwritten before any further read in that block, or dead
+at its exit. Functions containing `mulc` reuse QBE's liveness analysis after
+allocation, including inserted copies and stack-slot writes, to check successor
+uses. ABI return registers remain implicit uses, and calls stop the local proof.
+Other targets and unproved pairs emit
 ordinary multiplication. The patch does not add a third operand to generic QBE
 instructions, alter register allocation, reassociate expressions, or assume
 finite values. Independently observed products retain their rounded value.
@@ -85,7 +88,8 @@ already widened from Integer. Checked Integer multiplication is unchanged.
 Run `python3 tools/qbe_fma_test.py --qbe /path/to/qbe` for both scalar widths,
 six-target emission, a libm `fma` oracle, strict multiplication, signed zero,
 subnormals, nonfinite values, random bit patterns, product reuse, calls and
-branches. `--baseline /path/to/previous/qbe` verifies rejection of the new IL.
+branches, successor observations and loop-carried products.
+`--baseline /path/to/previous/qbe` verifies rejection of the new IL.
 
 Maintenance is five pinned patches, one acquisition helper and target/edge tests.
 A QBE upgrade must rebase the patches, run upstream tests, run these controls on
