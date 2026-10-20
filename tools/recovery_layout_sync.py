@@ -121,11 +121,18 @@ def default_mutation(name: str, source: str) -> list[str] | None:
     # Optimization-only modules can contain no strings or records. A unique
     # integer comparison bound is still a typed, observable source mutation.
     # Consume strings/comments first and retain the operator in the needle.
-    for match in re.finditer(STRING + r"|#[^\n]*|(?:>=|<=|>|<) [0-9]+\b", body):
+    for match in re.finditer(STRING + r"|#[^\n]*|(?:>=|<=|==|!=|>|<) [0-9]+\b", body):
         needle = match.group(0)
-        bound = re.fullmatch(r"(>=|<=|>|<) ([0-9]+)", needle)
+        bound = re.fullmatch(r"(>=|<=|==|!=|>|<) ([0-9]+)", needle)
         if bound and int(bound[2]) < 9007199254740991 and source.count(needle) == 1:
             return [name, needle, f"{bound[1]} {int(bound[2]) + 1}"]
+    # Named Integer literals need neither strings nor comparisons. Include the
+    # line ending so a shorter value cannot also match a longer/Float return.
+    for match in re.finditer(STRING + r"|#[^\n]*|\breturn [0-9]+\n", body):
+        needle = match.group(0)
+        literal = re.fullmatch(r"return ([0-9]+)\n", needle)
+        if literal and int(literal[1]) < 9007199254740991 and source.count(needle) == 1:
+            return [name, needle, f"return {int(literal[1]) + 1}\n"]
     return None
 
 

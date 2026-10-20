@@ -14,6 +14,19 @@ FRONTEND = (
 
 
 class RecoveryInventorySyncTest(unittest.TestCase):
+    def test_default_mutation_covers_unique_integer_equality(self):
+        source = 'def eligible(kind: Integer): Boolean\nreturn kind != 2\nend\n'
+        self.assertEqual(default_mutation("eligible", source),
+                         ["eligible", "!= 2", "!= 3"])
+
+    def test_default_mutation_covers_literal_return_modules(self):
+        source = 'def none(): Integer\nreturn 0\nend\ndef failure(): Integer\nreturn 8\nend\n'
+        self.assertEqual(default_mutation("effects", source),
+                         ["effects", "return 0\n", "return 1\n"])
+        for body in ('# return 0\n', 'return 0.5\n', 'return -1\n',
+                     'return 9007199254740991\n', 'return 0\nreturn 0\n'):
+            self.assertIsNone(default_mutation("no_candidate", body))
+
     def test_default_mutation_uses_unique_numeric_bound_outside_strings_and_comments(self):
         source = '# bound > 2\ndef small(count: Integer): Boolean\nreturn count <= 24\nend\n'
         self.assertEqual(default_mutation("small", source), ["small", "<= 24", "<= 25"])

@@ -18,6 +18,7 @@ The directory responsibility map and enforced dependency rules are in
 | `compiler/src/support/storage.trb` | Integer and String storage share their direct chunk arrays across record aliases. Explicit storage copies clone every populated chunk and own their limits and high-water cells; sparse holes stay unallocated. Scalar cells retain alias-visible updates under readonly record fields and the recovery subset. |
 | `compiler/src/project/package_json.trb`, `compiler/src/project/package_checksum.trb`, `compiler/src/project/package_manifest.trb`, `compiler/src/project/packages.trb` | Strict package JSON, portable SHA-256 and manifest defaults, dependency-scoped package identities and deterministic lock serialization. The compiler source loader owns filesystem reads; the CLI publishes locks atomically. Package metadata is separate from checked language declarations. |
 | `compiler/src/backend/qbe/output.trb` | QBE output appends to zero-origin String storage. Its used-line boundary is the single shared length for emission, concatenation and chunking; output aliases see every append. Appending one output to another preserves independent subsequent appends. |
+| `compiler/src/mir/model/effects.trb`, `compiler/src/mir/analysis/call_effects.trb` | Named allocation, mutation, I/O and failure bits and their supported combinations have one encoding owner. Instruction classification and the distinct none/failure/conservative call-summary lattice consume those names. Numeric maximum is a join only for those three summary classes, not for arbitrary effect masks. |
 | `compiler/src/state/nominal_state.trb` | `CompilerNominalTypes` owns authored class, newtype and enum declarations alongside concrete class instances and receiver lookup. Template checks share authored declarations while copying concrete object and enum catalogs and mutable receiver bindings. |
 | `compiler/src/state/global_state.trb`, `compiler/src/state/callable_state.trb` | Global declarations, inferred bindings, lambda syntax and checked callable bodies have separate state owners. Template forks share authored syntax and ordering, while each fork owns inferred global types, function bindings, callable progress and checked bodies. |
 | `compiler/src/frontend/syntax/parser.trb`, `compiler/src/frontend/syntax/body_syntax.trb`, `compiler/src/frontend/syntax/declaration_syntax.trb`, `compiler/src/frontend/syntax/syntax_forms.trb` | Module/declaration routing, recursive expression/statement parsing, callable/record/default declarations, and shared token forms have distinct owners. Checking and REPL adapters import shared forms directly; there are no forwarding parser aliases. |
@@ -92,6 +93,15 @@ Keep source moves and their recovery derivation, imports, tests and operational
 consumers together. Useful shared code remains one implementation. Complete
 cohesive ownership changes without requiring another performance qualification
 for each helper extraction. Required correctness and reproducibility remain blocking.
+
+Semantic names must preserve their meaning across producers, validators and
+consumers. Effect names are parameterless Integer-literal-return functions so
+ordinary compilation and the recovery subset share one representation.
+`mir/passes/literal_calls.trb` replaces eligible verified direct calls with the
+literal while preserving the caller's value identity and origin; it does not
+recognize names or expand general helper bodies. Representation changes still
+need generated-code and compiler-cost checks. Ordinary numeric data, layout
+encodings and algorithm constants need no cosmetic wrapper.
 
 ## Current source and historical consumers
 
