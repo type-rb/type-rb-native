@@ -3,6 +3,61 @@ import { mir_op_array_position, mir_op_array_store, mir_op_callable_new, mir_op_
 import { integer_string } from support/literals
 import { MirBlock, MirCall, MirFunction, MirInstruction, MirModule } from mir/model/module
 import { mir_block } from mir/build/blocks
+import { mir_live_add, mir_live_before, mir_managed_contains } from mir/analysis/liveness
+
+# Values leaving a rewritten region must travel through its exit arguments.
+# Direct references from outside would need additional SSA merge parameters.
+def mir_rewrite_confined_values(native_module: MirModule, function: MirFunction, members: Array<Integer>): Array<Integer>
+	mut values: Array<Integer> := []
+	members.each do |member|
+		block := native_module.blocks[function.block_start + member]
+		mut index := block.parameter_start
+		while index < block.parameter_start + block.parameter_count
+			mir_live_add(values, native_module.arguments[index])
+			index += 1
+		end
+		index = block.instruction_start
+		while index < block.instruction_start + block.instruction_count
+			value := native_module.instructions[index].result
+			if value >= 0
+				mir_live_add(values, value)
+			end
+			index += 1
+		end
+	end
+	mut member := 0
+	while member < function.block_count
+		if !mir_managed_contains(members, member)
+			block := native_module.blocks[function.block_start + member]
+			if mir_managed_contains(values, block.condition) || mir_managed_contains(values, block.return_value)
+				return []
+			end
+			mut index := block.instruction_start
+			while index < block.instruction_start + block.instruction_count
+				if mir_live_before(native_module, values, native_module.instructions[index], []).size() > 0
+					return []
+				end
+				index += 1
+			end
+			index = block.first_argument_start
+			while index < block.first_argument_start + block.first_argument_count
+				if mir_managed_contains(values, native_module.arguments[index])
+					return []
+				end
+				index += 1
+			end
+			index = block.second_argument_start
+			while index < block.second_argument_start + block.second_argument_count
+				if mir_managed_contains(values, native_module.arguments[index])
+					return []
+				end
+				index += 1
+			end
+		end
+		member += 1
+	end
+	return values
+end
 
 def mir_rewrite_value(mapping: Hash<String, Integer>, value: Integer): Integer
 	if value >= 0 && mapping.key?(integer_string(value))
