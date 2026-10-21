@@ -74,6 +74,7 @@ export const catalog = {
         capability('Filesystem, paths, and temporary files', 'partial', ['parity', 'production', 'ecosystem'], 'Compiler-owned scoped filesystem operations exist; a general-purpose API remains incomplete.'),
         capability('Cryptography, secure random, and compression', 'open', ['production', 'ecosystem'], 'Expose safe adapters for common cryptographic and compression operations.'),
         capability('HTTP client and WebSocket', 'open', ['production', 'ecosystem'], 'Support TLS, timeout, streaming, cancellation, and connection reuse.'),
+        capability('Portable HTTP bodies, headers, and methods', 'partial', ['parity', 'production', 'ecosystem'], 'Pinned trb/http values cover raw byte bodies, ordered case-insensitive headers, typed lookup failures, immutable snapshots and method spelling through ordinary compilation and retained REPL values. Networking, streaming and Web providers remain incomplete.', ['Portable package coverage', 'docs/native-language-coverage.md']),
         capability('URL components and query parameters', 'verified', ['parity', 'ecosystem'], 'Pinned URL component encoding/decoding, structured errors and ordered duplicate query parameters use ordinary TypeRB and retained REPL paths.', ['URL import coverage', 'docs/type-rb-compatibility.md']),
       ],
     },

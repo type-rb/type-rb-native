@@ -5,14 +5,14 @@ import { repl_initialize_globals, repl_link_globals } from repl/globals
 import { repl_binding_witnesses, repl_refine_pending_collections, repl_refines_nullable_collection, repl_loaded_bindings, repl_projected_globals, repl_lines, repl_is_declaration } from repl/projection
 import { skip_newlines } from frontend/syntax/syntax_tokens
 import { repl_checked, repl_checked_input } from repl/check
-import { ReplProject, repl_project, repl_type_name } from repl/project
+import { ReplProject, repl_project, repl_type_name, repl_projected_types } from repl/project
 import { cli_diagnostic } from diagnostics
 import { ReplCandidates, repl_editor_read, repl_editor_paint } from repl/editor
 import { repl_incomplete, repl_escape } from repl/syntax
 import { repl_history_load, repl_history_save } from repl/history
 import { CompilerState, has_diagnostic } from state/state
 import { find_enum_type } from frontend/types/enum_types
-import { CheckedFlowFact, CheckedPresentation } from state/source_state
+import { CheckedFlowFact, CheckedPresentation, ProjectedType } from state/source_state
 import { sparse_integer_at, sparse_string_at, load_integer, load_string } from support/storage
 import { find_function_in_module } from frontend/resolution/declaration_lookup
 import { find_record_type } from frontend/resolution/type_resolution
@@ -210,6 +210,10 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 	else
 		authored = replay_inputs
 	end
+	mut projected_types: Array<ProjectedType> := []
+	if session.store.active_program[0] >= 0
+		projected_types = repl_projected_types(session.store.programs[session.store.active_program[0]])
+	end
 	declarations := repl_is_declaration(input)
 	if declarations
 		mut inputs: Array<String> := []
@@ -217,7 +221,7 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 			inputs.push(submission)
 		end
 		inputs.push(input)
-		if !repl_validate_inputs(session.project, inputs, session.resets, session.text[2])
+		if !repl_validate_inputs(session.project, inputs, session.resets, session.text[2], projected_types)
 			return false
 		end
 	end
@@ -252,7 +256,7 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 		end
 		retained += 1
 	end
-	mut state := repl_checked_input(source, session.project, start_line, finish_line, session.facts[0], [], captured, projected_start, start_line, authored, session.submissions.size() + 1, presentations)
+	mut state := repl_checked_input(source, session.project, start_line, finish_line, session.facts[0], [], captured, projected_start, start_line, authored, session.submissions.size() + 1, presentations, projected_types)
 	if has_diagnostic(state)
 		mut offset := repl_lines(prefix)
 		if declarations
@@ -264,7 +268,7 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 	if !declarations && repl_refines_nullable_collection(state, session.store, session.environment)
 		# A newly inferred optional declaration also governs earlier authored
 		# reads. Validate history before publishing the type or running effects.
-		if !repl_validate_inputs(session.project, authored, session.resets, session.text[2])
+		if !repl_validate_inputs(session.project, authored, session.resets, session.text[2], projected_types)
 			return false
 		end
 	end
@@ -489,7 +493,11 @@ def repl_complete(session: ReplSession): ReplCandidates
 		repl_candidate(candidates, types[keyword], types[keyword], "built-in type", repl_style_type())
 		keyword += 1
 	end
-	state := repl_checked_input(session.text[0] + session.text[2] + "def main()\n" + session.text[1] + "return\nend\n", session.project, -1, -1, [], [], [], repl_lines(session.text[0]) + 1, repl_lines(session.text[0] + session.text[2] + "def main()\n" + session.text[1]) + 1, session.submissions)
+	mut projected_types: Array<ProjectedType> := []
+	if session.store.active_program[0] >= 0
+		projected_types = repl_projected_types(session.store.programs[session.store.active_program[0]])
+	end
+	state := repl_checked_input(session.text[0] + session.text[2] + "def main()\n" + session.text[1] + "return\nend\n", session.project, -1, -1, [], [], [], repl_lines(session.text[0]) + 1, repl_lines(session.text[0] + session.text[2] + "def main()\n" + session.text[1]) + 1, session.submissions, 0, [], projected_types)
 
 	mut index := 0
 	while index < session.environment.count[0]
@@ -559,7 +567,7 @@ end
 
 # Check retained authored uses before accepting a declaration that may hide an
 # automatic binding. Validation never replays already executed side effects.
-def repl_validate_inputs(project: ReplProject, inputs: Array<String>, resets: Array<Integer>, bindings: String = ""): Boolean
+def repl_validate_inputs(project: ReplProject, inputs: Array<String>, resets: Array<Integer>, bindings: String = "", projected_types: Array<ProjectedType> = []): Boolean
 	mut declarations := project.imports
 	mut body := ""
 	mut index := 0
@@ -585,7 +593,7 @@ def repl_validate_inputs(project: ReplProject, inputs: Array<String>, resets: Ar
 		end
 		index += 1
 	end
-	checked := repl_checked_input(declarations + "def main()\n" + body + "return\nend\n", project, repl_lines(declarations) + 2, body_line, [], reset_lines, [], projection_start, repl_lines(declarations) + 1, inputs)
+	checked := repl_checked_input(declarations + "def main()\n" + body + "return\nend\n", project, repl_lines(declarations) + 2, body_line, [], reset_lines, [], projection_start, repl_lines(declarations) + 1, inputs, 0, [], projected_types)
 	if has_diagnostic(checked)
 		mut offset := repl_lines(project.imports)
 		mut body_offset := repl_lines(declarations) + 1
@@ -637,8 +645,12 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 		index += 1
 	end
 	# Check the complete replacement before replaying any observable effects.
+	mut projected_types: Array<ProjectedType> := []
+	if session.store.active_program[0] >= 0
+		projected_types = repl_projected_types(session.store.programs[session.store.active_program[0]])
+	end
 	mut projected := session.text[2] + repl_loaded_bindings(additional)
-	if !repl_validate_inputs(project, inputs, session.resets, projected)
+	if !repl_validate_inputs(project, inputs, session.resets, projected, projected_types)
 		return ReplReplay.new(session: session, success: false)
 	end
 	mut declarations := project.imports
@@ -648,7 +660,7 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 		end
 	end
 	replayed.text[0] = declarations
-	mut initial := repl_checked_input(declarations + projected + "def main()\nreturn\nend\n", project, -1, -1, [], [], [], repl_lines(declarations) + 1, repl_lines(declarations + projected) + 1, inputs)
+	mut initial := repl_checked_input(declarations + projected + "def main()\nreturn\nend\n", project, -1, -1, [], [], [], repl_lines(declarations) + 1, repl_lines(declarations + projected) + 1, inputs, 0, [], projected_types)
 	if has_diagnostic(initial)
 		repl_diagnostic(initial, 0)
 		return ReplReplay.new(session: session, success: false)

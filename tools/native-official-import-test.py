@@ -89,6 +89,58 @@ with tempfile.TemporaryDirectory(prefix='native-official-import-') as temporary:
     internal = run([binary, 'repl'], data='import trb/internal/runtime\n:quit\n')
     assert internal.stderr, internal
 
+    # Values returned by another module retain their owner even when the REPL
+    # has no import for their type, or a later declaration reuses its name.
+    retained_project = root / 'retained'
+    (retained_project / 'src').mkdir(parents=True)
+    retained_config = retained_project / 'trbconfig.jsonc'
+    retained_config.write_text(json.dumps({'name': 'retained', 'mode': 'go',
+        'sourceDir': 'src', 'go': {'module': 'example.com/retained'}}))
+    (retained_project / 'src/producer.trb').write_text('''import { Body, Header, Headers } from trb/http
+def make_headers(): Headers
+puts("headers factory")
+return Headers.new([Header.new(name: "X-Id", value: "kept")])
+end
+def make_entries(): Array<Header>
+return [Header.new(name: "X-Entry", value: "entry")]
+end
+def make_reader(): () -> Body
+puts("reader factory")
+body := Body.new("body".to_bytes())
+return fn(): Body
+return body
+end
+end
+''')
+    retained_input = '''headers := make_headers()
+entries := make_entries()
+read := make_reader()
+:type headers
+class Headers
+def size(): Integer
+return 99
+end
+end
+record Header
+number: Integer
+end
+puts(headers.first("x-id"))
+puts(entries[0].value)
+puts(read().to_s())
+puts(Headers.new().size())
+:reload
+puts(headers.first("x-id"))
+puts(entries[0].value)
+puts(read().to_s())
+:quit
+'''
+    retained = run([binary, 'repl', '--config', retained_config], data=retained_input)
+    assert not retained.stderr, retained
+    assert retained.stdout.count('headers factory\n') == 2, retained
+    assert retained.stdout.count('reader factory\n') == 2, retained
+    assert '\nHeaders\n' in retained.stdout, retained
+    assert retained.stdout.endswith('kept\nentry\nbody\n99\nreloaded\nkept\nentry\nbody\n'), retained
+
     if reference:
         main.write_text(source)
         run([reference, 'check', main])
@@ -96,5 +148,7 @@ with tempfile.TemporaryDirectory(prefix='native-official-import-') as temporary:
         assert run([program]).stdout == expected
         observed = run([reference, 'repl'], data=declarations + 'probe()\nprobe()\n:quit\n')
         assert not observed.stderr and observed.stdout == expected * 2, observed
+        observed = run([reference, 'repl', '--config', retained_config], data=retained_input)
+        assert not observed.stderr and observed.stdout == retained.stdout, observed
 
 print('PASS exact bundled HTTP imports, canonical identity, file/project/REPL and rejected boundaries')
