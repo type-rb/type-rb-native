@@ -34,6 +34,23 @@ digests. The upstream identity is verified against the retained seed provenance;
 the current patch identity is verified against `tools/qbe/backend.json` and the
 patch bytes. Historical seed manifests and schemas remain unchanged.
 
+## v0.5.0 transition boundary
+
+The accepted [canonical transition contract](https://github.com/type-rb/type-rb/blob/main/docs/native-transition.md) replaces independent
+release numbering prospectively when the Native implementation moves into
+`type-rb` at v0.5.0. That release and the retained `type-rb-go` release share the
+version and reviewed shared feature contract. Go emits the three source
+languages only; Native additionally emits Native executables. Record exact
+implementation, source, artifact and contract identities separately.
+
+The independent identities and bump rules in this document govern current
+pre-cutover development. They are not a permanent exception to the v0.5.0
+contract. Do not copy a version number or change a compatibility pin now;
+update the release metadata and validation through the qualified migration
+work. Preserve all old tags, manifests, seed assets and measurements without
+renaming or reclassification. Decision 0020 remains the historical authority
+for those identities; the transition contract owns the future switch.
+
 ## Independent identities
 
 The Native version identifies the compiler implementation, CLI,

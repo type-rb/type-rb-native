@@ -27,6 +27,18 @@ managed independently from TypeRB versions; the strict
 TypeRB version and revision backed by current evidence. See
 [Native versioning and compatibility](docs/versioning.md).
 
+## v0.5.0 destination
+
+The accepted [implementation transition](https://github.com/type-rb/type-rb/blob/main/docs/native-transition.md) makes the Native compiler the
+canonical implementation in `type-rb` at v0.5.0, after complete coverage of the
+reviewed Go implementation contract. Both implementations emit Go, Ruby and
+TypeScript; only Native additionally emits Native executables. Preserve the
+Go implementation as `type-rb-go` with matching release versions. After the
+verified source/history, distribution and support handoff, archive this
+repository. The current development identity and exact pins remain in force
+until cutover. [Initiative #1164](https://github.com/type-rb/type-rb-native/issues/1164)
+tracks the release outcome; existing coverage and quality gaps remain open.
+
 ## Try the native executable
 
 On Darwin arm64 or Linux arm64, `./trbn` builds the native executable when

@@ -7,6 +7,14 @@ execution, and Native output. Follow `docs/mir-consolidation.md` for the current
 milestone and measured Pure Go goals. Describe incomplete coverage and unstable
 interfaces as current gaps, not permanent exclusions from that objective.
 
+For release scope and feature selection, also follow the accepted
+[v0.5.0 transition contract](https://github.com/type-rb/type-rb/blob/main/docs/native-transition.md). Full Go implementation parity is a release
+gate, including source backends, packages and tooling. The retained Go compiler
+has no Native output requirement. Practical application slices remain a
+priority within that full scope. Current exact pins, historical identities,
+quality gates and initiative ownership stay in force until their documented
+transition; no planning task authorizes an early archive or release.
+
 ## Scope and completion
 
 Carry the user's requested task through its stated completion point. Use existing

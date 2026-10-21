@@ -4,6 +4,18 @@ Status: active development direction under [issue #439](https://github.com/type-
 This policy supersedes per-slice cost acceptance during the migration phase;
 historical decisions and measurements retain their original meanings.
 
+## Release destination
+
+The accepted [v0.5.0 transition contract](https://github.com/type-rb/type-rb/blob/main/docs/native-transition.md) makes this implementation the
+canonical compiler in `type-rb` only after it covers the complete reviewed Go
+feature contract. The Go implementation moves to `type-rb-go`, retaining three
+source backends and matching release versions; Native adds executable output.
+[Initiative #1164](https://github.com/type-rb/type-rb-native/issues/1164) joins the
+language, package, CLI, source-backend and migration evidence. It does not
+change this milestone's criteria or establish current support. Prioritize
+usable application paths and previews within the complete release scope.
+Archive this repository only after verified migration and release handoff.
+
 ## Long-term objective and current scope
 
 The long-term goal is a TypeRB-authored compiler/toolchain covering the reference
