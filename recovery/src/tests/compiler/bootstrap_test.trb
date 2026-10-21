@@ -1968,6 +1968,28 @@ def _recovery_verify_file_root_modules(
 		try _recovery_require_no_intermediates(cycle)
 	end
 
+	standard_json := workspace + "/file-driver-file-root-standard-json"
+	try _recovery_reset_directory(standard_json)
+	try _recovery_write_source(
+		standard_json + "/main.trb",
+		"import trb/std/json\nimport trb/std/result\n" +
+		"def roundtrip(): Result<String, JSON::Error>\n" +
+		"value := try JSON.parse(\"{\\\"ok\\\":[1,true]}\")\n" +
+		"return JSON.stringify(value)\nend\n" +
+		"def main()\ncase roundtrip()\nwhen Result::Ok(text)\nputs(text)\n" +
+		"when Result::Err(error)\nputs(error.message)\nend\nend\n",
+	)
+	executables.each.with_index do |executable, generation|
+		try _recovery_verify_built_program(
+			executable,
+			standard_json + "/main.trb",
+			standard_json + "/program-" + generation.to_s(),
+			qbe,
+			"{\"ok\":[1,true]}\n",
+			"standard JSON compiler " + generation.to_s(),
+		)
+	end
+
 	failure_names := [
 		"missing-module",
 		"escaping-path",
@@ -1984,6 +2006,7 @@ def _recovery_verify_file_root_modules(
 		"invalid-entry-main",
 		"package-import",
 		"package-root-import",
+		"unused-standard-json",
 		"capability-activation",
 	]
 	failure_entries := [
@@ -2001,6 +2024,7 @@ def _recovery_verify_file_root_modules(
 		"import { helper } from lib\n\ndef run()\n\tputs(helper())\n\treturn\nend\n",
 		"def main(value: Integer)\n\treturn\nend\n",
 		"import { value } from trb/std/value\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
+		"import trb/std/unknown\n\ndef main()\n\treturn\nend\n",
 		"import trb/std/json\n\ndef main()\n\treturn\nend\n",
 		"activate trb/platform/ruby/native\n\ndef main()\n\treturn\nend\n",
 	]
@@ -2017,6 +2041,7 @@ def _recovery_verify_file_root_modules(
 		"record LIB\n\tvalue: Integer\nend\n\nrecord Lib\n\tvalue: Integer\nend\n",
 		"def lib(): String\n\treturn \"function\"\nend\n",
 		"def helper(): String\n\treturn \"helper\"\nend\n\ndef main()\n\treturn\nend\n",
+		"",
 		"",
 		"",
 		"",
@@ -2038,6 +2063,7 @@ def _recovery_verify_file_root_modules(
 		"main must take no parameters",
 		"package imports are not supported by this compiler subset",
 		"package imports are not supported by this compiler subset",
+		"unused import JSON",
 		"unsupported top-level declaration activate",
 	]
 	mut failure_index := 0
