@@ -86,7 +86,9 @@ outward-facing text before publication.
   parent initiative. Main failures take priority over feature merges; follow
   the workflow's completion and reopening rules. Its authority table lists what
   needs a maintainer decision. A direct request keeps its own scope and
-  completion point.
+  completion point. Apply its flow checkpoints at work start, waiting/handoff,
+  merge and completion boundaries so that task acceptance, owners and next
+  actions remain aligned with the delivered work.
 - For language coverage, follow `docs/native-language-coverage.md`: pair basic
   syntax with MIR checks and verified compiler self-use. Extend the shared
   reference/Native case contract and regenerate the Capabilities detail view

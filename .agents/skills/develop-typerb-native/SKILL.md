@@ -26,7 +26,7 @@ All `docs/` and configuration paths below are relative to the repository root.
 | Changed surface | Read when needed |
 | --- | --- |
 | Feature selection or coverage claims | `docs/native-language-coverage.md`; preserve ordinary check/build/execution/REPL versus recovery distinctions. |
-| Work selected from the project board | `docs/project-workflow.md` for eligibility, claims, WIP, task closure and initiative completion. |
+| Work selected from the project board, waiting work or completion reconciliation | `docs/project-workflow.md` for eligibility, claims, WIP and flow checkpoints connecting PR evidence, next actions and initiative completion. |
 | Compiler, MIR, runtime, driver, or target implementation | [Compiler constraints](references/compiler.md) and the decisions for the affected boundary. |
 | Ordinary compiler source, recovery, self-hosting, or seed handoff | [Bootstrap and recovery](references/bootstrap.md), including recovery-enabled suites for compiler-source changes. |
 | Source decomposition, names, or removal | `docs/repository-organization.md` and the affected consumer inventory; applicable recovery and cost checks still apply. |
@@ -118,6 +118,11 @@ reference above: successful optional tests without the recovery/QBE environment
 do not establish recovery coverage.
 
 ## Finish within the requested scope
+
+At a waiting, handoff or completion boundary, apply the affected work's
+`docs/project-workflow.md` flow checkpoint. Reconcile batch-PR acceptance and
+open children before declaring an initiative complete; keep unresolved work
+actionable without repeating unchanged reports or reopening closed experiments.
 
 Report the implemented subset, meaningful validation, relevant measurements,
 and remaining limitations. Fix routine issues within the authorized task

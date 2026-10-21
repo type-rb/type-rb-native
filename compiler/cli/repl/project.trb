@@ -1,12 +1,13 @@
+import { ProjectedType } from state/source_state
 import { import_kind_module, import_kind_named } from state/import_kinds
 import { standard_source_result, standard_source_unit, standard_source_url } from state/standard_source_kinds
-import { find_object_type } from frontend/types/object_types
+import { find_object_type, object_instance_type } from frontend/types/object_types
 import { literal_type_base, literal_type_display } from frontend/types/literal_types
-import { find_newtype_type } from frontend/types/newtype_types
+import { find_newtype_type, newtype_type } from frontend/types/newtype_types
 import { union_parts } from frontend/types/union_types
 import { namespace_parent } from frontend/types/namespace_model
 import { callable_parts } from frontend/types/callable_types
-import { generic_application } from frontend/types/generic_arguments
+import { generic_application, generic_arguments, generic_base } from frontend/types/generic_arguments
 import { standard_source_kind } from project/standard_library
 import { nullable_element } from frontend/types/nullable_types
 import { hash_key_type, hash_value_type } from frontend/types/hash_types
@@ -16,9 +17,9 @@ import { native_cli_cwd } from host
 import { parse_module } from frontend/syntax/parser
 import { path_directory, path_join } from support/path
 import { parse_project_config, project_config_support_error } from project/config
-import { find_enum_type } from frontend/types/enum_types
+import { enum_type, find_enum_type } from frontend/types/enum_types
 import { standard_package_root, standard_package_target } from frontend/resolution/import_resolution
-import { array_element_type, find_record_type, generic_instance_for_type } from frontend/resolution/type_resolution
+import { array_element_type, find_record_type, generic_instance_for_type, record_type } from frontend/resolution/type_resolution
 import { CompilerState, compiler_new, has_diagnostic } from state/state
 import { load_integer, load_string } from support/storage
 
@@ -237,8 +238,6 @@ def repl_project_source(source: String, prelude: String): String
 	return filtered + authored
 end
 
-# Reconstructed bindings need the visible alias, while values retain their
-# canonical record identity and render with the original declaration name.
 def repl_type_name(state: CompilerState, type_name: String): String
 	if type_name == "Array"
 		return "Array<Any>"
@@ -402,13 +401,20 @@ def repl_standard_imports(names: Array<String>): String
 	return result
 end
 
-# Reconstruction chooses a visible checked alias when its target contains a
-# declaration hidden by another local name. Display remains a separate contract.
+# Witness names carry only an opaque catalog key. Their declaration descriptors
+# rebind within the next checked catalog and only inside generated source spans.
+def repl_projection_name(type_name: String): String
+	return "__retained_" + type_name.split("#").join("_")
+end
+
 def repl_witness_type_name(state: CompilerState, type_name: String): String
 	return repl_witness_type_name_at(state, type_name, [])
 end
 
 def repl_witness_type_name_at(state: CompilerState, type_name: String, blocked: Array<Integer>): String
+	if find_object_type(state, type_name) >= 0 || find_record_type(state, type_name) >= 0 || find_enum_type(state, type_name) >= 0 || find_newtype_type(state, type_name) >= 0
+		return repl_projection_name(type_name)
+	end
 	mut index := 0
 	while index < state.type_resolution.alias_instances.size()
 		instance := state.type_resolution.alias_instances[index]
@@ -490,4 +496,85 @@ def repl_witness_type_name_at(state: CompilerState, type_name: String, blocked: 
 		return "Hash<" + repl_witness_type_name_at(state, hash_key_type(type_name), blocked) + "," + repl_witness_type_name_at(state, hash_value_type(type_name), blocked) + ">"
 	end
 	return repl_type_name(state, type_name)
+end
+
+# Metadata keeps the canonical structure of literals, unions and callables;
+# only nominal leaves are replaced by their ownership descriptor keys.
+def repl_descriptor_type_name(state: CompilerState, type_name: String): String
+	if find_object_type(state, type_name) >= 0 || find_record_type(state, type_name) >= 0 || find_enum_type(state, type_name) >= 0 || find_newtype_type(state, type_name) >= 0
+		return repl_projection_name(type_name)
+	end
+	optional := nullable_element(type_name)
+	if optional != ""
+		return repl_descriptor_type_name(state, optional) + "?"
+	end
+	parts := generic_arguments(type_name)
+	if parts.size() > 0
+		mut arguments: Array<String> := []
+		parts.each do |part|
+			arguments.push(repl_descriptor_type_name(state, part))
+		end
+		return generic_application(generic_base(type_name), arguments)
+	end
+	return type_name
+end
+
+def repl_projected_types(state: CompilerState): Array<ProjectedType>
+	mut bindings: Array<ProjectedType> := []
+	mut index := 0
+	while index < state.nominal.object_instances.size()
+		row := state.nominal.object_instances[index]
+		definition := state.nominal.objects[row.definition]
+		mut arguments: Array<String> := []
+		row.arguments.each do |argument|
+			arguments.push(repl_descriptor_type_name(state, argument))
+		end
+		bindings.push(ProjectedType.new(name: repl_projection_name(object_instance_type(state, index)), module_name: load_string(state.module_graph.module_names, definition.source_id), declaration: definition.name, arguments: arguments))
+		index += 1
+	end
+	index = 0
+	while index < state.declarations.record_count[0]
+		name := record_type(index)
+		instance := generic_instance_for_type(state, name)
+		mut owner := load_integer(state.declarations.record_modules, index)
+		mut declaration := load_string(state.declarations.record_names, index)
+		mut arguments: Array<String> := []
+		if instance >= 0
+			row := state.type_resolution.generic_instances[instance]
+			definition := state.type_resolution.generic_definitions[row.definition]
+			owner = definition.source_id
+			declaration = definition.name
+			row.arguments.each do |argument|
+				arguments.push(repl_descriptor_type_name(state, argument))
+			end
+		end
+		bindings.push(ProjectedType.new(name: repl_projection_name(name), module_name: load_string(state.module_graph.module_names, owner), declaration: declaration, arguments: arguments))
+		index += 1
+	end
+	index = 0
+	while index < state.nominal.enums.size()
+		name := enum_type(index)
+		instance := generic_instance_for_type(state, name)
+		mut owner := state.nominal.enums[index].source_id
+		mut declaration := state.nominal.enums[index].name
+		mut arguments: Array<String> := []
+		if instance >= 0
+			row := state.type_resolution.generic_instances[instance]
+			definition := state.type_resolution.generic_definitions[row.definition]
+			owner = definition.source_id
+			declaration = definition.name
+			row.arguments.each do |argument|
+				arguments.push(repl_descriptor_type_name(state, argument))
+			end
+		end
+		bindings.push(ProjectedType.new(name: repl_projection_name(name), module_name: load_string(state.module_graph.module_names, owner), declaration: declaration, arguments: arguments))
+		index += 1
+	end
+	index = 0
+	while index < state.nominal.newtypes.size()
+		definition := state.nominal.newtypes[index]
+		bindings.push(ProjectedType.new(name: repl_projection_name(newtype_type(index)), module_name: load_string(state.module_graph.module_names, definition.source_id), declaration: definition.name, arguments: []))
+		index += 1
+	end
+	return bindings
 end
