@@ -72,6 +72,10 @@ stored values into the next check without calling their constructors again.
 Class/interface input framing, project imports and explicit replay use the same
 ordinary declaration and checking contracts.
 
+The [typed Web context implementation](../native-web-context.md) adds independently
+verified immutable class-copy and instance-identity operations. They preserve
+the initialization and readonly-store restrictions described above.
+
 The shared ordinary check/build/execution/REPL registry includes positive and
 negative object cases plus qualified record, class and interface contracts.
 The ordinary CLI authority also exercises retained fields, heterogeneous interface

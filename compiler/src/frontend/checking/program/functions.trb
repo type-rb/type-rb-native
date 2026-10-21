@@ -1,3 +1,6 @@
+import { web_context_function } from frontend/providers/web_context
+import { web_context_primitive } from frontend/resolution/web_context_intrinsics
+import { lower_web_context_primitive } from mir/lowering/web_context
 import { standard_time_host } from frontend/resolution/time_intrinsics
 import { standard_runtime_fail } from frontend/resolution/standard_intrinsics
 import { web_binding_function } from frontend/providers/web_declarations
@@ -82,9 +85,16 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 end
 
 def check_function_body(mut state: CompilerState, function_index: Integer, mut locals: CheckedLocals): Boolean
-	if state.type_resolution.generic_template_mode[0] && (web_binding_function(state, function_index) > 0 || json_provider_function(state, function_index) > 0)
+	if state.type_resolution.generic_template_mode[0] && (web_context_function(state, function_index) > 0 || web_binding_function(state, function_index) > 0 || json_provider_function(state, function_index) > 0)
 		# The trusted provider validates its schema during speculative checking.
 		# Ordinary checking materializes and verifies its complete executable body.
+		return !has_diagnostic(state)
+	end
+	primitive := web_context_primitive(state, function_index)
+	if primitive > 0
+		if !state.type_resolution.generic_template_mode[0] && state.callables.lambda_phase[0] != checking_discovery()
+			lower_web_context_primitive(state, function_index, primitive, locals)
+		end
 		return !has_diagnostic(state)
 	end
 	if standard_runtime_fail(state, function_index) || standard_time_host(state, function_index) > 0
