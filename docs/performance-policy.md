@@ -101,6 +101,28 @@ continuous measurement, within an explicit runtime budget. Adding a benchmark
 does not automatically add it to daily or weekly CI. Inspect noisy alerts and
 profile reproducible regressions before adding another expensive check.
 
+### Publication is independent of measurement cadence
+
+The benchmark Pages application view lists every registered representative input,
+including unmeasured cases. It groups them by workload family and shows runtime,
+CPU, peak RSS and throughput against same-cohort controls. Each observation retains
+its date, compiler revisions, environment and evidence link. Missing measurements
+are unavailable, and related source changes mark the previous result as awaiting
+refresh. These results do not enter the existing daily workload score.
+
+The initial public matrix and later milestone or relevant-change refreshes use
+the manual, main-only `representative-performance.yml` workflow. It has no
+schedule and is independent of PR acceptance. The existing daily and weekly
+cadences are unchanged. Select future weekly cases only after reviewing actual
+runtime and regression-detection value within a stated budget.
+
+Pages composes retained results without compiling or measuring. It preserves the
+latest complete representative snapshot when a later attempt fails, displays that
+failure separately, and retains up to twelve complete compact snapshots. The
+published snapshot remains a fallback after the 90-day raw-artifact retention
+expires; its original date and evidence-expiry limit stay visible. Local diagnostics
+remain separate from hosted observations and are not automatically published.
+
 ## Maintenance loop
 
 For a reproducible practical slowdown, preserve the reproducer, find the costly

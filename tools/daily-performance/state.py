@@ -152,14 +152,17 @@ def gh(endpoint, binary=False):
     return result if binary else json.loads(result)
 
 
-def restore(destination):
+def restore(destination, *, workflow=None, artifact_name=None, validator=None):
+    workflow = workflow or WORKFLOW
+    artifact_name = artifact_name or ARTIFACT
+    validator = validator or validate
     repo = os.environ["GITHUB_REPOSITORY"]
     # A repository artifact name alone is not an authority: verify the producer.
-    artifacts = gh(f"repos/{repo}/actions/artifacts?name={ARTIFACT}&per_page=100")["artifacts"]
+    artifacts = gh(f"repos/{repo}/actions/artifacts?name={artifact_name}&per_page=100")["artifacts"]
     if not artifacts:
         write(destination, empty())
         return
-    workflow_id = gh(f"repos/{repo}/actions/workflows/{WORKFLOW}")["id"]
+    workflow_id = gh(f"repos/{repo}/actions/workflows/{workflow}")["id"]
     for artifact in sorted(artifacts, key=lambda item: item["id"], reverse=True):
         if artifact["expired"] or artifact["workflow_run"]["head_branch"] != "main":
             continue
@@ -176,7 +179,7 @@ def restore(destination):
         member = archive.getinfo("state.json")
         if member.file_size > 8_000_000:
             raise ValueError("Daily state expands beyond its limit")
-        state = validate(json.loads(archive.read(member)))
+        state = validator(json.loads(archive.read(member)))
         write(destination, state)
         return
     write(destination, empty())
