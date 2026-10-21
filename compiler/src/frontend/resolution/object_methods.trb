@@ -6,7 +6,7 @@ import { CompilerState } from state/state
 
 # Specialization uses the nominal receiver's arguments before method arguments.
 # Contracts retain signatures without producing empty executable functions.
-def object_method_function(mut state: CompilerState, type_name: String, member: String, class_member: Boolean, method_arguments: Array<String>): Integer
+def object_method_function(mut state: CompilerState, type_name: String, member: String, class_member: Boolean, method_arguments: Array<String>, call_origin: Integer): Integer
 	owner := find_object_type(state, type_name)
 	if owner < 0
 		return -1
@@ -22,7 +22,7 @@ def object_method_function(mut state: CompilerState, type_name: String, member: 
 			method_arguments.each do |argument|
 				arguments.push(argument)
 			end
-			function := instantiate_method_signature(state, method.generic_function, arguments, next_generic_depth(state), "")
+			function := instantiate_method_signature(state, method.generic_function, arguments, next_generic_depth(state), "", call_origin)
 			declare_default_functions(state)
 			return function
 		end
@@ -30,12 +30,12 @@ def object_method_function(mut state: CompilerState, type_name: String, member: 
 	# Initializer inheritance is deliberately not inferred while portable
 	# superclass initialization remains unspecified.
 	if instance.superclass >= 0 && member != "initialize"
-		return inherited_method_function(state, owner, instance.superclass, member, class_member, method_arguments)
+		return inherited_method_function(state, owner, instance.superclass, member, class_member, method_arguments, call_origin)
 	end
 	return -1
 end
 
-def inherited_method_function(mut state: CompilerState, receiver: Integer, owner: Integer, member: String, class_member: Boolean, method_arguments: Array<String>): Integer
+def inherited_method_function(mut state: CompilerState, receiver: Integer, owner: Integer, member: String, class_member: Boolean, method_arguments: Array<String>, call_origin: Integer): Integer
 	instance := state.nominal.object_instances[owner]
 	state.nominal.objects[instance.definition].methods.each do |method|
 		if method.name == member && ((method.class_member && class_member) || (!method.class_member && !class_member))
@@ -46,13 +46,13 @@ def inherited_method_function(mut state: CompilerState, receiver: Integer, owner
 			if !class_member
 				receiver_type = object_instance_type(state, receiver)
 			end
-			function := instantiate_method_signature(state, method.generic_function, arguments, next_generic_depth(state), receiver_type)
+			function := instantiate_method_signature(state, method.generic_function, arguments, next_generic_depth(state), receiver_type, call_origin)
 			declare_default_functions(state)
 			return function
 		end
 	end
 	if instance.superclass >= 0
-		return inherited_method_function(state, receiver, instance.superclass, member, class_member, method_arguments)
+		return inherited_method_function(state, receiver, instance.superclass, member, class_member, method_arguments, call_origin)
 	end
 	return -1
 end
