@@ -41,7 +41,7 @@ class OfficialSourceTests(unittest.TestCase):
             source = self.reference / bundle.STDLIB_SOURCES[name]
             source.write_text('package stdlib\n\nfunc ' + name + 'Source() string {\n\treturn `module ' + name.upper() + '\nend\n`\n}\n')
         (self.root / bundle.JSON_ADAPTER).write_text("module JSON\nend\n")
-        for name in bundle.TIME_ADAPTERS:
+        for name in bundle.NATIVE_ADAPTERS:
             (self.root / "compiler/packages/internal" / (name + ".trb")).write_text("module TimeAdapter\nend\n")
         (self.reference / "LICENSE").write_text("Synthetic license\n")
         self.git("add", ".")

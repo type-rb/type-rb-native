@@ -20,7 +20,8 @@ with tempfile.TemporaryDirectory(prefix='native-global-bindings-') as temporary:
         return result
 
     source = root / 'main.trb'
-    source.write_text(r'''mut text := "日本\x00" + " first"
+    source.write_text(r'''KEPT := ["terminal", "root"]
+mut text := "日本\x00" + " first"
 mut retained: Array<String>? := nil
 def replace(): String
 old := text
@@ -42,6 +43,7 @@ retained = nil
 end
 def release()
 text = "released"
+puts(KEPT[0])
 end
 def main()
 (0...30).each { |_index| exercise() }
@@ -69,7 +71,7 @@ end
     run([binary.with_name('qbe'), '-o', assembly, il])
     run(['/usr/bin/cc', assembly, '-lm', '-o', program])
     executed = run([program], stats=True)
-    expected = ('日本\x00 first\n日本\x00 next\nlocal\n日本\x00 first\n' * 30).encode()
+    expected = ('日本\x00 first\n日本\x00 next\nlocal\n日本\x00 first\n' * 30 + 'terminal\n').encode()
     assert executed.stdout == expected, (executed.stdout, expected)
     statistics = {}
     for line in executed.stderr.decode().splitlines():

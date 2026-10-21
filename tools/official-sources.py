@@ -19,7 +19,7 @@ URL_SOURCE = "internal/stdlib/url.go"
 URL_ADAPTER = Path("compiler/packages/internal/url.trb")
 JSON_ADAPTER = Path("compiler/packages/internal/json.trb")
 STDLIB_SOURCES = {"url": URL_SOURCE, "json": "internal/stdlib/json.go", "jsonc": "internal/stdlib/jsonc.go", "time": "internal/stdlib/time.go"}
-TIME_ADAPTERS = ["time", "time_calendar", "time_parse", "time_zones", "time_host"]
+NATIVE_ADAPTERS = ["time", "time_calendar", "time_parse", "time_zones", "time_host", "web_context"]
 REPOSITORY = "https://github.com/type-rb/type-rb"
 
 
@@ -142,7 +142,7 @@ def adapter_source(root, relative=URL_ADAPTER):
     return path.read_text()
 
 
-def catalog_source(files, adapter="", json_adapter="", time_adapters=None):
+def catalog_source(files, adapter="", json_adapter="", extra_adapters=None):
     packages = []
     names = set()
     for path, data in sorted(files.items()):
@@ -192,7 +192,7 @@ def catalog_source(files, adapter="", json_adapter="", time_adapters=None):
     sources = [("pinned_" + name + "_source", pinned_standard_source(files["stdlib/" + name + ".go"], name))
                for name in STDLIB_SOURCES]
     sources += [("native_url_source", adapter), ("native_json_source", json_adapter)]
-    sources += [("native_" + name + "_source", source) for name, source in (time_adapters or {}).items()]
+    sources += [("native_" + name + "_source", source) for name, source in (extra_adapters or {}).items()]
     for name, source in sources:
         lines += [f"def {name}(): String", "\treturn " + typerb_string(source), "end", ""]
     return "\n".join(lines).encode("utf-8")
@@ -222,7 +222,7 @@ def check(root, checkout):
             raise ValidationError("official source bundle differs from TYPE_RB_REVISION: " + name)
     catalog = catalog_path(root)
     if not catalog.is_file() or catalog.read_bytes() != catalog_source(expected, adapter_source(root), adapter_source(root, JSON_ADAPTER),
-                        {name: adapter_source(root, Path("compiler/packages/internal") / (name + ".trb")) for name in TIME_ADAPTERS}):
+                        {name: adapter_source(root, Path("compiler/packages/internal") / (name + ".trb")) for name in NATIVE_ADAPTERS}):
         raise ValidationError("official source catalog differs from TYPE_RB_REVISION")
     return len(expected) - 1
 
@@ -230,7 +230,7 @@ def check(root, checkout):
 def sync(root, checkout):
     expected = reference_files(root, checkout)
     catalog_bytes = catalog_source(expected, adapter_source(root), adapter_source(root, JSON_ADAPTER),
-                        {name: adapter_source(root, Path("compiler/packages/internal") / (name + ".trb")) for name in TIME_ADAPTERS})
+                        {name: adapter_source(root, Path("compiler/packages/internal") / (name + ".trb")) for name in NATIVE_ADAPTERS})
     catalog = catalog_path(root)
     bundle = root / BUNDLE
     for path in (root / "vendor", root / "vendor/type-rb", bundle):
