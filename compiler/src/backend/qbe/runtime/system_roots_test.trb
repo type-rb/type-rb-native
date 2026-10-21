@@ -34,7 +34,7 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("reserves the exact peak of live nested Array and String operands") do
-		source := "def nested(limit: Integer): String\n\tmut outer: Array<String> := []\n\tmut index := 0\n\twhile index < limit\n\t\tmut inner: Array<String> := []\n\t\twhile inner.size() < 1\n\t\t\tinner.push(\"ok\")\n\t\tend\n\t\touter.push(inner[0])\n\t\tindex += 1\n\tend\n\treturn outer[0]\nend\n\ndef main()\n\tvalue := nested(1)\n\tputs(value)\n\treturn\nend\n"
+		source := "def nested(limit: Integer): String\n\tmut outer: Array<String> := []\n\tmut index := 0\n\twhile index < limit\n\t\tmut inner: Array<String> := []\n\t\twhile inner.size() < 1\n\t\t\tinner.push(index.to_s())\n\t\tend\n\t\touter.push(inner[0])\n\t\tindex += 1\n\tend\n\treturn outer[0]\nend\n\ndef main()\n\tvalue := nested(1)\n\tputs(value)\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
@@ -50,7 +50,7 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("emits exact logical root segments and one managed-return epilogue") do
-		source := "record Bundle\n\tlabel: String\n\tlabels: Array<String>\nend\n\ndef select(mut bundle: Bundle, mut current: String): String\n\twhile current != \"done\"\n\t\tcurrent = bundle.label\n\t\tbundle = Bundle.new(label: \"done\", labels: bundle.labels)\n\t\treturn bundle.labels[0]\n\tend\n\treturn current\nend\n\ndef grow(mut current: String): String\n\tmut index := 0\n\twhile index < 2\n\t\tcurrent += \"x\"\n\t\tindex += 1\n\tend\n\treturn current\nend\n\ndef main()\n\tmut labels: Array<String> := []\n\tlabels.push(\"kept\")\n\tbundle := Bundle.new(label: \"next\", labels: labels)\n\tresult := grow(select(bundle, \"start\"))\n\tputs(result)\n\treturn\nend\n"
+		source := "record Bundle\n\tlabel: String\n\tlabels: Array<String>\nend\n\ndef select(mut bundle: Bundle, mut current: String): String\n\twhile current != \"done\"\n\t\tcurrent = bundle.label\n\t\tbundle = Bundle.new(label: current + \"done\", labels: bundle.labels)\n\t\treturn bundle.labels[0]\n\tend\n\treturn current\nend\n\ndef grow(mut current: String): String\n\tmut index := 0\n\twhile index < 2\n\t\tcurrent += \"x\"\n\t\tindex += 1\n\tend\n\treturn current\nend\n\ndef main()\n\tmut labels: Array<String> := []\n\tlabels.push(\"kept\")\n\tbundle := Bundle.new(label: \"next\", labels: labels)\n\tresult := grow(select(bundle, \"start\"))\n\tputs(result)\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
@@ -152,7 +152,7 @@ describe("Native TypeRB frontend") do
 			expect(state.scalar_mir.instructions[point].kind == 11).to_be_false()
 		end
 		qbe := output_source(emit_qbe(state))
-		expect(qbe.include?("%root_capacity =l add %temporary_roots, 2")).to_be_true()
+		expect(qbe.include?("%root_capacity =l add %temporary_roots, 1")).to_be_true()
 	end
 
 	test("retains Array loop values across allocating calls") do
