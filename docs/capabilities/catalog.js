@@ -40,7 +40,7 @@ export const catalog = {
         capability('File-oriented check and build', 'verified', ['parity', 'production'], 'Read source files and own the QBE and C-toolchain process boundary.', ['Native builds', 'docs/native-cli.md']),
         capability('Multi-file module graph', 'verified', ['parity', 'production'], 'Load explicit imports and deterministic transitive module closures. Same-unit cycles share a verified initialization plan across ordinary execution and the REPL; package-unit cycles and unsafe cyclic initialization are rejected.', ['Module loading', 'docs/compiler-project-layout.md']),
         capability('Configured project build', 'verified', ['parity', 'production'], 'Load a bounded trbconfig.jsonc source set and build its unique main entry.', ['Project configuration', 'docs/native-cli.md']),
-        capability('Upward project discovery', 'open', ['parity', 'production', 'ecosystem'], 'Discover the project root and configuration from a working directory.'),
+        capability('Upward project discovery', 'verified', ['parity', 'production', 'ecosystem'], 'Search parent directories for the project configuration and resolve its source and package paths from that root. An explicit configuration selects the project independently of the working directory.', ['Project commands', 'docs/native-cli.md']),
         capability('Incremental build and cache', 'open', ['production', 'ecosystem'], 'Reuse unchanged parsing, checking, code generation, and external-tool outputs.'),
         capability('Source maps and debug information', 'open', ['parity', 'production', 'ecosystem'], 'Map native diagnostics and failures back to TypeRB source locations.'),
         capability('Editor and LSP workflow', 'unassessed', ['production', 'ecosystem'], 'Connect Native checks, builds, runs, and diagnostics to editor workflows.'),
@@ -101,7 +101,7 @@ export const catalog = {
       title: 'Packages and native integration',
       description: 'Reproducible package graphs and safe extension boundaries for non-standard functionality.',
       items: [
-        capability('TypeRB package resolution', 'open', ['parity', 'production', 'ecosystem'], 'Carry a pinned package graph into Native project builds.'),
+        capability('TypeRB package resolution', 'partial', ['parity', 'production', 'ecosystem'], 'Local path packages retain canonical import identities and deterministic atomic locks. Frozen installation validates direct and transitive manifests without replacing the lock; offline installation resolves local paths. Git packages, package updates and executable extension providers remain incomplete.', ['Package commands', 'docs/native-cli.md']),
         capability('C ABI and shared-library adapter', 'open', ['production', 'ecosystem'], 'Type symbols, calling conventions, errors, and resource lifetimes.'),
         capability('Package-owned native adapter', 'open', ['production', 'ecosystem'], 'Let a package own a bounded dependency on a database, TLS, image, or system library.'),
         capability('Extension sandbox and security', 'unassessed', ['production', 'ecosystem'], 'Constrain compiler extensions and build hooks by explicit capabilities.'),

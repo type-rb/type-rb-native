@@ -162,4 +162,5 @@ with tempfile.TemporaryDirectory(prefix="native packages ") as temporary:
     assert "Git TypeRB packages are not implemented" in run("install", success=False)
     assert lock_path.read_bytes() == saved
 
+subprocess.run([sys.executable, str(repository / "tools/native-package-install-test.py"), str(binary)], check=True)
 print("Native local source maps, path packages, alias scopes and atomic lock checks passed")

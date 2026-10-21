@@ -57,6 +57,7 @@ build may leave a lock that must be inspected before removing it.
 
 ```sh
 ./trbn install
+./trbn install --frozen --offline
 ./trbn check examples/main.trb
 ./trbn build
 ./trbn build --stdout
@@ -89,13 +90,19 @@ mode and atomically writes `trb.lock` with reference-compatible checksums and
 package identities. It does not install host-language dependencies. `check`
 and builds require a current lock for `packages`; edits to package source files
 do not require reinstalling, while configuration or manifest edits do.
+`install --frozen` requires a current lock and preserves its contents,
+modification time and file identity. Missing or stale locks and changed direct
+or transitive manifests are rejected.
+`install --offline` resolves local paths without network access, including when
+creating or refreshing their lock. The flags can be combined. Empty projects
+need no lock. Explicit Boolean values such as `--frozen=false` are accepted.
 `localPackages` maps names directly to source directories without a manifest or
 lock. Package aliases are scoped to each package's dependencies and take
 precedence over an identically spelled project import.
 
 Git package sources, nonempty native-dependency/adapter manifest fields and
 package loading in the REPL remain unimplemented and fail explicitly. Lock
-update/frozen/offline options are not yet available. Configuration JSON Unicode
+update options are not yet available. Configuration JSON Unicode
 escapes retain their current limitations; package manifests and locks decode
 JSON Unicode escapes separately.
 

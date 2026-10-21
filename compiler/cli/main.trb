@@ -71,6 +71,8 @@ record CliOptions
 	output: Array<String>
 	compile: Array<Integer>
 	stdout: Array<Integer>
+	frozen: Array<Integer>
+	offline: Array<Integer>
 	arguments: Array<String>
 	error: Array<String>
 end
@@ -88,7 +90,7 @@ def cli_usage(): Integer
 	puts("  trbn build [SOURCE]          Emit native QBE source")
 	puts("  trbn build --compile [SOURCE] Build an executable")
 	puts("  trbn run [SOURCE] [-- ARGS...] Build and run")
-	puts("  trbn install                Resolve local TypeRB path packages")
+	puts("  trbn install [--frozen] [--offline] Resolve local TypeRB path packages")
 	puts("  trbn repl                   Start a stateful REPL")
 	puts("Options: --mode trb, --config PATH, --outfile PATH, --stdout")
 	puts("TypeRB Native is under development. Currently only mode trb is implemented.")
@@ -109,12 +111,29 @@ def cli_parse_argument(mut options: CliOptions, arguments: Array<String>, mut in
 		separator += 1
 	end
 	if has_inline
-		if !cli_any(cli_any(argument == "--mode", argument == "--config"), argument == "--outfile")
+		if !cli_any(cli_any(cli_any(argument == "--mode", argument == "--config"), argument == "--outfile"), cli_any(argument == "--frozen", argument == "--offline"))
 			options.error[0] = "unexpected option value for " + argument
 			return
 		end
 	end
 	index[0] += 1
+	if cli_any(argument == "--frozen", argument == "--offline")
+		mut value := 1
+		if has_inline
+			if cli_any(cli_any(cli_any(inline_value == "false", inline_value == "False"), cli_any(inline_value == "FALSE", inline_value == "f")), cli_any(inline_value == "F", inline_value == "0"))
+				value = 0
+			elsif !cli_any(cli_any(cli_any(inline_value == "true", inline_value == "True"), cli_any(inline_value == "TRUE", inline_value == "t")), cli_any(inline_value == "T", inline_value == "1"))
+				options.error[0] = "invalid Boolean value for " + argument
+				return
+			end
+		end
+		if argument == "--frozen"
+			options.frozen[0] = value
+		else
+			options.offline[0] = value
+		end
+		return
+	end
 	if argument == "--"
 		while index[0] < arguments.size()
 			options.arguments.push(arguments[index[0]])
@@ -193,7 +212,7 @@ def cli_parse_argument(mut options: CliOptions, arguments: Array<String>, mut in
 end
 
 def cli_parse(arguments: Array<String>): CliOptions
-	mut options := CliOptions.new(command: [""], source: [""], config: [""], mode: [""], output: [""], compile: [0], stdout: [0], arguments: [], error: [""])
+	mut options := CliOptions.new(command: [""], source: [""], config: [""], mode: [""], output: [""], compile: [0], stdout: [0], frozen: [-1], offline: [-1], arguments: [], error: [""])
 	mut index := [0]
 	while index[0] < arguments.size()
 		cli_parse_argument(options, arguments, index)
@@ -307,6 +326,13 @@ def native_cli_main(): Integer
 			return cli_error("program arguments are only accepted by run")
 		end
 	end
+	if command != "install"
+		if cli_any(options.frozen[0] >= 0, options.offline[0] >= 0)
+			return cli_error("--frozen and --offline require the install command")
+		end
+	elsif options.source[0] != ""
+		return cli_error("install does not accept package arguments")
+	end
 	if command != "build"
 		if cli_any(cli_any((options.compile[0] != 0), (options.stdout[0] != 0)), options.output[0] != "")
 			return cli_error("build options require the build command")
@@ -369,7 +395,9 @@ def native_cli_main(): Integer
 			return cli_error("no trbconfig.jsonc found")
 		end
 		project := parse_project_config(compiler_read_source(config))
-		packages := load_project_packages(project, config, false)
+		# All currently supported package requirements are local. Offline uses
+		# the same resolver and retains its explicit remote/provider rejection.
+		packages := load_project_packages(project, config, options.frozen[0] > 0)
 		if packages.error[0] != ""
 			return cli_error(packages.error[0])
 		end
@@ -378,6 +406,10 @@ def native_cli_main(): Integer
 			return 0
 		end
 		lock_path := path_join(path_directory(config), "trb.lock")
+		if options.frozen[0] > 0
+			puts("resolved " + packages.packages.size().to_s() + " TypeRB package(s) -> " + lock_path)
+			return 0
+		end
 		temporary := native_cli_tempfile(lock_path)
 		if temporary == ""
 			return cli_error("cannot create temporary package lock")
