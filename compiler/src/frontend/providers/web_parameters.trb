@@ -29,7 +29,7 @@ def web_parameter_fields(mut state: CompilerState, target: String, query: Boolea
 	start := load_integer(state.declarations.record_field_starts, record_index)
 	finish := start + load_integer(state.declarations.record_field_counts, record_index)
 	mut index := start
-	mut arrays := 0
+	mut required_arrays := 0
 	while index < finish && !has_diagnostic(state)
 		name := load_string(state.declarations.field_names, index)
 		type_name := load_string(state.declarations.field_types, index)
@@ -41,7 +41,9 @@ def web_parameter_fields(mut state: CompilerState, target: String, query: Boolea
 		element := array_element_type(value_type)
 		mut scalar := value_type
 		if element != ""
-			arrays += 1
+			if optional == ""
+				required_arrays += 1
+			end
 			if !query
 				diagnostic(state, "TRBN4003", line, "path parameter field " + name + " cannot be an Array")
 				return fields
@@ -50,7 +52,7 @@ def web_parameter_fields(mut state: CompilerState, target: String, query: Boolea
 		end
 		raw := raw_enum_type(state, find_enum_type(state, scalar))
 		if raw == "Integer"
-			diagnostic(state, "TRBN4003", line, "integer raw-enum parameter parsing awaits a consistent reference contract")
+			diagnostic(state, "TRBN4003", line, "integer-backed enum parameters are not supported yet")
 			return fields
 		end
 		if scalar != "String" && scalar != "Boolean" && scalar != "Integer" && scalar != "Float" && raw == ""
@@ -60,9 +62,9 @@ def web_parameter_fields(mut state: CompilerState, target: String, query: Boolea
 		fields.push(WebParameterField.new(name: name, value_type: value_type, scalar_type: scalar, raw_type: raw, nullable: optional != "", array: element != "", expected: type_display(state, scalar)))
 		index += 1
 	end
-	if arrays > 1
+	if required_arrays > 1
 		# The pinned Go build and REPL disagree; issue #1175 owns the decision.
-		diagnostic(state, "TRBN4003", line, "multiple array parameter fields await a consistent reference build contract")
+		diagnostic(state, "TRBN4003", line, "multiple non-nullable Array fields are not yet supported by typed parameter binding")
 	end
 	return fields
 end
@@ -170,6 +172,11 @@ def specialize_web_binding(mut state: CompilerState, function: Integer, target: 
 	fields := web_parameter_fields(state, target, kind == 1, line)
 	if has_diagnostic(state)
 		return false
+	end
+	# Speculative checking shares immutable source syntax with its parent.
+	# Validate the schema there, but materialize bodies only in ordinary state.
+	if state.type_resolution.generic_template_mode[0]
+		return true
 	end
 	owner := load_integer(state.declarations.function_modules, function)
 	namespace := "$web_binding" + integer_string(function)

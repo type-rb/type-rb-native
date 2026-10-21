@@ -3,7 +3,7 @@ import { ObjectMethod } from frontend/types/object_model
 import { object_method_owner } from frontend/types/object_types
 import { official_source_kind } from project/official_catalog
 import { CompilerState } from state/state
-import { sparse_integer_at } from support/storage
+import { load_integer, sparse_integer_at } from support/storage
 
 # The loader grants canonical ownership; the pinned source remains unchanged.
 def declare_web_bindings(mut state: CompilerState, source: Integer)
@@ -50,6 +50,19 @@ def web_binding_kind(state: CompilerState, definition: Integer): Integer
 	end
 	if object.name == "Context" && row.name == "Context::params"
 		return 2
+	end
+	return 0
+end
+
+def web_binding_function(state: CompilerState, function: Integer): Integer
+	owner := load_integer(state.declarations.function_modules, function)
+	if sparse_integer_at(state.standard_modules, owner) != official_source_kind("trb/web")
+		return 0
+	end
+	state.type_resolution.generic_function_instances.each do |instance|
+		if instance.function == function
+			return web_binding_kind(state, instance.definition)
+		end
 	end
 	return 0
 end

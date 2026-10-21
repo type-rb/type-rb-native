@@ -128,7 +128,9 @@ responsibilities without duplicating the canonical compiler closure.
 Official package providers under `frontend/providers` attach declarations only
 to loader-owned package identities. Concrete Web parameter schemas generate
 ordinary TypeRB bodies with private aliases for canonical record and field
-types. Those bodies use the normal resolver, checker, verified MIR and REPL;
+types. Speculative template analysis validates the schema without modifying
+shared source syntax; ordinary checking materializes the executable body.
+Those bodies use the normal resolver, checker, verified MIR and REPL;
 the backend receives no Web parsing or record-construction rules. The pinned
 portable package sources remain unchanged. Unsettled cross-mode contracts stay
 explicitly unsupported and visible in the shared coverage registry.

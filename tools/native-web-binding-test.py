@@ -21,8 +21,11 @@ end
 record PathInput
 id: Integer
 end
+record Numbers
+ids: Array<Integer>
+end
 '''
-producer = '''import { Input as Query, PathInput } from models
+producer = '''import { Input as Query, PathInput, Numbers } from models
 import { Request, Context, Response } from trb/web
 import { Body, Headers, HttpMethod } from trb/http
 import trb/std/result
@@ -51,15 +54,25 @@ when Result::Err(_error)
 return Response.text("path error", 400)
 end
 end
+def error_probe()
+input := Request.new(method: HttpMethod.get(), path: "/items", query_string: "ids=1&ids=invalid", headers: Headers.new(), body: Body.empty())
+case input.query<Numbers>()
+when Result::Ok(_value)
+puts("unexpected")
+when Result::Err(_error)
+puts("invalid")
+end
+end
 def probe()
 input := request()
 context := Context.new(request: input, path_parameters: {"id": "7"})
 response := handle(context)
 puts(response.body.to_s())
 puts(input.query_string)
+error_probe()
 end
 '''
-expected = 'receiver\nkept:one,two:7\nname=kept&tags=one&tags=two\n'
+expected = 'receiver\nkept:one,two:7\nname=kept&tags=one&tags=two\ninvalid\n'
 
 with tempfile.TemporaryDirectory(prefix='native-web-binding-') as temporary:
     root = Path(temporary)
@@ -81,8 +94,11 @@ with tempfile.TemporaryDirectory(prefix='native-web-binding-') as temporary:
     assert run([program]).stdout == expected
     if args.reference:
         reference = args.reference.resolve()
-        run([reference, 'check', main])
-        run([reference, 'build', main, '--compile', '--outfile', program])
+        reference_config = root / 'reference.trbconfig.jsonc'
+        reference_config.write_text(json.dumps({'name': 'web-binding', 'mode': 'go',
+            'sourceDir': '.', 'go': {'module': 'example.com/web-binding'}}))
+        run([reference, 'check', '--config', reference_config])
+        run([reference, 'build', '--config', reference_config, '--compile', '--outfile', program])
         assert run([program]).stdout == expected
 
     # A later homonym and checked submission cannot change the retained record

@@ -1,4 +1,9 @@
 import { declare_web_bindings, web_binding_kind } from frontend/providers/web_declarations
+import { generic_program_fork } from frontend/checking/program/generic_fork
+import { instantiate_generic_function } from frontend/resolution/generic_functions
+import { find_record_in_module } from frontend/resolution/declaration_lookup
+import { record_type } from frontend/resolution/type_resolution
+import { GenericFunction } from frontend/types/generic_model
 import { web_parameter_fields } from frontend/providers/web_parameters
 import { check, emit_qbe } from compiler
 import { resolve } from frontend/checking/program/resolution
@@ -13,6 +18,7 @@ import { expect_compiler_phase, logical_checked_source } from testing/pipeline
 import { intrinsic_mir_erase } from testing/mir/intrinsics
 import { control_test_output } from testing/mir/control
 import { verify_mir } from mir/verify/module
+import { MirSignature } from mir/model/module
 import { describe, expect, test } from trb/std/test
 
 # Isolate the checked provider from the reference-hosted recovery byte decoder.
@@ -48,6 +54,64 @@ describe("Checked Web parameter providers") do
 		mut state := web_provider_test_state(official_source_kind("trb/web"), "id: Array<Integer>", "puts(value.id.size())")
 		expect_compiler_phase(state, "check", check(state))
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+
+	test("admits multiple arrays when only one field is non-nullable") do
+		mut state := web_provider_test_state(official_source_kind("trb/web"), "id: Array<Integer>\nflags: Array<Boolean>?", "puts(value.id.size())")
+		expect_compiler_phase(state, "check", check(state))
+	end
+
+	test("rejects a malformed provider declaration even with a trusted owner") do
+		mut state := web_provider_test_state(official_source_kind("trb/web"), "id: Integer", "puts(value.id)")
+		mut changed := 0
+		mut definition := 0
+		while definition < state.type_resolution.generic_functions.size()
+			if web_binding_kind(state, definition) > 0
+				row := state.type_resolution.generic_functions[definition]
+				state.type_resolution.generic_functions[definition] = GenericFunction.new(receiver_type: row.receiver_type, name: row.name, source_id: row.source_id, line: row.line, type_parameters: row.type_parameters, parameters: row.parameters, result_type: "Integer", body_start: row.body_start, body_finish: row.body_finish)
+				expect(web_binding_kind(state, definition)).to_equal(0)
+				changed += 1
+			end
+			definition += 1
+		end
+		expect(changed).to_equal(1)
+	end
+
+	test("keeps speculative provider checking from changing shared source syntax") do
+		parent := web_provider_test_state(official_source_kind("trb/web"), "id: Integer", "puts(value.id)")
+		tokens := parent.source_tokens.token_count[0]
+		aliases := parent.type_resolution.type_aliases.size()
+		controls := parent.parsed.controls.size()
+		mut fork := generic_program_fork(parent)
+		mut definition := 0
+		mut checked := 0
+		while definition < fork.type_resolution.generic_functions.size()
+			if web_binding_kind(fork, definition) > 0
+				target := record_type(find_record_in_module(fork, 0, "Payload"))
+				expect(instantiate_generic_function(fork, definition, [target], 0) >= 0).to_be_true()
+				checked += 1
+			end
+			definition += 1
+		end
+		expect(checked).to_equal(1)
+		expect(parent.source_tokens.token_count[0]).to_equal(tokens)
+		expect(parent.type_resolution.type_aliases.size()).to_equal(aliases)
+		expect(parent.parsed.controls.size()).to_equal(controls)
+	end
+
+	test("independently verifies the generated function's typed result") do
+		mut state := web_provider_test_state(official_source_kind("trb/web"), "id: Integer", "puts(value.id)")
+		expect_compiler_phase(state, "check", check(state))
+		mut changed := 0
+		state.type_resolution.generic_function_instances.each do |instance|
+			if web_binding_kind(state, instance.definition) > 0
+				row := state.scalar_mir.signatures[instance.function]
+				state.scalar_mir.signatures[instance.function] = MirSignature.new(id: row.id, kind: row.kind, name: row.name, adapter: row.adapter, source_id: row.source_id, line: row.line, parameter_types: row.parameter_types, parameter_mutable: row.parameter_mutable, result_type: "Integer")
+				changed += 1
+			end
+		end
+		expect(changed).to_equal(1)
+		expect(verify_mir(state.scalar_mir, true) != "").to_be_true()
 	end
 
 	test("does not grant provider methods to authored or unrelated package owners") do
@@ -87,6 +151,6 @@ describe("Checked Web parameter providers") do
 		expect(load_string(path.diagnostics.messages, 0)).to_equal("path parameter field ids cannot be an Array")
 		mut query := logical_checked_source("record Payload\nids: Array<Integer>\nnames: Array<String>\nend\ndef main()\nend\n")
 		web_parameter_fields(query, "Record#0", true, 9)
-		expect(load_string(query.diagnostics.messages, 0)).to_equal("multiple array parameter fields await a consistent reference build contract")
+		expect(load_string(query.diagnostics.messages, 0)).to_equal("multiple non-nullable Array fields are not yet supported by typed parameter binding")
 	end
 end
