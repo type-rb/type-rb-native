@@ -21,7 +21,6 @@ import { builtin_result_method } from frontend/checking/builtins/results
 import { repl_builtin_lookup } from repl/builtin_lookup
 import { union_parts } from frontend/types/union_types
 import { find_newtype_in_module, find_newtype_type, newtype_type } from frontend/types/newtype_types
-import { newtype_method_function } from frontend/resolution/newtype_methods
 import { find_visible_newtype } from frontend/resolution/declaration_lookup
 import { repl_slice_available, repl_slice_next } from repl/sliced_iteration
 import { repl_array_sort_keys } from repl/array_sorting
@@ -576,8 +575,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			position[0] += 1
 			return repl_reference(repl_value(store, newtype_type(newtype_owner), 0, 0.0, "", [repl_coerce(store, argument.value, representation)]))
 		end
-		function := newtype_method_function(state, newtype_type(newtype_owner), member, true)
-		return repl_reference(repl_nominal_method_call(state, position, store, environment, function, -1))
+		return repl_reference(repl_newtype_method(state, position, store, environment, -1))
 	end
 	if token_is(state, position[0], ".")
 		position[0] += 1
@@ -790,6 +788,20 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					end
 					next
 				end
+				if find_newtype_type(state, value.type_name) >= 0
+					if member == "value"
+						position[0] += 1
+						skip_newlines(state, position)
+						position[0] += 1
+						result = repl_reference(value.children[0])
+					else
+						result = repl_reference(repl_newtype_method(state, position, store, environment, result.value))
+					end
+					if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
+						result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
+					end
+					next
+				end
 				record_index := find_record_type(state, value.type_name)
 				if record_index >= 0
 					field := find_field(state, record_index, member)
@@ -799,21 +811,6 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						result = repl_callable_expression(state, position, store, environment, result.value)
 					end
 				elsif token_is(state, position[0], "(")
-					if find_newtype_type(state, value.type_name) >= 0
-						if member == "value"
-							position[0] += 1
-							skip_newlines(state, position)
-							position[0] += 1
-							result = repl_reference(value.children[0])
-						else
-							function := newtype_method_function(state, value.type_name, member, false)
-							result = repl_reference(repl_nominal_method_call(state, position, store, environment, function, result.value))
-						end
-						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
-							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
-						end
-						next
-					end
 					if member == "raw_value" && raw_enum_type(state, find_enum_type(state, value.type_name)) != ""
 						position[0] += 1
 						skip_newlines(state, position)
@@ -1908,6 +1905,24 @@ end
 
 # Object evaluation consumes the callee chosen by ordinary checking. Explicit
 # method arguments are skipped, never re-inferred against a retained value.
+# Dispatch consumes the specialization selected by the ordinary checker.
+def repl_newtype_method(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, receiver: Integer): Integer
+	if token_is(state, position[0], "<")
+		finish := nominal_application_end(state, position[0] - 1)
+		if finish < 0
+			store.error[0] = "newtype method has no checked type application"
+			return 0
+		end
+		position[0] = finish
+	end
+	encoded := sparse_integer_at(state.callables.checked[0].generic_calls, position[0])
+	if encoded <= 0
+		store.error[0] = "newtype method has no checked callee"
+		return 0
+	end
+	return repl_nominal_method_call(state, position, store, environment, encoded - 1, receiver)
+end
+
 def repl_object_method(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, type_name: String, member: String, receiver: Integer): Integer
 	if token_is(state, position[0], "<")
 		finish := nominal_application_end(state, position[0] - 1)
