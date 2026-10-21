@@ -47,6 +47,37 @@ import { load_integer, load_string, sparse_integer_at, sparse_string_at } from s
 import { check_expression } from frontend/checking/body/expressions
 import { checked_hash_call } from frontend/checking/body/collections
 import { check_newtype_member } from frontend/checking/body/members
+import { abstract_generic_type_valid } from frontend/types/generic_bindings
+import { nullable_element } from frontend/types/nullable_types
+import { union_parts } from frontend/types/union_types
+
+# Templates have checked type parameters but no executable representation.
+# Every concrete instantiation still passes the ordinary MIR output gate.
+def checked_puts_type(state: CompilerState, type_name: String): Boolean
+	if mir_puts_type(type_name)
+		return true
+	end
+	if !state.type_resolution.generic_template_mode[0]
+		return false
+	end
+	if abstract_generic_type_valid(state, type_name)
+		return true
+	end
+	element := nullable_element(type_name)
+	if element != ""
+		return checked_puts_type(state, element)
+	end
+	parts := union_parts(type_name)
+	if parts.size() == 0
+		return false
+	end
+	parts.each do |part|
+		if !checked_puts_type(state, part)
+			return false
+		end
+	end
+	return true
+end
 
 def checked_call_bindings(state: CompilerState, function: Integer, callee_category: Integer): ArgumentBindings
 	if callee_category == checked_category_system()
@@ -128,7 +159,7 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 				scalar_mir_disable(locals)
 			end
 			bindings.values[slot] = checked_mir_value(argument)
-			if (callee_name == "puts" && encoded == 0) && !mir_puts_type(argument.type_name)
+			if (callee_name == "puts" && encoded == 0) && !checked_puts_type(state, argument.type_name)
 				diagnostic(state, "TRBN4004", line, "puts does not yet support " + type_display(state, argument.type_name))
 			end
 			skip_newlines(state, position)
