@@ -78,7 +78,30 @@ service pause times still need the dedicated resource/load harnesses.
 ## CI
 
 The existing Native CLI job reuses its built CLI for `--smoke`, with a two-minute
-step deadline. Controller tests run in the existing tooling job. No new workflow,
-compiler bootstrap, comparative timing gate or scheduled matrix is added.
+step deadline. Controller tests run in the existing tooling job. No additional
+compiler bootstrap, comparative timing gate or scheduled matrix runs in PR CI.
 Changing the workload/controller still uses the planner's applicable authorities;
 this does not waive full validation for this change itself.
+
+## Public application coverage
+
+The Pages application view always lists all registered cases, with independent
+dates, source revisions and environments. `representative-performance.yml` is a
+manual, main-only workflow for the initial public matrix and later relevant-change
+or milestone measurements. It builds the current CLI through the ordinary pinned
+seed/fixed-point path and the exact reference compiler, then measures Native,
+TypeRB Go and Pure Go together on one Linux arm64 logical CPU. It retains the
+registered warmup/sample counts, full matrix and runtime deadlines, plus a
+25-minute workflow limit. It has no daily/weekly schedule or PR trigger.
+
+`publication.py` validates and reduces the manifest to public fields, excluding
+machine-local tool paths. It rejects smoke data, partial input selections, changed
+sources and missing comparison identities. A failed attempt retains partial
+observations and the previous complete snapshot. Pages displays failures and
+unmeasured inputs explicitly; it never imports these results into the daily score.
+
+Raw evidence and state artifacts last 90 days. Compact state retains twelve
+complete snapshots and the latest attempt; Pages falls back to its previous
+public state when artifacts expire, preserving the original measurement dates.
+Main pushes update freshness metadata without running a benchmark. Public
+measurement happens only on explicit dispatch; local diagnostics are separate.

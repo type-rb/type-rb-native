@@ -351,7 +351,8 @@ def main():
             result["controllerSha256"] = digest(__file__)
             result["environment"] = {"GOMAXPROCS": "1", "cpuCount": os.cpu_count(),
                                      "affinity": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
-                                     "filesystemCache": "uncontrolled local warm cache", "cpuPinning": "none"}
+                                     "filesystemCache": "uncontrolled warm cache",
+                                     "cpuPinning": "inherited single CPU" if hasattr(os, "sched_getaffinity") and len(os.sched_getaffinity(0)) == 1 else "none"}
             roles = list(binaries)
             started = time.monotonic()
             samples = 1 if args.smoke else args.samples or suite["samples"]
@@ -373,6 +374,7 @@ def main():
                         validate(record, directory, oracle)
                         rows[role].append(record)
                         if record["status"] != "pass":
+                            result["failedObservation"] = {"case": case["id"], "role": role, "status": record["status"]}
                             raise RuntimeError(f"{case['id']}/{role}: {record['status']}; observations retained")
                 summaries = {role: summarize(records, case["count"] * case["batches"]) for role, records in rows.items()}
                 ratios = {}

@@ -6,7 +6,7 @@ on:
       - main
   workflow_dispatch:
   workflow_run:
-    workflows: [Daily performance snapshot, Weekly language comparison]
+    workflows: [Daily performance snapshot, Weekly language comparison, Representative performance snapshot]
     types: [completed]
     branches: [main]
 
@@ -56,6 +56,17 @@ jobs:
             python3 tools/weekly-performance/pages-fallback.py "$RUNNER_TEMP/weekly-state.json"
           python3 tools/daily-performance/state.py site --tier weekly --state "$RUNNER_TEMP/weekly-state.json" \
             --output docs/capabilities/benchmarks/weekly-state.json
+
+      - name: Compose representative coverage without running benchmarks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIGGER_RUN_ID: ${{ github.event.workflow_run.name == 'Representative performance snapshot' && github.event.workflow_run.id || '' }}
+          TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          TRIGGER_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          python3 tools/representative-performance/publication.py restore --state "$RUNNER_TEMP/representative-state.json"
+          python3 tools/representative-performance/publication.py site --state "$RUNNER_TEMP/representative-state.json" \
+            --output docs/capabilities/benchmarks/representative-state.json
 
       - name: Upload the GitHub Pages artifact
         uses: actions/upload-pages-artifact@v5

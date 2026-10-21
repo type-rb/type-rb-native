@@ -79,7 +79,10 @@ and Pure Go. Add a workload only when ordinary Native support for its features
 exists and both TypeRB outputs match the Pure Go output; do not extend language
 semantics just to port a benchmark.
 
-JSON, I/O, service latency and large working sets are not covered. The
+JSON and varied working sets are covered by the separate
+[application workload view](capabilities/benchmarks/representative.html), whose
+measurements run on demand rather than daily. I/O and service latency remain
+coverage gaps. The
 compiler's own bootstrap cost remains separate from the application's
 clean-output build timings and sizes shown here. Its daily self-compilation
 measurement is reported separately.
