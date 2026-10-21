@@ -1,4 +1,4 @@
-import { metrics, roles, positive, resultFor, verdict, groupResults } from './representative-model.mjs';
+import { metrics, roles, positive, resultFor, verdict, groupResults, metricValue, invalidRss } from './representative-model.mjs';
 
 const $ = id => document.getElementById(id);
 const node = (tag, text, className) => {
@@ -49,6 +49,9 @@ function render() {
   const groups = groupResults(cases, snapshot, roleKey, metricKey);
   $('families').replaceChildren();
   $('metric-description').textContent = metrics[metricKey].description;
+  if (metricKey === 'peakRssBytes' && invalidRss(snapshot)) {
+    $('metric-description').textContent += ' Earlier Linux RSS observations include launcher memory and are unavailable. Other metrics and the original raw observations are retained.';
+  }
   const comparable = groups.reduce((sum, group) => sum + group.inputs.length - group.counts.missing, 0);
   $('coverage-summary').textContent = `${cases.length} registered cases across ${groups.length} areas · ${comparable} comparable · ${cases.length - comparable} unavailable. Open an area to see every input.`;
   for (const group of groups) {
@@ -70,7 +73,7 @@ function render() {
     }
     head.append(header); table.append(head, body); scroll.append(table); section.append(scroll);
     for (const input of group.inputs) {
-      const row = resultFor(snapshot, input), current = row?.summaries.native?.[metricKey], control = row?.summaries[roleKey]?.[metricKey];
+      const row = resultFor(snapshot, input), current = metricValue(snapshot, row, 'native', metricKey), control = metricValue(snapshot, row, roleKey, metricKey);
       const tr = node('tr'), name = node('th', `${input.size} · ${input.variant}`, 'input-name');
       name.scope = 'row';
       name.append(node('small', `${input.count.toLocaleString()} items × ${input.batches} batches`));
