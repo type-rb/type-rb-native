@@ -3,7 +3,7 @@ import { lex } from frontend/syntax/lexer
 import { parse_lambda_syntax } from frontend/syntax/body_syntax
 import { parse_module } from frontend/syntax/parser
 import { resolve } from frontend/checking/program/resolution
-import { compiler_new, select_checked_body } from state/state
+import { compiler_new, compiler_new_with_mode, select_checked_body } from state/state
 import { load_string, sparse_integer_at } from support/storage
 import { describe, expect, test } from trb/std/test
 
@@ -20,7 +20,7 @@ describe("Anonymous function syntax ownership") do
 	end
 	test("keeps nested fn parameters and defaults separate from surrounding declarations") do
 		source := "alias Callback = (Integer) -> Integer\nrecord Holder\ncallback: Callback = fn(input: Integer): Integer; return input; end\nend\ndef consume(callback: Callback = fn(mut first: Integer): Integer\nnested := fn(second: Integer): Integer; return second; end\nreturn nested(first)\nend, tail: Integer = 7): Integer\nreturn callback(tail)\nend\ndef main()\nend\n"
-		mut state := compiler_new(source.size() * 4 + 64)
+		mut state := compiler_new_with_mode(source.size() * 4 + 64, true)
 		expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
 		expect(state.declarations.function_count[0]).to_equal(2)
 		expect(state.declarations.parameter_count[0]).to_equal(2)
@@ -41,7 +41,6 @@ describe("Anonymous function syntax ownership") do
 		expect(state.callables.lambdas.size()).to_equal(3)
 		expect(state.declarations.parameter_count[0]).to_equal(2)
 		expect(resolve(state)).to_be_true()
-		state.hash_repl[0] = true
 		expect(check(state)).to_be_true()
 	end
 	test("resolves shared fn syntax separately for each generic body") do
