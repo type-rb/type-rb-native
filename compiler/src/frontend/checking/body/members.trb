@@ -1,4 +1,6 @@
 import { checked_category_enum, checked_category_function, checked_category_initializer, checked_category_newtype, checked_category_object, checked_category_readonly, checked_category_record, checked_category_system, checked_category_value } from frontend/types/value_categories
+import { json_provider_kind, json_provider_response } from frontend/providers/json_declarations
+import { check_inferred_json_encoding } from frontend/checking/builtins/json_codecs
 import { mir_state_enabled_slot, nullable_state_head_slot } from state/local_slots
 import { binary_add_assign } from frontend/types/operators
 import { mir_op_newtype_construct, mir_op_newtype_project, mir_op_nullable_extract, mir_op_nullable_none, mir_op_string_index } from mir/model/instructions
@@ -482,6 +484,13 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 			expect(state, position, ")")
 		end
 		return mir_checked_object_new(state, locals, owner, receiver.type_name, origin)
+	end
+	if class_member && method_arguments.size() == 0
+		definition.methods.each do |method|
+			if method.class_member && method.name == member && json_provider_kind(state, method.generic_function) == json_provider_response()
+				return check_inferred_json_encoding(state, position, locals, method.generic_function)
+			end
+		end
 	end
 	function := object_method_function(state, receiver.type_name, member, class_member, method_arguments, origin)
 	if function < 0

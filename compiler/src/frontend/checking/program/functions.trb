@@ -1,5 +1,6 @@
 import { standard_runtime_fail } from frontend/resolution/standard_intrinsics
 import { web_binding_function } from frontend/providers/web_declarations
+import { json_provider_function, json_provider_kind } from frontend/providers/json_declarations
 import { mir_control_terminated_slot, mir_state_enabled_slot, mir_state_function_slot, mir_state_return_value_slot } from state/local_slots
 import { checking_discovery, checking_lowering } from state/checking_phases
 import { prepare_collection_contexts } from frontend/checking/collections/context_analysis
@@ -80,7 +81,7 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 end
 
 def check_function_body(mut state: CompilerState, function_index: Integer, mut locals: CheckedLocals): Boolean
-	if state.type_resolution.generic_template_mode[0] && web_binding_function(state, function_index) > 0
+	if state.type_resolution.generic_template_mode[0] && (web_binding_function(state, function_index) > 0 || json_provider_function(state, function_index) > 0)
 		# The trusted provider validates its schema during speculative checking.
 		# Ordinary checking materializes and verifies its complete executable body.
 		return !has_diagnostic(state)
@@ -169,13 +170,15 @@ end
 # File programs without closures or inferred transform results retain one pass.
 # REPL witnesses also analyze retained shared bindings before MIR lowering.
 def analyze_callable_bodies(mut state: CompilerState): Boolean
-	mut generic_methods := false
+	mut inferred_calls := false
+	mut definition_index := 0
 	state.type_resolution.generic_functions.each do |definition|
-		if definition.receiver_type != ""
-			generic_methods = true
+		if definition.receiver_type != "" || json_provider_kind(state, definition_index) > 0
+			inferred_calls = true
 		end
+		definition_index += 1
 	end
-	if state.callables.lambdas.size() == 0 && state.parsed.transforms.size() == 0 && !state.interactive && !generic_methods && state.nominal.objects.size() == 0 && !builtin_result_source(state)
+	if state.callables.lambdas.size() == 0 && state.parsed.transforms.size() == 0 && !state.interactive && !inferred_calls && state.nominal.objects.size() == 0 && !builtin_result_source(state)
 		return true
 	end
 	state.callables.lambda_phase[0] = checking_discovery()
