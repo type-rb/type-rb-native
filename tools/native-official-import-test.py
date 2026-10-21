@@ -94,8 +94,7 @@ with tempfile.TemporaryDirectory(prefix='native-official-import-') as temporary:
     retained_project = root / 'retained'
     (retained_project / 'src').mkdir(parents=True)
     retained_config = retained_project / 'trbconfig.jsonc'
-    retained_config.write_text(json.dumps({'name': 'retained', 'mode': 'go',
-        'sourceDir': 'src', 'go': {'module': 'example.com/retained'}}))
+    retained_config.write_text(json.dumps({'name': 'retained', 'mode': 'trb', 'sourceDir': 'src'}))
     (retained_project / 'src/producer.trb').write_text('''import { Body, Header, Headers } from trb/http
 def make_headers(): Headers
 puts("headers factory")
@@ -148,7 +147,18 @@ puts(read().to_s())
         assert run([program]).stdout == expected
         observed = run([reference, 'repl'], data=declarations + 'probe()\nprobe()\n:quit\n')
         assert not observed.stderr and observed.stdout == expected * 2, observed
-        observed = run([reference, 'repl', '--config', retained_config], data=retained_input)
-        assert not observed.stderr and observed.stdout == retained.stdout, observed
+        # Compare the same source project in each compiler's execution mode.
+        reference_config = retained_project / 'reference.trbconfig.jsonc'
+        reference_config.write_text(json.dumps({'name': 'retained', 'mode': 'go',
+            'sourceDir': 'src', 'go': {'module': 'example.com/retained'}}))
+        observed = run([reference, 'repl', '--config', reference_config], data=retained_input)
+        # Native announces a successful reload after replay; the reference
+        # announces it before replay. Keep both complete effect transcripts
+        # exact while accounting for this existing status-line placement.
+        before, after = retained.stdout.split('reloaded\n')
+        replay_effects = 'headers factory\nreader factory\nkept\nentry\nbody\n99\n'
+        assert before.endswith(replay_effects), retained
+        expected_reference = before[:-len(replay_effects)] + 'reloaded\n' + replay_effects + after
+        assert not observed.stderr and observed.stdout == expected_reference, observed
 
 print('PASS exact bundled HTTP imports, canonical identity, file/project/REPL and rejected boundaries')
