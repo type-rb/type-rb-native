@@ -1,0 +1,127 @@
+import { binary_equal, binary_not_equal } from frontend/types/operators
+import { mir_function_value_groups } from mir/analysis/flow
+import { mir_terminator_branch } from mir/model/control
+import { mir_op_scalar_binary, mir_op_scalar_literal } from mir/model/instructions
+import { mir_type_integer } from mir/model/type_ids
+import { MirBlock, MirInstruction, MirModule, MirValue } from mir/model/module
+
+def mir_integer_edge_operands(values: Array<MirValue>, instruction: MirInstruction): Boolean
+	mut first := false
+	mut second := false
+	values.each do |value|
+		if value.type_id == mir_type_integer()
+			if value.id == instruction.first
+				first = true
+			end
+			if value.id == instruction.second
+				second = true
+			end
+		end
+	end
+	if !first
+		return false
+	end
+	return second
+end
+
+def mir_integer_edge_arguments(mut native_module: MirModule, start: Integer, count: Integer, value: Integer, literal: Integer): Integer
+	mut found := false
+	mut index := 0
+	while index < count
+		if native_module.arguments[start + index] == value
+			found = true
+		end
+		index += 1
+	end
+	if !found
+		return start
+	end
+	# Spans can be shared by different edges. A private copy changes only the
+	# edge that established equality, including when both arms have one target.
+	replacement := native_module.arguments.size()
+	index = 0
+	while index < count
+		mut argument := native_module.arguments[start + index]
+		if argument == value
+			argument = literal
+		end
+		native_module.arguments.push(argument)
+		index += 1
+	end
+	return replacement
+end
+
+def mir_integer_edge_block(mut native_module: MirModule, block: MirBlock, values: Array<MirValue>): MirBlock
+	if block.terminator != mir_terminator_branch()
+		return block
+	end
+	mut position := block.instruction_start
+	while position < block.instruction_start + block.instruction_count
+		instruction := native_module.instructions[position]
+		if instruction.result == block.condition && instruction.kind == mir_op_scalar_binary() && (instruction.payload == binary_equal() || instruction.payload == binary_not_equal())
+			# Float equality does not preserve the sign of zero. Optional and
+			# composite comparisons likewise do not establish this scalar fact.
+			if !mir_integer_edge_operands(values, instruction)
+				return block
+			end
+			mut first_literal := false
+			mut second_literal := false
+			mut previous := block.instruction_start
+			while previous < position
+				definition := native_module.instructions[previous]
+				if definition.kind == mir_op_scalar_literal()
+					if definition.result == instruction.first
+						first_literal = true
+					end
+					if definition.result == instruction.second
+						second_literal = true
+					end
+				end
+				previous += 1
+			end
+			# Requiring exactly one local literal keeps repeated optimization
+			# stable and avoids choosing between two already constant operands.
+			if first_literal && second_literal
+				return block
+			end
+			if !first_literal && !second_literal
+				return block
+			end
+			mut literal := instruction.first
+			mut value := instruction.second
+			if second_literal
+				literal = instruction.second
+				value = instruction.first
+			end
+			mut first_start := block.first_argument_start
+			mut second_start := block.second_argument_start
+			if instruction.payload == binary_equal()
+				first_start = mir_integer_edge_arguments(native_module, first_start, block.first_argument_count, value, literal)
+			else
+				second_start = mir_integer_edge_arguments(native_module, second_start, block.second_argument_count, value, literal)
+			end
+			if first_start == block.first_argument_start && second_start == block.second_argument_start
+				return block
+			end
+			return MirBlock.new(id: block.id, source_id: block.source_id, line: block.line, parameter_start: block.parameter_start, parameter_count: block.parameter_count, instruction_start: block.instruction_start, instruction_count: block.instruction_count, terminator: block.terminator, condition: block.condition, first_target: block.first_target, second_target: block.second_target, first_argument_start: first_start, first_argument_count: block.first_argument_count, second_argument_start: second_start, second_argument_count: block.second_argument_count, return_value: block.return_value)
+		end
+		position += 1
+	end
+	return block
+end
+
+# Runs only after structural/type verification. The original comparison and
+# failure edges remain; later analyses consume ordinary verified SSA arguments.
+def mir_forward_integer_edge_constants(mut native_module: MirModule)
+	values := mir_function_value_groups(native_module)
+	mut function_index := 0
+	while function_index < native_module.functions.size()
+		function := native_module.functions[function_index]
+		mut index := function.block_start
+		while index < function.block_start + function.block_count
+			native_module.blocks[index] = mir_integer_edge_block(native_module, native_module.blocks[index], values[function_index])
+			index += 1
+		end
+		function_index += 1
+	end
+end
