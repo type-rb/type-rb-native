@@ -3,7 +3,9 @@ import importlib.util
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("representative_measure", Path(__file__).with_name("measure.py"))
 measure = importlib.util.module_from_spec(spec)
@@ -56,6 +58,23 @@ class MeasurementTests(unittest.TestCase):
             result = measure.observe([sys.executable, "-c", code], Path(temporary) / "timeout", 0.15)
             self.assertEqual(result["status"], "timeout")
             self.assertLess(result["wallSeconds"], 3)
+
+    def test_stdout_observer_delay_is_not_application_wall_time(self):
+        selector = measure.selectors.DefaultSelector()
+        original = selector.select
+
+        def delayed_select(timeout):
+            events = original(timeout)
+            time.sleep(0.3)
+            return events
+
+        with tempfile.TemporaryDirectory() as temporary, patch.object(selector, "select", delayed_select), \
+                patch.object(measure.selectors, "DefaultSelector", return_value=selector):
+            result = measure.observe([sys.executable, "-c", "print('finished')"], Path(temporary) / "delayed", 3)
+            self.assertEqual(result["status"], "pass")
+            # The observation thread deliberately cannot read the line for
+            # 300 ms. Process completion is captured independently before it.
+            self.assertLess(result["wallSeconds"], result["arrivals"][0]["seconds"])
 
     def test_coalesced_markers_are_not_zero_latency_samples(self):
         record = {"phase": "retained", "status": "pass", "wallSeconds": 1,

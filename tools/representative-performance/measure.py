@@ -15,6 +15,7 @@ import statistics
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -60,13 +61,24 @@ def observe(command, directory, timeout, env=None):
               "status": "pass", "arrivals": []}
     process = subprocess.Popen(record["command"], stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, start_new_session=True, env=env)
+    completion = {}
+    finished = threading.Event()
+
+    def reap():
+        _, status, usage = os.wait4(process.pid, 0)
+        completion.update(status=status, usage=usage, wallSeconds=time.monotonic() - started)
+        process.returncode = os.waitstatus_to_exitcode(status)
+        finished.set()
+
+    # Timestamp child completion independently of stdout draining/polling. A
+    # selector timeout after EOF must not become apparent application runtime.
+    waiter = threading.Thread(target=reap, daemon=True)
+    waiter.start()
     streams = {"stdout": bytearray(), "stderr": bytearray()}
     pending = bytearray()
     selector = selectors.DefaultSelector()
     selector.register(process.stdout, selectors.EVENT_READ, "stdout")
     selector.register(process.stderr, selectors.EVENT_READ, "stderr")
-    usage = None
-    status = None
     terminated = False
 
     def terminate():
@@ -80,7 +92,7 @@ def observe(command, directory, timeout, env=None):
         terminated = True
 
     try:
-        while selector.get_map() or status is None:
+        while selector.get_map() or not finished.is_set():
             elapsed = time.monotonic() - started
             if elapsed >= timeout:
                 record["status"] = "timeout"
@@ -101,26 +113,23 @@ def observe(command, directory, timeout, env=None):
                     lines = pending.split(b"\n")
                     pending = bytearray(lines.pop())
                     arrival = time.monotonic() - started
+                    batch_lines = sum(line.split(b",")[0].isdigit() for line in lines)
+                    coalesced = batch_lines > 1 or (batch_lines > 0 and b"ready" in lines)
                     for line in lines:
                         record["arrivals"].append({"line": line.decode("utf-8", errors="replace"),
-                                                   "seconds": arrival, "coalesced": len(lines) > 1})
+                                                   "seconds": arrival, "coalesced": coalesced})
             if record["status"] != "pass":
                 break
-            if status is None:
-                pid, child_status, child_usage = os.wait4(process.pid, os.WNOHANG)
-                if pid:
-                    status, usage = child_status, child_usage
-                    process.returncode = os.waitstatus_to_exitcode(status)
-        if status is None:
-            _, status, usage = os.wait4(process.pid, 0)
-            process.returncode = os.waitstatus_to_exitcode(status)
-        record.update(exitCode=process.returncode, wallSeconds=time.monotonic() - started,
+        waiter.join()
+        usage = completion["usage"]
+        record.update(exitCode=process.returncode, wallSeconds=completion["wallSeconds"],
                       cpuSeconds=usage.ru_utime + usage.ru_stime,
                       peakRssBytes=int(usage.ru_maxrss * (1 if sys.platform == "darwin" else 1024)))
         if process.returncode and record["status"] == "pass":
             record["status"] = "nonzero-exit"
     finally:
         terminate()
+        waiter.join()
         selector.close()
         process.stdout.close()
         process.stderr.close()
