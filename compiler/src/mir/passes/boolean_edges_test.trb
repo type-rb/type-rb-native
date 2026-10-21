@@ -2,7 +2,7 @@ import { emit_qbe } from compiler
 import { MirBlock, MirInstruction, mir_function_index } from mir/model/module
 import { mir_op_scalar_binary, mir_op_scalar_literal } from mir/model/instructions
 import { mir_terminator_branch, mir_terminator_jump } from mir/model/control
-import { mir_flow_blocks, mir_flow_parameter_slot } from mir/analysis/flow
+import { mir_flow_blocks, mir_flow_parameter_slot, mir_function_value_groups } from mir/analysis/flow
 import { MirThreadedEdge, mir_boolean_edge_block, mir_boolean_edge_known_literals, mir_boolean_edge_literals, mir_boolean_edge_path, mir_boolean_edge_target_retained } from mir/passes/boolean_edges
 import { optimize_verified_mir } from mir/passes/optimize
 import { verify_mir } from mir/verify/module
@@ -44,7 +44,8 @@ describe("MIR Boolean edge threading") do
 		entry := state.scalar_mir.blocks[function.block_start + blocks[integer_string(function.entry_block)]]
 		header := state.scalar_mir.blocks[function.block_start + blocks[integer_string(entry.first_target)]]
 		expect(header.terminator).to_equal(mir_terminator_branch())
-		facts := mir_boolean_edge_known_literals(state.scalar_mir, function, blocks)
+		values := mir_function_value_groups(state.scalar_mir)
+		facts := mir_boolean_edge_known_literals(state.scalar_mir, function, blocks, values[0])
 		key := integer_string(header.condition)
 		expect(facts.values.key?(key)).to_be_true()
 		expect(state.scalar_mir.literal_texts[facts.values[key]]).to_equal("true")
@@ -58,7 +59,8 @@ describe("MIR Boolean edge threading") do
 		entry := state.scalar_mir.blocks[function.block_start + blocks[integer_string(function.entry_block)]]
 		header := state.scalar_mir.blocks[function.block_start + blocks[integer_string(entry.first_target)]]
 		expect(header.terminator).to_equal(mir_terminator_branch())
-		facts := mir_boolean_edge_known_literals(state.scalar_mir, function, blocks)
+		values := mir_function_value_groups(state.scalar_mir)
+		facts := mir_boolean_edge_known_literals(state.scalar_mir, function, blocks, values[0])
 		expect(facts.values.key?(integer_string(header.condition))).to_be_false()
 		boolean_edge_run(control_test_output(emit_qbe(state)), "0\n5\n", false)
 	end
@@ -67,7 +69,8 @@ describe("MIR Boolean edge threading") do
 		state := array_loop_mir_check("def choose(flag: Boolean): Integer\nmut selected := true\nif flag\nselected = false\nend\nputs(selected)\nif selected\nreturn 1\nend\nreturn 2\nend\ndef main()\nputs(choose(true))\nputs(choose(false))\nend\n")
 		function := state.scalar_mir.functions[0]
 		blocks := mir_flow_blocks(state.scalar_mir, function)
-		facts := mir_boolean_edge_known_literals(state.scalar_mir, function, blocks)
+		values := mir_function_value_groups(state.scalar_mir)
+		facts := mir_boolean_edge_known_literals(state.scalar_mir, function, blocks, values[0])
 		mut found := false
 		mut index := function.block_start
 		while index < function.block_start + function.block_count
@@ -239,7 +242,7 @@ describe("MIR Boolean edge threading") do
 		boolean_edge_run(forced, "1000!456\n1000?123\n", false)
 	end
 
-	test("keeps source erasure block reordering and repeated optimization stable") do
+	test("keeps source erasure block and value reordering and repeated optimization stable") do
 		mut state := array_loop_mir_check(boolean_edge_choice_source())
 		before := control_test_output(emit_qbe(state))
 		arguments := state.scalar_mir.arguments.size()
@@ -254,6 +257,15 @@ describe("MIR Boolean edge threading") do
 			block := state.scalar_mir.blocks[left]
 			state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
 			state.scalar_mir.blocks[right] = block
+			left += 1
+			right -= 1
+		end
+		left = 0
+		right = state.scalar_mir.values.size() - 1
+		while left < right
+			value := state.scalar_mir.values[left]
+			state.scalar_mir.values[left] = state.scalar_mir.values[right]
+			state.scalar_mir.values[right] = value
 			left += 1
 			right -= 1
 		end
