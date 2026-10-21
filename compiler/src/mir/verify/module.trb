@@ -20,7 +20,7 @@ import { mir_numeric_plans, mir_numeric_plans_equal } from mir/analysis/numeric
 import { mir_array_loops_equal, mir_function_array_loops } from mir/analysis/array_loops
 import { mir_array_read_guards_equal, mir_function_array_checks } from mir/analysis/array_read_guards
 import { integer_string } from support/literals
-import { mir_definition_index, mir_identity_key } from mir/analysis/identities
+import { mir_definition_index } from mir/analysis/identities
 import { mir_semantic_type_name, mir_semantic_value_type, mir_types_error } from mir/model/types
 import { mir_function_root_plan, mir_root_plan_equal } from mir/analysis/roots
 import { mir_live_equal } from mir/analysis/liveness
@@ -491,7 +491,8 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	index = 0
 	while index < native_module.values.size()
 		value := native_module.values[index]
-		if !functions.key?(integer_string(value.function_id))
+		function_key := integer_string(value.function_id)
+		if !functions.key?(function_key)
 			return "MIR value identity is invalid"
 		end
 		if value.id < 0
@@ -506,17 +507,19 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 		if !mir_origin_valid(value.source_id, value.line, native_module.source_count[0])
 			return "MIR value origin is invalid"
 		end
-		key := mir_identity_key(value.function_id, value.id)
+		function_index := functions[function_key]
+		mut counts := definitions[function_index].counts
+		key := integer_string(value.id)
 		# Positive counts are fresh definitions; zero marks a validated value row.
-		if definitions.key?(key) && definitions[key] == 0
+		if counts.key?(key) && counts[key] == 0
 			return "MIR value is defined more than once"
 		end
-		mut owned := function_values[functions[integer_string(value.function_id)]]
+		mut owned := function_values[function_index]
 		owned.push(value)
-		if !definitions.key?(key) || definitions[key] != 1
+		if !counts.key?(key) || counts[key] != 1
 			return "MIR value definition count differs"
 		end
-		definitions[key] = 0
+		counts[key] = 0
 		index += 1
 	end
 	call_effects := mir_call_effect_summaries(native_module)
