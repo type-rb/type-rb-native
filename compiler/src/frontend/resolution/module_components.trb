@@ -1,4 +1,4 @@
-import { standard_source_internal_json, standard_source_internal_url, standard_source_json, standard_source_jsonc, standard_source_url } from state/standard_source_kinds
+import { standard_source_internal_json, standard_source_internal_url, standard_source_json, standard_source_jsonc, standard_source_time, standard_source_time_host, standard_source_url } from state/standard_source_kinds
 import { CompilerState, diagnostic } from state/state
 import { integer_string } from support/literals
 import { load_integer, sparse_integer_at } from support/storage
@@ -105,7 +105,11 @@ def compilation_unit_owner(state: CompilerState, source: Integer, owners: Array<
 	# Each public standard service and its loader-owned adapter form one unit.
 	# Module/declaration identities stay distinct; authored units stay separate.
 	owned := sparse_integer_at(state.standard_modules, source)
-	if owned == standard_source_url() || owned == standard_source_internal_url() || owned == standard_source_json() || owned == standard_source_jsonc() || owned == standard_source_internal_json()
+	mut time_service := false
+	if owned >= standard_source_time() && owned <= standard_source_time_host()
+		time_service = true
+	end
+	if owned == standard_source_url() || owned == standard_source_internal_url() || owned == standard_source_json() || owned == standard_source_jsonc() || owned == standard_source_internal_json() || time_service
 		mut owner := owners.size() + state.module_graph.module_count[0] + 1
 		mut index := 0
 		while index < owners.size()
@@ -116,6 +120,8 @@ def compilation_unit_owner(state: CompilerState, source: Integer, owners: Array<
 		end
 		if owned == standard_source_json() || owned == standard_source_jsonc() || owned == standard_source_internal_json()
 			owner += 1
+		elsif time_service
+			owner += 2
 		end
 		return owner
 	end
