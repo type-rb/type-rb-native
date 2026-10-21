@@ -1,5 +1,7 @@
 import { checked_category_enum, checked_category_function, checked_category_newtype, checked_category_object, checked_category_record, checked_category_value } from frontend/types/value_categories
 import { provisional_collection_nil_test } from frontend/checking/collections/context_analysis
+import { json_provider_encode, json_provider_kind } from frontend/providers/json_declarations
+import { check_inferred_json_encoding } from frontend/checking/builtins/json_codecs
 import { mir_state_enabled_slot, nullable_state_head_slot } from state/local_slots
 import { checking_single_pass } from state/checking_phases
 import { declaration_namespace, declaration_object } from frontend/types/declaration_kinds
@@ -267,7 +269,11 @@ def check_primary(
 			end
 			return checked_function_value(state, locals, function, origin)
 		end
-		if find_visible_generic_function(state, state.module_graph.active_module[0], name) >= 0
+		generic_function := find_visible_generic_function(state, state.module_graph.active_module[0], name)
+		if generic_function >= 0
+			if token_is(state, position[0], "(") && json_provider_kind(state, generic_function) == json_provider_encode()
+				return check_inferred_json_encoding(state, position, locals, generic_function)
+			end
 			return type_diagnostic(state, line, "function " + name + " requires an explicit fn wrapper to be used as a value")
 		end
 		enum_owner := find_visible_enum(state, state.module_graph.active_module[0], name)
