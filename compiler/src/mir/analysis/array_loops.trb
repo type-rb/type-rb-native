@@ -10,9 +10,9 @@ import { mir_effect_failure, mir_effect_none } from mir/model/effects
 import { mir_planned_instruction_effects } from mir/analysis/callables
 import { mir_array_reserved_pushes } from mir/analysis/array_appends
 import { integer_string } from support/literals
-import { MirArrayHeader, MirArrayLoop, MirBlock, MirFunction, MirModule } from mir/model/module
+import { MirArrayHeader, MirArrayLoop, MirBlock, MirFunction, MirModule, MirValue } from mir/model/module
 import { MirNonnegative, mir_exact_integer_literal, mir_nonnegative_value, mir_nonnegative_values } from mir/analysis/ranges
-import { MirFlow, MirFlowAliases, mir_build_flow, mir_flow_alias, mir_flow_aliases, mir_flow_block_index, mir_flow_blocks, mir_flow_dominates, mir_flow_parameter_slot, mir_flow_position } from mir/analysis/flow
+import { MirFlow, MirFlowAliases, mir_build_flow_with_values, mir_flow_alias, mir_flow_aliases, mir_flow_block_index, mir_flow_blocks, mir_flow_dominates, mir_flow_parameter_slot, mir_flow_position } from mir/analysis/flow
 import { mir_live_add, mir_live_equal, mir_managed_contains } from mir/analysis/liveness
 
 def mir_loop_definition(flow: MirFlow, value: Integer): Integer
@@ -244,7 +244,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 	return MirArrayLoop.new(header: header.id, preheader: preheader, owner: owner, length: length_index, accesses: accesses, headers: reused, reserved_pushes: pushes, cached_values: [], peel_body: -1, peel_nonempty: false)
 end
 
-def mir_function_array_loops(native_module: MirModule, function: MirFunction): Array<MirArrayLoop>
+def mir_function_array_loops(native_module: MirModule, function: MirFunction, values: Array<MirValue>): Array<MirArrayLoop>
 	mut plans: Array<MirArrayLoop> := []
 	if function.kind != mir_function_control()
 		return plans
@@ -264,7 +264,7 @@ def mir_function_array_loops(native_module: MirModule, function: MirFunction): A
 	if headers.size() == 0
 		return plans
 	end
-	flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
+	flow := mir_build_flow_with_values(native_module, function, mir_flow_blocks(native_module, function), values)
 	nonnegative := mir_nonnegative_values(native_module, function, flow)
 	headers.each do |id|
 		header_index := mir_flow_block_index(flow, id)

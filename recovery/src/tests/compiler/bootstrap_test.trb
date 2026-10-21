@@ -10,6 +10,7 @@ import { allocate_compiler_recovery_workspace } from compiler/workspace
 import { native_create_directory, native_read_text, native_write_text } from support/file_system
 import trb/std/process
 import trb/std/result
+import { Instant } from trb/std/time
 import { describe, expect, test } from trb/std/test
 
 def _recovery_environment(name: String): String
@@ -1449,15 +1450,21 @@ record RecoveryModuleControl
 	check_mutation: Boolean
 end
 
+record RecoveryModuleObservation
+	result: Result<Array<Float>, String>
+	seconds: Float
+end
+
 # Each task owns its mutation and negative-control directories. Missing and
 # malformed modules are checked sequentially in the same isolated closure.
-def _recovery_verify_module_control(control: RecoveryModuleControl): Result<Boolean, String>
+def _recovery_verify_module_control(control: RecoveryModuleControl): Result<Array<Float>, String>
 	executable := control.executable
 	workspace := control.workspace
 	names := control.closure.names
 	sources := control.closure.contents
 	mutations := control.mutations
 	index := control.index
+	mut timings := [-1.0, -1.0, -1.0, -1.0]
 	if control.check_mutation
 		mut changed: Array<String> := []
 		sources.each do |source|
@@ -1471,29 +1478,40 @@ def _recovery_verify_module_control(control: RecoveryModuleControl): Result<Bool
 			end
 		end
 		if !found
-			return Result<Boolean, String>::Err("missing compiler module mutation: " + names[index])
+			return Result<Array<Float>, String>::Err("missing compiler module mutation: " + names[index])
 		end
 		directory := workspace + "/compiler-source-compiler-" + names[index] + "-mutation"
+		prepared := Instant.now()
 		try _prepare_compiler_closure(directory, names, changed, "")
+		timings[0] = Instant.now().duration_since(prepared).total_seconds()
+		emitting := Instant.now()
 		emission := try _recovery_process(executable, ["emit-qbe", directory + "/compiler.trb"])
+		timings[1] = Instant.now().duration_since(emitting).total_seconds()
 		if emission.status != 0 || emission.stdout.empty?() || !emission.stderr.empty?()
-			return Result<Boolean, String>::Err(names[index] + " mutation emission failed: " + emission.stderr)
+			return Result<Array<Float>, String>::Err(names[index] + " mutation emission failed: " + emission.stderr)
 		end
 		if emission.stdout == control.canonical_qbe
-			return Result<Boolean, String>::Err(names[index] + " mutation did not change compiler QBE")
+			return Result<Array<Float>, String>::Err(names[index] + " mutation did not change compiler QBE")
 		end
 		try _recovery_require_no_intermediates(directory)
 	end
 
 	negative := workspace + "/compiler-source-compiler-invalid-" + names[index]
+	prepared := Instant.now()
 	try _prepare_compiler_closure(negative, names, sources, names[index])
+	if timings[0] < 0.0
+		timings[0] = 0.0
+	end
+	timings[0] += Instant.now().duration_since(prepared).total_seconds()
 	missing_output := negative + "/compiler-missing"
+	missing_started := Instant.now()
 	missing_build := try _recovery_build(executable, negative + "/compiler.trb", missing_output, negative + "/missing-qbe", negative + "/missing-cc")
+	timings[2] = Instant.now().duration_since(missing_started).total_seconds()
 	if missing_build.status != 1 || !missing_build.stdout.empty?()
-		return Result<Boolean, String>::Err("missing " + names[index] + " module did not fail before tools")
+		return Result<Array<Float>, String>::Err("missing " + names[index] + " module did not fail before tools")
 	end
 	if !missing_build.stderr.include?("cannot resolve project import " + names[index])
-		return Result<Boolean, String>::Err("missing " + names[index] + " module diagnostic differs: " + missing_build.stderr)
+		return Result<Array<Float>, String>::Err("missing " + names[index] + " module diagnostic differs: " + missing_build.stderr)
 	end
 	try _recovery_require_missing(missing_output)
 	try _recovery_require_no_intermediates(negative)
@@ -1502,16 +1520,18 @@ def _recovery_verify_module_control(control: RecoveryModuleControl): Result<Bool
 	# reject it before launching either external tool.
 	try _recovery_restore_module(negative, names[index], sources[index] + "\n`\n")
 	malformed_output := negative + "/compiler-malformed"
+	malformed_started := Instant.now()
 	malformed_build := try _recovery_build(executable, negative + "/compiler.trb", malformed_output, negative + "/missing-qbe", negative + "/missing-cc")
+	timings[3] = Instant.now().duration_since(malformed_started).total_seconds()
 	if malformed_build.status != 1 || !malformed_build.stdout.empty?()
-		return Result<Boolean, String>::Err("malformed " + names[index] + " module did not fail before tools")
+		return Result<Array<Float>, String>::Err("malformed " + names[index] + " module did not fail before tools")
 	end
 	if !malformed_build.stderr.include?("TRBN4001")
-		return Result<Boolean, String>::Err("malformed " + names[index] + " module diagnostic differs: " + malformed_build.stderr)
+		return Result<Array<Float>, String>::Err("malformed " + names[index] + " module diagnostic differs: " + malformed_build.stderr)
 	end
 	try _recovery_require_missing(malformed_output)
 	try _recovery_require_no_intermediates(negative)
-	return Result<Boolean, String>::Ok(true)
+	return Result<Array<Float>, String>::Ok(timings)
 end
 
 def _recovery_verify_compiler_source_closure(
@@ -1546,8 +1566,30 @@ def _recovery_verify_compiler_source_closure(
 				))
 		end
 	end
-	results := controls.concurrent_map(limit: limit) do |control|
-		_recovery_verify_module_control(control)
+	observations := controls.concurrent_map(limit: limit) do |control|
+		started := Instant.now()
+		result := _recovery_verify_module_control(control)
+		RecoveryModuleObservation.new(result: result, seconds: Instant.now().duration_since(started).total_seconds())
+	end
+	# Input order keeps successful and failed observations deterministic even
+	# though controls finish in parallel. These are diagnostic wall durations.
+	mut results: Array<Result<Boolean, String>> := []
+	observations.each.with_index do |observation, index|
+		control := controls[index]
+		mut timings := [-1.0, -1.0, -1.0, -1.0]
+		outcome := case observation.result
+		when Result::Ok(completed)
+			timings = completed
+			results.push(Result<Boolean, String>::Ok(true))
+			"ok"
+		when Result::Err(error)
+			results.push(Result<Boolean, String>::Err(error))
+			"failed"
+		end
+		puts("Recovery module " + names[control.index] + ": " + outcome +
+			", prepare=" + timings[0].to_s() + ", emit=" + timings[1].to_s() +
+			", missing=" + timings[2].to_s() + ", malformed=" + timings[3].to_s() +
+			", total=" + observation.seconds.to_s())
 	end
 	try collect_recovery_controls(results)
 

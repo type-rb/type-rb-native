@@ -12,6 +12,24 @@ import trb/std/process
 import trb/std/result
 
 describe("Array loop CFG MIR") do
+	test("rebuilds loop proofs from function-owned values after value storage reordering") do
+		mut state := array_loop_mir_check(array_loop_mir_source("while index < values.size()\ntotal += values[index]\nindex += 1\nend"))
+		before := control_test_output(emit_qbe(state))
+		mut left := 0
+		mut right := state.scalar_mir.values.size() - 1
+		while left < right
+			saved := state.scalar_mir.values[left]
+			state.scalar_mir.values[left] = state.scalar_mir.values[right]
+			state.scalar_mir.values[right] = saved
+			left += 1
+			right -= 1
+		end
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		optimize_verified_mir(state.scalar_mir)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+	end
+
 	test("caches stable Arrays and retains bounds in the scalar-counted fallback") do
 		source := "def scan(values: Array<Integer>, other: Array<Integer>, limit: Integer): Integer\nmut index := 0\nmut total := 0\nwhile index < limit\ntotal += values[index] + other[index]\nindex += 1\nend\nreturn total\nend\ndef main()\nputs(scan([1, 2, 3], [4, 5, 6], 2))\nend\n"
 		mut state := array_loop_mir_check(source)
