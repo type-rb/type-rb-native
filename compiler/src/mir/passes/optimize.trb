@@ -66,7 +66,8 @@ def optimize_verified_mir(mut native_module: MirModule)
 		native_module.callable_plans[0] = mir_callable_plans(native_module)
 	end
 	# Edge threading only replaces argument spans. Reuse these verified value
-	# groups during its flow analysis and the final plan derivation.
+	# groups during its flow analysis and the final plan derivation. Loop plans
+	# must not rescan the module's entire value table for each function.
 	function_values := mir_function_value_groups(native_module)
 	if mir_thread_boolean_edges(native_module, function_values)
 		native_module.callable_plans[0] = mir_callable_plans(native_module)
@@ -87,7 +88,7 @@ def optimize_verified_mir(mut native_module: MirModule)
 		native_module.functions[index] = mir_function_with_guard(function, mir_scalar_guard(native_module, function))
 		# Build the plan from the final record retained by the module. Replacing
 		# that record above must not leave planning dependent on a displaced alias.
-		loops := mir_function_array_loops(native_module, native_module.functions[index])
+		loops := mir_function_array_loops(native_module, native_module.functions[index], function_values[index])
 		if native_module.array_loops.size() == index
 			native_module.array_loops.push(loops)
 		else
@@ -104,7 +105,7 @@ def optimize_verified_mir(mut native_module: MirModule)
 		else
 			native_module.array_read_guards[index] = checks.guards
 		end
-		loop_calls := mir_function_loop_calls(native_module, native_module.functions[index])
+		loop_calls := mir_function_loop_calls(native_module, native_module.functions[index], function_values[index])
 		if native_module.loop_calls.size() == index
 			native_module.loop_calls.push(loop_calls)
 		else

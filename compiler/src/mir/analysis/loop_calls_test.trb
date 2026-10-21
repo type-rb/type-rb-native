@@ -132,6 +132,20 @@ describe("MIR invariant loop calls") do
 		before := control_test_output(emit_qbe(state))
 		intrinsic_mir_erase(state)
 		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		# Groups belong to function identities, not contiguous value-table rows.
+		mut first := 0
+		mut last := state.scalar_mir.values.size() - 1
+		while first < last
+			saved := state.scalar_mir.values[first]
+			state.scalar_mir.values[first] = state.scalar_mir.values[last]
+			state.scalar_mir.values[last] = saved
+			first += 1
+			last -= 1
+		end
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		optimize_verified_mir(state.scalar_mir)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
 		state.scalar_mir.functions.each do |function|
 			mut left := function.block_start
 			mut right := left + function.block_count - 1

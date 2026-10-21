@@ -282,6 +282,11 @@ Independent generation commands and per-module boundary controls run with
 `TYPE_RB_NATIVE_RECOVERY_JOBS` concurrency (default `2`, accepted `1` to `4`;
 hosted CI uses `4`). Each module keeps its missing-module and malformed-module
 checks; selected modules also run the QBE mutation check. Each root invocation
+prints per-module preparation, emission, missing/malformed and total wall
+durations in inventory order, including total time for failed controls. A negative
+duration marks an unavailable or unselected phase; totals include assertion/cleanup
+overhead and parallel durations must not be summed as stage elapsed time.
+The complete module controls remain required. Each root invocation
 owns a fresh `mktemp -d` workspace
 validated by `tools/recovery-workspace.mjs` before later consumers use it and
 before cleanup. Do not remove generation identity, mutation or differential
