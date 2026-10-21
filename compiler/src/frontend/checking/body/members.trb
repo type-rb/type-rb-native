@@ -384,8 +384,20 @@ def check_newtype_member(mut state: CompilerState, mut position: Array<Integer>,
 	origin := position[0]
 	line := load_integer(state.source_tokens.token_lines, origin)
 	class_method := receiver.category == checked_category_newtype()
-	if !token_is(state, origin, "(")
+	mut method_arguments: Array<String> := []
+	if token_is(state, position[0], "<")
+		mut application := [position[0] - 1]
+		raw := parse_type(state, application)
+		generic_arguments(raw).each do |argument|
+			method_arguments.push(resolve_type_name(state, state.module_graph.active_module[0], argument, false))
+		end
+		position[0] = application[0]
+	end
+	if !token_is(state, position[0], "(")
 		return type_diagnostic(state, line, "newtype member requires an explicit call")
+	end
+	if method_arguments.size() > 0 && ((class_method && member == "new") || (!class_method && member == "value"))
+		return type_diagnostic(state, line, "newtype construction and projection do not accept type arguments")
 	end
 	if class_method && member == "new"
 		if definition.closed && (state.module_graph.active_module[0] != definition.source_id || state.global_bindings.declaration_owner[0] != definition.name)
@@ -411,13 +423,14 @@ def check_newtype_member(mut state: CompilerState, mut position: Array<Integer>,
 		expect(state, position, ")")
 		return mir_newtype_operation(state, locals, mir_op_newtype_project(), receiver, owner, definition.representation, origin)
 	end
-	function := newtype_method_function(state, receiver.type_name, member, class_method)
+	function := newtype_method_function(state, receiver.type_name, member, class_method, method_arguments)
 	if function < 0
 		return type_diagnostic(state, line, "newtype " + definition.name + " has no matching member " + member)
 	end
 	if !namespace_member_access(state, definition.source_id, definition.name + "::" + member, origin)
 		return checked_value("Invalid", checked_category_value(), origin, 0)
 	end
+	store_integer(state.callables.checked[0].generic_calls, position[0], function + 1)
 	return check_call(state, position, locals, checked_category_function(), "", function, checked_mir_value(receiver), !class_method)
 end
 
