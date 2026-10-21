@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assessment, change, value, metrics } from '../../docs/capabilities/benchmarks/daily-model.mjs';
+import { groupResults, resultFor, verdict } from '../../docs/capabilities/benchmarks/representative-model.mjs';
 test('verdicts distinguish speed, memory, build time and size without inverting ratios', () => {
   assert.deepEqual(assessment(change(80, 100), 'runtime'), { tone: 'better', label: 'Faster', detail: '20.0% less time' });
   assert.equal(assessment(change(120, 100), 'runtime').label, 'Slower');
@@ -15,6 +16,21 @@ test('missing, failed and below-resolution comparisons never look favorable', ()
     assert.equal(assessment(change(1, v), 'runtime').tone, 'missing');
   }
   assert.equal(value({ status: 'timeout', runtime: { wallSeconds: 1 } }, metrics.runtime), null);
+});
+test('representative coverage keeps unmeasured and changed inputs without borrowing old results', () => {
+  const input = { id: 'json-small', workload: 'json-transform', count: 16, batches: 5, size: 'small', variant: 'valid' };
+  const snapshot = { inputs: [input], rows: [{ case: input.id, summaries: { native: { wallSeconds: 2 }, 'pure-go': { wallSeconds: 1 } } }] };
+  const pending = { ...input, id: 'json-large', count: 1024 };
+  assert.equal(resultFor(snapshot, { ...input, count: 32 }), undefined);
+  assert.deepEqual(groupResults([input, pending], snapshot, 'pure-go', 'wallSeconds')[0].counts, { better: 0, worse: 1, neutral: 0, missing: 1 });
+  assert.equal(groupResults([input], undefined, 'pure-go', 'wallSeconds')[0].counts.missing, 1);
+  assert.equal(groupResults([input], snapshot, 'typerb-go', 'wallSeconds')[0].counts.missing, 1);
+});
+test('representative throughput reverses time direction and zero CPU stays unknown', () => {
+  assert.equal(verdict(2, 1, 'unitsPerSecond').label, 'Higher throughput');
+  assert.equal(verdict(2, 1, 'wallSeconds').label, 'Slower');
+  assert.equal(verdict(0, 1, 'cpuSeconds').label, 'Not comparable');
+  assert.equal(verdict(1.01, 1, 'peakRssBytes').label, 'About the same');
 });
 test('language areas use geometric means, keep the weakest workload and count missing values', async () => {
   const { areaSummary, familyCoverage } = await import('../../docs/capabilities/benchmarks/daily-model.mjs');
