@@ -171,12 +171,13 @@ describe("MIR Array loop versioning") do
 
 	test("keeps the version budget across repeated optimization") do
 		body := "index = 0\nwhile index < limit\ntotal += values[index]\nindex += 1\nend\n"
-		mut state := array_loop_mir_check("def sum(values: Array<Integer>, limit: Integer): Integer\nmut total := 0\nmut index := 0\n" + body + body + body + "\nreturn total\nend\ndef main()\nputs(sum([10, 20], 2))\nend\n")
+		mut state := array_loop_mir_check("def sum(values: Array<Integer>, limit: Integer): Integer\nmut total := 0\nmut index := 0\n" + body + body + body + body + "\nreturn total\nend\ndef main()\nputs(sum([10, 20], 2))\nend\n")
+		expect(mir_array_version_count(state.scalar_mir, state.scalar_mir.functions[0])).to_equal(3)
 		count := state.scalar_mir.blocks.size()
 		optimize_verified_mir(state.scalar_mir)
 		expect(state.scalar_mir.blocks.size()).to_equal(count)
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
-		versioned_array_run(control_test_output(emit_qbe(state)), "90\n")
+		versioned_array_run(control_test_output(emit_qbe(state)), "120\n")
 	end
 
 	test("rejects resizing and allocating operations inside a candidate loop") do
