@@ -62,3 +62,12 @@ for (const name of ['index.html', 'trends.html', 'weekly.html']) {
   const page = await readFile(resolve(root, 'docs/capabilities/benchmarks', name), 'utf8');
   if (page.includes('<select')) throw new Error(`${name} must use visible comparison buttons`);
 }
+
+const representative = await readFile(resolve(root, 'docs/capabilities/benchmarks/representative.html'), 'utf8');
+for (const required of ['Application workloads', 'id="families"', 'id="attempt"', './representative.js', 'on demand', 'Remaining gaps']) {
+  if (!representative.includes(required)) throw new Error(`representative.html is missing ${required}`);
+}
+for (const name of ['index.html', 'trends.html', 'weekly.html']) {
+  const page = await readFile(resolve(root, 'docs/capabilities/benchmarks', name), 'utf8');
+  if (!page.includes('representative.html')) throw new Error(`${name} must link the application coverage`);
+}
