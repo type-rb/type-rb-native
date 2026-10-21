@@ -1,0 +1,975 @@
+import { Result } from trb/std/result
+import trb/std/json as PublicJSON
+
+module JSON
+end
+
+# Preserve raw numbers until the whole document is valid and duplicate object
+# keys have been resolved. Syntax errors precede value conversion errors.
+record JsonNode
+	kind: Integer
+	text: String
+	items: Array<Integer>
+	members: Hash<String, Integer>
+end
+
+record JsonParser
+	bytes: Bytes
+	position: Array<Integer>
+	nodes: Array<JsonNode>
+	failure: Array<PublicJSON::Error>
+end
+
+def _slice(source: String, start: Integer, finish: Integer): String
+	mut text := ""
+	mut index := start
+	while index < finish
+		text += source[index]
+		index += 1
+	end
+	return text
+end
+
+def _byte(parser: JsonParser): Integer
+	if parser.position[0] >= parser.bytes.size()
+		return -1
+	end
+	return parser.bytes.at(parser.position[0])
+end
+
+def _source_slice(parser: JsonParser, start: Integer, finish: Integer): String
+	mut text := ""
+	mut index := start
+	while index < finish
+		text += _octet(parser.bytes.at(index))
+		index += 1
+	end
+	return text
+end
+
+def _space(mut parser: JsonParser)
+	mut character := _byte(parser)
+	while character == 32 || character == 10 || character == 13 || character == 9
+		parser.position[0] += 1
+		character = _byte(parser)
+	end
+end
+
+def _error(kind: PublicJSON::ErrorKind, message: String, path: String): PublicJSON::Error
+	return PublicJSON::Error.new(kind: kind, message: message, path: path, line: nil, column: nil)
+end
+
+def _byte_width(bytes: Bytes, position: Integer, finish: Integer): Integer
+	first := bytes.at(position)
+	mut width := 1
+	if first >= 194 && first < 224
+		width = 2
+	elsif first >= 224 && first < 240
+		width = 3
+	elsif first >= 240 && first < 245
+		width = 4
+	end
+	if position + width > finish
+		return 1
+	end
+	mut character := ""
+	mut index := 0
+	while index < width
+		character += _octet(bytes.at(position + index))
+		index += 1
+	end
+	if !character.to_bytes().valid_utf8?()
+		return 1
+	end
+	return width
+end
+
+def _syntax(mut parser: JsonParser, message: String, location: Integer)
+	if !parser.failure.empty?()
+		return
+	end
+	if location < 0
+		parser.failure.push(_error(PublicJSON::ErrorKind::Syntax, message, ""))
+		return
+	end
+	# The reference counts runes before the error's final byte, consuming each
+	# incomplete or invalid UTF-8 byte separately rather than replacing a run.
+	mut line := 1
+	mut column := 1
+	mut index := 0
+	while index < location
+		if parser.bytes.at(index) == 10
+			line += 1
+			column = 1
+		else
+			column += 1
+		end
+		index += _byte_width(parser.bytes, index, location)
+	end
+	parser.failure.push(PublicJSON::Error.new(kind: PublicJSON::ErrorKind::Syntax, message: message, path: "", line: line, column: column))
+end
+
+def _diagnostic_hex(value: Integer, width: Integer): String
+	mut number := value
+	mut text := ""
+	mut index := 0
+	while index < width
+		text = "0123456789abcdef"[number % 16] + text
+		number /= 16
+		index += 1
+	end
+	return text
+end
+
+def _diagnostic_range(data: String, point: Integer): Boolean
+	mut low := 0
+	mut high := data.size() / 12
+	while low < high
+		middle := low + (high - low) / 2
+		mut start := 0
+		mut finish := 0
+		mut index := 0
+		while index < 6
+			start = start * 16 + _hex(data[middle * 12 + index])
+			finish = finish * 16 + _hex(data[middle * 12 + 6 + index])
+			index += 1
+		end
+		if point < start
+			high = middle
+		elsif point > finish
+			low = middle + 1
+		else
+			return true
+		end
+	end
+	return false
+end
+
+def _diagnostic_character(character: String, quote: String): String
+	if !character.to_bytes().valid_utf8?()
+		return "\\x" + _diagnostic_hex(character.to_bytes().at(0), 2)
+	end
+	if character == quote || character == "\\"
+		return "\\" + character
+	end
+	point := character.codepoints()[0]
+	if _diagnostic_range(_diagnostic_printable_data(), point)
+		return character
+	end
+	if point == 7
+		return "\\a"
+	elsif point == 8
+		return "\\b"
+	elsif point == 9
+		return "\\t"
+	elsif point == 10
+		return "\\n"
+	elsif point == 11
+		return "\\v"
+	elsif point == 12
+		return "\\f"
+	elsif point == 13
+		return "\\r"
+	elsif point < 32 || point == 127
+		return "\\x" + _diagnostic_hex(point, 2)
+	elsif point < 65536
+		return "\\u" + _diagnostic_hex(point, 4)
+	end
+	return "\\U" + _diagnostic_hex(point, 8)
+end
+
+def _quoted(character: String): String
+	return "'" + _diagnostic_character(character, "'") + "'"
+end
+
+def _bad(mut parser: JsonParser, context: String)
+	if _byte(parser) < 0
+		_syntax(parser, "unexpected EOF", -1)
+	else
+		width := _byte_width(parser.bytes, parser.position[0], parser.bytes.size())
+		character := _source_slice(parser, parser.position[0], parser.position[0] + width)
+		_syntax(parser, "invalid character " + _quoted(character) + " " + context, parser.position[0] + width - 1)
+	end
+end
+
+def _hex(character: String): Integer
+	mut index := 0
+	while index < 16
+		if "0123456789abcdef"[index] == character || "0123456789ABCDEF"[index] == character
+			return index
+		end
+		index += 1
+	end
+	return -1
+end
+
+def _hex_byte(character: Integer): Integer
+	if character >= 48 && character <= 57
+		return character - 48
+	elsif character >= 65 && character <= 70
+		return character - 55
+	elsif character >= 97 && character <= 102
+		return character - 87
+	end
+	return -1
+end
+
+def _octet(value: Integer): String
+	if value < 128
+		return "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x20\x21\x22\x23\x24\x25\x26\x27\x28\x29\x2a\x2b\x2c\x2d\x2e\x2f\x30\x31\x32\x33\x34\x35\x36\x37\x38\x39\x3a\x3b\x3c\x3d\x3e\x3f\x40\x41\x42\x43\x44\x45\x46\x47\x48\x49\x4a\x4b\x4c\x4d\x4e\x4f\x50\x51\x52\x53\x54\x55\x56\x57\x58\x59\x5a\x5b\x5c\x5d\x5e\x5f\x60\x61\x62\x63\x64\x65\x66\x67\x68\x69\x6a\x6b\x6c\x6d\x6e\x6f\x70\x71\x72\x73\x74\x75\x76\x77\x78\x79\x7a\x7b\x7c\x7d\x7e\x7f"[value]
+	end
+	return ["\x80", "\x81", "\x82", "\x83", "\x84", "\x85", "\x86", "\x87", "\x88", "\x89", "\x8a", "\x8b", "\x8c", "\x8d", "\x8e", "\x8f", "\x90", "\x91", "\x92", "\x93", "\x94", "\x95", "\x96", "\x97", "\x98", "\x99", "\x9a", "\x9b", "\x9c", "\x9d", "\x9e", "\x9f", "\xa0", "\xa1", "\xa2", "\xa3", "\xa4", "\xa5", "\xa6", "\xa7", "\xa8", "\xa9", "\xaa", "\xab", "\xac", "\xad", "\xae", "\xaf", "\xb0", "\xb1", "\xb2", "\xb3", "\xb4", "\xb5", "\xb6", "\xb7", "\xb8", "\xb9", "\xba", "\xbb", "\xbc", "\xbd", "\xbe", "\xbf", "\xc0", "\xc1", "\xc2", "\xc3", "\xc4", "\xc5", "\xc6", "\xc7", "\xc8", "\xc9", "\xca", "\xcb", "\xcc", "\xcd", "\xce", "\xcf", "\xd0", "\xd1", "\xd2", "\xd3", "\xd4", "\xd5", "\xd6", "\xd7", "\xd8", "\xd9", "\xda", "\xdb", "\xdc", "\xdd", "\xde", "\xdf", "\xe0", "\xe1", "\xe2", "\xe3", "\xe4", "\xe5", "\xe6", "\xe7", "\xe8", "\xe9", "\xea", "\xeb", "\xec", "\xed", "\xee", "\xef", "\xf0", "\xf1", "\xf2", "\xf3", "\xf4", "\xf5", "\xf6", "\xf7", "\xf8", "\xf9", "\xfa", "\xfb", "\xfc", "\xfd", "\xfe", "\xff"][value - 128]
+end
+
+def _rune(point: Integer): String
+	if point < 128
+		return _octet(point)
+	elsif point < 2048
+		return _octet(192 + point / 64) + _octet(128 + point % 64)
+	elsif point < 65536
+		return _octet(224 + point / 4096) + _octet(128 + point / 64 % 64) + _octet(128 + point % 64)
+	end
+	return _octet(240 + point / 262144) + _octet(128 + point / 4096 % 64) + _octet(128 + point / 64 % 64) + _octet(128 + point % 64)
+end
+
+def _escape_diagnostic(sequence: String): String
+	bytes := sequence.to_bytes()
+	mut needs_quotes := false
+	mut encoded := "\""
+	mut index := 0
+	while index < bytes.size()
+		width := _byte_width(bytes, index, bytes.size())
+		if width == 1 && bytes.at(index) >= 128
+			needs_quotes = true
+			encoded += "\\x" + _diagnostic_hex(bytes.at(index), 2)
+		else
+			mut raw := ""
+			mut offset := 0
+			while offset < width
+				raw += _octet(bytes.at(index + offset))
+				offset += 1
+			end
+			character := raw.to_bytes().to_s()
+			point := character.codepoints()[0]
+			if point == 96 || point == 65533 || !_diagnostic_range(_diagnostic_printable_data(), point) || _diagnostic_range(_diagnostic_space_data(), point)
+				needs_quotes = true
+			end
+			encoded += _diagnostic_character(character, "\"")
+		end
+		index += width
+	end
+	if needs_quotes
+		return encoded + "\""
+	end
+	return "`" + sequence.to_bytes().to_s() + "`"
+end
+
+def _unicode(mut parser: JsonParser): Integer
+	mut value := 0
+	mut count := 0
+	mut sequence := "\\u"
+	mut valid := true
+	while count < 4 && _byte(parser) >= 0
+		character := _byte(parser)
+		sequence += _octet(character)
+		digit := _hex_byte(character)
+		if digit < 0
+			valid = false
+		else
+			value = value * 16 + digit
+		end
+		parser.position[0] += 1
+		count += 1
+	end
+	if count < 4 && _byte(parser) < 0 && valid
+		_syntax(parser, "unexpected EOF", -1)
+		return -1
+	end
+	if !valid || count != 4
+		_syntax(parser, "invalid escape sequence " + _escape_diagnostic(sequence) + " in string", parser.position[0] - 1)
+		return -1
+	end
+	return value
+end
+
+def _string(mut parser: JsonParser): String
+	parser.position[0] += 1
+	mut text := ""
+	while _byte(parser) >= 0 && parser.failure.empty?()
+		character := _byte(parser)
+		if character == 34
+			parser.position[0] += 1
+			return text.to_bytes().to_s()
+		end
+		if character < 32
+			_bad(parser, "in string")
+			return ""
+		end
+		if character >= 128
+			width := _byte_width(parser.bytes, parser.position[0], parser.bytes.size())
+			if width == 1
+				text += _rune(65533)
+			else
+				text += _source_slice(parser, parser.position[0], parser.position[0] + width)
+			end
+			parser.position[0] += width
+			next
+		end
+		parser.position[0] += 1
+		if character != 92
+			text += _octet(character)
+			next
+		end
+		escape := _byte(parser)
+		if escape < 0
+			break
+		end
+		parser.position[0] += 1
+		if escape == 34 || escape == 92 || escape == 47
+			text += _octet(escape)
+		elsif escape == 98
+			text += "\x08"
+		elsif escape == 102
+			text += "\x0c"
+		elsif escape == 110
+			text += "\n"
+		elsif escape == 114
+			text += "\r"
+		elsif escape == 116
+			text += "\t"
+		elsif escape == 117
+			mut point := _unicode(parser)
+			if point < 0
+				return ""
+			end
+			if point >= 55296 && point <= 56319
+				start := parser.position[0]
+				if start + 6 <= parser.bytes.size() && parser.bytes.at(start) == 92 && parser.bytes.at(start + 1) == 117
+					mut low := 0
+					mut offset := 2
+					while offset < 6 && _hex_byte(parser.bytes.at(start + offset)) >= 0
+						low = low * 16 + _hex_byte(parser.bytes.at(start + offset))
+						offset += 1
+					end
+					if offset == 6 && low >= 56320 && low <= 57343
+						point = 65536 + (point - 55296) * 1024 + low - 56320
+						parser.position[0] += 6
+					end
+				end
+			end
+			if point >= 55296 && point <= 57343
+				point = 65533
+			end
+			text += _rune(point)
+		else
+			_syntax(parser, "invalid escape sequence " + _escape_diagnostic("\\" + _octet(escape)) + " in string", parser.position[0] - 1)
+			return ""
+		end
+	end
+	_syntax(parser, "unexpected EOF", -1)
+	return ""
+end
+
+def _digit(character: Integer): Boolean
+	return character >= 48 && character <= 57
+end
+
+def _number(mut parser: JsonParser): String
+	start := parser.position[0]
+	if _byte(parser) == 45
+		parser.position[0] += 1
+	end
+	if !_digit(_byte(parser))
+		_bad(parser, "in numeric literal")
+		return ""
+	end
+	if _byte(parser) == 48
+		parser.position[0] += 1
+	else
+		while _digit(_byte(parser))
+			parser.position[0] += 1
+		end
+	end
+	if _byte(parser) == 46
+		parser.position[0] += 1
+		if !_digit(_byte(parser))
+			_bad(parser, "in numeric literal")
+			return ""
+		end
+		while _digit(_byte(parser))
+			parser.position[0] += 1
+		end
+	end
+	if _byte(parser) == 101 || _byte(parser) == 69
+		parser.position[0] += 1
+		if _byte(parser) == 43 || _byte(parser) == 45
+			parser.position[0] += 1
+		end
+		if !_digit(_byte(parser))
+			_bad(parser, "in numeric literal")
+			return ""
+		end
+		while _digit(_byte(parser))
+			parser.position[0] += 1
+		end
+	end
+	return _source_slice(parser, start, parser.position[0])
+end
+
+def _literal(mut parser: JsonParser, literal: String)
+	bytes := literal.to_bytes()
+	mut index := 0
+	while index < bytes.size()
+		if _byte(parser) != bytes.at(index)
+			_bad(parser, "in literal " + literal + " (expecting '" + literal[index] + "')")
+			return
+		end
+		parser.position[0] += 1
+		index += 1
+	end
+end
+
+# Nodes retain raw values; only reachable children are converted after syntax
+# and duplicate-key handling finish. Explicit stacks preserve the JSON depth
+# contract without consuming an evaluator call frame for each container.
+def _atom(mut parser: JsonParser, depth: Integer): Integer
+	_space(parser)
+	character := _byte(parser)
+	mut kind := 0
+	mut text := ""
+	if character == 34
+		kind = 3
+		text = _string(parser)
+	elsif character == 110
+		_literal(parser, "null")
+	elsif character == 116 || character == 102
+		kind = 1
+		text = "true"
+		if character == 102
+			text = "false"
+		end
+		_literal(parser, text)
+	elsif character == 45 || _digit(character)
+		kind = 2
+		text = _number(parser)
+	elsif character == 91 || character == 123
+		if depth >= 10000
+			_syntax(parser, "exceeded max depth", parser.position[0])
+			return -1
+		end
+		kind = 4
+		if character == 123
+			kind = 5
+		end
+		parser.position[0] += 1
+	else
+		_bad(parser, "looking for beginning of value")
+		return -1
+	end
+	if !parser.failure.empty?()
+		return -1
+	end
+	identity := parser.nodes.size()
+	parser.nodes.push(JsonNode.new(kind: kind, text: text, items: [], members: {}))
+	return identity
+end
+
+def _node(mut parser: JsonParser): Integer
+	root := _atom(parser, 0)
+	if root < 0 || parser.nodes[root].kind < 4
+		return root
+	end
+	mut frames := [root]
+	mut phases := [0]
+	while !frames.empty?() && parser.failure.empty?()
+		top := frames.size() - 1
+		mut node := parser.nodes[frames[top]]
+		mut closing := 93
+		if node.kind == 5
+			closing = 125
+		end
+		_space(parser)
+		character := _byte(parser)
+		if phases[top] == 0 && character == closing
+			parser.position[0] += 1
+			frames.pop()
+			phases.pop()
+			next
+		end
+		if phases[top] != 2
+			mut key := ""
+			if node.kind == 5
+				if character != 34
+					_bad(parser, "looking for beginning of object key string")
+					return -1
+				end
+				key = _string(parser)
+				_space(parser)
+				if _byte(parser) != 58
+					_bad(parser, "after object key")
+					return -1
+				end
+				parser.position[0] += 1
+			end
+			child := _atom(parser, frames.size())
+			if child < 0
+				return -1
+			end
+			if node.kind == 5
+				node.members[key] = child
+			else
+				node.items.push(child)
+			end
+			phases[top] = 2
+			if parser.nodes[child].kind >= 4
+				frames.push(child)
+				phases.push(0)
+			end
+			next
+		end
+		if character == closing
+			parser.position[0] += 1
+			frames.pop()
+			phases.pop()
+		elsif character == 44
+			parser.position[0] += 1
+			phases[top] = 1
+		else
+			if node.kind == 5
+				_bad(parser, "after object key:value pair")
+			else
+				_bad(parser, "after array element")
+			end
+			return -1
+		end
+	end
+	return root
+end
+
+def _pointer(name: String): String
+	mut escaped := ""
+	mut index := 0
+	while index < name.size()
+		if name[index] == "~"
+			escaped += "~0"
+		elsif name[index] == "/"
+			escaped += "~1"
+		else
+			escaped += name[index]
+		end
+		index += 1
+	end
+	return escaped
+end
+
+def _atomic_value(node: JsonNode): Result<PublicJSON::Value, PublicJSON::Error>
+	if node.kind == 0
+		return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::Null)
+	elsif node.kind == 1
+		return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::Boolean(node.text == "true"))
+	elsif node.kind == 2
+		case node.text.try_to_f()
+		when Result::Ok(number)
+			if number < -9007199254740991.0 || number > 9007199254740991.0
+				return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(PublicJSON::ErrorKind::Decode, "JSON integer is outside the portable range", ""))
+			end
+			integer := number.to_i()
+			if integer.to_f() == number
+				return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::Integer(integer))
+			end
+			return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::Float(number))
+		when Result::Err(_cause)
+			return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(PublicJSON::ErrorKind::Decode, "JSON number is not finite", ""))
+		end
+	elsif node.kind == 3
+		return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::String(node.text))
+	end
+	return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::Null)
+end
+
+def _path(parents: Array<Integer>, parts: Array<String>, identity: Integer): String
+	mut path := ""
+	mut index := identity
+	while parents[index] >= 0
+		path = "/" + parts[index] + path
+		index = parents[index]
+	end
+	return path
+end
+
+def _value(nodes: Array<JsonNode>, identity: Integer): Result<PublicJSON::Value, PublicJSON::Error>
+	# Node identities are dense indexes; unreachable duplicate-key nodes keep
+	# their unused placeholder without requiring a second Hash lookup per edge.
+	mut values: Array<PublicJSON::Value> := []
+	mut parents: Array<Integer> := []
+	mut parts: Array<String> := []
+	mut index := 0
+	while index < nodes.size()
+		values.push(PublicJSON::Value::Null)
+		parents.push(-1)
+		parts.push("")
+		index += 1
+	end
+	mut pending := [identity]
+	mut entered := [false]
+	while !pending.empty?()
+		top := pending.size() - 1
+		current := pending[top]
+		node := nodes[current]
+		if node.kind < 4
+			case _atomic_value(node)
+			when Result::Ok(value)
+				values[current] = value
+			when Result::Err(error)
+				return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(error.kind, error.message, _path(parents, parts, current)))
+			end
+		elsif !entered[top]
+			entered[top] = true
+			if node.kind == 4
+				index = node.items.size()
+				while index > 0
+					index -= 1
+					child := node.items[index]
+					parents[child] = current
+					parts[child] = index.to_s()
+					pending.push(child)
+					entered.push(false)
+				end
+			else
+				keys := node.members.keys().sort()
+				index = keys.size()
+				while index > 0
+					index -= 1
+					child := node.members.fetch(keys[index])
+					parents[child] = current
+					parts[child] = _pointer(keys[index])
+					pending.push(child)
+					entered.push(false)
+				end
+			end
+			next
+		elsif node.kind == 4
+			mut items: Array<PublicJSON::Value> := []
+			index = 0
+			while index < node.items.size()
+				items.push(values[node.items[index]])
+				index += 1
+			end
+			values[current] = PublicJSON::Value::Array(items)
+		else
+			mut members: Hash<String, PublicJSON::Value> := {}
+			keys := node.members.keys().sort()
+			index = 0
+			while index < keys.size()
+				members[keys[index]] = values[node.members.fetch(keys[index])]
+				index += 1
+			end
+			values[current] = PublicJSON::Value::Object(members)
+		end
+		pending.pop()
+		entered.pop()
+	end
+	return Result<PublicJSON::Value, PublicJSON::Error>::Ok(values[identity])
+end
+
+def parse(source: String): Result<PublicJSON::Value, PublicJSON::Error>
+	mut parser := JsonParser.new(bytes: source.to_bytes(), position: [0], nodes: [], failure: [])
+	_space(parser)
+	if _byte(parser) < 0
+		return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(PublicJSON::ErrorKind::Syntax, "EOF", ""))
+	end
+	root := _node(parser)
+	if !parser.failure.empty?()
+		return Result<PublicJSON::Value, PublicJSON::Error>::Err(parser.failure[0])
+	end
+	_space(parser)
+	if _byte(parser) >= 0
+		trailing := _node(parser)
+		if !parser.failure.empty?()
+			return Result<PublicJSON::Value, PublicJSON::Error>::Err(parser.failure[0])
+		end
+		kind := parser.nodes[trailing].kind
+		mut message := "JSON source contains multiple values"
+		mut name := ""
+		if kind == 1
+			name = "bool"
+		elsif kind == 2
+			name = "number"
+		elsif kind == 3
+			name = "string"
+		elsif kind == 4
+			name = "array"
+		end
+		if name != ""
+			message = "json: cannot unmarshal " + name + " into Go value of type struct {}"
+		end
+		return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(PublicJSON::ErrorKind::Syntax, message, ""))
+	end
+	return _value(parser.nodes, root)
+end
+
+def parse_jsonc(source: String): Result<PublicJSON::Value, PublicJSON::Error>
+	# Comments become spaces per byte, preserving the reference decoder's
+	# filtered-source locations, including CR/LF and multibyte comments.
+	bytes := source.to_bytes()
+	mut text := ""
+	mut mode := 0
+	mut escaped := false
+	mut index := 0
+	while index < bytes.size()
+		octet := bytes.at(index)
+		mut following := -1
+		if index + 1 < bytes.size()
+			following = bytes.at(index + 1)
+		end
+		if mode == 1
+			text += _octet(octet)
+			if escaped
+				escaped = false
+			elsif octet == 92
+				escaped = true
+			elsif octet == 34
+				mode = 0
+			end
+		elsif mode == 2 || mode == 3
+			if mode == 3 && octet == 42 && following == 47
+				text += "  "
+				index += 1
+				mode = 0
+			elsif octet == 10 || octet == 13
+				text += _octet(octet)
+				if mode == 2 && octet == 10
+					mode = 0
+				end
+			else
+				text += " "
+			end
+		elsif octet == 47 && (following == 47 || following == 42)
+			mode = 2
+			if following == 42
+				mode = 3
+			end
+			text += "  "
+			index += 1
+		else
+			text += _octet(octet)
+			if octet == 34
+				mode = 1
+			end
+		end
+		index += 1
+	end
+	return parse(text)
+end
+
+def _escape(text: String): String
+	mut encoded := "\""
+	mut index := 0
+	while index < text.size()
+		character := text[index]
+		octet := character.to_bytes().at(0)
+		if character == "\"" || character == "\\"
+			encoded += "\\" + character
+		elsif character == "\x08"
+			encoded += "\\b"
+		elsif character == "\x0c"
+			encoded += "\\f"
+		elsif character == "\n"
+			encoded += "\\n"
+		elsif character == "\r"
+			encoded += "\\r"
+		elsif character == "\t"
+			encoded += "\\t"
+		elsif octet < 32 || character == "<" || character == ">" || character == "&"
+			encoded += "\\u00" + "0123456789abcdef"[octet / 16] + "0123456789abcdef"[octet % 16]
+		elsif character == "\u2028"
+			encoded += "\\u2028"
+		elsif character == "\u2029"
+			encoded += "\\u2029"
+		elsif !character.to_bytes().valid_utf8?()
+			encoded += "\\ufffd"
+		else
+			encoded += character
+		end
+		index += 1
+	end
+	return encoded + "\""
+end
+
+def _floating(number: Float): String
+	if number == 0.0
+		if 1.0 / number < 0.0
+			return "-0"
+		end
+		return "0"
+	end
+	fixed := number.to_s()
+	mut sign := ""
+	mut start := 0
+	if number < 0.0
+		sign = "-"
+		start = 1
+	end
+	mut point := start
+	while point < fixed.size() && fixed[point] != "."
+		point += 1
+	end
+	if number.abs() >= 0.000001 && number.abs() < "1e21".to_f()
+		if point + 2 == fixed.size() && fixed[point + 1] == "0"
+			return _slice(fixed, 0, point)
+		end
+		return fixed
+	end
+	mut digits := ""
+	mut first := -1
+	mut index := start
+	while index < fixed.size()
+		if fixed[index] != "."
+			if first >= 0 || fixed[index] != "0"
+				if first < 0
+					first = index
+				end
+				digits += fixed[index]
+			end
+		end
+		index += 1
+	end
+	mut finish := digits.size()
+	while finish > 1 && digits[finish - 1] == "0"
+		finish -= 1
+	end
+	mut exponent := point - first
+	if first < point
+		exponent -= 1
+	end
+	mut result := sign + digits[0]
+	if finish > 1
+		result += "." + _slice(digits, 1, finish)
+	end
+	result += "e"
+	if exponent >= 0
+		result += "+"
+	end
+	return result + exponent.to_s()
+end
+
+def _encoding_error(value: PublicJSON::Value): PublicJSON::Error?
+	mut values := [value]
+	mut parents := [-1]
+	mut parts := [""]
+	mut pending := [0]
+	while !pending.empty?()
+		current := pending[pending.size() - 1]
+		pending.pop()
+		case values[current]
+		when PublicJSON::Value::Float(number)
+			if !number.finite?()
+				return _error(PublicJSON::ErrorKind::Encode, "JSON Float must be finite", _path(parents, parts, current))
+			end
+		when PublicJSON::Value::Array(items)
+			mut index := items.size()
+			while index > 0
+				index -= 1
+				pending.push(values.size())
+				values.push(items[index])
+				parents.push(current)
+				parts.push(index.to_s())
+			end
+		when PublicJSON::Value::Object(members)
+			keys := members.keys()
+			mut index := keys.size()
+			while index > 0
+				index -= 1
+				pending.push(values.size())
+				values.push(members.fetch(keys[index]))
+				parents.push(current)
+				parts.push(_pointer(keys[index]))
+			end
+		else
+			nil
+		end
+	end
+	return nil
+end
+
+def _serialize(value: PublicJSON::Value): String
+	mut values := [value]
+	mut tokens := [""]
+	mut text := ""
+	while !values.empty?()
+		current := values[values.size() - 1]
+		token := tokens[tokens.size() - 1]
+		values.pop()
+		tokens.pop()
+		if token != ""
+			text += token
+			next
+		end
+		case current
+		when PublicJSON::Value::Null
+			text += "null"
+		when PublicJSON::Value::Boolean(boolean)
+			text += boolean.to_s()
+		when PublicJSON::Value::Integer(integer)
+			text += integer.to_s()
+		when PublicJSON::Value::Float(number)
+			text += _floating(number)
+		when PublicJSON::Value::String(string)
+			text += _escape(string)
+		when PublicJSON::Value::Array(items)
+			text += "["
+			values.push(PublicJSON::Value::Null)
+			tokens.push("]")
+			mut index := items.size()
+			while index > 0
+				index -= 1
+				values.push(items[index])
+				tokens.push("")
+				if index > 0
+					values.push(PublicJSON::Value::Null)
+					tokens.push(",")
+				end
+			end
+		when PublicJSON::Value::Object(members)
+			text += "{"
+			values.push(PublicJSON::Value::Null)
+			tokens.push("}")
+			keys := members.keys().sort()
+			mut index := keys.size()
+			while index > 0
+				index -= 1
+				values.push(members.fetch(keys[index]))
+				tokens.push("")
+				values.push(PublicJSON::Value::Null)
+				tokens.push(_escape(keys[index]) + ":")
+				if index > 0
+					values.push(PublicJSON::Value::Null)
+					tokens.push(",")
+				end
+			end
+		end
+	end
+	return text
+end
+
+def stringify(value: PublicJSON::Value): Result<String, PublicJSON::Error>
+	error := _encoding_error(value)
+	if error != nil
+		return Result<String, PublicJSON::Error>::Err(error)
+	end
+	return Result<String, PublicJSON::Error>::Ok(_serialize(value))
+end
+
+# BEGIN GENERATED JSON DIAGNOSTIC DATA
+# Generated by tools/json-diagnostic-data.py; do not edit by hand.
+# Go Unicode 17.0.0: printable runes and whitespace.
+# Ordered ranges encode six hexadecimal digits for each bound.
+
+def _diagnostic_printable_data(): String
+	return "00002000007e0000a10000ac0000ae00037700037a00037f00038400038a00038c00038c00038e0003a10003a300052f00053100055600055900058a00058d00058f0005910005c70005d00005ea0005ef0005f400060600061b00061d0006dc0006de00070d00071000074a00074d0007b10007c00007fa0007fd00082d00083000083e00084000085b00085e00085e00086000086a00087000088f0008970008e10008e300098300098500098c00098f0009900009930009a80009aa0009b00009b20009b20009b60009b90009bc0009c40009c70009c80009cb0009ce0009d70009d70009dc0009dd0009df0009e30009e60009fe000a01000a03000a05000a0a000a0f000a10000a13000a28000a2a000a30000a32000a33000a35000a36000a38000a39000a3c000a3c000a3e000a42000a47000a48000a4b000a4d000a51000a51000a59000a5c000a5e000a5e000a66000a76000a81000a83000a85000a8d000a8f000a91000a93000aa8000aaa000ab0000ab2000ab3000ab5000ab9000abc000ac5000ac7000ac9000acb000acd000ad0000ad0000ae0000ae3000ae6000af1000af9000aff000b01000b03000b05000b0c000b0f000b10000b13000b28000b2a000b30000b32000b33000b35000b39000b3c000b44000b47000b48000b4b000b4d000b55000b57000b5c000b5d000b5f000b63000b66000b77000b82000b83000b85000b8a000b8e000b90000b92000b95000b99000b9a000b9c000b9c000b9e000b9f000ba3000ba4000ba8000baa000bae000bb9000bbe000bc2000bc6000bc8000bca000bcd000bd0000bd0000bd7000bd7000be6000bfa000c00000c0c000c0e000c10000c12000c28000c2a000c39000c3c000c44000c46000c48000c4a000c4d000c55000c56000c58000c5a000c5c000c5d000c60000c63000c66000c6f000c77000c8c000c8e000c90000c92000ca8000caa000cb3000cb5000cb9000cbc000cc4000cc6000cc8000cca000ccd000cd5000cd6000cdc000cde000ce0000ce3000ce6000cef000cf1000cf3000d00000d0c000d0e000d10000d12000d44000d46000d48000d4a000d4f000d54000d63000d66000d7f000d81000d83000d85000d96000d9a000db1000db3000dbb000dbd000dbd000dc0000dc6000dca000dca000dcf000dd4000dd6000dd6000dd8000ddf000de6000def000df2000df4000e01000e3a000e3f000e5b000e81000e82000e84000e84000e86000e8a000e8c000ea3000ea5000ea5000ea7000ebd000ec0000ec4000ec6000ec6000ec8000ece000ed0000ed9000edc000edf000f00000f47000f49000f6c000f71000f97000f99000fbc000fbe000fcc000fce000fda0010000010c50010c70010c70010cd0010cd0010d000124800124a00124d00125000125600125800125800125a00125d00126000128800128a00128d0012900012b00012b20012b50012b80012be0012c00012c00012c20012c50012c80012d60012d800131000131200131500131800135a00135d00137c0013800013990013a00013f50013f80013fd00140000167f00168100169c0016a00016f800170000171500171f00173600174000175300176000176c00176e0017700017720017730017800017dd0017e00017e90017f00017f900180000180d00180f0018190018200018780018800018aa0018b00018f500190000191e00192000192b00193000193b00194000194000194400196d0019700019740019800019ab0019b00019c90019d00019da0019de001a1b001a1e001a5e001a60001a7c001a7f001a89001a90001a99001aa0001aad001ab0001add001ae0001aeb001b00001b4c001b4e001bf3001bfc001c37001c3b001c49001c4d001c8a001c90001cba001cbd001cc7001cd0001cfa001d00001f15001f18001f1d001f20001f45001f48001f4d001f50001f57001f59001f59001f5b001f5b001f5d001f5d001f5f001f7d001f80001fb4001fb6001fc4001fc6001fd3001fd6001fdb001fdd001fef001ff2001ff4001ff6001ffe00201000202700203000205e00207000207100207400208e00209000209c0020a00020c10020d00020f000210000218b00219000242900244000244a002460002b73002b76002cf3002cf9002d25002d27002d27002d2d002d2d002d30002d67002d6f002d70002d7f002d96002da0002da6002da8002dae002db0002db6002db8002dbe002dc0002dc6002dc8002dce002dd0002dd6002dd8002dde002de0002e5d002e80002e99002e9b002ef3002f00002fd5002ff0002fff00300100303f0030410030960030990030ff00310500312f00313100318e0031900031e50031ef00321e00322000a48c00a49000a4c600a4d000a62b00a64000a6f700a70000a7dc00a7f100a82c00a83000a83900a84000a87700a88000a8c500a8ce00a8d900a8e000a95300a95f00a97c00a98000a9cd00a9cf00a9d900a9de00a9fe00aa0000aa3600aa4000aa4d00aa5000aa5900aa5c00aac200aadb00aaf600ab0100ab0600ab0900ab0e00ab1100ab1600ab2000ab2600ab2800ab2e00ab3000ab6b00ab7000abed00abf000abf900ac0000d7a300d7b000d7c600d7cb00d7fb00f90000fa6d00fa7000fad900fb0000fb0600fb1300fb1700fb1d00fb3600fb3800fb3c00fb3e00fb3e00fb4000fb4100fb4300fb4400fb4600fdcf00fdf000fe1900fe2000fe5200fe5400fe6600fe6800fe6b00fe7000fe7400fe7600fefc00ff0100ffbe00ffc200ffc700ffca00ffcf00ffd200ffd700ffda00ffdc00ffe000ffe600ffe800ffee00fffc00fffd01000001000b01000d01002601002801003a01003c01003d01003f01004d01005001005d0100800100fa01010001010201010701013301013701018e01019001019c0101a00101a00101d00101fd01028001029c0102a00102d00102e00102fb01030001032301032d01034a01035001037a01038001039d01039f0103c30103c80103d501040001049d0104a00104a90104b00104d30104d80104fb01050001052701053001056301056f01057a01057c01058a01058c0105920105940105950105970105a10105a30105b10105b30105b90105bb0105bc0105c00105f30106000107360107400107550107600107670107800107850107870107b00107b20107ba01080001080501080801080801080a01083501083701083801083c01083c01083f01085501085701089e0108a70108af0108e00108f20108f40108f50108fb01091b01091f01093901093f0109590109800109b70109bc0109cf0109d2010a03010a05010a06010a0c010a13010a15010a17010a19010a35010a38010a3a010a3f010a48010a50010a58010a60010a9f010ac0010ae6010aeb010af6010b00010b35010b39010b55010b58010b72010b78010b91010b99010b9c010ba9010baf010c00010c48010c80010cb2010cc0010cf2010cfa010d27010d30010d39010d40010d65010d69010d85010d8e010d8f010e60010e7e010e80010ea9010eab010ead010eb0010eb1010ec2010ec7010ed0010ed8010efa010f27010f30010f59010f70010f89010fb0010fcb010fe0010ff601100001104d01105201107501107f0110bc0110be0110c20110d00110e80110f00110f90111000111340111360111470111500111760111800111df0111e10111f401120001121101121301124101128001128601128801128801128a01128d01128f01129d01129f0112a90112b00112ea0112f00112f901130001130301130501130c01130f01131001131301132801132a01133001133201133301133501133901133b01134401134701134801134b01134d01135001135001135701135701135d01136301136601136c01137001137401138001138901138b01138b01138e01138e0113900113b50113b70113c00113c20113c20113c50113c50113c70113ca0113cc0113d50113d70113d80113e10113e201140001145b01145d0114610114800114c70114d00114d90115800115b50115b80115dd01160001164401165001165901166001166c0116800116b90116c00116c90116d00116e301170001171a01171d01172b01173001174601180001183b0118a00118f20118ff01190601190901190901190c01191301191501191601191801193501193701193801193b0119460119500119590119a00119a70119aa0119d70119da0119e4011a00011a47011a50011aa2011ab0011af8011b00011b09011b60011b67011bc0011be1011bf0011bf9011c00011c08011c0a011c36011c38011c45011c50011c6c011c70011c8f011c92011ca7011ca9011cb6011d00011d06011d08011d09011d0b011d36011d3a011d3a011d3c011d3d011d3f011d47011d50011d59011d60011d65011d67011d68011d6a011d8e011d90011d91011d93011d98011da0011da9011db0011ddb011de0011de9011ee0011ef8011f00011f10011f12011f3a011f3e011f5a011fb0011fb0011fc0011ff1011fff01239901240001246e012470012474012480012543012f90012ff201300001342f0134400134550134600143fa014400014646016100016139016800016a38016a40016a5e016a60016a69016a6e016abe016ac0016ac9016ad0016aed016af0016af5016b00016b45016b50016b59016b5b016b61016b63016b77016b7d016b8f016d40016d79016e40016e9a016ea0016eb8016ebb016ed3016f00016f4a016f4f016f87016f8f016f9f016fe0016fe4016ff0016ff6017000018cd5018cff018d1e018d80018df201aff001aff301aff501affb01affd01affe01b00001b12201b13201b13201b15001b15201b15501b15501b16401b16701b17001b2fb01bc0001bc6a01bc7001bc7c01bc8001bc8801bc9001bc9901bc9c01bc9f01cc0001ccfc01cd0001ceb301ceba01ced001cee001cef001cf0001cf2d01cf3001cf4601cf5001cfc301d00001d0f501d10001d12601d12901d17201d17b01d1ea01d20001d24501d2c001d2d301d2e001d2f301d30001d35601d36001d37801d40001d45401d45601d49c01d49e01d49f01d4a201d4a201d4a501d4a601d4a901d4ac01d4ae01d4b901d4bb01d4bb01d4bd01d4c301d4c501d50501d50701d50a01d50d01d51401d51601d51c01d51e01d53901d53b01d53e01d54001d54401d54601d54601d54a01d55001d55201d6a501d6a801d7cb01d7ce01da8b01da9b01da9f01daa101daaf01df0001df1e01df2501df2a01e00001e00601e00801e01801e01b01e02101e02301e02401e02601e02a01e03001e06d01e08f01e08f01e10001e12c01e13001e13d01e14001e14901e14e01e14f01e29001e2ae01e2c001e2f901e2ff01e2ff01e4d001e4f901e5d001e5fa01e5ff01e5ff01e6c001e6de01e6e001e6f501e6fe01e6ff01e7e001e7e601e7e801e7eb01e7ed01e7ee01e7f001e7fe01e80001e8c401e8c701e8d601e90001e94b01e95001e95901e95e01e95f01ec7101ecb401ed0101ed3d01ee0001ee0301ee0501ee1f01ee2101ee2201ee2401ee2401ee2701ee2701ee2901ee3201ee3401ee3701ee3901ee3901ee3b01ee3b01ee4201ee4201ee4701ee4701ee4901ee4901ee4b01ee4b01ee4d01ee4f01ee5101ee5201ee5401ee5401ee5701ee5701ee5901ee5901ee5b01ee5b01ee5d01ee5d01ee5f01ee5f01ee6101ee6201ee6401ee6401ee6701ee6a01ee6c01ee7201ee7401ee7701ee7901ee7c01ee7e01ee7e01ee8001ee8901ee8b01ee9b01eea101eea301eea501eea901eeab01eebb01eef001eef101f00001f02b01f03001f09301f0a001f0ae01f0b101f0bf01f0c101f0cf01f0d101f0f501f10001f1ad01f1e601f20201f21001f23b01f24001f24801f25001f25101f26001f26501f30001f6d801f6dc01f6ec01f6f001f6fc01f70001f7d901f7e001f7eb01f7f001f7f001f80001f80b01f81001f84701f85001f85901f86001f88701f89001f8ad01f8b001f8bb01f8c001f8c101f8d001f8d801f90001fa5701fa6001fa6d01fa7001fa7c01fa8001fa8a01fa8e01fac601fac801fac801facd01fadc01fadf01faea01faef01faf801fb0001fb9201fb9401fbfa02000002a6df02a70002b81d02b82002cead02ceb002ebe002ebf002ee5d02f80002fa1d03000003134a0313500334790e01000e01ef"
+end
+
+def _diagnostic_space_data(): String
+	return "00000900000d0000200000200000850000850000a00000a000168000168000200000200a00202800202900202f00202f00205f00205f003000003000"
+end
+# END GENERATED JSON DIAGNOSTIC DATA

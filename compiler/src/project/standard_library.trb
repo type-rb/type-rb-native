@@ -1,8 +1,8 @@
-import { standard_source_errors, standard_source_internal_url, standard_source_official_start, standard_source_result, standard_source_unit, standard_source_url } from state/standard_source_kinds
+import { standard_source_errors, standard_source_internal_json, standard_source_internal_url, standard_source_json, standard_source_jsonc, standard_source_official_start, standard_source_result, standard_source_unit, standard_source_url } from state/standard_source_kinds
 import { lex_module } from frontend/syntax/lexer
-import { parse_module } from frontend/syntax/parser
+import { parse_module, register_namespace } from frontend/syntax/parser
 import { CompilerState, add_module, diagnostic, has_diagnostic } from state/state
-import { native_url_source, official_source_kind, official_source_name, official_source_supported, official_source_text, pinned_url_source } from project/official_catalog
+import { native_json_source, native_url_source, official_source_kind, official_source_name, official_source_supported, official_source_text, pinned_json_source, pinned_jsonc_source, pinned_url_source } from project/official_catalog
 import { sparse_integer_at, store_integer } from support/storage
 
 # Portable declarations use the same parser and nominal catalogs as authored
@@ -23,12 +23,30 @@ def standard_source_kind(path: String): Integer
 	if path == "trb/internal/url"
 		return standard_source_internal_url()
 	end
+	if path == "trb/std/json"
+		return standard_source_json()
+	end
+	if path == "trb/std/jsonc"
+		return standard_source_jsonc()
+	end
+	if path == "trb/internal/json"
+		return standard_source_internal_json()
+	end
 	return official_source_kind(path)
 end
 
 def standard_source_name(kind: Integer): String
 	if kind >= standard_source_official_start()
 		return official_source_name(kind)
+	end
+	if kind == standard_source_json()
+		return "trb/std/json/index"
+	end
+	if kind == standard_source_jsonc()
+		return "trb/std/jsonc/index"
+	end
+	if kind == standard_source_internal_json()
+		return "trb/internal/json/index"
 	end
 	if kind == standard_source_url()
 		return "trb/std/url/index"
@@ -48,6 +66,15 @@ end
 def standard_source_text(kind: Integer): String
 	if kind >= standard_source_official_start()
 		return official_source_text(kind)
+	end
+	if kind == standard_source_json()
+		return pinned_json_source()
+	end
+	if kind == standard_source_jsonc()
+		return pinned_jsonc_source()
+	end
+	if kind == standard_source_internal_json()
+		return native_json_source()
 	end
 	if kind == standard_source_url()
 		return pinned_url_source()
@@ -69,6 +96,13 @@ def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer)
 		diagnostic(state, "TRBN4003", line, "internal package imports are reserved for verified standard sources: trb/internal/url")
 		return -1
 	end
+	if kind == standard_source_internal_json()
+		caller := sparse_integer_at(state.standard_modules, state.module_graph.active_module[0])
+		if caller != standard_source_json() && caller != standard_source_jsonc()
+			diagnostic(state, "TRBN4003", line, "internal package imports are reserved for verified standard sources: trb/internal/json")
+			return -1
+		end
+	end
 	if kind >= standard_source_official_start() && !official_source_supported(kind)
 		diagnostic(state, "TRBN4003", line, "official package requires an unimplemented platform or semantic provider: " + official_source_name(kind))
 		return -1
@@ -89,6 +123,11 @@ def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer)
 	lex_module(state, standard_source_text(kind), owner)
 	if !has_diagnostic(state)
 		parse_module(state, start, owner)
+	end
+	if kind == standard_source_jsonc() && !has_diagnostic(state)
+		# The pinned JSONC source has a registry-owned root, not a module wrapper.
+		# Keep its bytes and source locations unchanged.
+		register_namespace(state, "JSONC", owner, 1)
 	end
 	state.module_graph.active_module[0] = previous
 	return owner
