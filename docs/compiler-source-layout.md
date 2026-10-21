@@ -10,12 +10,13 @@ REPL adapters. `recovery/src` contains the independent recovery implementation.
 | --- | --- | --- |
 | `frontend/syntax` | Scanning, escape decoding, parsed declarations and source regions | types, resolution, state, support |
 | `frontend/types` | Language type models, nominal identities and substitutions | resolution, state, support; the two projection exceptions below |
-| `frontend/resolution` | Import and declaration lookup, specialization and argument binding | types, syntax, state, support, MIR, project |
-| `frontend/checking` | Expression, statement and body checking; checked operation construction | types, resolution, syntax, state, support, MIR, project |
+| `frontend/resolution` | Import and declaration lookup, specialization and argument binding | types, syntax, providers, state, support, MIR, project |
+| `frontend/checking` | Expression, statement and body checking; checked operation construction | types, resolution, syntax, providers, state, support, MIR, project |
+| `frontend/providers` | Loader-owned package declarations and checked-schema specialization into ordinary TypeRB bodies | types, resolution, syntax, state, support, project |
 | `state` | Compilation state and function-owned checked projections | types, support, MIR; the parsed-iteration exception below |
 | `mir` | Target-independent IR, construction, proofs, passes and verification | checking, types, syntax, resolution, state, support |
 | `backend/qbe` | QBE serialization and emitted runtime and data routines | MIR, state, support, types; the intrinsic-identity exception below |
-| `project` | Configuration, packages, standard-library source catalog and host files | support, syntax, state |
+| `project` | Configuration, packages, standard-library source catalog and host files | support, syntax, providers, state |
 | `support` | Storage, path and literal helpers, Unicode identifier data | none |
 
 Owners may import themselves. The entry composes core owners. Reciprocal

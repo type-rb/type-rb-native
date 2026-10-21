@@ -14,11 +14,12 @@ GROUPS = {
     'state': {'state', 'support', 'frontend/types', 'mir'},
     'frontend/types': {'frontend/types', 'frontend/resolution', 'state', 'support'},
     'frontend/syntax': {'frontend/syntax', 'frontend/types', 'frontend/resolution', 'state', 'support'},
-    'frontend/resolution': {'frontend/resolution', 'frontend/types', 'frontend/syntax', 'state', 'support', 'mir', 'project'},
-    'frontend/checking': {'frontend/checking', 'frontend/types', 'frontend/resolution', 'frontend/syntax', 'state', 'support', 'mir', 'project'},
+    'frontend/resolution': {'frontend/resolution', 'frontend/types', 'frontend/syntax', 'frontend/providers', 'state', 'support', 'mir', 'project'},
+    'frontend/checking': {'frontend/checking', 'frontend/types', 'frontend/resolution', 'frontend/syntax', 'frontend/providers', 'state', 'support', 'mir', 'project'},
+    'frontend/providers': {'frontend/providers', 'frontend/types', 'frontend/resolution', 'frontend/syntax', 'state', 'support', 'project'},
     'mir': {'mir', 'frontend/checking', 'frontend/types', 'frontend/syntax', 'frontend/resolution', 'state', 'support'},
     'backend/qbe': {'backend/qbe', 'mir', 'state', 'support', 'frontend/types'},
-    'project': {'project', 'support', 'frontend/syntax', 'state'},
+    'project': {'project', 'support', 'frontend/syntax', 'frontend/providers', 'state'},
 }
 DIRECTORY_OWNERS = {name: name for name in GROUPS}
 for owner, children in {
