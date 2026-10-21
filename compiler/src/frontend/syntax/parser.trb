@@ -147,6 +147,18 @@ def parse_bare_import(mut state: CompilerState, mut position: Array<Integer>, li
 	return finish_statement(state, position)
 end
 
+def register_namespace(mut state: CompilerState, name: String, source: Integer, line: Integer)
+	mut found := false
+	state.global_bindings.namespaces.each do |declaration|
+		if declaration.source_id == source && declaration.name == name
+			found = true
+		end
+	end
+	if !found
+		state.global_bindings.namespaces.push(NamespaceDeclaration.new(name: name, source_id: source, line: line))
+	end
+end
+
 def parse_namespace(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	line := load_integer(state.source_tokens.token_lines, position[0])
 	advance(position)
@@ -157,15 +169,7 @@ def parse_namespace(mut state: CompilerState, mut position: Array<Integer>): Boo
 	end
 	parent := state.global_bindings.declaration_owner[0]
 	name := namespace_qualify(parent, leaf)
-	mut found := false
-	state.global_bindings.namespaces.each do |declaration|
-		if declaration.source_id == state.module_graph.active_module[0] && declaration.name == name
-			found = true
-		end
-	end
-	if !found
-		state.global_bindings.namespaces.push(NamespaceDeclaration.new(name: name, source_id: state.module_graph.active_module[0], line: line))
-	end
+	register_namespace(state, name, state.module_graph.active_module[0], line)
 	if !finish_statement(state, position)
 		return false
 	end
