@@ -1,3 +1,9 @@
+import { checked_category_value } from frontend/types/value_categories
+import { mir_type_composite_start } from mir/model/type_ids
+import { mir_type_kind_callable } from mir/model/type_kinds
+import { mir_signature_ordinary } from mir/model/call_kinds
+import { mir_function_fixture } from mir/model/control
+import { mir_op_callable_new, mir_op_indirect_call } from mir/model/instructions
 import { callable_type } from frontend/types/callable_types
 import { nullable_capture_call } from frontend/checking/nominal/nullable_flow
 import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from frontend/checking/body/values
@@ -31,7 +37,7 @@ def checked_function_value(mut state: CompilerState, mut locals: CheckedLocals, 
 	while parameter < finish
 		if load_integer(state.declarations.parameter_named_only, parameter) > 0 || sparse_integer_at(state.parsed.parameter_defaults, parameter) > 0
 			diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "function " + load_string(state.source_tokens.token_texts, origin) + " requires an explicit fn wrapper to be used as a value")
-			return checked_value("Invalid", 0, origin, 0)
+			return checked_value("Invalid", checked_category_value(), origin, 0)
 		end
 		parameter += 1
 	end
@@ -40,11 +46,11 @@ def checked_function_value(mut state: CompilerState, mut locals: CheckedLocals, 
 end
 
 def mir_callable_id(native_module: MirModule, type_id: Integer): Integer
-	if type_id < 9 || type_id - 9 >= native_module.types.size()
+	if type_id < mir_type_composite_start() || type_id - mir_type_composite_start() >= native_module.types.size()
 		return -1
 	end
-	row := native_module.types[type_id - 9]
-	if row.kind != 9
+	row := native_module.types[type_id - mir_type_composite_start()]
+	if row.kind != mir_type_kind_callable()
 		return -1
 	end
 	return row.declaration
@@ -59,14 +65,14 @@ def mir_checked_closure(mut state: CompilerState, mut locals: CheckedLocals, fun
 		end
 	end
 	if !mir_control_active(locals)
-		return checked_value(type_name, 0, 9007199254740991, 0)
+		return checked_value(type_name, checked_category_value(), 9007199254740991, 0)
 	end
 	result := scalar_mir_value(state, locals, mir_semantic_type_id(state.scalar_mir, type_name), origin)
 	start := locals.mir_arguments.size()
 	captures.each do |capture|
 		locals.mir_arguments.push(capture)
 	end
-	scalar_mir_instruction(state, locals, 41, result, start, captures.size(), function, -1, load_integer(state.source_tokens.token_lines, origin))
+	scalar_mir_instruction(state, locals, mir_op_callable_new(), result, start, captures.size(), function, -1, load_integer(state.source_tokens.token_lines, origin))
 	return mir_checked_value(type_name, result, 9007199254740991, 0)
 end
 
@@ -83,7 +89,7 @@ def mir_checked_callable_call(mut state: CompilerState, mut locals: CheckedLocal
 		end
 	end
 	if !mir_control_active(locals)
-		return checked_value(result_type, 0, 9007199254740991, 0)
+		return checked_value(result_type, checked_category_value(), 9007199254740991, 0)
 	end
 	start := locals.mir_arguments.size()
 	arguments.each do |argument|
@@ -93,9 +99,9 @@ def mir_checked_callable_call(mut state: CompilerState, mut locals: CheckedLocal
 	if result_type != "Void"
 		result = scalar_mir_value(state, locals, mir_semantic_type_id(state.scalar_mir, result_type), origin)
 	end
-	scalar_mir_instruction(state, locals, 42, result, owner, arguments.size(), start, -1, load_integer(state.source_tokens.token_lines, origin))
+	scalar_mir_instruction(state, locals, mir_op_indirect_call(), result, owner, arguments.size(), start, -1, load_integer(state.source_tokens.token_lines, origin))
 	if result < 0
-		return checked_value("Void", 0, 9007199254740991, 0)
+		return checked_value("Void", checked_category_value(), 9007199254740991, 0)
 	end
 	return mir_checked_value(result_type, result, 9007199254740991, 0)
 end
@@ -104,19 +110,19 @@ def mir_callable_instruction_error(flow: MirFlow, native_module: MirModule, func
 	if instruction.failure != -1
 		return "MIR callable failure shape differs"
 	end
-	if instruction.kind == 41
+	if instruction.kind == mir_op_callable_new()
 		if instruction.payload < 0 || instruction.payload >= native_module.signatures.size()
 			return "MIR function value declaration is missing"
 		end
 		signature := native_module.signatures[instruction.payload]
-		if signature.kind != 0
+		if signature.kind != mir_signature_ordinary()
 			return "MIR function value requires an ordinary declaration"
 		end
 		body := mir_function_index(native_module, signature.id)
 		if body < 0
 			return "MIR function value body is missing"
 		end
-		if native_module.functions[body].kind == 0
+		if native_module.functions[body].kind == mir_function_fixture()
 			return "MIR function value requires a checked body"
 		end
 		if instruction.second < 0 || instruction.second > signature.parameter_types.size() || !mir_table_span_valid(instruction.first, instruction.second, native_module.arguments.size())

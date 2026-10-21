@@ -1,3 +1,4 @@
+import { hash_action_literal } from mir/model/hash_actions
 import { UnionPattern } from frontend/types/union_types
 import { MirTransform } from frontend/types/transform_model
 import { ResultOperation } from frontend/types/result_model
@@ -24,9 +25,15 @@ record CheckedBody
 	lambdas: Array<CheckedLambda>
 	shared_bindings: Array<Integer>
 	local_types: StringStorage
+	collection_contexts: Array<StringStorage>
+	collection_witnesses: Array<StringStorage>
+	collection_context_regions: Array<IntegerStorage>
+	collection_contexts_checked: Array<Boolean>
 	array_literal_types: StringStorage
 	builtin_result_types: StringStorage
 	result_operations: Array<ResultOperation>
+	# Resolved authored application before alias expansion, for checked display.
+	generic_application_names: StringStorage
 	generic_application_types: StringStorage
 	generic_application_finishes: IntegerStorage
 	enum_patterns: Array<EnumPattern>
@@ -63,9 +70,14 @@ def checked_body_new(function: Integer, origin: Integer, finish: Integer): Check
 		lambda_types: string_storage_span(origin, finish),
 		lambdas: [], shared_bindings: [],
 		local_types: string_storage_span(origin, finish),
+		collection_contexts: [string_storage_span(origin, finish)],
+		collection_witnesses: [string_storage_span(origin, finish)],
+		collection_context_regions: [integer_storage_span(origin, finish)],
+		collection_contexts_checked: [false],
 		array_literal_types: string_storage_span(origin, finish),
 		builtin_result_types: string_storage_span(origin, finish),
 		result_operations: [],
+		generic_application_names: string_storage_span(origin, finish),
 		generic_application_types: string_storage_span(origin, finish),
 		generic_application_finishes: integer_storage_span(origin, finish),
 		enum_patterns: [],
@@ -96,7 +108,7 @@ end
 def checked_body_lowering(previous: CheckedBody, function: Integer, origin: Integer, finish: Integer): CheckedBody
 	mut hash_initial_types := string_storage_span(origin, finish)
 	previous.hash_operations.each do |operation|
-		if operation.kind == 1
+		if operation.kind == hash_action_literal()
 			store_string(hash_initial_types, operation.origin, operation.type_name)
 		end
 	end
@@ -110,9 +122,14 @@ def checked_body_lowering(previous: CheckedBody, function: Integer, origin: Inte
 		lambda_types: previous.lambda_types,
 		lambdas: previous.lambdas, shared_bindings: previous.shared_bindings,
 		local_types: previous.local_types,
+		collection_contexts: previous.collection_contexts,
+		collection_witnesses: previous.collection_witnesses,
+		collection_context_regions: previous.collection_context_regions,
+		collection_contexts_checked: previous.collection_contexts_checked,
 		array_literal_types: string_storage_span(origin, finish),
 		builtin_result_types: string_storage_span(origin, finish),
 		result_operations: [],
+		generic_application_names: previous.generic_application_names,
 		generic_application_types: previous.generic_application_types,
 		generic_application_finishes: previous.generic_application_finishes,
 		enum_patterns: [],

@@ -27,7 +27,8 @@ def main():
             return result
 
         cases = []
-        for name in ('hash-values', 'hash-managed', 'hash-cycles'):
+        for name in ('hash-values', 'hash-managed', 'hash-cycles',
+                     'hash-lookup-reuse', 'hash-lookup-alias-barriers'):
             fixture = repository / 'compiler/conformance/valid' / (name + '.trb')
             cases.append((name, fixture.read_text(), fixture.with_suffix('.out').read_text(),
                           name in ('hash-managed', 'hash-cycles')))
@@ -84,6 +85,47 @@ end
                 # The reference acknowledges declarations before invocation.
                 assert reference.returncode == 0 and not reference.stderr, reference
                 assert reference.stdout.endswith(expected), reference
+
+        # The ordinary byte-preserving adapter must exercise the selected MIR
+        # path, including embedded NUL and Unicode. Collect only at operations
+        # whose existing MIR effects already require roots.
+        for name in ('hash-lookup-reuse', 'hash-lookup-alias-barriers'):
+            source = root / (name + '.trb')
+            emitted = run('--internal-driver', 'emit-qbe', source)
+            assert 'call $trbn_hash_existing_slot_string(' in emitted.stdout, name
+            forced, ordinary, hooks = [], False, 0
+            for line in emitted.stdout.splitlines():
+                if line.startswith('function '):
+                    ordinary = '$trbnf' in line
+                if line == '}':
+                    ordinary = False
+                if ordinary and any(marker in line for marker in (
+                        'call $trbn_array_new(', 'call $trbn_array_new_reserved(',
+                        'call $trbn_array_push_', 'call $trbn_array_grow_paced(',
+                        'call $trbn_gc_alloc(', 'call $trbn_string_concat',
+                        'call $trbn_integer_to_string(', 'call $trbn_hash_new(',
+                        'call $trbn_hash_set(', 'call $trbn_hash_delete(',
+                        'call $trbn_hash_update(', 'call $trbnf')):
+                    forced.append('\tcall $trbn_gc_collect(w 0)')
+                    hooks += 1
+                forced.append(line)
+            assert hooks >= 4, (name, hooks)
+            il, assembly, program = [root / (name + suffix) for suffix in ('.ssa', '.s', '-forced')]
+            il.write_text('\n'.join(forced) + '\n')
+            subprocess.run([binary.with_name('qbe'), '-o', assembly, il], check=True, timeout=60)
+            subprocess.run(['/usr/bin/cc', assembly, '-lm', '-o', program], check=True, timeout=60)
+            result = subprocess.run([program], capture_output=True, text=True,
+                                    env=dict(env, TYPE_RB_NATIVE_RUNTIME_STATS='1'), timeout=60)
+            expected = (repository / 'compiler/conformance/valid' / (name + '.out')).read_text()
+            assert result.returncode == 0 and result.stdout == expected, result
+            statistics = {}
+            for line in result.stderr.splitlines():
+                prefix, key, value = line.split(',')
+                assert prefix == 'type-rb-native-gc-stat-v1' and key not in statistics, line
+                statistics[key] = int(value)
+            assert statistics['collections'] >= hooks, (name, statistics)
+            assert statistics['live-bytes'] == 0, statistics
+            assert statistics['allocated-bytes'] == statistics['reclaimed-bytes'], statistics
 
         result = run('repl', text='mut h := {}\nh.size()\nh[1] = 2\nmut shared := h\n'
                      'h.delete(1)\nshared.empty?()\nshared[3] = 4\nh[3]\n'

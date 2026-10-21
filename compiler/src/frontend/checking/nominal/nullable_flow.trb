@@ -1,3 +1,7 @@
+import { mir_nil_test_equal, mir_nil_test_not_equal } from mir/model/operation_modes
+import { nullable_state_head_slot, nullable_state_version_slot } from state/local_slots
+import { binary_add_assign } from frontend/types/operators
+import { mir_op_nil_test, mir_op_nullable_extract, mir_op_nullable_none } from mir/model/instructions
 import { token_is } from frontend/syntax/syntax_tokens
 import { binary_operator_id } from frontend/syntax/syntax_forms
 import { CheckedValue, checked_condition_value, checked_nullable_target, checked_view } from frontend/checking/body/values
@@ -19,7 +23,7 @@ end
 
 def nullable_version(locals: CheckedLocals, binding: Integer): Integer
 	identity := nullable_identity(locals, binding)
-	mut cursor := locals.nullable_state[0]
+	mut cursor := locals.nullable_state[nullable_state_head_slot()]
 	while cursor >= 0
 		fact := locals.nullable_facts[cursor]
 		if fact.identity == identity && fact.field == -2
@@ -45,7 +49,7 @@ def nullable_apply(mut locals: CheckedLocals, facts: Integer)
 			binding = fact.identity
 		end
 		if binding != -1 && fact.version == nullable_version(locals, binding)
-			locals.nullable_state[0] = nullable_fact(locals, binding, fact.field, fact.type_name, locals.nullable_state[0])
+			locals.nullable_state[nullable_state_head_slot()] = nullable_fact(locals, binding, fact.field, fact.type_name, locals.nullable_state[nullable_state_head_slot()])
 		end
 		cursor = fact.previous
 	end
@@ -56,18 +60,18 @@ def nullable_replace(mut locals: CheckedLocals, binding: Integer, flow_type: Str
 end
 
 def nullable_replace_type(mut locals: CheckedLocals, binding: Integer, declared: String, flow_type: String)
-	locals.nullable_state[1] += 1
+	locals.nullable_state[nullable_state_version_slot()] += 1
 	id := locals.nullable_facts.size()
-	locals.nullable_facts.push(NullableFact.new(identity: nullable_identity(locals, binding), field: -2, type_name: declared, version: locals.nullable_state[1], previous: locals.nullable_state[0]))
-	locals.nullable_state[0] = id
+	locals.nullable_facts.push(NullableFact.new(identity: nullable_identity(locals, binding), field: -2, type_name: declared, version: locals.nullable_state[nullable_state_version_slot()], previous: locals.nullable_state[nullable_state_head_slot()]))
+	locals.nullable_state[nullable_state_head_slot()] = id
 	if nullable_element(declared) != ""
-		locals.nullable_state[0] = nullable_fact(locals, binding, -1, flow_type, locals.nullable_state[0])
+		locals.nullable_state[nullable_state_head_slot()] = nullable_fact(locals, binding, -1, flow_type, locals.nullable_state[nullable_state_head_slot()])
 	end
 end
 
 def nullable_lookup(locals: CheckedLocals, binding: Integer, field: Integer, declared: String): String
 	identity := nullable_identity(locals, binding)
-	mut cursor := locals.nullable_state[0]
+	mut cursor := locals.nullable_state[nullable_state_head_slot()]
 	while cursor >= 0
 		fact := locals.nullable_facts[cursor]
 		if fact.identity == identity
@@ -97,20 +101,20 @@ def nullable_read(mut state: CompilerState, mut locals: CheckedLocals, value: Ch
 		narrowed := mir_union_narrow(state, locals, value, flow, origin)
 		return checked_view(target, flow, narrowed.category)
 	end
-	mut kind := 36
+	mut kind := mir_op_nullable_extract()
 	if flow == "Nil"
-		kind = 33
+		kind = mir_op_nullable_none()
 	end
 	narrowed := mir_checked_nullable(state, locals, kind, value, flow, 0, origin)
 	return checked_view(target, flow, narrowed.category)
 end
 
 def nullable_nil_condition(mut state: CompilerState, mut locals: CheckedLocals, subject: CheckedValue, different: Boolean, origin: Integer): CheckedValue
-	mut mode := 0
+	mut mode := mir_nil_test_equal()
 	if different
-		mode = 1
+		mode = mir_nil_test_not_equal()
 	end
-	result := mir_checked_nullable(state, locals, 35, subject, "Boolean", mode, origin)
+	result := mir_checked_nullable(state, locals, mir_op_nil_test(), subject, "Boolean", mode, origin)
 	mut truth := -1
 	mut falsity := -1
 	element := nullable_element(subject.type_name)
@@ -130,7 +134,7 @@ end
 # path-local value types do not escape a branch which may not execute.
 def nullable_finish(mut locals: CheckedLocals, parent: Integer, first: Integer, count: Integer)
 	finish := locals.nullable_facts.size()
-	locals.nullable_state[0] = parent
+	locals.nullable_state[nullable_state_head_slot()] = parent
 	mut cursor := first
 	while cursor < finish
 		fact := locals.nullable_facts[cursor]
@@ -149,7 +153,7 @@ def nullable_loop_writes(state: CompilerState, mut locals: CheckedLocals, start:
 	nullable_capture_call(state, locals)
 	mut cursor := start
 	while cursor + 1 < finish
-		if token_is(state, cursor + 1, "=") || binary_operator_id(load_string(state.source_tokens.token_texts, cursor + 1)) >= 17
+		if token_is(state, cursor + 1, "=") || binary_operator_id(load_string(state.source_tokens.token_texts, cursor + 1)) >= binary_add_assign()
 			name := load_string(state.source_tokens.token_texts, cursor)
 			mut binding := local_find(locals, name)
 			if cursor > 0 && (token_is(state, cursor - 1, ".") || token_is(state, cursor - 1, "&."))

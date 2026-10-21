@@ -1,3 +1,6 @@
+import { checked_category_value } from frontend/types/value_categories
+import { mir_signature_interface, mir_signature_ordinary } from mir/model/call_kinds
+import { mir_op_object_convert } from mir/model/instructions
 import { CheckedValue, checked_mir_value, checked_view, scalar_mir_instruction, scalar_mir_value } from frontend/checking/body/values
 import { integer_string } from support/literals
 import { MirBlock, MirInstruction, MirModule, mir_function_index } from mir/model/module
@@ -30,17 +33,17 @@ def mir_object_coerce(mut state: CompilerState, mut locals: CheckedLocals, value
 	end
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
-		return checked_view(value, expected, 0)
+		return checked_view(value, expected, checked_category_value())
 	end
 	owner := find_object_type(state, value.type_name)
 	contract := find_object_type(state, expected)
 	witness := mir_object_witness(state.scalar_mir, owner, contract)
 	if witness < 0
 		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "interface conversion has no checked implementation")
-		return checked_view(value, expected, 0)
+		return checked_view(value, expected, checked_category_value())
 	end
 	result := scalar_mir_value(state, locals, mir_semantic_type_id(state.scalar_mir, expected), origin)
-	scalar_mir_instruction(state, locals, 66, result, checked_mir_value(value), -1, witness, -1, load_integer(state.source_tokens.token_lines, origin))
+	scalar_mir_instruction(state, locals, mir_op_object_convert(), result, checked_mir_value(value), -1, witness, -1, load_integer(state.source_tokens.token_lines, origin))
 	return checked_view(value, expected, -result - 1)
 end
 
@@ -100,10 +103,10 @@ def mir_object_dispatch_error(native_module: MirModule): String
 			end
 		end
 		if owner.interface_type
-			if method.class_member || signature.kind != 4 || signature.adapter != index || mir_function_index(native_module, signature.id) >= 0
+			if method.class_member || signature.kind != mir_signature_interface() || signature.adapter != index || mir_function_index(native_module, signature.id) >= 0
 				return "MIR interface method signature ownership differs"
 			end
-		elsif signature.kind != 0 || mir_function_index(native_module, signature.id) < 0
+		elsif signature.kind != mir_signature_ordinary() || mir_function_index(native_module, signature.id) < 0
 			return "MIR object method body is missing"
 		end
 		mut names: Hash<String, Integer> := {}
@@ -124,7 +127,7 @@ def mir_object_dispatch_error(native_module: MirModule): String
 		index += 1
 	end
 	native_module.signatures.each do |signature|
-		if signature.kind == 4
+		if signature.kind == mir_signature_interface()
 			if signature.adapter < 0 || signature.adapter >= native_module.object_methods.size()
 				return "MIR interface signature method is missing"
 			end

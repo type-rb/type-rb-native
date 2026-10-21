@@ -1,4 +1,5 @@
 import { build_recovery_managed_executable } from managed/toolchain
+import { emit_recovery_managed_qbe } from managed/qbe
 import { native_create_directory } from support/file_system
 import { SourceOrigin } from snapshot/schema
 import trb/std/process
@@ -17,17 +18,17 @@ def managed_alias_cycle_module(): RecoveryManagedModule
 		id: "main", name: "main", parameters: [], result_type: RecoveryManagedResultType::Void, entry: "entry", origin: origin,
 		blocks: [
 			RecoveryManagedBlock.new(id: "entry", parameters: [], origin: origin,
-				instructions: [RecoveryManagedInstruction::StringLiteral("initial", "stable", origin), RecoveryManagedInstruction::Scalar(RecoveryScalarInstruction::BooleanLiteral("first", true, origin))],
+				instructions: [RecoveryManagedInstruction::StringLiteral("left", "sta", origin), RecoveryManagedInstruction::StringLiteral("right", "ble", origin), RecoveryManagedInstruction::StringConcat("initial", "left", "right", origin), RecoveryManagedInstruction::Scalar(RecoveryScalarInstruction::BooleanLiteral("first", true, origin))],
 				terminator: RecoveryManagedTerminator::Jump("header", ["initial", "first"], origin)),
 			RecoveryManagedBlock.new(id: "header", parameters: [RecoveryManagedParameter.new(id: "header_value", value_type: type_name, origin: origin), RecoveryManagedParameter.new(id: "take", value_type: boolean_type, origin: origin)], origin: origin, instructions: [],
 				terminator: RecoveryManagedTerminator::Branch("take", "body", ["header_value"], "exit", ["header_value"], origin)),
 			# The backedge precedes its predecessor in block storage order.
 			RecoveryManagedBlock.new(id: "backedge", parameters: [RecoveryManagedParameter.new(id: "backedge_value", value_type: type_name, origin: origin)], origin: origin,
-				instructions: [RecoveryManagedInstruction::WriteString("backedge_value", true, origin), RecoveryManagedInstruction::Scalar(RecoveryScalarInstruction::BooleanLiteral("last", false, origin))],
+				instructions: [RecoveryManagedInstruction::RuntimeCollect(origin), RecoveryManagedInstruction::WriteString("backedge_value", true, origin), RecoveryManagedInstruction::Scalar(RecoveryScalarInstruction::BooleanLiteral("last", false, origin))],
 				terminator: RecoveryManagedTerminator::Jump("header", ["backedge_value", "last"], origin)),
 			RecoveryManagedBlock.new(id: "body", parameters: [RecoveryManagedParameter.new(id: "body_value", value_type: type_name, origin: origin)], origin: origin, instructions: [],
 				terminator: RecoveryManagedTerminator::Jump("backedge", ["body_value"], origin)),
-			RecoveryManagedBlock.new(id: "exit", parameters: [RecoveryManagedParameter.new(id: "exit_value", value_type: type_name, origin: origin)], origin: origin, instructions: [RecoveryManagedInstruction::WriteString("exit_value", true, origin)],
+			RecoveryManagedBlock.new(id: "exit", parameters: [RecoveryManagedParameter.new(id: "exit_value", value_type: type_name, origin: origin)], origin: origin, instructions: [RecoveryManagedInstruction::RuntimeCollect(origin), RecoveryManagedInstruction::WriteString("exit_value", true, origin)],
 				terminator: RecoveryManagedTerminator::Return(nil, origin)),
 		],
 	)
@@ -35,6 +36,19 @@ def managed_alias_cycle_module(): RecoveryManagedModule
 end
 
 describe("Managed block-parameter aliases") do
+	test("allocates roots only for distinct definitions after resolving a loop cycle") do
+		case emit_recovery_managed_qbe(managed_alias_cycle_module())
+		when Result::Ok(source)
+			# Two literals and their allocated concatenation survive; four aliases
+			# share the concatenation's slot instead of extending the frame.
+			expect(source.include?("%root_frame =l alloc8 40")).to_be_true()
+			expect(source.include?("storel 3, %root_count_address")).to_be_true()
+		when Result::Err(diagnostic)
+			puts(diagnostic.message)
+			expect(false).to_be_true()
+		end
+	end
+
 	test("keeps the entry definition through a reordered invariant loop cycle") do
 		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
 		if qbe != nil

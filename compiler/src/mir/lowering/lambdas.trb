@@ -1,3 +1,5 @@
+import { checked_category_value } from frontend/types/value_categories
+import { mir_state_enabled_slot, nullable_state_head_slot } from state/local_slots
 import { CheckedLambda, callable_parts } from frontend/types/callable_types
 import { CheckedValue, checked_value } from frontend/checking/body/values
 import { integer_string } from support/literals
@@ -79,7 +81,7 @@ def lambda_bind_captures(mut state: CompilerState, mut locals: CheckedLocals, fu
 			store_string(locals.mir_cell_types, slot, array_type(capture.type_name))
 			store_integer(locals.mir_cell_plans, capture.child_identity, 1)
 		elsif capture.flow_type != capture.type_name
-			locals.nullable_state[0] = nullable_fact(locals, slot, -1, capture.flow_type, locals.nullable_state[0])
+			locals.nullable_state[nullable_state_head_slot()] = nullable_fact(locals, slot, -1, capture.flow_type, locals.nullable_state[nullable_state_head_slot()])
 		end
 		parameter += 1
 	end
@@ -96,17 +98,17 @@ def lower_lambda(mut state: CompilerState, mut locals: CheckedLocals, origin: In
 					store_integer(locals.binding_use_counts, slot, sparse_integer_at(locals.binding_use_counts, slot) + 1)
 				end
 			end
-			if locals.mir_state[0] == 1
+			if locals.mir_state[mir_state_enabled_slot()] == 1
 				lambda.captures.each do |capture|
 					captures.push(mir_binding_capture(state, locals, capture, origin))
 				end
 			end
-			if locals.mir_state[0] != 1
-				return checked_value(lambda.type_name, 0, origin, 0)
+			if locals.mir_state[mir_state_enabled_slot()] != 1
+				return checked_value(lambda.type_name, checked_category_value(), origin, 0)
 			end
 			return mir_checked_closure(state, locals, lambda.function[0], captures, origin)
 		end
 	end
 	diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "fn has no analyzed body")
-	return checked_value("Invalid", 0, origin, 0)
+	return checked_value("Invalid", checked_category_value(), origin, 0)
 end

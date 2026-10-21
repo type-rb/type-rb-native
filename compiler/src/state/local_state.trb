@@ -1,3 +1,4 @@
+import { binding_use_result, binding_use_stride } from state/binding_kinds
 import { MirBlock, MirCall, MirControlLoop, MirIndexedTarget, MirInstruction, MirUnionTarget, MirValue } from mir/model/module
 import { IntegerStorage, StringStorage, integer_storage, load_integer, load_string, store_integer, store_string, string_storage } from support/storage
 
@@ -23,6 +24,7 @@ record CheckedLocals
 	binding_use_obligations: IntegerStorage
 	binding_use_counts: IntegerStorage
 	nullable_facts: Array<NullableFact>
+	# Shared head/version cells; indices are named in state/local_slots.
 	nullable_state: Array<Integer>
 	lexical_loop: Array<Integer>
 	value_block: Array<Boolean>
@@ -33,8 +35,12 @@ record CheckedLocals
 	array_declaration_origins: IntegerStorage
 	array_inference_regions: IntegerStorage
 	inference_active_region: Array<Integer>
+	collection_scopes: IntegerStorage
+	collection_statement_regions: Array<Integer>
+	collection_region_count: Array<Integer>
 	names: StringStorage
 	types: StringStorage
+	presentations: StringStorage
 	mutable: IntegerStorage
 	# Binding semantics remain in types; cells have independent MIR storage types.
 	mir_cell_plans: IntegerStorage
@@ -43,6 +49,7 @@ record CheckedLocals
 	mir_value_rows: Array<MirValue>
 	mir_instructions: Array<MirInstruction>
 	mir_literal_texts: Array<String>
+	# Shared builder slots are named in state/local_slots, preserving alias updates.
 	mir_control: Array<Integer>
 	mir_blocks: Array<MirBlock>
 	mir_loops: Array<MirControlLoop>
@@ -77,8 +84,12 @@ def locals_new(capacity: Integer): CheckedLocals
 		array_declaration_origins: integer_storage(capacity),
 		array_inference_regions: integer_storage(capacity),
 		inference_active_region: [0],
+		collection_scopes: integer_storage(capacity),
+		collection_statement_regions: [],
+		collection_region_count: [0],
 		names: string_storage(capacity),
 		types: string_storage(capacity),
+		presentations: string_storage(capacity),
 		mutable: integer_storage(capacity),
 		mir_cell_plans: integer_storage(capacity), mir_cell_types: string_storage(capacity),
 		mir_values: integer_storage(capacity),
@@ -150,6 +161,7 @@ def local_bind_temporary(mut locals: CheckedLocals, name: String, type_name: Str
 	store_integer(locals.array_inference_regions, index, 0)
 	store_string(locals.names, index, name)
 	store_string(locals.types, index, type_name)
+	store_string(locals.presentations, index, "")
 	store_integer(locals.mutable, index, mutable)
 	store_integer(locals.mir_values, index, 0)
 	store_string(locals.mir_cell_types, index, "")
@@ -159,12 +171,12 @@ end
 
 # Only authored bindings have a use obligation. A leading underscore explicitly
 # permits a named discard, except that a Result binding retains must-use policy.
-# Kind 1 is a local, 2 a block parameter, 3 a pattern, 4 a catch, 5 a Result.
+# Binding kinds and their packed representation are owned by state/binding_kinds.
 def local_require_use(mut locals: CheckedLocals, slot: Integer, name: String, origin: Integer, kind: Integer)
-	if kind != 5 && (name.size() == 0 || name[0] == "_")
+	if kind != binding_use_result() && (name.size() == 0 || name[0] == "_")
 		return
 	end
-	store_integer(locals.binding_use_obligations, slot, (origin + 1) * 8 + kind)
+	store_integer(locals.binding_use_obligations, slot, (origin + 1) * binding_use_stride() + kind)
 end
 
 def local_storage_type(locals: CheckedLocals, slot: Integer): String

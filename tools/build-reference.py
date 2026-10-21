@@ -43,7 +43,7 @@ def main():
     root = Path(__file__).resolve().parent.parent
     try:
         manifest = load_json_strict(root / "compatibility/current.json")
-        schema = load_json_strict(root / "compatibility/schema-v2.json")
+        schema = load_json_strict(root / "compatibility/schema-v3.json")
         validate_manifest_data(root, manifest, schema)
         build(args.reference.resolve(), args.output.resolve(), manifest["typeRB"], args.trimpath)
     except (OSError, subprocess.CalledProcessError, ValidationError) as error:

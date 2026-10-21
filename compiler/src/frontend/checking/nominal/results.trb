@@ -1,3 +1,8 @@
+import { standard_source_result } from state/standard_source_kinds
+import { checked_category_value } from frontend/types/value_categories
+import { binding_use_catch, binding_use_parameter, binding_use_pattern, binding_use_result, binding_use_stride } from state/binding_kinds
+import { mir_state_function_slot, mir_state_return_value_slot } from state/local_slots
+import { mir_op_enum_field, mir_op_enum_test } from mir/model/instructions
 import { CompilerState, diagnostic } from state/state
 import { CheckedLocals } from state/local_state
 import { find_enum_type, find_enum_variant } from frontend/types/enum_types
@@ -16,7 +21,7 @@ def standard_result_instance(state: CompilerState, type_name: String): Integer
 		return -1
 	end
 	definition := state.type_resolution.generic_definitions[state.type_resolution.generic_instances[instance].definition]
-	if sparse_integer_at(state.standard_modules, definition.source_id) != 1
+	if sparse_integer_at(state.standard_modules, definition.source_id) != standard_source_result()
 		return -1
 	end
 	return instance
@@ -61,17 +66,17 @@ def checked_result_try(mut state: CompilerState, mut locals: CheckedLocals, valu
 	origin := operation.origin
 	line := load_integer(state.source_tokens.token_lines, origin)
 	if operation.ok_variant < 0 || operation.boundary_variant < 0
-		return checked_value("Invalid", 0, origin, 0)
+		return checked_value("Invalid", checked_category_value(), origin, 0)
 	end
-	condition := mir_enum_operation(state, locals, 38, value, -1, operation.err_variant, "Boolean", origin)
+	condition := mir_enum_operation(state, locals, mir_op_enum_test(), value, -1, operation.err_variant, "Boolean", origin)
 	ok := mir_control_branch(state, locals, condition, line)
-	error := mir_enum_operation(state, locals, 39, value, -1, state.nominal.enum_variants[operation.err_variant].field_start, operation.error_type, origin)
+	error := mir_enum_operation(state, locals, mir_op_enum_field(), value, -1, state.nominal.enum_variants[operation.err_variant].field_start, operation.error_type, origin)
 	converted := mir_nullable_coerce(state, locals, error, operation.boundary_error, origin)
 	returned := mir_enum_construct(state, locals, operation.boundary_variant, [checked_mir_value(converted)], origin)
-	locals.mir_state[4] = checked_mir_value(returned)
+	locals.mir_state[mir_state_return_value_slot()] = checked_mir_value(returned)
 	mir_control_return(state, locals, checked_mir_value(returned))
 	mir_control_enter(state, locals, ok, line)
-	return mir_enum_operation(state, locals, 39, value, -1, state.nominal.enum_variants[operation.ok_variant].field_start, operation.success_type, origin)
+	return mir_enum_operation(state, locals, mir_op_enum_field(), value, -1, state.nominal.enum_variants[operation.ok_variant].field_start, operation.success_type, origin)
 end
 
 def result_projection(state: CompilerState, origin: Integer, catches: Boolean): ResultOperation
@@ -91,10 +96,10 @@ def result_projection(state: CompilerState, origin: Integer, catches: Boolean): 
 end
 
 def result_interactive_entry(state: CompilerState, locals: CheckedLocals): Boolean
-	if !state.interactive || locals.mir_state[1] < 0 || locals.lambda_result.size() > 0
+	if !state.interactive || locals.mir_state[mir_state_function_slot()] < 0 || locals.lambda_result.size() > 0
 		return false
 	end
-	function := locals.mir_state[1]
+	function := locals.mir_state[mir_state_function_slot()]
 	if load_integer(state.declarations.function_modules, function) != state.module_graph.entry_module[0]
 		return false
 	end
@@ -106,18 +111,18 @@ def binding_scope_check(mut state: CompilerState, locals: CheckedLocals, start: 
 	while index < locals.count[0]
 		encoded := sparse_integer_at(locals.binding_use_obligations, index)
 		if encoded > 0 && sparse_integer_at(locals.binding_use_counts, index) == 0
-			origin := encoded / 8 - 1
-			use_kind := encoded % 8
+			origin := encoded / binding_use_stride() - 1
+			use_kind := encoded % binding_use_stride()
 			name := load_string(locals.names, index)
-			if use_kind == 5
+			if use_kind == binding_use_result()
 				diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "Result binding " + name + " must be used")
 			else
 				mut kind := "local variable"
-				if use_kind == 2
+				if use_kind == binding_use_parameter()
 					kind = "block parameter"
-				elsif use_kind == 3
+				elsif use_kind == binding_use_pattern()
 					kind = "pattern binding"
-				elsif use_kind == 4
+				elsif use_kind == binding_use_catch()
 					kind = "catch binding"
 				end
 				diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), kind + " " + name + " is not used")

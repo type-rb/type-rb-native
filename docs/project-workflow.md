@@ -150,6 +150,60 @@ negated closing keyword can close an issue.
 
 A dropped task records the reason in a comment and is closed as not planned.
 
+## Flow checkpoints
+
+At work start, before waiting or handing off, after a PR merges, and before
+reporting completion, reconcile the affected issues with current PRs, checks
+and dependencies. Review the changed work and its parents, not the entire
+history each time. Reuse the latest checkpoint when its evidence remains
+current; do not post an unchanged status report.
+
+A waiting item needs a concise issue checkpoint containing:
+
+- its phase, such as implementation, local validation, PR/CI, acceptance,
+  decision or dependency wait;
+- the last substantive result and its evidence, not merely a claim heartbeat;
+- the next concrete action and its responsible owner;
+- the blocker and a review trigger, such as a dependency merge, CI completion,
+  initiative activation or a review date.
+
+Use the existing Status, Attention, Current and Evidence fields where applicable;
+the checkpoint does not require new Project fields. Waiting still counts toward
+the applicable WIP limit. A review trigger prompts investigation, not automatic
+claim reassignment, closure or experiment restart. Follow the stale-claim and
+authority rules above.
+
+For a batch PR, map each affected task to the acceptance criteria it satisfies,
+the evidence and any remaining work. Reconcile each task after merge. A partial
+reference stays open with its actual next action; completed implementation must
+not remain described as untouched work. Parent outcome and Main integration
+checks retain their independent authority.
+
+Each Active initiative must have a next eligible task or an owned action to
+resolve acceptance, measurement, a dependency or a decision. Flag an initiative
+with neither for review; do not invent another implementation task merely to
+keep it Active. Before completing an initiative, inspect every open child and
+record its disposition: completed, not adopted, continuing under another
+approved outcome, or deferred with an explicit reconsideration condition.
+Respect the authority required by each disposition. Do not bulk-close children
+or activate a different initiative to hide unfinished acceptance.
+
+Keep the Decisions view for actual unresolved choices. State the question,
+options, recommendation, affected work and decision owner, with a review
+trigger. When a recorded decision settles non-adoption, preserve its reason,
+failed observations and source recovery, then close the dropped task as not
+planned. An inconclusive experiment is not proof of no benefit: record what
+method or evidence is missing. Repeated preparation failures need a shared
+tooling repair before another candidate repeats the same broken procedure.
+None of these transitions renews a closed measurement budget.
+
+The lightweight review looks for stale claims without PRs, completed checks
+still described as pending, blockers whose dependencies have completed, open
+children of completed initiatives without a disposition, and decision requests
+without a concrete question. Report actionable changes only. This is an
+on-demand procedure; it does not enable a scheduled workflow or change Project
+settings.
+
 ## Project automation
 
 Use issue cards as the work records; linked PRs supply review and CI context.
@@ -172,13 +226,20 @@ a merged child PR. Set a newly added initiative to Proposed during triage.
 
 ## Authority
 
-Work that preserves specified behavior and the approved scope and targets
+Work that preserves specified behavior and the approved scope
 proceeds without further approval, from task creation through merge and cleanup.
 This includes reference conformance, MIR and performance improvements, and
 maintenance. The maintainer decides what TypeRB is, including specification
 changes and any Native behavior that differs from the pinned reference. The
 maintainer also decides direction, publication, irreversible actions and
 security-sensitive settings.
+
+Agents may adopt performance or maintenance candidates with unmet numerical
+targets when the evidence supports an overall improvement under
+[the trade-off policy](optimization-tradeoffs.md#acceptance-after-evaluation).
+Record the benefit, costs and remaining misses before merging; another
+confirmation is not required solely because a target is unmet. Candidate
+adoption does not change an initiative's target or establish its completion.
 
 | Agents act without asking | The maintainer decides; agents set Needs decision |
 | --- | --- |
@@ -188,7 +249,7 @@ security-sensitive settings.
 | Update the pinned reference revision through the release integration procedure | Remove or weaken required CI checks |
 | Update documentation, fixtures and generated views within the task's scope | Change secrets, permissions, organization or project settings |
 | File, reproduce and triage bugs, and file specification proposals | Post to other repositories or external services |
-| Record current evidence and complete an initiative whose recorded criteria are met | Accept an unmet target or a different outcome; stop or reopen an initiative |
+| Record current evidence and complete an initiative whose recorded criteria are met | Change an initiative's target or accept a different completion outcome; stop or reopen an initiative |
 
 Waiting for a decision blocks only the affected item. Agents continue with other
 eligible work in the meantime.
@@ -215,9 +276,11 @@ claim success. Incomplete or ambiguous evidence leaves the initiative Active;
 continue measuring or request a decision on the unresolved criterion while
 other eligible work proceeds.
 
-Accepting an unmet target or a different outcome requires the maintainer's
-explicit decision with the reason recorded. To stop an initiative, record that
-decision, set Done and close as not planned. Reopening requires an explicit
+Closing an initiative with an unmet target or a different outcome requires the
+maintainer's explicit decision with the reason recorded. Adopting an improving
+candidate under the trade-off policy leaves an unmet initiative Active.
+To stop an initiative, record that decision, set Done and close as not planned.
+Reopening requires an explicit
 lifecycle decision and must respect the five-Active limit; it does not resume
 work by itself.
 
@@ -230,6 +293,11 @@ Each week the maintainer, with an agent preparing the summary, reviews:
 - Proposed initiatives to approve or drop, and the priority order that agents
   follow when they activate Approved initiatives;
 - stale claims, long-running tasks and PRs waiting for review or CI.
+
+Use the flow checkpoints to prepare this review. Focus on unresolved direction
+and ownership choices rather than rereading unchanged history. Track whether
+next actions happened, time spent waiting for decisions or acceptance, and
+recurring preparation failures; issue or comment counts alone are not progress.
 
 The board and issues are the source of truth for work state. Local session notes
 may hold environment details and handoffs, but not task ownership or status.

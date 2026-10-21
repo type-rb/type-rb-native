@@ -43,14 +43,52 @@ def _recovery_function_count_snapshot(count: Integer): String
 	return "{\"format\":\"type-rb-bootstrap-snapshot\",\"version\":4,\"module\":\"example\",\"entryFunction\":\"example#f0\",\"sources\":[{\"id\":\"main\",\"path\":\"main.trb\"}],\"types\":[],\"functions\":[" + functions + "]}"
 end
 
+def _recovery_source_count_snapshot(count: Integer): String
+	mut sources := "{\"id\":\"main\",\"path\":\"main.trb\"}"
+	mut index := 1
+	while index < count
+		source_id := "source" + index.to_s()
+		sources += ",{\"id\":\"" + source_id + "\",\"path\":\"" + source_id + ".trb\"}"
+		index += 1
+	end
+	return _recovery_function_count_snapshot(1).replace_all(
+		"\"sources\":[{\"id\":\"main\",\"path\":\"main.trb\"}]",
+		"\"sources\":[" + sources + "]",
+	)
+end
+
 describe("Managed recovery snapshot v4") do
+	test("bounds compiler recovery sources separately from ordinary snapshots") do
+		[256, 257, 512, 513].each do |count|
+			source := _recovery_source_count_snapshot(count)
+			case decode_recovery_managed_snapshot(source)
+			when Result::Ok(native_module)
+				expect(count).to_equal(256)
+				expect(native_module.sources.size()).to_equal(count)
+			when Result::Err(diagnostic)
+				expect(count > 256).to_be_true()
+				expect(diagnostic.code).to_equal("TRBN0005")
+				expect(diagnostic.path).to_equal("/sources")
+			end
+			case decode_bootstrap_snapshot(source)
+			when Result::Ok(native_module)
+				expect(count <= 512).to_be_true()
+				expect(native_module.sources.size()).to_equal(count)
+			when Result::Err(diagnostic)
+				expect(count).to_equal(513)
+				expect(diagnostic.code).to_equal("TRBN0005")
+				expect(diagnostic.path).to_equal("/sources")
+			end
+		end
+	end
+
 	test("bounds compiler recovery bytes separately from ordinary snapshots") do
 		base := _recovery_function_count_snapshot(1)
 		mut padding := " "
-		while padding.size() < 134217729
+		while padding.size() < 167772161
 			padding += padding
 		end
-		[4194304, 4194305, 134217728, 134217729].each do |size|
+		[4194304, 4194305, 134217729, 167772160, 167772161].each do |size|
 			source := base + padding.slice(0...(size - base.size()))
 			case decode_recovery_managed_snapshot(source)
 			when Result::Ok(_module)
@@ -61,10 +99,10 @@ describe("Managed recovery snapshot v4") do
 			end
 			case decode_bootstrap_snapshot(source)
 			when Result::Ok(_module)
-				expect(size <= 134217728).to_be_true()
+				expect(size <= 167772160).to_be_true()
 			when Result::Err(diagnostic)
-				expect(size).to_equal(134217729)
-				expect(diagnostic.message).to_equal("snapshot exceeds the Native bootstrap 128 MiB input limit")
+				expect(size).to_equal(167772161)
+				expect(diagnostic.message).to_equal("snapshot exceeds the Native bootstrap 160 MiB input limit")
 			end
 		end
 	end

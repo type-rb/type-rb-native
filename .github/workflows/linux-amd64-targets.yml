@@ -18,8 +18,8 @@ permissions:
 
 env:
   NATIVE_MIR_COST_MODE: ${{ inputs.cost_mode || 'strict' }}
-  TYPE_RB_REVISION: af8e5f52e18e265d20bab7efbeaa2c36ea9342ae
-  TYPE_RB_VERSION: 0.4.10
+  TYPE_RB_REVISION: e3cdd5e26a57f2389d8b40dd4eafd32c608d6728
+  TYPE_RB_VERSION: 0.4.12-dev
   QBE_VERSION: "1.3"
   QBE_ARCHIVE_SHA256: d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320
   ROOT_REPOSITORY: type-rb/type-rb-native
@@ -135,16 +135,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y binutils file jq lld strace time
 
-      - name: Build pinned QBE 1.3
+      - name: Build the pinned Native QBE variant
         id: qbe
         run: |
-          archive="$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz"
-          curl --fail --location --show-error \
-            "https://c9x.me/compile/release/qbe-$QBE_VERSION.tar.xz" \
-            -o "$archive"
-          printf '%s  %s\n' "$QBE_ARCHIVE_SHA256" "$archive" | sha256sum -c -
-          tar -C "$RUNNER_TEMP" -xf "$archive"
-          make -C "$RUNNER_TEMP/qbe-$QBE_VERSION"
+          python3 .native-target-candidate/tools/qbe_toolchain.py "$RUNNER_TEMP/qbe-$QBE_VERSION"
+          python3 .native-target-candidate/tools/qbe_sqrt_test.py --qbe "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe"
+          python3 .native-target-candidate/tools/qbe_integer_test.py --qbe "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe"
+          python3 .native-target-candidate/tools/qbe_memory_test.py --qbe "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe"
           test -x "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe"
           python3 .native-target-candidate/tools/native-puts-writev-test.py --qbe "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe"
           python3 .native-target-candidate/tools/native-string-index-test.py --qbe "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe"
@@ -309,6 +306,7 @@ jobs:
             wc -c "$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz" \
               > "$evidence/workflow/qbe-source-size.txt"
           fi
+          cp "$RUNNER_TEMP/qbe-$QBE_VERSION/build-info.json" "$evidence/workflow/qbe-build-info.json" 2>/dev/null || true
           if test -x "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe"; then
             sha256sum "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe" \
               > "$evidence/workflow/qbe-binary-sha256.txt"
@@ -369,16 +367,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y binutils file jq lld strace time
 
-      - name: Build pinned QBE 1.3 for arm64
+      - name: Build the pinned Native QBE variant for arm64
         id: arm64_qbe
         run: |
-          archive="$RUNNER_TEMP/qbe-$QBE_VERSION-arm64.tar.xz"
-          curl --fail --location --show-error \
-            "https://c9x.me/compile/release/qbe-$QBE_VERSION.tar.xz" \
-            -o "$archive"
-          printf '%s  %s\n' "$QBE_ARCHIVE_SHA256" "$archive" | sha256sum -c -
-          tar -C "$RUNNER_TEMP" -xf "$archive"
-          make -C "$RUNNER_TEMP/qbe-$QBE_VERSION"
+          python3 .native-target-arm64-candidate/tools/qbe_toolchain.py "$RUNNER_TEMP/qbe-$QBE_VERSION"
+          python3 .native-target-arm64-candidate/tools/qbe_sqrt_test.py --qbe "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe"
+          python3 .native-target-arm64-candidate/tools/qbe_integer_test.py --qbe "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe"
+          python3 .native-target-arm64-candidate/tools/qbe_memory_test.py --qbe "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe"
           test -x "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe"
           printf 'path=%s\n' "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe" >> "$GITHUB_OUTPUT"
 
@@ -624,8 +619,9 @@ jobs:
           nm -D -u "$first" > "$evidence/undefined-symbols.txt"
           ldd "$first" > "$evidence/ldd.txt"
           grep -Eq 'Machine:[[:space:]]+AArch64' "$evidence/elf-header.txt"
-          grep -Eq 'Shared library: \[libm\.so' "$evidence/elf-dependencies.txt"
-          grep -Eq '(^|[[:space:]])sqrt(@|$)' "$evidence/undefined-symbols.txt"
+          grep -Eq '=d sqrt ' "$evidence/first.ssa"
+          objdump -d "$first" > "$evidence/disassembly.txt"
+          grep -Eq '[[:space:]]fsqrt[[:space:]]' "$evidence/disassembly.txt"
           {
             printf 'candidate_revision=%s\n' "$(git -C "$candidate" rev-parse HEAD)"
             printf 'compiler_sha256=%s\n' "$(sha256sum "$compiler" | awk '{print $1}')"
@@ -694,7 +690,8 @@ jobs:
           dpkg-query -W -f='${binary:Package}\t${Version}\n' \
             binutils file jq lld strace time \
             > "$evidence/packages.tsv" 2>&1 || true
-          archive="$RUNNER_TEMP/qbe-$QBE_VERSION-arm64.tar.xz"
+          cp "$RUNNER_TEMP/qbe-$QBE_VERSION/build-info.json" "$evidence/qbe-build-info.json" 2>/dev/null || true
+          archive="$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz"
           if test -f "$archive"; then
             sha256sum "$archive" > "$evidence/qbe-source-sha256.txt"
             wc -c "$archive" > "$evidence/qbe-source-size.txt"

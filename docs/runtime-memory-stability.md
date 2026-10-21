@@ -56,9 +56,18 @@ Larger objects retain direct system allocation. Array backing stores and the
 exact-root buffer remain separate allocations. These raw storage operations
 cannot trigger collection or a managed callback.
 
+Released four-element Array backing buffers enter a bounded reuse cache. It
+retains at most 8192 ordinary libc allocations, or 256 KiB of payload plus
+allocator overhead. Reuse clears all 32 bytes, and growth continues to use
+`realloc` on the original libc pointer. Larger buffers and entries exceeding
+the cap are freed immediately. Cached storage is untraced and never keeps its
+previous elements alive. Final statistics/trace reclamation also flushes this
+cache; ordinary execution relies on process teardown for final raw storage.
+
 Collector accounting and pacing count the exact requested object and Array
 backing bytes. They exclude page headers, owner prefixes, class rounding and
-unused cells. Thus logical heap statistics are not physical storage or RSS
+unused cells, as well as released backing buffers retained in the cache.
+Thus logical heap statistics are not physical storage or RSS
 measurements. Empty pages are never cached, and final reclamation must release
 all page storage as well as every directly allocated object and Array buffer.
 

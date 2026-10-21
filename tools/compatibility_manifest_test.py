@@ -29,7 +29,7 @@ from compatibility_manifest import (  # noqa: E402
 class CompatibilityManifestTest(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = load_json_strict(ROOT / "compatibility/current.json")
-        self.schema = load_json_strict(ROOT / "compatibility/schema-v2.json")
+        self.schema = load_json_strict(ROOT / "compatibility/schema-v3.json")
 
     def validate(self, manifest: dict) -> None:
         validate_manifest_data(ROOT, manifest, self.schema)

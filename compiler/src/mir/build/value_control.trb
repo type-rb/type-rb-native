@@ -1,3 +1,5 @@
+import { checked_category_value } from frontend/types/value_categories
+import { mir_control_parameter_count_slot, mir_control_terminated_slot } from state/local_slots
 import { mir_nullable_coerce } from mir/lowering/nullable
 import { CheckedValue, checked_mir_value, checked_value, mir_add_value, mir_checked_value } from frontend/checking/body/values
 import { mir_control_active, mir_control_allocate, mir_control_arguments, mir_control_branch, mir_control_enter, mir_control_jump_arguments } from mir/build/control
@@ -21,7 +23,7 @@ def mir_value_join(mut locals: CheckedLocals, line: Integer): MirValueJoin
 end
 
 def mir_value_exit(state: CompilerState, mut locals: CheckedLocals, mut join: MirValueJoin, value: CheckedValue)
-	if !mir_control_active(locals) || locals.mir_control[6] == 1
+	if !mir_control_active(locals) || locals.mir_control[mir_control_terminated_slot()] == 1
 		return
 	end
 	bridge := mir_control_allocate(locals)
@@ -36,13 +38,13 @@ def mir_value_enter(mut state: CompilerState, mut locals: CheckedLocals, block: 
 	mir_control_enter(state, locals, block, line)
 	value := mir_add_value(state, locals, mir_semantic_type_id(state.scalar_mir, type_name), line)
 	locals.mir_arguments.push(value)
-	locals.mir_control[5] += 1
+	locals.mir_control[mir_control_parameter_count_slot()] += 1
 	return mir_checked_value(type_name, value, 9007199254740991, 0)
 end
 
 def mir_value_complete(mut state: CompilerState, mut locals: CheckedLocals, join: MirValueJoin, type_name: String, origin: Integer): CheckedValue
 	if !mir_control_active(locals) || type_name == "Never"
-		return checked_value(type_name, 0, 9007199254740991, 0)
+		return checked_value(type_name, checked_category_value(), 9007199254740991, 0)
 	end
 	mut index := 0
 	while index < join.blocks.size()

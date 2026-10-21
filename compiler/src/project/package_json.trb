@@ -1,3 +1,4 @@
+import { json_array, json_boolean, json_null, json_number, json_object, json_string } from project/json_kinds
 import { compiler_string_bytes } from support/compiler_bytes
 import { compiler_literal_byte, escape_digit } from frontend/syntax/string_escapes
 
@@ -31,22 +32,22 @@ end
 
 def package_json_value(mut document: PackageJson, source: String, mut position: Array<Integer>, depth: Integer): Integer
 	id := document.nodes.size()
-	document.nodes.push(PackageJsonNode.new(kind: 6, text: "null", keys: [], children: []))
+	document.nodes.push(PackageJsonNode.new(kind: json_null(), text: "null", keys: [], children: []))
 	package_json_space(source, position)
 	if depth > 128 || position[0] >= source.size()
 		package_json_fail(document, "invalid or excessively nested JSON value")
 		return id
 	end
 	character := source[position[0]]
-	mut kind := 4
+	mut kind := json_number()
 	mut value := ""
 	mut keys: Array<String> := []
 	mut children: Array<Integer> := []
 	if character == "{" || character == "["
-		kind = 1
+		kind = json_object()
 		mut finish := "}"
 		if character == "["
-			kind = 2
+			kind = json_array()
 			finish = "]"
 		end
 		position[0] += 1
@@ -58,7 +59,7 @@ def package_json_value(mut document: PackageJson, source: String, mut position: 
 		end
 		while !done && document.error[0] == ""
 			mut key := ""
-			if kind == 1
+			if kind == json_object()
 				key = package_json_read_string(document, source, position)
 				package_json_space(source, position)
 				if position[0] >= source.size() || source[position[0]] != ":"
@@ -79,10 +80,10 @@ def package_json_value(mut document: PackageJson, source: String, mut position: 
 				end
 				index += 1
 			end
-			if kind == 1 && previous >= 0
+			if kind == json_object() && previous >= 0
 				children[previous] = child
 			else
-				if kind == 1
+				if kind == json_object()
 					keys.push(key)
 				end
 				children.push(child)
@@ -104,7 +105,7 @@ def package_json_value(mut document: PackageJson, source: String, mut position: 
 			end
 		end
 	elsif character == "\""
-		kind = 3
+		kind = json_string()
 		value = package_json_read_string(document, source, position)
 	else
 		mut scanning := true
@@ -118,9 +119,9 @@ def package_json_value(mut document: PackageJson, source: String, mut position: 
 			end
 		end
 		if value == "null"
-			kind = 6
+			kind = json_null()
 		elsif value == "true" || value == "false"
-			kind = 5
+			kind = json_boolean()
 		elsif !package_json_number(value)
 			package_json_fail(document, "invalid JSON value")
 		end
@@ -193,7 +194,7 @@ def package_json_parse(source: String): PackageJson
 end
 
 def package_json_member(document: PackageJson, id: Integer, key: String): Integer
-	if id < 0 || document.nodes[id].kind != 1
+	if id < 0 || document.nodes[id].kind != json_object()
 		return -1
 	end
 	node := document.nodes[id]
@@ -209,10 +210,10 @@ end
 
 def package_json_string_field(mut document: PackageJson, id: Integer, key: String): String
 	child := package_json_member(document, id, key)
-	if child < 0 || document.nodes[child].kind == 6
+	if child < 0 || document.nodes[child].kind == json_null()
 		return ""
 	end
-	if document.nodes[child].kind != 3
+	if document.nodes[child].kind != json_string()
 		package_json_fail(document, key + " must be a string")
 		return ""
 	end
@@ -286,16 +287,16 @@ end
 # Canonical object ordering is used only for structural lock comparisons.
 def package_json_canonical(document: PackageJson, id: Integer): String
 	node := document.nodes[id]
-	if node.kind == 3
+	if node.kind == json_string()
 		return package_json_quote(node.text)
 	end
-	if node.kind != 1 && node.kind != 2
+	if node.kind != json_object() && node.kind != json_array()
 		return node.text
 	end
 	mut result := "["
 	mut finish := "]"
 	mut order: Array<Integer> := []
-	if node.kind == 1
+	if node.kind == json_object()
 		result = "{"
 		finish = "}"
 		order = package_sorted_indices(node.keys)
@@ -312,7 +313,7 @@ def package_json_canonical(document: PackageJson, id: Integer): String
 			result += ","
 		end
 		selected := order[index]
-		if node.kind == 1
+		if node.kind == json_object()
 			result += package_json_quote(node.keys[selected]) + ":"
 		end
 		result += package_json_canonical(document, node.children[selected])

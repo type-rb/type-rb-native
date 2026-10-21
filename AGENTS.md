@@ -17,8 +17,10 @@ the project board continues through merge, cleanup and the next eligible task
 without further approval, and stops only for the maintainer decisions in the
 workflow's authority table. This includes reference conformance, MIR and
 performance improvements, and maintenance that preserve specified behavior and
-the approved scope and targets. When an initiative meets its recorded completion
-criteria, record current evidence and mark it Done under the project workflow.
+the approved scope. Use the development skill's trade-off guidance to adopt
+overall improvements even when numerical performance targets remain unmet.
+When an initiative meets its recorded completion criteria, record current
+evidence and mark it Done under the project workflow.
 A request to prepare a PR for review ends with an open PR; it does not authorize
 a merge or another development slice. Later task and budget limits narrow
 earlier standing direction to continue.
@@ -84,7 +86,9 @@ outward-facing text before publication.
   parent initiative. Main failures take priority over feature merges; follow
   the workflow's completion and reopening rules. Its authority table lists what
   needs a maintainer decision. A direct request keeps its own scope and
-  completion point.
+  completion point. Apply its flow checkpoints at work start, waiting/handoff,
+  merge and completion boundaries so that task acceptance, owners and next
+  actions remain aligned with the delivered work.
 - For language coverage, follow `docs/native-language-coverage.md`: pair basic
   syntax with MIR checks and verified compiler self-use. Extend the shared
   reference/Native case contract and regenerate the Capabilities detail view

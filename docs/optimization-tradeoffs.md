@@ -27,7 +27,7 @@ There are two routes:
 | Route | Purpose | Outcome |
 | --- | --- | --- |
 | Ordinary acceptance | Detect regressions against the registered Native baseline using existing limits and all correctness authorities | Eligible for normal review only when the complete contract passes |
-| Bounded trade-off evaluation | Learn a promising candidate's runtime benefit even when an ordinary cost limit fails | Diagnostic evidence and an explicit decision, never automatic acceptance |
+| Bounded trade-off evaluation | Learn a promising candidate's runtime benefit even when an ordinary cost limit fails | Diagnostic evidence for a documented candidate-specific adoption decision |
 
 The ordinary 1.05 ratios and absolute limits of the retired
 [transition policy](https://github.com/type-rb/type-rb-native/blob/d1c151d02e051c6557acb479a9e9d7c713226858/tools/native-mir-transition-policy.sh)
@@ -62,6 +62,57 @@ Correctness, portable semantics, memory safety, failure ordering, MIR ownership,
 reproducible self-hosting, target/process/cleanup requirements and evidence
 integrity cannot be traded for performance. A diagnostic may stage expensive
 authorities, but must say which remain unrun; acceptance still requires them.
+
+## Runtime RSS and execution-performance trade-offs
+
+New runtime optimization assessments use `go-competitive-runtime-rss-v1`,
+implemented by `tools/daily-performance/rss_policy.py`. Apply this policy only
+through an explicit prospective registration. Historical contracts and their
+failed observations remain unchanged; a later assessment records its own policy
+and sources instead of rewriting an earlier result.
+
+The required application-memory goal is lower runtime peak RSS than the
+same-source optimized TypeRB Go program and every available equivalent Pure Go
+counterpart, measured with the same inputs and environment. Missing Pure Go
+programs remain explicit coverage gaps, not assumed wins. A declared comparator
+that is missing or invalid blocks assessment. A tie is not a memory advantage.
+
+A Native-relative RSS increase is no longer an automatic rejection under this
+policy. Record both absolute bytes and ratios against the immediately preceding
+accepted implementation and the fixed cumulative baseline. An increase exceeding
+both 10% and 256 KiB requires a documented trade-off review: identify the runtime
+benefit, memory cost, implementation necessity and expected workload impact.
+Do not adopt an unexplained increase without a useful compensating benefit.
+These warning thresholds are operational choices, not statistical significance
+or a reusable exemption for memory safety. Do not reset the cumulative baseline
+after each adoption.
+
+An RSS advantage smaller than 10% against either Go comparator also requires
+review of the retained dispersion before calling the advantage reliable. Freeze
+any necessary additional validation and its finite budget before execution;
+do not repeat samples until the comparison passes. A wider measured advantage
+does not require identical Native binaries to reproduce within a separate 5%
+RSS band. A failed historical A/A observation remains valid evidence of that
+protocol's dispersion.
+
+This policy changes runtime RSS acceptance only. Required useful execution-time
+improvements, other-case runtime regression limits, application-build memory,
+artifact size, correctness, exact outputs, GC and lifetime safety, sustained
+memory-growth checks, reproducibility and platform authorities remain binding.
+RSS is a process high-water measurement, not a replacement for those checks.
+Application-build time trades require measured competitive comparisons;
+compiler self-cost remains a separate observation. A promising optimization can
+be adopted while still slower than Go if it demonstrably closes the execution
+gap and passes its registered benefit and regression contract. The intermediate
+goal remains faster execution than same-source TypeRB Go across the public
+runtime suite; the longer-term target remains equivalent Pure Go.
+
+The RSS assessor returns `met`, `review-required` or `unmet`; none independently
+authorizes an optimizer merge. Complete source/raw-data validation and every
+other required authority in the owning assessment. If a review is required,
+retain its explicit case-specific rationale before acceptance. Reconsidering a
+held candidate under this policy needs a new finite validation scope; old repair
+and measurement allowances are not silently renewed.
 
 ## Register a bounded evaluation
 
@@ -126,6 +177,20 @@ another semantic owner, an unbounded optimizer, or premature LLVM expansion.
 
 ## Avoid both missed opportunities and budget drift
 
+An attempt's stopping condition and an optimization idea's value are separate.
+Distinguish implementation or validation incomplete, measured benefit absent,
+measured benefit with an acceptance blocker, and adopted. A setup failure,
+unsupported compiler-source construct or exhausted repair allowance does not
+establish absent runtime benefit. Keep unfinished work pending with its concrete
+blocker and next check rather than closing it as not planned for that reason.
+
+Reconsider earlier ideas when a corrected implementation, resolved prerequisite,
+changed policy or improved measurement method answers a stated open question.
+Reuse their source and evidence, including unfavorable results, in the existing
+task. Historical budget exhaustion prevents silently continuing that attempt;
+it is not a permanent exclusion of the mechanism. Register any new comparative
+cohort prospectively and do not resample unchanged candidates until they pass.
+
 At each coherent checkpoint, record the next action and why. After two bounded
 size-only attempts without a current runtime-benefit assessment, explicitly
 choose a bounded benefit measurement, a cost/benefit review, or deferral with a
@@ -143,14 +208,26 @@ dispatched, not added to every PR's CI.
 
 ## Acceptance after evaluation
 
-If ordinary bounds still fail, a successful diagnostic is insufficient to merge
-the optimization. Propose a separate, candidate-scoped acceptance decision with
-the measured benefit, justified budget, cumulative limits, review/retirement
-conditions, and all remaining authorities. Implement any approved enforcement
-change through a reviewed PR with fail-closed tests before relying on it.
-Do not use an admin bypass or a diagnostic exit status to turn failed acceptance
-green. Full correctness and the registered performance contract must pass under
-the approved policy. Preserve the original failure and the later decision.
+Within authorized performance or maintenance work, agents may adopt and merge a
+candidate with unmet numerical targets without another maintainer confirmation
+when the evidence supports an overall improvement. Judge application runtime
+and build costs, compiler costs, RSS, generated artifacts, code quality and
+maintenance burden together. Small or absent speed gains can justify simpler
+code; extra complexity needs a useful compensating benefit. If the evidence
+does not support that judgment, revise or defer within the authorized scope.
+
+Before merging, record a candidate-specific decision with the benefit,
+incremental and cumulative costs, every unmet or unknown metric, maintenance
+trade-offs and any review or retirement conditions. All required correctness,
+safety, reproducibility and CI authorities must pass. A diagnostic result alone
+does not supply missing validation. Retain the registered assessment's actual
+result: adoption does not turn an unmet measurement into a pass, change numerical
+thresholds, renew an expired experiment budget, or complete an unmet initiative.
+
+Do not use an admin bypass or weaken required CI to adopt a candidate. Changes
+to enforced limits or project goals still require a separate maintainer decision
+and the applicable reviewed implementation and checks. A later review-only
+instruction or narrower task endpoint overrides standing merge authorization.
 
 The detailed cross-language Pages comparison changes only with complete
 accepted formal evidence. The separate [daily performance page](daily-performance.md)

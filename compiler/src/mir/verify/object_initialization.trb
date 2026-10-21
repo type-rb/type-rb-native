@@ -1,3 +1,7 @@
+import { mir_type_composite_start } from mir/model/type_ids
+import { mir_signature_ordinary } from mir/model/call_kinds
+import { mir_terminator_return } from mir/model/control
+import { mir_op_object_field, mir_op_object_store } from mir/model/instructions
 import { integer_string } from support/literals
 import { MirFunction, MirModule } from mir/model/module
 import { MirFlow, mir_flow_type } from mir/analysis/flow
@@ -139,7 +143,7 @@ def mir_object_initialization_error(native_module: MirModule, function: MirFunct
 				mut index := block.instruction_start
 				while index < block.instruction_start + block.instruction_count
 					instruction := native_module.instructions[index]
-					if instruction.kind == 65 && mir_object_alias(exact, instruction.first)
+					if instruction.kind == mir_op_object_store() && mir_object_alias(exact, instruction.first)
 						fields[instruction.payload] = 1
 					end
 					index += 1
@@ -187,7 +191,7 @@ def mir_object_initialization_error(native_module: MirModule, function: MirFunct
 						ready = false
 					end
 				end
-				if instruction.kind == 65
+				if instruction.kind == mir_op_object_store()
 					target := mir_object_id(native_module, mir_flow_type(flow, instruction.first))
 					if native_module.objects[target].fields[instruction.payload].readonly && !mir_object_alias(exact, instruction.first)
 						return "MIR readonly class field store is outside its initializer"
@@ -196,11 +200,11 @@ def mir_object_initialization_error(native_module: MirModule, function: MirFunct
 				if !ready
 					uses := mir_live_before(native_module, managed, instruction, [])
 					uses.each do |value|
-						if value == instruction.first && (instruction.kind == 64 || instruction.kind == 65)
-							if instruction.kind == 64 && fields[instruction.payload] == 0
+						if value == instruction.first && (instruction.kind == mir_op_object_field() || instruction.kind == mir_op_object_store())
+							if instruction.kind == mir_op_object_field() && fields[instruction.payload] == 0
 								return "MIR class field is read before definite initialization"
 							end
-							if instruction.kind == 65 && value == instruction.second
+							if instruction.kind == mir_op_object_store() && value == instruction.second
 								return "MIR class receiver escapes before definite initialization"
 							end
 						else
@@ -208,12 +212,12 @@ def mir_object_initialization_error(native_module: MirModule, function: MirFunct
 						end
 					end
 				end
-				if instruction.kind == 65 && mir_object_alias(exact, instruction.first)
+				if instruction.kind == mir_op_object_store() && mir_object_alias(exact, instruction.first)
 					fields[instruction.payload] = 1
 				end
 				index += 1
 			end
-			if block.terminator == 3
+			if block.terminator == mir_terminator_return()
 				fields.each do |initialized|
 					if initialized == 0
 						return "MIR class initializer returns with an uninitialized field"
@@ -234,10 +238,10 @@ def mir_object_initializers_error(native_module: MirModule): String
 		end
 		if definition.initializer >= 0
 			signature := native_module.signatures[definition.initializer]
-			if definition.interface_type || signature.kind != 0 || signature.result_type != "Void" || signature.parameter_types.size() == 0
+			if definition.interface_type || signature.kind != mir_signature_ordinary() || signature.result_type != "Void" || signature.parameter_types.size() == 0
 				return "MIR class initializer signature differs"
 			end
-			if signature.parameter_types[0] != native_module.types[definition.type_id - 9].name
+			if signature.parameter_types[0] != native_module.types[definition.type_id - mir_type_composite_start()].name
 				return "MIR class initializer receiver differs"
 			end
 		end

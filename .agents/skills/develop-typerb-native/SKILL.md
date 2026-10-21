@@ -26,7 +26,7 @@ All `docs/` and configuration paths below are relative to the repository root.
 | Changed surface | Read when needed |
 | --- | --- |
 | Feature selection or coverage claims | `docs/native-language-coverage.md`; preserve ordinary check/build/execution/REPL versus recovery distinctions. |
-| Work selected from the project board | `docs/project-workflow.md` for eligibility, claims, WIP, task closure and initiative completion. |
+| Work selected from the project board, waiting work or completion reconciliation | `docs/project-workflow.md` for eligibility, claims, WIP and flow checkpoints connecting PR evidence, next actions and initiative completion. |
 | Compiler, MIR, runtime, driver, or target implementation | [Compiler constraints](references/compiler.md) and the decisions for the affected boundary. |
 | Ordinary compiler source, recovery, self-hosting, or seed handoff | [Bootstrap and recovery](references/bootstrap.md), including recovery-enabled suites for compiler-source changes. |
 | Source decomposition, names, or removal | `docs/repository-organization.md` and the affected consumer inventory; applicable recovery and cost checks still apply. |
@@ -119,21 +119,34 @@ do not establish recovery coverage.
 
 ## Finish within the requested scope
 
+At a waiting, handoff or completion boundary, apply the affected work's
+`docs/project-workflow.md` flow checkpoint. Reconcile batch-PR acceptance and
+open children before declaring an initiative complete; keep unresolved work
+actionable without repeating unchanged reports or reopening closed experiments.
+
 Report the implemented subset, meaningful validation, relevant measurements,
 and remaining limitations. Fix routine issues within the authorized task
 without introducing a new approval checkpoint. If a skill instruction requires
 a pause, identify the exact file and instruction, and explain the unresolved
 decision; do not turn an optional recommendation into a mandatory approval.
 
-Board work that preserves specified behavior and the approved scope and targets
+Board work that preserves specified behavior and the approved scope
 needs no confirmation for routine steps. This includes reference conformance,
 MIR and performance improvements, and maintenance. Merge green PRs, clean up,
 update the reference pin through its procedure, mark an initiative Done when
 current evidence meets its recorded completion criteria, activate the next
 Approved initiative in a free slot, and continue. Follow
 `docs/project-workflow.md` for evidence and lifecycle rules. Stop only for its
-listed maintainer decisions, such as a specification change or accepting an
-unmet target.
+listed maintainer decisions, such as a specification change or retargeting an
+initiative.
+
+For performance and maintenance candidates, assess measured benefit, code quality
+and maintenance cost together. When the evidence supports an overall improvement
+and required correctness and CI pass, record the trade-off and merge without
+another confirmation even if numerical targets remain unmet. Simpler code can
+justify little or no speed gain; added complexity needs a useful compensating
+benefit. Follow `docs/optimization-tradeoffs.md` for the adoption record. Preserve
+misses, unknowns, thresholds and initiative completion criteria.
 
 When the user has authorized continued development, pursue the active milestone
 through cohesive ownership changes within that authorization and budget. Avoid

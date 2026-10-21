@@ -1,3 +1,4 @@
+import { hash_action_copy, hash_action_delete, hash_action_empty, hash_action_fetch, hash_action_has_key, hash_action_index_read, hash_action_index_write, hash_action_keys, hash_action_literal, hash_action_merge, hash_action_none, hash_action_size, hash_action_update, hash_action_values } from mir/model/hash_actions
 import { find_object_type } from frontend/types/object_types
 import { literal_type_base } from frontend/types/literal_types
 import { find_newtype_type } from frontend/types/newtype_types
@@ -37,42 +38,42 @@ def checked_hash_plan(state: CompilerState, origin: Integer): MirHashOperation
 			return state.callables.checked[0].hash_operations[index]
 		end
 	end
-	return mir_hash_operation(0, -1, -1, -1, "", false, 0)
+	return mir_hash_operation(hash_action_none(), -1, -1, -1, "", false, 0)
 end
 
 def checked_hash_method(method: String): Integer
 	if method == "fetch"
-		return 13
+		return hash_action_fetch()
 	elsif method == "size"
-		return 4
+		return hash_action_size()
 	elsif method == "key?"
-		return 5
+		return hash_action_has_key()
 	elsif method == "delete"
-		return 6
+		return hash_action_delete()
 	elsif method == "dup"
-		return 7
+		return hash_action_copy()
 	elsif method == "merge"
-		return 8
+		return hash_action_merge()
 	elsif method == "update"
-		return 9
+		return hash_action_update()
 	elsif method == "keys"
-		return 10
+		return hash_action_keys()
 	elsif method == "values"
-		return 11
+		return hash_action_values()
 	elsif method == "empty?"
-		return 12
+		return hash_action_empty()
 	end
-	return 0
+	return hash_action_none()
 end
 
 def checked_hash_empty_constant(state: CompilerState, plan: MirHashOperation): Boolean
 	if plan.type_name != "Hash" || plan.entries != 0
 		return false
 	end
-	if plan.kind == 4 || plan.kind == 12
+	if plan.kind == hash_action_size() || plan.kind == hash_action_empty()
 		return true
 	end
-	if plan.kind != 1
+	if plan.kind != hash_action_literal()
 		return false
 	end
 	mut index := 0
@@ -103,22 +104,22 @@ def checked_hash_valid(state: CompilerState, plan: MirHashOperation, pending: Bo
 	if plan.type_name != "Hash" && !checked_hash_value_layout(state, plan.value_type)
 		return false
 	end
-	if plan.kind == 3 || plan.kind == 6 || plan.kind == 9
+	if plan.kind == hash_action_index_write() || plan.kind == hash_action_delete() || plan.kind == hash_action_update()
 		if !checked_hash_binding_target(state, plan.receiver_origin)
 			return false
 		end
 	end
-	if plan.kind == 1
+	if plan.kind == hash_action_literal()
 		if token_is(state, plan.origin, "{") && token_is(state, plan.finish, "}")
 			return true
 		end
 		return false
 	end
-	if plan.kind == 2 || plan.kind == 3
+	if plan.kind == hash_action_index_read() || plan.kind == hash_action_index_write()
 		if !token_is(state, plan.origin, "[") || !token_is(state, plan.finish, "]")
 			return false
 		end
-		if plan.kind == 3
+		if plan.kind == hash_action_index_write()
 			return token_is(state, plan.finish + 1, "=")
 		end
 		return true
@@ -146,10 +147,10 @@ def checked_hash_binding_target(state: CompilerState, origin: Integer): Boolean
 	mut depth := 0
 	while depth < state.source_tokens.token_count[0]
 		parent := checked_hash_plan(state, root)
-		if parent.kind == 1
+		if parent.kind == hash_action_literal()
 			return false
 		end
-		if parent.kind != 2
+		if parent.kind != hash_action_index_read()
 			return true
 		end
 		root = parent.receiver_origin

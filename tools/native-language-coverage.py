@@ -351,12 +351,13 @@ def main():
     with tempfile.TemporaryDirectory(prefix="native-language-") as temporary:
         def run_case(item):
             index, case = item
-            root = Path(temporary).resolve() / str(index)
-            root.mkdir()
-            try:
-                observations = collect(case, native, reference, root)
-            except ValueError as error:
-                return case, {"error": str(error)}
+            # Retain observations, but bound generated files by the worker count.
+            with tempfile.TemporaryDirectory(prefix=f"{index}-", dir=temporary) as case_directory:
+                root = Path(case_directory).resolve()
+                try:
+                    observations = collect(case, native, reference, root)
+                except ValueError as error:
+                    return case, {"error": str(error)}
             return case, observations
         with ThreadPoolExecutor(max_workers=args.jobs) as pool:
             results = list(pool.map(run_case, enumerate(cases)))

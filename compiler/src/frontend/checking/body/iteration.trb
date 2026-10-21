@@ -1,3 +1,10 @@
+import { checked_category_value } from frontend/types/value_categories
+import { binding_use_parameter } from state/binding_kinds
+import { mir_state_enabled_slot, nullable_state_head_slot } from state/local_slots
+import { checking_lowering } from state/checking_phases
+import { transform_any, transform_find, transform_find_index, transform_map, transform_none, transform_reduce, transform_select, transform_sort_by, transform_sort_by_descending } from frontend/types/transform_kinds
+import { iteration_source_array, iteration_source_hash, iteration_source_range } from frontend/types/iteration_kinds
+import { mir_op_array_load, mir_op_array_new, mir_op_array_push, mir_op_nullable_extract, mir_op_nullable_none } from mir/model/instructions
 import { mir_checked_nullable, mir_literal_scalar, mir_nullable_coerce } from mir/lowering/nullable
 import { mir_sliced_iteration_begin, mir_sliced_iteration_end } from frontend/checking/collections/sliced_iteration
 import { mir_array_sort_keys } from frontend/checking/builtins/array_sorting
@@ -23,20 +30,20 @@ import { check_expression } from frontend/checking/body/expressions
 import { check_block, check_block_value } from frontend/checking/body/statements
 
 def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, parent_loop: Integer): CheckedValue
-	flow_parent := locals.nullable_state[0]
+	flow_parent := locals.nullable_state[nullable_state_head_slot()]
 	flow_first := locals.nullable_facts.size()
 	origin := position[0]
 	encoded := sparse_integer_at(state.parsed.iteration_origins, origin)
 	if encoded < 1 || encoded > state.parsed.iterations.size()
-		return checked_value("Invalid", 0, origin, 0)
+		return checked_value("Invalid", checked_category_value(), origin, 0)
 	end
 	shape := state.parsed.iterations[encoded - 1]
 	if !checked_iteration_shape(state, shape, origin)
 		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "invalid iteration syntax plan")
-		return checked_value("Invalid", 0, origin, 0)
+		return checked_value("Invalid", checked_category_value(), origin, 0)
 	end
 	mut receiver := check_expression(state, position, locals, 1, "")
-	saved_mir := locals.mir_state[0]
+	saved_mir := locals.mir_state[mir_state_enabled_slot()]
 	mut optional := false
 	if token_is(state, shape.receiver_finish, "&.") && nullable_element(receiver.type_name) != ""
 		optional = true
@@ -47,41 +54,41 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 		absent = mir_control_branch(state, locals, condition, load_integer(state.source_tokens.token_lines, origin))
 		nullable_apply(locals, condition.truth)
 		present_type := nullable_element(receiver.type_name)
-		payload := mir_checked_nullable(state, locals, 36, receiver, present_type, 0, shape.receiver_finish)
+		payload := mir_checked_nullable(state, locals, mir_op_nullable_extract(), receiver, present_type, 0, shape.receiver_finish)
 		receiver = checked_view(receiver, present_type, payload.category)
 	end
 	element_type := iteration_element_type(receiver.type_name)
 	if element_type == "" || position[0] != shape.receiver_finish
 		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "ordinary each requires a supported Array, Range or Hash receiver")
-		return checked_value("Invalid", 0, origin, 0)
+		return checked_value("Invalid", checked_category_value(), origin, 0)
 	end
-	mut source_kind := 1
+	mut source_kind := iteration_source_array()
 	if receiver.type_name == "Range<Integer>"
-		source_kind = 2
+		source_kind = iteration_source_range()
 	end
 	if hash_key_type(receiver.type_name) != ""
-		source_kind = 3
+		source_kind = iteration_source_hash()
 	end
 	plan := MirIteration.new(syntax: shape, parent_loop: parent_loop, source_kind: source_kind, type_name: receiver.type_name, element_type: element_type)
 	if !checked_iteration_parameters(state, plan)
 		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "each block parameters differ from its receiver and with_index mode")
-		return checked_value("Invalid", 0, origin, 0)
+		return checked_value("Invalid", checked_category_value(), origin, 0)
 	end
-	mut size := checked_value("Integer", 0, origin, 0)
+	mut size := checked_value("Integer", checked_category_value(), origin, 0)
 	mut block_type := element_type
 	if shape.slice_start >= 0
 		position[0] = shape.slice_start
 		size = check_expression(state, position, locals, 1, "Integer")
 		if !check_expected(state, size.type_name, "Integer", load_integer(state.source_tokens.token_lines, shape.slice_start))
-			return checked_value("Invalid", 0, origin, 0)
+			return checked_value("Invalid", checked_category_value(), origin, 0)
 		end
 		if position[0] != shape.slice_finish
 			diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "invalid each_slice size boundary")
-			return checked_value("Invalid", 0, origin, 0)
+			return checked_value("Invalid", checked_category_value(), origin, 0)
 		end
 		if checked_slice_zero_literal(state, size.origin)
 			diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, shape.slice_start), "each_slice size must be greater than zero")
-			return checked_value("Invalid", 0, origin, 0)
+			return checked_value("Invalid", checked_category_value(), origin, 0)
 		end
 		block_type = array_type(element_type)
 	end
@@ -94,7 +101,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 		scalar_mir_disable(locals)
 	end
 	saved := locals.count[0]
-	mut element := checked_value(block_type, 0, plan.syntax.element_origin, 1)
+	mut element := checked_value(block_type, checked_category_value(), plan.syntax.element_origin, 1)
 	if shape.slice_start >= 0
 		local_bind_temporary(locals, "$slice.receiver", receiver.type_name, 1)
 		local_bind_temporary(locals, "$slice.cursor", "Integer", 1)
@@ -106,10 +113,10 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 		# Hidden receiver/cursor bindings provide the loop-carried MIR values.
 		local_bind(locals, "$iteration.receiver", receiver.type_name, 1)
 		local_bind(locals, "$iteration.cursor", "Integer", 1)
-		if source_kind == 2 && plan.syntax.second_origin >= 0
+		if source_kind == iteration_source_range() && plan.syntax.second_origin >= 0
 			local_bind(locals, "$iteration.ordinal", "Integer", 1)
 		end
-		if source_kind == 3
+		if source_kind == iteration_source_hash()
 			local_bind(locals, "$iteration.keys", array_type(element_type), 1)
 			local_bind(locals, "$iteration.values", array_type(hash_value_type(receiver.type_name)), 1)
 		end
@@ -117,28 +124,28 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	end
 	element_name := load_string(state.source_tokens.token_texts, plan.syntax.element_origin)
 	local_bind(locals, element_name, block_type, 1)
-	local_require_use(locals, locals.count[0] - 1, element_name, plan.syntax.element_origin, 2)
+	local_require_use(locals, locals.count[0] - 1, element_name, plan.syntax.element_origin, binding_use_parameter())
 	mir_binding_initialize(state, locals, locals.count[0] - 1, element, plan.syntax.element_origin)
 	if plan.syntax.second_origin >= 0
 		if load_string(state.source_tokens.token_texts, plan.syntax.element_origin) == load_string(state.source_tokens.token_texts, plan.syntax.second_origin)
 			diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, plan.syntax.second_origin), "iteration block parameter is duplicated")
-			return checked_value("Invalid", 0, origin, 0)
+			return checked_value("Invalid", checked_category_value(), origin, 0)
 		end
 		mut second_type := "Integer"
-		if source_kind == 3
+		if source_kind == iteration_source_hash()
 			second_type = hash_value_type(receiver.type_name)
 		end
 		second_name := load_string(state.source_tokens.token_texts, plan.syntax.second_origin)
 		local_bind(locals, second_name, second_type, 1)
-		local_require_use(locals, locals.count[0] - 1, second_name, plan.syntax.second_origin, 2)
+		local_require_use(locals, locals.count[0] - 1, second_name, plan.syntax.second_origin, binding_use_parameter())
 		mut index_slot := saved + 1
-		if source_kind == 2 || shape.slice_start >= 0
+		if source_kind == iteration_source_range() || shape.slice_start >= 0
 			index_slot = saved + 2
 		end
 		mut second := mir_binding_read(state, locals, index_slot, plan.syntax.second_origin)
-		if source_kind == 3
+		if source_kind == iteration_source_hash()
 			values := mir_binding_read(state, locals, saved + 3, plan.syntax.second_origin)
-			second = mir_checked_array_operation(state, locals, 22, checked_mir_value(values), checked_mir_value(second), 0, second_type, plan.syntax.second_origin)
+			second = mir_checked_array_operation(state, locals, mir_op_array_load(), checked_mir_value(values), checked_mir_value(second), 0, second_type, plan.syntax.second_origin)
 		end
 		mir_binding_initialize(state, locals, locals.count[0] - 1, second, plan.syntax.second_origin)
 	end
@@ -156,7 +163,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	end
 	locals.count[0] = saved
 	if size.type_name == "Never"
-		locals.mir_state[0] = saved_mir
+		locals.mir_state[mir_state_enabled_slot()] = saved_mir
 	end
 	if absent >= 0
 		mir_control_jump(state, locals, absent, saved)
@@ -166,9 +173,9 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	position[0] = plan.syntax.finish
 	finish_statement(state, position)
 	if size.type_name == "Never" && !optional
-		return checked_value("Never", 0, origin, 0)
+		return checked_value("Never", checked_category_value(), origin, 0)
 	end
-	return checked_value("Void", 0, origin, 0)
+	return checked_value("Void", checked_category_value(), origin, 0)
 end
 
 def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue): CheckedValue
@@ -187,24 +194,24 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	if element_type == "" || hash_key_type(receiver.type_name) != ""
 		return type_diagnostic(state, line, "collection transform requires a supported Array or Range receiver")
 	end
-	if syntax.kind >= 9 && array_element_type(receiver.type_name) == ""
+	if syntax.kind >= transform_sort_by() && array_element_type(receiver.type_name) == ""
 		return type_diagnostic(state, line, "key-based sorting requires an Array receiver")
 	end
-	mut initial := checked_value("Void", 0, origin, 0)
+	mut initial := checked_value("Void", checked_category_value(), origin, 0)
 	mut output := array_type(element_type)
 	mut key_type := ""
-	if syntax.kind >= 9
+	if syntax.kind >= transform_sort_by()
 		key_type = sparse_string_at(state.callables.checked[0].transform_key_types, origin)
 	end
-	if syntax.kind == 1
+	if syntax.kind == transform_map()
 		output = sparse_string_at(state.callables.checked[0].transform_types, origin)
-	elsif syntax.kind == 7
+	elsif syntax.kind == transform_find()
 		output = nullable_type(element_type)
-	elsif syntax.kind == 8
+	elsif syntax.kind == transform_find_index()
 		output = "Integer?"
-	elsif syntax.kind >= 4 && syntax.kind <= 6
+	elsif syntax.kind >= transform_any() && syntax.kind <= transform_none()
 		output = "Boolean"
-	elsif syntax.kind == 3
+	elsif syntax.kind == transform_reduce()
 		position[0] = syntax.initial_start
 		initial = check_expression(state, position, locals, 1, "")
 		if position[0] != syntax.initial_finish || initial.type_name == "Void"
@@ -216,44 +223,56 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 		end
 		output = initial.type_name
 	end
-	mut source_kind := 1
+	mut source_kind := iteration_source_array()
 	if receiver.type_name == "Range<Integer>"
-		source_kind = 2
+		source_kind = iteration_source_range()
 	end
 	plan := MirIteration.new(syntax: shape, parent_loop: locals.lexical_loop[0], source_kind: source_kind, type_name: receiver.type_name, element_type: element_type)
 	outer := locals.count[0]
-	flow_parent := locals.nullable_state[0]
+	flow_parent := locals.nullable_state[nullable_state_head_slot()]
 	flow_first := locals.nullable_facts.size()
 	local_bind(locals, "$transform.result", output, 1)
-	if syntax.kind == 7 || syntax.kind == 8
-		initial = mir_checked_nullable(state, locals, 33, initial, output, 0, origin)
-	elsif syntax.kind >= 4 && syntax.kind <= 6
+	if syntax.kind == transform_find() || syntax.kind == transform_find_index()
+		initial = mir_checked_nullable(state, locals, mir_op_nullable_none(), initial, output, 0, origin)
+	elsif syntax.kind >= transform_any() && syntax.kind <= transform_none()
 		mut empty := "true"
-		if syntax.kind == 4
+		if syntax.kind == transform_any()
 			empty = "false"
 		end
 		initial = scalar_mir_literal(state, locals, "Boolean", origin, empty)
-	elsif syntax.kind != 3
-		initial = mir_checked_array_operation(state, locals, 19, -1, -1, 0, output, origin)
+	elsif syntax.kind != transform_reduce()
+		# Map and select emit at most one result per visited element. This initial
+		# hint preserves live traversal and growth when callbacks change the input.
+		mut capacity_owner := -1
+		mut capacity_limit := 0
+		if (syntax.kind == transform_map() || syntax.kind == transform_select()) && source_kind == iteration_source_array()
+			capacity_owner = checked_mir_value(receiver)
+			if syntax.kind == transform_select()
+				# Selection can be sparse. Bound speculative backing to 2 KiB;
+				# ordinary geometric growth handles larger results.
+				capacity_limit = 256
+			end
+		end
+		initial = mir_checked_array_operation(state, locals, mir_op_array_new(), capacity_owner, -1, capacity_limit, output, origin)
 	end
 	mir_binding_initialize(state, locals, outer, initial, origin)
-	if syntax.kind >= 9
+	if syntax.kind >= transform_sort_by()
 		local_bind(locals, "$transform.keys", array_type(key_type), 1)
-		keys := mir_checked_array_operation(state, locals, 19, -1, -1, 0, array_type(key_type), origin)
+		keys := mir_checked_array_operation(state, locals, mir_op_array_new(), -1, -1, 0, array_type(key_type), origin)
 		mir_binding_initialize(state, locals, outer + 1, keys, origin)
 	end
 	saved := locals.count[0]
 	local_bind(locals, "$iteration.receiver", receiver.type_name, 1)
 	local_bind(locals, "$iteration.cursor", "Integer", 1)
-	if source_kind == 2 && shape.second_origin >= 0
+	if source_kind == iteration_source_range() && shape.second_origin >= 0
 		local_bind(locals, "$iteration.ordinal", "Integer", 1)
 	end
 	element := mir_checked_iteration_begin(state, locals, plan, receiver, saved)
-	if syntax.kind == 3
+	if syntax.kind == transform_reduce()
 		accumulator := mir_binding_read(state, locals, outer, syntax.accumulator_origin)
 		accumulator_name := load_string(state.source_tokens.token_texts, syntax.accumulator_origin)
 		local_bind(locals, accumulator_name, output, 1)
-		local_require_use(locals, locals.count[0] - 1, accumulator_name, syntax.accumulator_origin, 2)
+		local_require_use(locals, locals.count[0] - 1, accumulator_name, syntax.accumulator_origin, binding_use_parameter())
 		mir_binding_initialize(state, locals, locals.count[0] - 1, accumulator, syntax.accumulator_origin)
 		if load_string(state.source_tokens.token_texts, syntax.accumulator_origin) == load_string(state.source_tokens.token_texts, shape.element_origin)
 			return type_diagnostic(state, line, "collection block parameter is duplicated")
@@ -261,20 +280,20 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	end
 	transform_name := load_string(state.source_tokens.token_texts, shape.element_origin)
 	local_bind(locals, transform_name, element_type, 1)
-	local_require_use(locals, locals.count[0] - 1, transform_name, shape.element_origin, 2)
+	local_require_use(locals, locals.count[0] - 1, transform_name, shape.element_origin, binding_use_parameter())
 	mir_binding_initialize(state, locals, locals.count[0] - 1, element, shape.element_origin)
 	if shape.second_origin >= 0
 		if load_string(state.source_tokens.token_texts, shape.second_origin) == load_string(state.source_tokens.token_texts, shape.element_origin)
 			return type_diagnostic(state, line, "collection block parameter is duplicated")
 		end
 		mut index_slot := saved + 1
-		if source_kind == 2
+		if source_kind == iteration_source_range()
 			index_slot = saved + 2
 		end
 		ordinal := mir_binding_read(state, locals, index_slot, shape.second_origin)
 		ordinal_name := load_string(state.source_tokens.token_texts, shape.second_origin)
 		local_bind(locals, ordinal_name, "Integer", 1)
-		local_require_use(locals, locals.count[0] - 1, ordinal_name, shape.second_origin, 2)
+		local_require_use(locals, locals.count[0] - 1, ordinal_name, shape.second_origin, binding_use_parameter())
 		mir_binding_initialize(state, locals, locals.count[0] - 1, ordinal, shape.second_origin)
 	end
 	position[0] = shape.body_start
@@ -289,26 +308,26 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	if position[0] != shape.body_finish || yielded.type_name == "Void" || yielded.type_name == "Never"
 		return type_diagnostic(state, line, "collection block must end with a result expression")
 	end
-	if syntax.kind == 1
+	if syntax.kind == transform_map()
 		output = array_type(yielded.type_name)
 		analyzed := sparse_string_at(state.callables.checked[0].transform_types, origin)
-		if state.callables.lambda_phase[0] == 2 && analyzed != output
+		if state.callables.lambda_phase[0] == checking_lowering() && analyzed != output
 			return type_diagnostic(state, line, "collection result differs from analyzed type")
 		end
 		store_string(locals.types, outer, output)
-	elsif syntax.kind >= 9
+	elsif syntax.kind >= transform_sort_by()
 		yielded = mir_literal_scalar(state, locals, yielded, origin)
 		key_type = yielded.type_name
 		if key_type != "Integer" && key_type != "Float" && key_type != "String"
 			return type_diagnostic(state, line, "sorting key requires portable natural order")
 		end
 		analyzed_key := sparse_string_at(state.callables.checked[0].transform_key_types, origin)
-		if state.callables.lambda_phase[0] == 2 && analyzed_key != key_type
+		if state.callables.lambda_phase[0] == checking_lowering() && analyzed_key != key_type
 			return type_diagnostic(state, line, "sorting key differs from analyzed type")
 		end
 		store_string(locals.types, outer + 1, array_type(key_type))
 		store_string(state.callables.checked[0].transform_key_types, origin, key_type)
-	elsif syntax.kind == 2 || syntax.kind >= 4
+	elsif syntax.kind == transform_select() || syntax.kind >= transform_any()
 		check_expected(state, yielded.type_name, "Boolean", line)
 	else
 		check_expected(state, yielded.type_name, output, line)
@@ -320,21 +339,21 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	store_integer(state.callables.checked[0].transform_origins, origin, state.callables.checked[0].transforms.size())
 	checked_transform_require(state, origin)
 	binding_scope_check(state, locals, saved)
-	if syntax.kind >= 9
+	if syntax.kind >= transform_sort_by()
 		values := mir_binding_read(state, locals, outer, origin)
-		mir_checked_array_operation(state, locals, 24, checked_mir_value(values), checked_mir_value(element), 0, "Void", origin)
+		mir_checked_array_operation(state, locals, mir_op_array_push(), checked_mir_value(values), checked_mir_value(element), 0, "Void", origin)
 		keys := mir_binding_read(state, locals, outer + 1, origin)
-		mir_checked_array_operation(state, locals, 24, checked_mir_value(keys), checked_mir_value(yielded), 0, "Void", origin)
-	elsif syntax.kind >= 7
+		mir_checked_array_operation(state, locals, mir_op_array_push(), checked_mir_value(keys), checked_mir_value(yielded), 0, "Void", origin)
+	elsif syntax.kind >= transform_find()
 		mir_transform_search_yield(state, locals, transformation, outer, element, yielded)
 	else
 		mir_transform_yield(state, locals, syntax.kind, outer, element, yielded, origin)
 	end
 	mir_checked_iteration_end(state, locals, plan, saved)
 	mut result := mir_binding_read(state, locals, outer, origin)
-	if syntax.kind >= 9
+	if syntax.kind >= transform_sort_by()
 		keys := mir_binding_read(state, locals, outer + 1, origin)
-		result = mir_array_sort_keys(state, locals, result, keys, syntax.kind == 10, origin)
+		result = mir_array_sort_keys(state, locals, result, keys, syntax.kind == transform_sort_by_descending(), origin)
 	end
 	locals.count[0] = outer
 	nullable_finish(locals, flow_parent, flow_first, outer)

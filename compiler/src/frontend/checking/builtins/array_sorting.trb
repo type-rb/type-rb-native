@@ -1,3 +1,6 @@
+import { mir_array_copy_duplicate, mir_string_compare_before } from mir/model/operation_modes
+import { checked_category_value } from frontend/types/value_categories
+import { mir_op_array_copy, mir_op_array_load, mir_op_array_size, mir_op_array_store, mir_op_string_compare } from mir/model/instructions
 import { mir_literal_scalar } from mir/lowering/nullable
 import { mir_array_query_advance, mir_array_query_binding } from frontend/checking/builtins/array_queries
 import { CheckedValue, checked_mir_value, checked_value, scalar_mir_binary, scalar_mir_literal } from frontend/checking/body/values
@@ -41,9 +44,9 @@ def mir_sort_before(mut state: CompilerState, mut locals: CheckedLocals, first_i
 	second := mir_literal_scalar(state, locals, second_input, origin)
 	if first.type_name == "String"
 		if descending
-			return mir_checked_string_operation(state, locals, 14, checked_mir_value(second), checked_mir_value(first), 2, "Boolean", origin)
+			return mir_checked_string_operation(state, locals, mir_op_string_compare(), checked_mir_value(second), checked_mir_value(first), mir_string_compare_before(), "Boolean", origin)
 		end
-		return mir_checked_string_operation(state, locals, 14, checked_mir_value(first), checked_mir_value(second), 2, "Boolean", origin)
+		return mir_checked_string_operation(state, locals, mir_op_string_compare(), checked_mir_value(first), checked_mir_value(second), mir_string_compare_before(), "Boolean", origin)
 	end
 	mut comparison := "<"
 	if descending
@@ -79,7 +82,7 @@ end
 def mir_sort_item(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, cursor: Integer, element: String, origin: Integer): CheckedValue
 	array := mir_binding_read(state, locals, owner, origin)
 	index := mir_binding_read(state, locals, cursor, origin)
-	return mir_checked_array_operation(state, locals, 22, checked_mir_value(array), checked_mir_value(index), 0, element, origin)
+	return mir_checked_array_operation(state, locals, mir_op_array_load(), checked_mir_value(array), checked_mir_value(index), 0, element, origin)
 end
 
 # Select the left run on ties, without reading either exhausted run.
@@ -121,11 +124,11 @@ def mir_sort_write(mut state: CompilerState, mut locals: CheckedLocals, owner: I
 	item := mir_sort_item(state, locals, owner, selected, element, origin)
 	target := mir_binding_read(state, locals, destination, origin)
 	index := mir_binding_read(state, locals, cursor, origin)
-	mir_checked_array_operation(state, locals, 23, checked_mir_value(target), checked_mir_value(index), checked_mir_value(item), "Void", origin)
+	mir_checked_array_operation(state, locals, mir_op_array_store(), checked_mir_value(target), checked_mir_value(index), checked_mir_value(item), "Void", origin)
 	if keys >= 0
 		key := mir_sort_item(state, locals, keys, selected, key_type, origin)
 		key_target := mir_binding_read(state, locals, key_destination, origin)
-		mir_checked_array_operation(state, locals, 23, checked_mir_value(key_target), checked_mir_value(index), checked_mir_value(key), "Void", origin)
+		mir_checked_array_operation(state, locals, mir_op_array_store(), checked_mir_value(key_target), checked_mir_value(index), checked_mir_value(key), "Void", origin)
 	end
 	mir_array_query_advance(state, locals, selected, origin)
 end
@@ -198,7 +201,7 @@ def mir_sort_buffers(mut state: CompilerState, mut locals: CheckedLocals, copy: 
 		keys = mir_array_query_binding(state, locals, "$sort.keys", key_values, origin)
 		key_destination = mir_array_query_binding(state, locals, "$sort.key_destination", key_scratch, origin)
 	end
-	length := mir_checked_array_operation(state, locals, 20, checked_mir_value(copy), -1, 0, "Integer", origin)
+	length := mir_checked_array_operation(state, locals, mir_op_array_size(), checked_mir_value(copy), -1, 0, "Integer", origin)
 	size := mir_array_query_binding(state, locals, "$sort.size", length, origin)
 	one := scalar_mir_literal(state, locals, "Integer", origin, "1")
 	width := mir_array_query_binding(state, locals, "$sort.width", one, origin)
@@ -233,11 +236,11 @@ end
 def mir_array_sort(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, descending: Boolean, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
-		return checked_value(receiver.type_name, 0, origin, 1)
+		return checked_value(receiver.type_name, checked_category_value(), origin, 1)
 	end
-	copy := mir_checked_array_operation(state, locals, 47, checked_mir_value(receiver), -1, 0, receiver.type_name, origin)
-	scratch := mir_checked_array_operation(state, locals, 47, checked_mir_value(copy), -1, 0, receiver.type_name, origin)
-	absent := checked_value("Void", 0, origin, 0)
+	copy := mir_checked_array_operation(state, locals, mir_op_array_copy(), checked_mir_value(receiver), -1, mir_array_copy_duplicate(), receiver.type_name, origin)
+	scratch := mir_checked_array_operation(state, locals, mir_op_array_copy(), checked_mir_value(copy), -1, mir_array_copy_duplicate(), receiver.type_name, origin)
+	absent := checked_value("Void", checked_category_value(), origin, 0)
 	return mir_sort_buffers(state, locals, copy, scratch, absent, absent, descending, origin)
 end
 
@@ -246,9 +249,9 @@ end
 def mir_array_sort_keys(mut state: CompilerState, mut locals: CheckedLocals, values: CheckedValue, keys: CheckedValue, descending: Boolean, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
-		return checked_value(values.type_name, 0, origin, 1)
+		return checked_value(values.type_name, checked_category_value(), origin, 1)
 	end
-	scratch := mir_checked_array_operation(state, locals, 47, checked_mir_value(values), -1, 0, values.type_name, origin)
-	key_scratch := mir_checked_array_operation(state, locals, 47, checked_mir_value(keys), -1, 0, keys.type_name, origin)
+	scratch := mir_checked_array_operation(state, locals, mir_op_array_copy(), checked_mir_value(values), -1, mir_array_copy_duplicate(), values.type_name, origin)
+	key_scratch := mir_checked_array_operation(state, locals, mir_op_array_copy(), checked_mir_value(keys), -1, mir_array_copy_duplicate(), keys.type_name, origin)
 	return mir_sort_buffers(state, locals, values, scratch, keys, key_scratch, descending, origin)
 end

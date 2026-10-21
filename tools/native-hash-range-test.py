@@ -41,7 +41,8 @@ with tempfile.TemporaryDirectory(prefix='native-hash-range-') as temporary:
         if line == '}':
             ordinary = False
         if ordinary and any(marker in line for marker in (
-                'call $trbn_array_new(', 'call $trbn_array_push_',
+                'call $trbn_array_new(', 'call $trbn_array_new_reserved(',
+                'call $trbn_array_push_', 'call $trbn_array_grow_paced(',
                 'call $trbn_gc_alloc(', 'call $trbn_string_concat(', 'call $trbn_hash_entries(',
                 'call $trbn_hash_new(', 'call $trbn_hash_set(', 'call $trbn_hash_delete(', 'call $trbnf')):
             forced.append('\tcall $trbn_gc_collect(w 0)')

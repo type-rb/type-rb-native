@@ -8,32 +8,33 @@ Each count describes registered probes, not language coverage percentages.
 | Strings and UTF-8 | basic | 2 / 182 | Reference output-mode Unicode case differences (TypeRB #791); Embedded-expression boundaries beyond the reviewed interpolation probes | Literal, InterpolatedString |
 | Immutable Bytes | basic | 0 / 22 | Bytes values across remaining nominal wrappers and imported declarations |  |
 | Numeric and Boolean operations | basic | 1 / 50 | Remaining operators and assignment forms; mixed widening and portable failure boundaries; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
-| Bindings, constants and mutation | basic | 5 / 128 | Contextual empty collection inference beyond constant literals; qualified namespace binding members (TypeRB #787) | VariableStatement, AssignmentStatement |
+| Bindings, constants and mutation | basic | 5 / 163 | Remaining collection-inference combinations; qualified namespace binding members (TypeRB #787) | VariableStatement, AssignmentStatement |
 | Function declarations and calls | basic | 0 / 49 | none registered | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
-| Defaults and named arguments | basic | 0 / 13 | Method, function-value and payload-enum argument parity |  |
+| Defaults and named arguments | basic | 0 / 63 | Imported method-default shadowing across execution modes (reference issue #1134) |  |
 | Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
 | Loop control and transfers | basic | 0 / 10 | Additional nested transfer and diagnostic-origin differential probes | WhileStatement, BreakStatement, NextStatement |
 | Case statements and expressions | basic | 0 / 16 | none registered | CaseStatement |
 | Records and field bindings | basic | 0 / 40 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 1 / 8 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
-| Nullable values and narrowing | basic | 1 / 53 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
-| Enums and tagged values | basic | 4 / 113 | Method-specific type parameters, attribute output-mode effects and wider pattern forms; Reference REPL initializer replay (TypeRB #768) and shadowed standard error identity (#769); imported/nested REPL presentation parity | EnumStatement, EnumMemberStatement |
-| Transparent aliases | basic | 4 / 33 | Literal/discriminated union alias targets; Authored alias spelling in REPL display and diagnostics | TypeAliasStatement |
+| Nullable values and narrowing | basic | 12 / 100 | Class/callback and general pattern narrowing; remaining collection/union optional conversions; unguarded nullable indexing (issue #1120); Nullable standard-library methods beyond the currently implemented Native APIs |  |
+| Enums and tagged values | basic | 4 / 169 | Method-specific type parameters, attribute output-mode effects and remaining pattern/control combinations; Reference REPL initializer replay (TypeRB #768) and shadowed standard error identity (#769); imported/nested REPL presentation parity | EnumStatement, EnumMemberStatement |
+| Transparent aliases | basic | 3 / 110 | Authored alias spelling in diagnostics, nominal import display and nullable union alternative ordering (#455); Transparent alias compatibility at conditional branch joins (proposal #1128) | TypeAliasStatement |
 | Nominal newtypes | basic | 1 / 83 | Class/interface representation dependencies; Method-specific generic parameters with the remaining callable/generic family | NewtypeStatement |
-| Generic declarations and applications | basic | 3 / 83 | Remaining method-specific generic combinations and deferred generic class methods; Wider constraints and type applications | GenericExpression |
-| Union values, literal types and discriminated unions | basic | 9 / 198 | Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference |  |
-| Function values and lexical capture | basic | 0 / 57 | Callable equality, method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
-| Arrays and checked indexes | basic | 5 / 244 | Remaining receiver combinations and contextual empty collection inference; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
-| Hash values and operations | basic | 2 / 40 | Wider key/value representations, dynamic Any operations, empty inference and managed lifetime combinations | HashLiteral |
+| Generic declarations and applications | basic | 0 / 135 | Remaining method-specific generic combinations and deferred generic class methods; Wider constraints and type applications | GenericExpression |
+| Union values, literal types and discriminated unions | basic | 10 / 218 | Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference |  |
+| Function values and lexical capture | basic | 0 / 116 | Method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
+| Arrays and checked indexes | basic | 11 / 324 | Remaining receiver and inference combinations; unguarded nullable indexing (issue #1120); Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
+| Hash values and operations | basic | 12 / 69 | Wider key/value representations, dynamic Any operations, remaining inference combinations and managed lifetimes; nullable Hash reference Go lowering and unguarded indexing (issue #1120) | HashLiteral |
 | Structured and value-producing iteration | basic | 0 / 176 | Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
 | Range values and boundaries | basic | 0 / 19 | none registered | RangeExpression |
 | Result and typed propagation | basic | 0 / 81 | General union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |
 | Classes, fields and methods | basic | 0 / 85 | Initialized superclass storage and constructor chaining; inherited overrides (TypeRB #797) | ClassStatement, FieldStatement |
 | Explicit interface conformance | basic | 0 / 21 | Variance and method-specific generic contracts with the reference object specification; Initialized-superclass and override dependencies | InterfaceStatement |
-| Modules and constant lookup | basic | 1 / 38 | Remaining module method and qualified mutable namespace-member boundaries | ModuleStatement |
+| Modules and constant lookup | basic | 1 / 40 | Remaining module method and qualified mutable namespace-member boundaries | ModuleStatement |
 | Symbol values | basic | 1 / 36 | Remaining reference operator/control framing and multiline interpolation boundaries | SymbolLiteral |
-| Project imports and declaration identity | basic | 0 / 23 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
+| Project imports and declaration identity | basic | 0 / 38 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
 | Target source interop | toolchain | 0 / 0 | Go/Ruby/TypeScript source emission and platform interop | NativeStatement, NativeBlock, NativeExpression |
 | JSX and web bindings | packages | 0 / 0 | Typed JSX and official web-package boundaries | JSXElement |
 | Package capability activation | packages | 0 / 0 | Package-owned activation and resolution | ActivateStatement |
 | Retired authored attempt syntax | retired | 0 / 0 | none registered | AttemptExpression |
+| JSON values and comments | packages | 0 / 33 | Typed record codecs, wire attributes and date/time codecs; Deterministic precedence for multiple invalid object members requires the decision in #1138 |  |

@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory(prefix='native-array-join-') as temporary:
     source.write_text(body + '\ndef main()\n(0...20).each { |_index| exercise() }\nend\n')
     emitted = run([binary, '--internal-driver', 'emit-qbe', source])
     marker = ' %result =l call $trbn_string_alloc(l %payload)'
-    start = emitted.stdout.index('function l $trbn_array_join(')
+    start = emitted.stdout.index('function l $trbn_string_join(')
     end = emitted.stdout.index('\n}', start) + 2
     runtime = emitted.stdout[start:end]
     assert runtime.count(marker) == 1
@@ -78,7 +78,7 @@ end
     for expression in ('["aaaa", "bbb"].join("")', '["aa", "bb"].join("---")'):
         source.write_text('def main()\nputs(' + expression + ')\nend\n')
         emitted = run([binary, '--internal-driver', 'emit-qbe', source])
-        start = emitted.stdout.index('function l $trbn_array_join(')
+        start = emitted.stdout.index('function l $trbn_string_join(')
         end = emitted.stdout.index('\n}', start) + 2
         runtime = emitted.stdout[start:end]
         assert runtime.count('sub 9007199254740991,') == 2

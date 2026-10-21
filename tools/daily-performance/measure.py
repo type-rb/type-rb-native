@@ -19,6 +19,21 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def retain_artifact(program, evidence):
+    """Preserve complete build output after timing, before the next overwrite."""
+    data = program.read_bytes()
+    sha256 = hashlib.sha256(data).hexdigest()
+    relative = Path("artifacts") / "sha256" / sha256
+    saved = evidence / relative
+    saved.parent.mkdir(parents=True, exist_ok=True)
+    if saved.exists():
+        if saved.read_bytes() != data:
+            raise ValueError(f"Retained artifact differs from {sha256}")
+    else:
+        saved.write_bytes(data)
+    return {"sha256": sha256, "bytes": len(data), "path": relative.as_posix()}
+
+
 def observe(command, directory, timeout, cwd=None, env=None, core=None):
     directory.mkdir(parents=True, exist_ok=False)
     metrics = directory / "time.txt"
@@ -228,6 +243,12 @@ def run(args):
                 record.update(phase="warmup" if round_index == 0 else "retained", kind="build", case=case["id"], role=role)
                 if record["status"] == "pass" and (not program.exists() or (directory / "stderr").stat().st_size):
                     record["status"] = "build-failure"
+                # Persist metadata even if evidence storage fails. The exception
+                # aborts the run as an infrastructure failure, without a snapshot.
+                write(directory / "observation.json", record)
+                if record["status"] == "pass":
+                    record["artifact"] = retain_artifact(program, evidence)
+                    write(directory / "observation.json", record)
                 build_records[role].append(record)
                 raw.append(record)
                 if record["status"] != "pass":
@@ -236,7 +257,9 @@ def run(args):
             if row["status"] != "pass":
                 continue
             program = case_dir / role / "program"
-            row.update(artifactBytes=program.stat().st_size, artifactSha256=digest(program))
+            artifact = build_records[role][-1]["artifact"]
+            row.update(artifactBytes=artifact["bytes"], artifactSha256=artifact["sha256"],
+                       runtimeArtifact=artifact)
             stripped = case_dir / role / "program.stripped"
             shutil.copyfile(program, stripped)
             subprocess.run(["strip", "--strip-all", stripped], check=True, timeout=30)
@@ -245,6 +268,8 @@ def run(args):
                 directory = case_dir / role / "gc-probe"
                 record = observe([program, *case["args"]], directory, suite["timeoutSeconds"],
                                  env={**environment, "TYPE_RB_NATIVE_RUNTIME_STATS": "1"}, core=core)
+                record["artifact"] = artifact
+                write(directory / "observation.json", record)
                 lines = (directory / "stderr").read_text().splitlines()
                 prefix = "type-rb-native-gc-stat-v1,automatic-collections,"
                 collections = [int(line.removeprefix(prefix)) for line in lines if line.startswith(prefix)]
@@ -262,7 +287,8 @@ def run(args):
                                  suite["timeoutSeconds"], env=environment, core=core)
                 correct(record, directory, expected)
                 record.update(phase="warmup" if round_index < suite["warmups"] else "retained",
-                              kind="runtime", case=case["id"], role=role)
+                              kind="runtime", case=case["id"], role=role, artifact=row["runtimeArtifact"])
+                write(directory / "observation.json", record)
                 runtime_records[role].append(record)
                 raw.append(record)
                 if record["status"] != "pass":

@@ -1,3 +1,4 @@
+import { hash_action_delete, hash_action_empty, hash_action_fetch, hash_action_index_write, hash_action_literal, hash_action_size, hash_action_update } from mir/model/hash_actions
 import { hash_key_type, hash_type, hash_value_type, native_value_layout } from frontend/types/hash_types
 
 # This checked MIR region owns Hash representation, mutation effects, and
@@ -31,10 +32,10 @@ def mir_hash_operation(kind: Integer, origin: Integer, finish: Integer, receiver
 end
 
 def mir_hash_valid(plan: MirHashOperation, token_count: Integer, pending: Boolean): Boolean
-	if plan.kind < 1 || plan.kind > 13 || plan.origin < 0 || plan.finish <= plan.origin || plan.finish >= token_count
+	if plan.kind < hash_action_literal() || plan.kind > hash_action_fetch() || plan.origin < 0 || plan.finish <= plan.origin || plan.finish >= token_count
 		return false
 	end
-	if plan.kind == 1
+	if plan.kind == hash_action_literal()
 		if plan.receiver_origin != plan.origin
 			return false
 		end
@@ -46,19 +47,19 @@ def mir_hash_valid(plan: MirHashOperation, token_count: Integer, pending: Boolea
 	if plan.entries < 0 || plan.entries > token_count
 		return false
 	end
-	if plan.kind != 1 && plan.entries != 0
+	if plan.kind != hash_action_literal() && plan.entries != 0
 		return false
 	end
 	if plan.capacity != mir_hash_capacity(plan.entries)
 		return false
 	end
-	if plan.kind == 3 || plan.kind == 6 || plan.kind == 9
+	if plan.kind == hash_action_index_write() || plan.kind == hash_action_delete() || plan.kind == hash_action_update()
 		if !plan.mutable
 			return false
 		end
 	end
 	if plan.type_name == "Hash"
-		if pending && (plan.kind == 1 || plan.kind == 4 || plan.kind == 12) && plan.entries == 0
+		if pending && (plan.kind == hash_action_literal() || plan.kind == hash_action_size() || plan.kind == hash_action_empty()) && plan.entries == 0
 			return true
 		end
 		return false

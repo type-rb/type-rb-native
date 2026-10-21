@@ -1,91 +1,12 @@
+import { mir_function_control, mir_terminator_branch, mir_terminator_jump, mir_terminator_return } from mir/model/control
+import { mir_op_array_position, mir_op_array_store, mir_op_callable_new, mir_op_direct_call, mir_op_enum_new, mir_op_hash_new, mir_op_hash_set, mir_op_indirect_call, mir_op_record_new, mir_op_scalar_binary, mir_op_scalar_literal, mir_op_singleton_literal, mir_op_string_compare, mir_op_string_concat, mir_op_string_index, mir_op_string_literal, mir_op_string_replace } from mir/model/instructions
+import { mir_effect_allocation } from mir/model/effects
+import { mir_planned_instruction_effects } from mir/analysis/callables
 import { mir_managed_type } from mir/model/types
 import { integer_string } from support/literals
-import { MirBlock, MirFunction, MirInstruction, MirModule, MirRootPlan, MirValue } from mir/model/module
+import { MirBlock, MirFunction, MirInstruction, MirModule, MirRootPlan, MirStringConcat, MirValue, mir_function_index } from mir/model/module
 import { mir_flow_blocks } from mir/analysis/flow
-
-# Effects are allocation, mutation, I/O and failure bits. Runtime-internal
-# terminal failures stay with their operation; they never resume a MIR edge.
-def mir_instruction_effects(native_module: MirModule, instruction: MirInstruction): Integer
-	if instruction.kind == 70 || instruction.kind == 71
-		return 9
-	end
-	if instruction.kind == 69
-		return 8
-	end
-	if instruction.kind >= 60 && instruction.kind <= 62
-		return 9
-	end
-	if instruction.kind == 65
-		return 2
-	end
-	if instruction.kind == 59
-		return 10
-	end
-	if instruction.kind == 48
-		if instruction.payload == 0
-			return 11
-		end
-		return 10
-	end
-	if instruction.kind == 41 || instruction.kind == 45 || instruction.kind == 46 || instruction.kind == 47 || instruction.kind == 49 || instruction.kind == 50
-		return 9
-	end
-	if instruction.kind == 42
-		return 15
-	end
-	if instruction.kind == 34 || instruction.kind == 37 || instruction.kind == 52
-		return 9
-	end
-	if instruction.kind == 36 || instruction.kind == 39 || instruction.kind == 51 || instruction.kind == 54
-		return 8
-	end
-	if instruction.kind == 19 || instruction.kind == 25 || instruction.kind == 27 || instruction.kind == 31 || instruction.kind == 63 || instruction.kind == 66
-		return 9
-	end
-	if instruction.kind == 28
-		return 8
-	end
-	if instruction.kind == 30
-		method := instruction.payload
-		if method == 6 || method == 9
-			return 11
-		end
-		if method == 7 || method == 10 || method == 11
-			return 9
-		end
-		if method == 13
-			return 8
-		end
-	end
-	if instruction.kind == 24 || instruction.kind == 29
-		return 11
-	end
-	if instruction.kind == 21 || instruction.kind == 22
-		return 8
-	end
-	if instruction.kind == 23
-		return 10
-	end
-	if instruction.kind == 11
-		return native_module.calls[instruction.payload].effects
-	end
-	if instruction.kind == 13 || instruction.kind == 16 || (instruction.kind == 17 && (instruction.payload == 1 || instruction.payload == 4))
-		return 9
-	end
-	if instruction.kind == 17 && instruction.payload == 5
-		return 0
-	end
-	if instruction.kind == 17 || instruction.failure >= 0
-		return 8
-	end
-	if instruction.kind == 18
-		if instruction.payload == 1
-			return 13
-		end
-		return 12
-	end
-	return 0
-end
+import { mir_string_concat_index } from mir/analysis/string_concats
 
 def mir_live_add(mut live: Array<Integer>, value: Integer)
 	mut index := 0
@@ -162,33 +83,33 @@ def mir_live_before(native_module: MirModule, managed: Array<Integer>, instructi
 		end
 	end
 	kind := instruction.kind
-	if kind == 42
+	if kind == mir_op_indirect_call()
 		mir_live_operand(managed, live, instruction.first)
 		mut index := instruction.payload
 		while index < instruction.payload + instruction.second
 			mir_live_operand(managed, live, native_module.arguments[index])
 			index += 1
 		end
-	elsif kind == 11
+	elsif kind == mir_op_direct_call()
 		call := native_module.calls[instruction.payload]
 		mut index := call.argument_start
 		while index < call.argument_start + call.argument_count
 			mir_live_operand(managed, live, native_module.arguments[index])
 			index += 1
 		end
-	elsif kind == 25 || kind == 37 || kind == 41
+	elsif kind == mir_op_record_new() || kind == mir_op_enum_new() || kind == mir_op_callable_new()
 		mut index := instruction.first
 		while index < instruction.first + instruction.second
 			mir_live_operand(managed, live, native_module.arguments[index])
 			index += 1
 		end
-	elsif kind != 6 && kind != 12 && kind != 57 && kind != 19 && kind != 27
+	elsif kind != mir_op_scalar_literal() && kind != mir_op_string_literal() && kind != mir_op_singleton_literal() && kind != mir_op_hash_new()
 		mir_live_operand(managed, live, instruction.first)
-		if kind == 7 || kind == 13 || kind == 14 || kind == 16 || kind >= 21
+		if kind == mir_op_scalar_binary() || kind == mir_op_string_concat() || kind == mir_op_string_compare() || kind == mir_op_string_index() || kind >= mir_op_array_position()
 			mir_live_operand(managed, live, instruction.second)
 		end
 	end
-	if kind == 23 || kind == 29 || kind == 61
+	if kind == mir_op_array_store() || kind == mir_op_hash_set() || kind == mir_op_string_replace()
 		mir_live_operand(managed, live, instruction.payload)
 	end
 	return live
@@ -212,15 +133,35 @@ def mir_live_edge(native_module: MirModule, function: MirFunction, blocks: Hash<
 	end
 end
 
+def mir_concat_live_before(native_module: MirModule, plans: Array<MirStringConcat>, managed: Array<Integer>, index: Integer, after: Array<Integer>): Array<Integer>
+	plan := mir_string_concat_index(plans, index)
+	if plan == -1
+		return mir_live_before(native_module, managed, native_module.instructions[index], after)
+	end
+	if plans[plan].fragments.size() == 0
+		return after
+	end
+	mut live: Array<Integer> := []
+	after.each do |value|
+		if value != native_module.instructions[index].result
+			live.push(value)
+		end
+	end
+	plans[plan].fragments.each do |value|
+		mir_live_operand(managed, live, value)
+	end
+	return live
+end
+
 def mir_live_exit(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>, managed: Array<Integer>, block: MirBlock, incoming: Array<Array<Integer>>): Array<Integer>
 	mut live: Array<Integer> := []
-	if block.terminator == 1 || block.terminator == 2
+	if block.terminator == mir_terminator_jump() || block.terminator == mir_terminator_branch()
 		mir_live_edge(native_module, function, blocks, block.first_target, block.first_argument_start, live, incoming)
 	end
-	if block.terminator == 2
+	if block.terminator == mir_terminator_branch()
 		mir_live_edge(native_module, function, blocks, block.second_target, block.second_argument_start, live, incoming)
 	end
-	if block.terminator == 3
+	if block.terminator == mir_terminator_return()
 		mir_live_operand(managed, live, block.return_value)
 	end
 	return live
@@ -234,13 +175,13 @@ record MirLiveTransfer
 	definitions: Array<Integer>
 end
 
-def mir_live_transfer(native_module: MirModule, managed: Array<Integer>, block: MirBlock): MirLiveTransfer
+def mir_live_transfer(native_module: MirModule, plans: Array<MirStringConcat>, managed: Array<Integer>, block: MirBlock): MirLiveTransfer
 	mut uses: Array<Integer> := []
 	mut definitions: Array<Integer> := []
 	mut cursor := block.instruction_start + block.instruction_count - 1
 	while cursor >= block.instruction_start
 		instruction := native_module.instructions[cursor]
-		uses = mir_live_before(native_module, managed, instruction, uses)
+		uses = mir_concat_live_before(native_module, plans, managed, cursor, uses)
 		mir_live_operand(managed, definitions, instruction.result)
 		cursor -= 1
 	end
@@ -268,6 +209,11 @@ end
 # schedules only predecessors, with both branch edges retained by mir_live_exit.
 # Queue storage is bounded by the block count, independent of sparse value IDs.
 def mir_live_incoming(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>, managed: Array<Integer>): Array<Array<Integer>>
+	mut plans: Array<MirStringConcat> := []
+	function_index := mir_function_index(native_module, function.id)
+	if function_index >= 0 && function_index < native_module.string_concats.size()
+		plans = native_module.string_concats[function_index]
+	end
 	mut incoming: Array<Array<Integer>> := []
 	mut predecessors: Array<Array<Integer>> := []
 	mut transfers: Array<MirLiveTransfer> := []
@@ -279,16 +225,16 @@ def mir_live_incoming(native_module: MirModule, function: MirFunction, blocks: H
 		predecessors.push([])
 		pending.push(index)
 		queued.push(true)
-		transfers.push(mir_live_transfer(native_module, managed, native_module.blocks[function.block_start + index]))
+		transfers.push(mir_live_transfer(native_module, plans, managed, native_module.blocks[function.block_start + index]))
 		index += 1
 	end
 	index = 0
 	while index < function.block_count
 		block := native_module.blocks[function.block_start + index]
-		if block.terminator == 1 || block.terminator == 2
+		if block.terminator == mir_terminator_jump() || block.terminator == mir_terminator_branch()
 			predecessors[blocks[integer_string(block.first_target)]].push(index)
 		end
-		if block.terminator == 2
+		if block.terminator == mir_terminator_branch()
 			predecessors[blocks[integer_string(block.second_target)]].push(index)
 		end
 		index += 1
@@ -319,10 +265,15 @@ end
 def mir_function_roots_with_values(native_module: MirModule, function: MirFunction, values: Array<MirValue>): MirRootPlan
 	mut points: Array<Integer> := []
 	mut roots: Array<Array<Integer>> := []
-	if function.kind != 3
+	if function.kind != mir_function_control()
 		return MirRootPlan.new(function_id: function.id, instructions: points, roots: roots, capacity: 0)
 	end
 	blocks := mir_flow_blocks(native_module, function)
+	mut concats: Array<MirStringConcat> := []
+	function_index := mir_function_index(native_module, function.id)
+	if function_index >= 0 && function_index < native_module.string_concats.size()
+		concats = native_module.string_concats[function_index]
+	end
 	mut managed: Array<Integer> := []
 	mut managed_count := 0
 	values.each do |value|
@@ -350,9 +301,15 @@ def mir_function_roots_with_values(native_module: MirModule, function: MirFuncti
 		while cursor >= block.instruction_start
 			instruction := native_module.instructions[cursor]
 			if managed_count > 0
-				live = mir_live_before(native_module, managed, instruction, live)
+				live = mir_concat_live_before(native_module, concats, managed, cursor, live)
 			end
-			if mir_instruction_effects(native_module, instruction) % 2 == 1
+			concat := mir_string_concat_index(concats, cursor)
+			mut skipped := false
+			if concat >= 0
+				skipped = concats[concat].fragments.size() == 0
+			end
+			# Allocation is the least significant effect bit; modulo 2 selects it.
+			if !skipped && mir_planned_instruction_effects(native_module, instruction, cursor) % 2 == mir_effect_allocation()
 				if managed_count == 0
 					# Retained empty root lists must remain independent between points.
 					live = []

@@ -31,6 +31,16 @@ class OfficialSourceTests(unittest.TestCase):
         self.source.write_bytes(b"# preserved source\r\ndef sample(): String\n\treturn \"sample\"\nend\n")
         self.manifest = self.source.parent.parent / "trbpackage.json"
         self.manifest.write_text('{"name":"trb/sample","module":"trb/sample/index","source":"src/index.trb"}\n')
+        url = self.reference / bundle.URL_SOURCE
+        url.parent.mkdir(parents=True, exist_ok=True)
+        url.write_text('package stdlib\n\nfunc urlSource() string {\n\treturn `module URL\nend\n`\n}\n')
+        adapter = self.root / bundle.URL_ADAPTER
+        adapter.parent.mkdir(parents=True, exist_ok=True)
+        adapter.write_text("module URL\nend\n")
+        for name in ("json", "jsonc"):
+            source = self.reference / bundle.STDLIB_SOURCES[name]
+            source.write_text('package stdlib\n\nfunc ' + name + 'Source() string {\n\treturn `module ' + name.upper() + '\nend\n`\n}\n')
+        (self.root / bundle.JSON_ADAPTER).write_text("module JSON\nend\n")
         (self.reference / "LICENSE").write_text("Synthetic license\n")
         self.git("add", ".")
         self.git("commit", "-qm", "Synthetic reference")
@@ -45,8 +55,8 @@ class OfficialSourceTests(unittest.TestCase):
     def test_exact_bytes_and_deterministic_sync(self):
         first = bundle.bundle_files(self.root)
         self.assertEqual(self.vendored.read_bytes(), self.source.read_bytes())
-        self.assertEqual(bundle.check(self.root, self.reference), 3)
-        self.assertEqual(bundle.sync(self.root, self.reference), 3)
+        self.assertEqual(bundle.check(self.root, self.reference), 6)
+        self.assertEqual(bundle.sync(self.root, self.reference), 6)
         self.assertEqual(first, bundle.bundle_files(self.root))
         self.assertEqual(self.git("status", "--porcelain"), "")
 
@@ -149,6 +159,36 @@ class OfficialSourceTests(unittest.TestCase):
         bundle.sync(self.root, self.reference)
         bundle.check(self.root, self.reference)
 
+    def test_pinned_url_source_and_native_adapter_are_verified(self):
+        url = self.root / bundle.BUNDLE / "stdlib/url.go"
+        original = url.read_bytes()
+        self.assertEqual(bundle.pinned_url_source(original), "module URL\nend\n")
+        url.write_bytes(original.replace(b"module URL", b"module Forged"))
+        with self.assertRaisesRegex(bundle.ValidationError, "differs"):
+            bundle.check(self.root, self.reference)
+        bundle.sync(self.root, self.reference)
+        (self.root / bundle.URL_ADAPTER).write_text("module Changed\nend\n")
+        with self.assertRaisesRegex(bundle.ValidationError, "catalog differs"):
+            bundle.check(self.root, self.reference)
+        bundle.sync(self.root, self.reference)
+        bundle.check(self.root, self.reference)
+        with self.assertRaisesRegex(bundle.ValidationError, "unrecognized"):
+            bundle.pinned_url_source(b"package stdlib\nfunc urlSource() string { return injected() }\n")
+
+    def test_json_sources_and_adapter_keep_exact_provenance(self):
+        for name in ("json", "jsonc"):
+            path = self.root / bundle.BUNDLE / ("stdlib/" + name + ".go")
+            self.assertEqual(bundle.pinned_standard_source(path.read_bytes(), name), "module " + name.upper() + "\nend\n")
+            path.write_bytes(path.read_bytes().replace(b"module", b"changed"))
+            with self.assertRaisesRegex(bundle.ValidationError, "differs"):
+                bundle.check(self.root, self.reference)
+            bundle.sync(self.root, self.reference)
+        (self.root / bundle.JSON_ADAPTER).write_text("module Changed\nend\n")
+        with self.assertRaisesRegex(bundle.ValidationError, "catalog differs"):
+            bundle.check(self.root, self.reference)
+        bundle.sync(self.root, self.reference)
+        bundle.check(self.root, self.reference)
+
     def test_catalog_does_not_follow_symlinks(self):
         catalog = self.root / bundle.CATALOG
         catalog.unlink()
@@ -164,7 +204,8 @@ class OfficialSourceTests(unittest.TestCase):
         files = {'packages/trb/sample/trbpackage.json': json.dumps({
             'name': 'trb/sample', 'aliases': ['trb/old/sample'],
             'module': 'trb/sample/index', 'source': 'src/index.trb'}).encode(),
-            'packages/trb/sample/src/index.trb': raw.encode()}
+            'packages/trb/sample/src/index.trb': raw.encode(),
+            **{'stdlib/' + name + '.go': (self.reference / source).read_bytes() for name, source in bundle.STDLIB_SOURCES.items()}}
         catalog = bundle.catalog_source(files).decode()
         self.assertIn('path == "trb/sample" || path == "trb/old/sample"', catalog)
         encoded = catalog.split('def official_source_text')[1].split('return ', 1)[1].splitlines()[0]

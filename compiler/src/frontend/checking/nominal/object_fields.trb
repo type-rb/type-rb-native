@@ -1,3 +1,7 @@
+import { checked_category_value } from frontend/types/value_categories
+import { mir_state_function_slot } from state/local_slots
+import { binary_add_assign } from frontend/types/operators
+import { mir_op_object_field, mir_op_object_store } from mir/model/instructions
 import { CheckedValue, checked_bound_value, checked_mir_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from frontend/checking/body/values
 import { MirIndexedTarget } from mir/model/module
 import { mir_binding_read } from mir/build/bindings
@@ -20,17 +24,17 @@ def checked_object_field(mut state: CompilerState, mut locals: CheckedLocals, re
 	if internal
 		mutable = 1
 		binding = true
-		if object_initializer_owner(state, locals.mir_state[1]) == owner
+		if object_initializer_owner(state, locals.mir_state[mir_state_function_slot()]) == owner
 			readonly = false
 		end
 	elsif row.name.size() > 1 && row.name[1] == "_"
 		diagnostic(state, "TRBN4004", row.line, "private class field cannot be accessed externally")
 	end
 	assignment := token_is(state, next_token, "=")
-	compound := binary_operator_id(load_string(state.source_tokens.token_texts, next_token)) >= 17
+	compound := binary_operator_id(load_string(state.source_tokens.token_texts, next_token)) >= binary_add_assign()
 	mir_control_prepare(state, locals)
 	operand := checked_mir_value(receiver)
-	mut category := 0
+	mut category := checked_category_value()
 	if mir_control_active(locals) && operand >= 0
 		if assignment || compound
 			locals.mir_object_targets.push(MirIndexedTarget.new(origin: origin, owner: operand, index: field))
@@ -39,7 +43,7 @@ def checked_object_field(mut state: CompilerState, mut locals: CheckedLocals, re
 			category = mir_checked_object_field(state, locals, receiver, field, origin).category
 		end
 	end
-	return CheckedValue.new(type_name: row.type_name, category: category, origin: origin, mutable: mutable, binding: binding, readonly: readonly, immutable_reference: false, nullable_binding: -1, nullable_field: -1, truth: -1, falsity: -1, flow_type: row.type_name)
+	return CheckedValue.new(presentation: "", type_name: row.type_name, category: category, origin: origin, mutable: mutable, binding: binding, readonly: readonly, immutable_reference: false, nullable_binding: -1, nullable_field: -1, truth: -1, falsity: -1, flow_type: row.type_name)
 end
 
 # Common union members use the same typed field read after their payload has
@@ -47,12 +51,12 @@ end
 def mir_checked_object_field(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, field: Integer, origin: Integer): CheckedValue
 	owner := find_object_type(state, receiver.type_name)
 	row := state.nominal.object_instances[owner].fields[field]
-	mut category := 0
+	mut category := checked_category_value()
 	mir_control_prepare(state, locals)
 	operand := checked_mir_value(receiver)
 	if mir_control_active(locals) && operand >= 0
 		result := scalar_mir_value(state, locals, state.scalar_mir.objects[owner].fields[field].type_id, origin)
-		scalar_mir_instruction(state, locals, 64, result, operand, -1, field, -1, load_integer(state.source_tokens.token_lines, origin))
+		scalar_mir_instruction(state, locals, mir_op_object_field(), result, operand, -1, field, -1, load_integer(state.source_tokens.token_lines, origin))
 		category = -result - 1
 	end
 	return checked_bound_value(row.type_name, category, origin, receiver.mutable, receiver.binding)
@@ -71,7 +75,7 @@ def checked_instance_field(mut state: CompilerState, mut locals: CheckedLocals, 
 		end
 	end
 	diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "instance field requires its declaring receiver")
-	return checked_bound_value("Invalid", 0, origin, 0, false)
+	return checked_bound_value("Invalid", checked_category_value(), origin, 0, false)
 end
 
 def mir_checked_object_store(mut state: CompilerState, mut locals: CheckedLocals, target: CheckedValue, value: CheckedValue): Boolean
@@ -84,7 +88,7 @@ def mir_checked_object_store(mut state: CompilerState, mut locals: CheckedLocals
 				if operand < 0
 					scalar_mir_disable(locals)
 				else
-					scalar_mir_instruction(state, locals, 65, -1, row.owner, operand, row.index, -1, load_integer(state.source_tokens.token_lines, target.origin))
+					scalar_mir_instruction(state, locals, mir_op_object_store(), -1, row.owner, operand, row.index, -1, load_integer(state.source_tokens.token_lines, target.origin))
 				end
 			end
 			return true
@@ -98,6 +102,6 @@ def mir_initialize_object_field(mut state: CompilerState, mut locals: CheckedLoc
 	if mir_control_active(locals)
 		receiver := mir_binding_read(state, locals, local_find(locals, "self"), origin)
 		field := object_field_index(state, owner, name)
-		scalar_mir_instruction(state, locals, 65, -1, checked_mir_value(receiver), checked_mir_value(value), field, -1, load_integer(state.source_tokens.token_lines, origin))
+		scalar_mir_instruction(state, locals, mir_op_object_store(), -1, checked_mir_value(receiver), checked_mir_value(value), field, -1, load_integer(state.source_tokens.token_lines, origin))
 	end
 end

@@ -33,7 +33,7 @@ def submission_test_state(source: String, start_line: Integer, finish_line: Inte
 		end
 		resets.push(reset)
 	end
-	state.submissions.push(CheckedSubmission.new(start: start, finish: finish, before: facts, after: [], types: string_storage(source.size() + 1), mutable: integer_storage(source.size() + 1), resets: resets, captured: captured))
+	state.submissions.push(CheckedSubmission.new(presentations: string_storage(source.size() + 1), retained_presentations: [], start: start, finish: finish, before: facts, after: [], types: string_storage(source.size() + 1), mutable: integer_storage(source.size() + 1), resets: resets, captured: captured))
 	check(state)
 	return state
 end
@@ -77,7 +77,7 @@ describe("Checked interactive submissions") do
 			before := control_test_output(emit_qbe(state))
 			intrinsic_mir_erase(state)
 			state.callables.checked[0].nullable_reads.used[0] = 0
-			state.submissions[0] = CheckedSubmission.new(start: -1, finish: -1, before: [], after: [], types: string_storage(1), mutable: integer_storage(1), resets: [], captured: [])
+			state.submissions[0] = CheckedSubmission.new(presentations: string_storage(1), retained_presentations: [], start: -1, finish: -1, before: [], after: [], types: string_storage(1), mutable: integer_storage(1), resets: [], captured: [])
 			expect(control_test_output(emit_qbe(state))).to_equal(before)
 			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
 			when Result::Ok(output)
@@ -109,4 +109,62 @@ describe("Checked interactive submissions") do
 			expect(has_diagnostic(invalid)).to_be_true()
 		end
 	end
+end
+
+def submission_presentation_at(state: CompilerState, line: Integer): String
+	mut origin := 0
+	while load_integer(state.source_tokens.token_lines, origin) < line
+		origin += 1
+	end
+	return sparse_string_at(state.submissions[0].presentations, origin)
+end
+
+describe("Checked enum alias presentation") do
+	test("keeps inferred aliases separate from explicit context and replacement types") do
+		source := "enum Choice\nFirst\nSecond\nend\nalias Pick = Choice\nalias Other = Choice\ndef main()\nmut first := Pick::First\nsaved := first\nexplicit: Pick := first\nfirst = Other::Second\nfirst\nsaved\nexplicit\nreturn\nend\n"
+		state := submission_test_state(source, 8, 15, [])
+		expect(has_diagnostic(state)).to_be_false()
+		expect(submission_presentation_at(state, 8)).to_equal("Pick")
+		expect(submission_presentation_at(state, 9)).to_equal("Pick")
+		expect(submission_presentation_at(state, 10)).to_equal("")
+		expect(submission_presentation_at(state, 12)).to_equal("Pick")
+		expect(submission_presentation_at(state, 13)).to_equal("Pick")
+		expect(submission_presentation_at(state, 14)).to_equal("")
+	end
+
+	test("joins display aliases in containers while indexed reads remain canonical") do
+		source := "enum Choice\nFirst\nSecond\nend\nalias Pick = Choice\nalias Other = Choice\ndef main()\nfirst := Pick::First\nsecond := Other::Second\nvalues := [first, second]\ntable := {\"saved\" => first}\nvalues[0]\ntable[\"saved\"]\nreturn\nend\n"
+		state := submission_test_state(source, 8, 14, [])
+		expect(has_diagnostic(state)).to_be_false()
+		expect(submission_presentation_at(state, 10)).to_equal("Array<Other | Pick>")
+		expect(submission_presentation_at(state, 11)).to_equal("Hash<String, Pick>")
+		expect(submission_presentation_at(state, 12)).to_equal("")
+		expect(submission_presentation_at(state, 13)).to_equal("")
+	end
+
+	test("preserves authored generic argument order and the outer alias declaration") do
+		source := "enum Pair<A, B>\nFirst(value: A)\nSecond(value: B)\nend\nalias Swap<X, Y> = Pair<Y, X>\nalias Again<A, B> = Swap<A, B>\ndef main()\nvalue := Again<Integer, String>::First(\"held\")\nvalue\nreturn\nend\n"
+		state := submission_test_state(source, 8, 10, [])
+		expect(has_diagnostic(state)).to_be_false()
+		expect(submission_presentation_at(state, 8)).to_equal("Again<Integer, String>")
+		expect(submission_presentation_at(state, 9)).to_equal("Again<Integer, String>")
+	end
+
+	test("uses resolved application arguments for literal types and alias arguments") do
+		source := "enum Choice\nFirst\nend\nalias Item = Choice\nenum Box<T>\nSome(value: T)\nend\nalias Pick<T> = Box<T>\ndef main()\nvalue := Pick<Item>::Some(Item::First)\nliteral := Pick<\"held\">::Some(\"held\")\nvalue\nliteral\nreturn\nend\n"
+		state := submission_test_state(source, 10, 14, [])
+		expect(has_diagnostic(state)).to_be_false()
+		expect(submission_presentation_at(state, 10)).to_equal("Pick<Choice>")
+		expect(submission_presentation_at(state, 11)).to_equal("Pick<\"held\">")
+	end
+
+	test("retains a shared alias across completing conditional branches") do
+		source := "enum Choice\nFirst\nSecond\nend\nalias Pick = Choice\nalias Other = Choice\ndef main()\nconditional := if true\nPick::First\nelse\nPick::Second\nend\nselected := case 1\nwhen 1\nPick::First\nelse\nPick::Second\nend\nternary := true ? Pick::First : Pick::Second\nconditional\nselected\nternary\nreturn\nend\n"
+		state := submission_test_state(source, 8, 23, [])
+		expect(has_diagnostic(state)).to_be_false()
+		[8, 13, 19, 20, 21, 22].each do |line|
+			expect(submission_presentation_at(state, line)).to_equal("Pick")
+		end
+	end
+
 end

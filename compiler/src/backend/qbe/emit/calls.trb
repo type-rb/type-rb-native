@@ -1,8 +1,11 @@
+import { qbe_runtime_process_slot } from backend/qbe/runtime_slots
+import { mir_adapter_argv, mir_adapter_sqrt, mir_signature_standard } from mir/model/call_kinds
+import { mir_call_return_find } from mir/analysis/call_returns
 import { mir_storage_name } from mir/model/types
-import { MirInstruction, MirSignature } from mir/model/module
+import { MirCallReturnGuard, MirInstruction, MirSignature } from mir/model/module
 import { mir_call_symbol } from mir/model/intrinsics
-import { QbeEmitContext, QbeValue, emit_temporary, emitted_value, qbe_type } from backend/qbe/context
-import { QbeOutput, qbe_output_line } from backend/qbe/output
+import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emitted_value, qbe_type } from backend/qbe/context
+import { QbeOutput, qbe_output_branch, qbe_output_line } from backend/qbe/output
 import { CompilerState } from state/state
 import { mir_enum_stack_selected } from mir/analysis/enum_stack
 import { integer_string } from support/literals
@@ -23,8 +26,15 @@ end
 def emit_mir_call(state: CompilerState, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	call := state.scalar_mir.calls[instruction.payload]
 	signature := state.scalar_mir.signatures[call.callee]
-	if signature.kind == 3 && signature.adapter == 10
-		output.runtime_flags[1] = 1
+	if signature.kind == mir_signature_standard() && signature.adapter == mir_adapter_sqrt()
+		# The verifier owns the canonical Float -> Float Math.sqrt signature.
+		argument := operands[state.scalar_mir.arguments[call.argument_start]]
+		result := emit_temporary(context)
+		qbe_output_line(output, "\t" + result + " =d sqrt " + argument)
+		return emitted_value(result, "Float")
+	end
+	if signature.kind == mir_signature_standard() && signature.adapter == mir_adapter_argv()
+		output.runtime_flags[qbe_runtime_process_slot()] = 1
 	end
 	mut arguments := ""
 	mut index := 0
@@ -43,5 +53,39 @@ def emit_mir_call(state: CompilerState, instruction: MirInstruction, operands: A
 	end
 	# MIR owns checked call effects and live-before root publication. The ABI
 	# adapter never infers safety from the emitted target symbol.
+	guard := mir_call_return_find(state.scalar_mir.call_return_guards[0], call.callee)
+	if guard >= 0
+		argument := operands[state.scalar_mir.arguments[call.argument_start]]
+		return emit_guarded_scalar_return(state, signature, arguments, argument, state.scalar_mir.call_return_guards[0][guard], context, output)
+	end
 	return emit_declared_call(state, signature, arguments, context, output)
+end
+
+# MIR owns the complete effect-free return edge. The other edge is the ordinary
+# declared call, preserving its effects, failure behavior and ABI arguments.
+def emit_guarded_scalar_return(state: CompilerState, signature: MirSignature, arguments: String, argument: String, guard: MirCallReturnGuard, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+	mut comparison := "csltl"
+	if guard.comparison == 9
+		comparison = "cslel"
+	elsif guard.comparison == 10
+		comparison = "csgtl"
+	elsif guard.comparison == 11
+		comparison = "csgel"
+	end
+	valid := emit_temporary(context)
+	result := emit_temporary(context)
+	returned := emit_label(context)
+	called := emit_label(context)
+	complete := emit_label(context)
+	qbe_output_line(output, "\t" + valid + " =w " + comparison + " " + argument + ", " + integer_string(guard.bound))
+	qbe_output_branch(output, valid, returned, called)
+	qbe_output_line(output, returned)
+	qbe_output_line(output, "\t" + result + " =l copy " + argument)
+	qbe_output_line(output, "\tjmp " + complete)
+	qbe_output_line(output, called)
+	value := emit_declared_call(state, signature, arguments, context, output)
+	qbe_output_line(output, "\t" + result + " =l copy " + value.operand)
+	qbe_output_line(output, "\tjmp " + complete)
+	qbe_output_line(output, complete)
+	return emitted_value(result, "Integer")
 end

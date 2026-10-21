@@ -15,6 +15,10 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCE_ROOT = "internal/official/packages"
 BUNDLE = Path("vendor/type-rb/official")
 CATALOG = Path("compiler/src/project/official_catalog.trb")
+URL_SOURCE = "internal/stdlib/url.go"
+URL_ADAPTER = Path("compiler/packages/internal/url.trb")
+JSON_ADAPTER = Path("compiler/packages/internal/json.trb")
+STDLIB_SOURCES = {"url": URL_SOURCE, "json": "internal/stdlib/json.go", "jsonc": "internal/stdlib/jsonc.go"}
 REPOSITORY = "https://github.com/type-rb/type-rb"
 
 
@@ -54,6 +58,13 @@ def reference_files(root, checkout):
         files["packages/" + relative] = git(checkout, "cat-file", "blob", oid.decode("ascii"))
     if not files or not any(name.endswith("/trbpackage.json") for name in files):
         raise ValidationError("pinned reference has no official package manifests")
+    for name, source_path in STDLIB_SOURCES.items():
+        entry = git(checkout, "ls-tree", revision, "--", source_path).split()
+        if len(entry) != 4 or entry[:2] != [b"100644", b"blob"]:
+            raise ValidationError("pinned " + name.upper() + " source must be a regular file")
+        data = git(checkout, "cat-file", "blob", entry[2].decode("ascii"))
+        pinned_standard_source(data, name)
+        files["stdlib/" + name + ".go"] = data
     license_entry = git(checkout, "ls-tree", revision, "--", "LICENSE").split()
     if len(license_entry) != 4 or license_entry[:2] != [b"100644", b"blob"]:
         raise ValidationError("pinned reference license must be a regular file")
@@ -65,7 +76,8 @@ def reference_files(root, checkout):
         "sourceRoot": SOURCE_ROOT,
         "files": [
             {"path": name,
-             "source": "LICENSE" if name == "LICENSE" else SOURCE_ROOT + "/" + name[len("packages/"):],
+             "source": ("LICENSE" if name == "LICENSE" else "internal/" + name if name.startswith("stdlib/")
+                        else SOURCE_ROOT + "/" + name[len("packages/"):]),
              "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
             for name, data in sorted(files.items())
         ],
@@ -100,7 +112,29 @@ def typerb_string(value):
     return json.dumps(value, ensure_ascii=False).replace("#{", "\\#{")
 
 
-def catalog_source(files):
+def pinned_standard_source(data, name):
+    boundary = rb"package stdlib\n\nfunc " + re.escape(name.encode()) + rb"Source\(\) string \{\n\treturn `([^`]*)`\n\}\n"
+    match = re.fullmatch(boundary, data)
+    if match is None:
+        raise ValidationError("unrecognized pinned " + name.upper() + " source boundary")
+    return match[1].decode("utf-8")
+
+
+def pinned_url_source(data):
+    return pinned_standard_source(data, "url")
+
+
+def adapter_source(root, relative=URL_ADAPTER):
+    path = root / relative
+    for parent in (path, *path.parents):
+        if parent == root:
+            break
+        if parent.is_symlink():
+            raise ValidationError("standard adapter contains a symlink")
+    return path.read_text()
+
+
+def catalog_source(files, adapter="", json_adapter=""):
     packages = []
     names = set()
     for path, data in sorted(files.items()):
@@ -140,6 +174,11 @@ def catalog_source(files):
             literal = ("true" if value else "false") if isinstance(value, bool) else typerb_string(value)
             lines += ["\tif kind == " + str(index), "\t\treturn " + literal, "\tend"]
         lines += ["\treturn " + default, "end", ""]
+    sources = [("pinned_" + name + "_source", pinned_standard_source(files["stdlib/" + name + ".go"], name))
+               for name in STDLIB_SOURCES]
+    sources += [("native_url_source", adapter), ("native_json_source", json_adapter)]
+    for name, source in sources:
+        lines += [f"def {name}(): String", "\treturn " + typerb_string(source), "end", ""]
     return "\n".join(lines).encode("utf-8")
 
 
@@ -166,14 +205,14 @@ def check(root, checkout):
         if actual[name] != expected[name]:
             raise ValidationError("official source bundle differs from TYPE_RB_REVISION: " + name)
     catalog = catalog_path(root)
-    if not catalog.is_file() or catalog.read_bytes() != catalog_source(expected):
+    if not catalog.is_file() or catalog.read_bytes() != catalog_source(expected, adapter_source(root), adapter_source(root, JSON_ADAPTER)):
         raise ValidationError("official source catalog differs from TYPE_RB_REVISION")
     return len(expected) - 1
 
 
 def sync(root, checkout):
     expected = reference_files(root, checkout)
-    catalog_bytes = catalog_source(expected)
+    catalog_bytes = catalog_source(expected, adapter_source(root), adapter_source(root, JSON_ADAPTER))
     catalog = catalog_path(root)
     bundle = root / BUNDLE
     for path in (root / "vendor", root / "vendor/type-rb", bundle):

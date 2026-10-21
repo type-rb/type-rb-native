@@ -3,8 +3,8 @@
 set -eu
 
 PRE_IMPLEMENTATION_REVISION=266c996668a4c3e0ad6eb833ca646b73ca7e56e1
-TYPE_RB_REVISION=af8e5f52e18e265d20bab7efbeaa2c36ea9342ae
-TYPE_RB_VERSION=0.4.10
+TYPE_RB_REVISION=e3cdd5e26a57f2389d8b40dd4eafd32c608d6728
+TYPE_RB_VERSION=0.4.12-dev
 ROOT_QBE_SIZE=658639
 ROOT_QBE_SHA256=62db3c31527a670c3050051a9fa27bf142b6c5deaab81ef8234104bd467aa95a
 PROFILE=linux-amd64-v0
@@ -200,7 +200,7 @@ x86_64 | amd64) ;;
 *) fail "Linux amd64 is required" ;;
 esac
 
-for command_name in as awk cmp cp cut file find git grep jq ld.lld ldd nm python3 readelf sed sha256sum strace strings strip; do
+for command_name in as awk cmp cp cut file find git grep jq ld.lld ldd nm objdump python3 readelf sed sha256sum strace strings strip; do
 	command -v "$command_name" > /dev/null 2>&1 || fail "$command_name is required"
 done
 python_command=$(command -v python3)
@@ -250,10 +250,11 @@ record_native_elf() {
 
 record_native_elf compiler "$output_compiler"
 record_native_elf portable-entry "$native_application"
-grep -Eq 'Shared library: \[libm\.so' "$evidence/elf/portable-entry/dependencies.txt" ||
-	fail "Native portable-entry executable does not declare libm"
-grep -Eq '(^|[[:space:]])sqrt(@|$)' "$evidence/elf/portable-entry/undefined-symbols.txt" ||
-	fail "Native portable-entry executable does not retain the external sqrt boundary"
+grep -Eq '=d sqrt ' "$evidence/applications/portable-entry-first.ssa" ||
+	fail "Native portable-entry QBE does not contain the sqrt operation"
+objdump -d "$native_application" > "$evidence/elf/portable-entry/disassembly.txt"
+grep -Eq '[[:space:]]sqrtsd[[:space:]]' "$evidence/elf/portable-entry/disassembly.txt" ||
+	fail "Native portable-entry executable does not contain scalar square root"
 
 mkdir -p "$evidence/go-elf"
 file "$go_application" > "$evidence/go-elf/file.txt"

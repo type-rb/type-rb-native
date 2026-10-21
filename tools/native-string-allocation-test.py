@@ -13,14 +13,15 @@ args = parser.parse_args()
 with tempfile.TemporaryDirectory(prefix='native-string-emission-') as temporary:
     source = Path(temporary) / 'main.trb'
     source.write_text('def main()\nnumber := 123\nputs(number.to_s())\n'
-                      'puts("raw".to_bytes().to_s())\nend\n')
+                      'text := number.to_s()\nputs("[" + text + "]")\n'
+                      'puts("<" + text + "|" + text + ">")\nputs("raw".to_bytes().to_s())\nend\n')
     emitted = subprocess.run([str(args.compiler.resolve()), 'emit-qbe', str(source)],
                              check=True, capture_output=True, timeout=30)
     assert not emitted.stderr, emitted
     decoded = emitted.stdout.decode()
 names = ['trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert',
          'trbn_storage_unlink', 'trbn_gc_alloc', 'trbn_string_alloc', 'trbn_string_from_bytes',
-         'trbn_string_concat', 'trbn_integer_to_string', 'trbn_string_from_codepoint',
+         'trbn_string_concat', 'trbn_string_concat_three', 'trbn_string_concat_many', 'trbn_integer_to_string', 'trbn_string_from_codepoint',
          'trbn_utf8_width', 'trbn_utf8_count', 'trbn_bytes_utf8_span', 'trbn_bytes_to_string',
          'trbn_gc_temp_push', 'trbn_gc_temp_grow']
 bodies = []
@@ -37,7 +38,12 @@ error = re.findall(r'^data \$trbn_allocation_error = [^\n]+', decoded, re.M)
 assert len(error) == 1
 storage = re.findall(r'^data \$trbn_storage_available = [^\n]+', decoded, re.M)
 assert len(storage) == 1
-il = 'export ' + error[0] + '\n' + storage[0] + '\n' + '\n'.join(bodies)
+integer_strings = re.findall(r'^data \$trbn_small_integer_strings = [^\n]+\n.*?^\}', decoded, re.M | re.S)
+assert len(integer_strings) == 1
+decimal_pairs = re.findall(r'^data \$trbn_decimal_pairs = [^\n]+', decoded, re.M)
+assert len(decimal_pairs) == 1
+il = ('export ' + error[0] + '\n' + storage[0] + '\n' + integer_strings[0] +
+      '\n' + decimal_pairs[0] + '\n' + '\n'.join(bodies))
 observer = r'''
 #include <assert.h>
 #include <stdint.h>
@@ -51,6 +57,9 @@ extern void *trbn_gc_alloc(void *, int64_t, int64_t);
 extern struct string *trbn_string_from_bytes(const void *, int64_t);
 extern struct string *trbn_bytes_to_string(struct string *);
 extern struct string *trbn_string_concat(struct string *, struct string *);
+extern struct string *trbn_string_concat_three(struct string *, struct string *, struct string *);
+extern struct string *trbn_string_concat_many(struct string **, int64_t);
+extern int64_t trbn_utf8_count(const void *, int64_t);
 extern struct string *trbn_integer_to_string(int64_t);
 extern struct string *trbn_string_from_codepoint(int64_t);
 int64_t trbn_desc_string[3], other_descriptor[3];
@@ -94,10 +103,13 @@ static void clear(void) {
     trbn_gc_heap_bytes = trbn_gc_allocated_bytes = peak = published = 0;
     trbn_gc_temp_count = 0;
 }
-static void expect(struct string *s, const void *bytes, size_t size, int64_t points) {
-    assert(s->descriptor == (uintptr_t)trbn_desc_string);
+static void expect_bytes(struct string *s, const void *bytes, size_t size, int64_t points) {
     assert(s->length == (int64_t)size && s->points == points);
     assert(!memcmp(s->bytes, bytes, size) && s->bytes[size] == 0);
+}
+static void expect(struct string *s, const void *bytes, size_t size, int64_t points) {
+    assert(s->descriptor == (uintptr_t)trbn_desc_string);
+    expect_bytes(s, bytes, size, points);
 }
 int main(int argc, char **argv) {
     if (argc > 1) {
@@ -146,6 +158,44 @@ int main(int argc, char **argv) {
         expect(s, input, length, length);
         clear(); trbn_storage_free(keeper, total);
     }
+    /* Exhaustive fragment triples compare the fused constructor with the
+       existing binary contract and an independently decoded whole byte span.
+       Empty and NUL fragments, malformed bytes, and split UTF-8 sequences
+       exercise joins that cannot blindly sum cached point counts. */
+    static const unsigned char atoms[][4] = {
+        {0}, {'a'}, {'b'}, {0}, {0xc3, 0xa9}, {0xc3}, {0xa9},
+        {0xf0}, {0x9f, 0x99}, {0x82}, {0xff}, {0xe0, 0xa0}, {0x80}
+    };
+    static const int64_t lengths[] = {0, 1, 1, 1, 2, 1, 1, 1, 2, 1, 1, 2, 1};
+    for (unsigned a = 0; a < 13; ++a)
+    for (unsigned b = 0; b < 13; ++b)
+    for (unsigned c = 0; c < 13; ++c) {
+        struct string *fragments[] = {
+            trbn_string_from_bytes(atoms[a], lengths[a]),
+            trbn_string_from_bytes(atoms[b], lengths[b]),
+            trbn_string_from_bytes(atoms[c], lengths[c])
+        };
+        unsigned char expected[12]; int64_t length = 0;
+        unsigned indexes[] = {a, b, c}; int nonempty = 0;
+        for (int i = 0; i < 3; ++i) {
+            memcpy(expected + length, atoms[indexes[i]], lengths[indexes[i]]);
+            length += lengths[indexes[i]];
+            nonempty += lengths[indexes[i]] != 0;
+        }
+        struct string *binary = trbn_string_concat(
+            trbn_string_concat(fragments[0], fragments[1]), fragments[2]);
+        int64_t before = trbn_gc_allocated_bytes;
+        struct string *fused = trbn_string_concat_many(fragments, 3);
+        int64_t points = trbn_utf8_count(expected, length);
+        expect(binary, expected, length, points);
+        expect(fused, expected, length, points);
+        assert(trbn_gc_allocated_bytes - before == (nonempty > 1 ? length + 33 : 0));
+        before = trbn_gc_allocated_bytes;
+        struct string *direct = trbn_string_concat_three(fragments[0], fragments[1], fragments[2]);
+        expect(direct, expected, length, points);
+        assert(trbn_gc_allocated_bytes - before == (nonempty > 1 ? length + 33 : 0));
+        clear();
+    }
     unsigned char bytes[256];
     for (unsigned i = 0; i < 256; ++i) bytes[i] = i;
     for (int64_t size = 0; size <= 256; ++size) {
@@ -188,7 +238,21 @@ int main(int argc, char **argv) {
     expect(trbn_string_concat(a, b), "\xe3\x81\x82\0a", 5, 3);
     assert(trbn_string_concat(empty, a) == a && trbn_string_concat(b, empty) == b);
     clear();
-    int64_t values[] = {-9007199254740991LL, -123, 0, 9, 123, 9007199254740991LL};
+    /* Static strings need neither heap publication nor an allocation. Keep the
+       managed-descriptor assertion intact for every constructor and fallback. */
+    fail_allocation = 1;
+    for (int64_t value = 0; value < 100; ++value) {
+        char buffer[32]; int size = snprintf(buffer, sizeof buffer, "%lld", (long long)value);
+        struct string *cached = trbn_integer_to_string(value);
+        assert(cached->descriptor == 0);
+        expect_bytes(cached, buffer, size, size);
+        assert(trbn_integer_to_string(value) == cached);
+        assert(published == 0 && trbn_gc_heap_bytes == 0 && trbn_gc_allocated_bytes == 0);
+        assert(trbn_gc_temp_count == 0);
+    }
+    fail_allocation = 0;
+    int64_t values[] = {-9007199254740991LL, -10001, -10000, -1000, -123, -1,
+                        100, 101, 123, 1000, 10000, 10001, 9007199254740991LL};
     for (unsigned i = 0; i < sizeof values / sizeof *values; ++i) {
         char buffer[32]; int size = snprintf(buffer, sizeof buffer, "%lld", (long long)values[i]);
         expect(trbn_integer_to_string(values[i]), buffer, size, size); clear();
@@ -209,9 +273,9 @@ with tempfile.TemporaryDirectory(prefix='native-string-allocation-') as temporar
     (root / 'runtime.ssa').write_text(il)
     (root / 'observer.c').write_text(observer)
     subprocess.run([str(args.qbe.resolve()), '-o', str(root / 'runtime.s'), str(root / 'runtime.ssa')],
-                   check=True, capture_output=True, timeout=30)
+                   check=True, timeout=30)
     subprocess.run(['/usr/bin/cc', '-O2', str(root / 'runtime.s'), str(root / 'observer.c'),
-                    '-o', str(root / 'probe')], check=True, capture_output=True, timeout=30)
+                    '-o', str(root / 'probe')], check=True, timeout=30)
     result = subprocess.run([str(root / 'probe')], capture_output=True, timeout=30)
     assert result.returncode == 0 and result.stderr == b'', result
     for descriptor in ['string', 'other']:

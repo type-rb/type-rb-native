@@ -1,3 +1,5 @@
+import { repl_editing_active, repl_editing_submitted, repl_input_accepted, repl_input_cancelled, repl_input_eof, repl_input_terminal_error } from repl/input_status
+import { repl_style_callable, repl_style_comment, repl_style_incomplete, repl_style_plain, repl_style_string, repl_style_type } from repl/display_kinds
 import { string_starts_with } from support/path
 import { compiler_source_slice } from frontend/syntax/lexer
 import { integer_string } from support/literals
@@ -93,7 +95,7 @@ def repl_editor_render(mut editor: ReplEditor)
 		editor.columns[0] = columns
 	end
 	spans := repl_syntax(editor.text[0])
-	mut rows := [repl_editor_paint("trbn:trb> ", 6, editor.color)]
+	mut rows := [repl_editor_paint("trbn:trb> ", repl_style_callable(), editor.color)]
 	mut row := 0
 	mut column := 10
 	mut cursor_row := 0
@@ -129,7 +131,7 @@ def repl_editor_render(mut editor: ReplEditor)
 			cursor_column = column
 		end
 		if character == "\n"
-			rows.push(repl_editor_paint("...> ", 6, editor.color))
+			rows.push(repl_editor_paint("...> ", repl_style_callable(), editor.color))
 			row += 1
 			column = 5
 		else
@@ -176,7 +178,7 @@ def repl_editor_render(mut editor: ReplEditor)
 	mut bottom := last - top - 1
 	if editor.message[0] != ""
 		# Messages contain only printable, width-bounded completion/search text.
-		output += "\r\n" + repl_editor_paint(editor.message[0], 4, editor.color)
+		output += "\r\n" + repl_editor_paint(editor.message[0], repl_style_comment(), editor.color)
 		bottom += 1
 	end
 	output += "\r"
@@ -420,12 +422,12 @@ def repl_editor_matches(editor: ReplEditor, candidates: ReplCandidates): Array<I
 	spans := repl_syntax(compiler_source_slice(editor.text[0], 0, editor.cursor[0]))
 	if spans.kinds.size() > 0
 		kind := spans.kinds[spans.kinds.size() - 1]
-		mut condition_53 := kind == 2
+		mut condition_53 := kind == repl_style_string()
 		if !condition_53
-			condition_53 = kind == 4
+			condition_53 = kind == repl_style_comment()
 		end
 		if !condition_53
-			condition_53 = kind == 7
+			condition_53 = kind == repl_style_incomplete()
 		end
 		if condition_53
 			return matches
@@ -457,7 +459,7 @@ def repl_editor_matches(editor: ReplEditor, candidates: ReplCandidates): Array<I
 		if repl_editor_candidate_match(candidates.labels[index], prefix)
 			mut condition_57 := !type_position
 			if !condition_57
-				condition_57 = candidates.kinds[index] == 5
+				condition_57 = candidates.kinds[index] == repl_style_type()
 			end
 			if condition_57
 				matches.push(index)
@@ -657,7 +659,7 @@ def repl_editor_edit(mut editor: ReplEditor, mut editing: ReplEditing, key: Stri
 			repl_editor_replace(editor, 0, editor.cursor[0], prefix)
 		else
 			editor.text[0] = repl_indent(editor.text[0])
-			editing.status[0] = 4
+			editing.status[0] = repl_editing_submitted()
 		end
 		return
 	end
@@ -704,7 +706,7 @@ def repl_editor_edit(mut editor: ReplEditor, mut editing: ReplEditing, key: Stri
 	end
 	if code == 4
 		if editor.text[0] == ""
-			editing.status[0] = 1
+			editing.status[0] = repl_input_eof()
 		else
 			repl_editor_replace(editor, editor.cursor[0], repl_next(editor.text[0], editor.cursor[0]), "")
 		end
@@ -843,13 +845,13 @@ end
 
 def repl_editor_read(history: Array<String>, candidates: ReplCandidates): ReplInput
 	if native_cli_terminal_start() != 0
-		return ReplInput.new(text: "cannot enter terminal editing mode", status: 3)
+		return ReplInput.new(text: "cannot enter terminal editing mode", status: repl_input_terminal_error())
 	end
 	mut editor := ReplEditor.new(text: [""], cursor: [0], row: [0], rows: [1], height: [repl_editor_size(0)], columns: [repl_editor_size(1)], overflow: [0], color: native_cli_env("NO_COLOR") == "", names: candidates.labels, kinds: candidates.kinds, message: [""], undo_count: [0], undo_text: [], undo_cursor: [])
-	mut editing := ReplEditing.new(history_index: [history.size()], draft: [""], searching: [0], query: [""], search_index: [history.size()], search_original: [""], clipboard: [""], paste: [0], pasted: [""], paste_cr: [0], menu: [[]], selected: [0], menu_finish: [0], status: [0])
+	mut editing := ReplEditing.new(history_index: [history.size()], draft: [""], searching: [0], query: [""], search_index: [history.size()], search_original: [""], clipboard: [""], paste: [0], pasted: [""], paste_cr: [0], menu: [[]], selected: [0], menu_finish: [0], status: [repl_editing_active()])
 	native_cli_write(repl_escape() + "?2004h", 1)
 	repl_editor_render(editor)
-	while editing.status[0] == 0
+	while editing.status[0] == repl_editing_active()
 		key := repl_editor_key()
 		if key == "idle"
 			if repl_editor_resized(editor)
@@ -857,10 +859,10 @@ def repl_editor_read(history: Array<String>, candidates: ReplCandidates): ReplIn
 			end
 		else
 			if key == "eof"
-				editing.status[0] = 1
+				editing.status[0] = repl_input_eof()
 			else
 				if key == "interrupt"
-					editing.status[0] = 2
+					editing.status[0] = repl_input_cancelled()
 				else
 					if (editing.paste[0] != 0)
 						repl_editor_pasted(editor, editing, key)
@@ -883,9 +885,9 @@ def repl_editor_read(history: Array<String>, candidates: ReplCandidates): ReplIn
 			end
 			if !(editing.paste[0] != 0)
 				if (editor.overflow[0] != 0)
-					editing.status[0] = 2
+					editing.status[0] = repl_input_cancelled()
 				end
-				if editing.status[0] == 0
+				if editing.status[0] == repl_editing_active()
 					repl_editor_render(editor)
 				end
 			end
@@ -895,8 +897,8 @@ def repl_editor_read(history: Array<String>, candidates: ReplCandidates): ReplIn
 	if (editor.overflow[0] != 0)
 		native_cli_write("trbn: input exceeds 64 KiB; submission discarded\n", 2)
 	end
-	if editing.status[0] == 4
-		editing.status[0] = 0
+	if editing.status[0] == repl_editing_submitted()
+		editing.status[0] = repl_input_accepted()
 	end
 	return ReplInput.new(text: editor.text[0], status: editing.status[0])
 end
@@ -957,7 +959,7 @@ def repl_editor_paste(pasted: String, key: String): String
 end
 
 def repl_editor_kind(editor: ReplEditor, word: String, lexical: Integer): Integer
-	if lexical != 0
+	if lexical != repl_style_plain()
 		return lexical
 	end
 	mut index := 0

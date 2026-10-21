@@ -15,20 +15,24 @@ decoded = '\n'.join(json.loads(s) for name in ['system.trb', 'managed_storage.tr
                     for s in re.findall(r'"(?:[^"\\]|\\.)*"', (root / name).read_text()))
 bodies = []
 for name in ['trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert',
-             'trbn_storage_unlink', 'trbn_gc_sweep', 'trbn_gc_mark', 'trbn_gc_scan_fixed', 'trbn_gc_scan_array']:
+             'trbn_storage_unlink', 'trbn_array_backing_new', 'trbn_array_backing_release', 'trbn_array_backing_flush',
+             'trbn_gc_sweep', 'trbn_gc_mark', 'trbn_gc_scan_fixed', 'trbn_gc_scan_array']:
     matches = re.findall(r'^function (?:l )?\$' + name + r'\([^\n]*\) \{.*?^\}', decoded, re.M | re.S)
     assert len(matches) == 1, name
     body = matches[0]
     if name == 'trbn_gc_sweep':
-        body = body.replace('call $free(', 'call $observe_free(')
+        body = body.replace('call $trbn_array_backing_release(', 'call $observe_backing_release(')
         body = body.replace('call $trbn_storage_free(', 'call $observe_object_free(')
-    else:
+    elif not name.startswith('trbn_array_backing_'):
         body = body.replace('call $malloc(', 'call $observe_malloc(')
         body = body.replace('call $free(', 'call $observe_storage_free(')
     bodies.append('export ' + body)
 storage = re.findall(r'^data \$trbn_storage_available = [^\n]+', decoded, re.M)
 assert len(storage) == 1
 bodies.append(storage[0])
+cache = re.findall(r'^data \$trbn_array_backing_cache = [^\n]+', decoded, re.M)
+assert len(cache) == 1
+bodies.append('export ' + cache[0])
 observer = r'''
 #include <assert.h>
 #include <stdint.h>
@@ -39,6 +43,10 @@ extern void *trbn_storage_alloc(int64_t);
 extern void trbn_storage_free(void *, int64_t);
 extern void trbn_gc_sweep(void);
 extern void trbn_gc_mark(void *);
+extern void *trbn_array_backing_new(void);
+extern void trbn_array_backing_release(void *, int64_t);
+extern void trbn_array_backing_flush(void);
+extern uintptr_t trbn_array_backing_cache[2];
 void *trbn_gc_heap;
 int64_t trbn_gc_heap_bytes, trbn_gc_reclaimed_bytes;
 static uintptr_t string_descriptor[] = {0};
@@ -65,10 +73,10 @@ void observe_object_free(void *pointer, int64_t size) {
 static void *zero_object(size_t size) {
     void *p = trbn_storage_alloc(size); assert(p); memset(p, 0, size); return p;
 }
-void observe_free(void *pointer) {
+void observe_backing_release(void *pointer, int64_t capacity) {
     assert(released < expected_releases);
     assert(pointer == release_order[released++]);
-    free(pointer);
+    trbn_array_backing_release(pointer, capacity);
 }
 static void snapshot(struct allocation *a) {
     assert(a->bytes - 16 <= sizeof a->payload);
@@ -91,11 +99,15 @@ static size_t prepare(int reverse, int references) {
             a->base = zero_object(a->bytes);
             a->base[4] = 0x1234;
         } else {
-            size_t capacity = i == 5 ? 0 : i == 6 ? 3 : 2;
+            size_t capacity = i == 5 ? 0 : 4;
             a->descriptor = i == 7 ? managed_array_descriptor : scalar_array_descriptor;
             a->bytes = 40; a->backing_bytes = capacity * sizeof(uintptr_t);
             a->base = zero_object(a->bytes);
-            if (capacity) { a->backing = calloc(capacity, sizeof(uintptr_t)); assert(a->backing); }
+            if (capacity) {
+                a->backing = capacity == 4 ? trbn_array_backing_new() : calloc(capacity, sizeof(uintptr_t));
+                assert(a->backing);
+                for (size_t j = 0; j < capacity; ++j) assert(a->backing[j] == 0);
+            }
             a->base[2] = capacity; a->base[3] = capacity;
             a->base[4] = (uintptr_t)a->backing;
         }
@@ -180,7 +192,10 @@ int main(void) {
         assert(trbn_gc_heap_bytes == 0 && trbn_gc_reclaimed_bytes == 8192 + (int64_t)total);
         assert(literal[0] == 0 && storage_blocks == 0);
     }
-    puts("Mixed-object sweep, backing release, cyclic roots and accounting passed");
+    assert(trbn_array_backing_cache[1] == 2);
+    trbn_array_backing_flush();
+    assert(!trbn_array_backing_cache[0] && !trbn_array_backing_cache[1]);
+    puts("Mixed-object sweep, backing reuse, cyclic roots and accounting passed");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='native-gc-sweep-') as temporary:

@@ -84,6 +84,29 @@ class LanguageCoverageTests(unittest.TestCase):
             self.assertEqual(coverage.main(), 1)
             output.assert_any_call("Language case mismatches (1): integer", file=sys.stderr)
 
+    def test_finished_case_files_are_released_before_the_next_case_even_after_failure(self):
+        case = next(case for case in self.document["cases"] if case["id"] == "integer")
+        cases = [{**case, "id": f"integer-{index}"} for index in range(4)]
+        roots = []
+
+        def observations(case, native, reference, root):
+            self.assertTrue(all(not previous.exists() for previous in roots))
+            roots.append(root)
+            (root / "generated-program").write_bytes(b"temporary executable")
+            if len(roots) == 1:
+                raise ValueError("synthetic missing executable")
+            return {"reference": case["reference"]}
+
+        argv = ["coverage", "--reference", sys.executable, "--jobs", "1"]
+        with patch.object(sys, "argv", argv), patch.object(coverage, "validate", return_value=cases), \
+                patch.object(coverage, "collect", side_effect=observations), patch("builtins.print") as output:
+            self.assertEqual(coverage.main(), 1)
+        self.assertTrue(all(not root.exists() for root in roots))
+        report = json.loads(output.call_args_list[0].args[0])
+        self.assertEqual(len(report["cases"]), 4)
+        self.assertEqual(report["failures"], ["integer-0"])
+        self.assertEqual(report["cases"][0]["error"], "synthetic missing executable")
+
     def test_rejection_and_runtime_failure_cases_retain_each_oracles_outcome(self):
         cases = {case["id"]: case for case in coverage.validate(self.document)}
         self.assertNotEqual(cases["unused-binding"]["reference"]["check"]["code"], 0)

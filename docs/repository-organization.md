@@ -17,7 +17,9 @@ The directory responsibility map and enforced dependency rules are in
 | `compiler/src/state/resolution_locals.trb` | Body name resolution owns independent names, declared receiver types and logical lookup order. Checked binding identities, flow facts and MIR storage remain in `CheckedLocals`; anonymous-body resolution takes an ordered snapshot of its active names. |
 | `compiler/src/support/storage.trb` | Integer and String storage share their direct chunk arrays across record aliases. Explicit storage copies clone every populated chunk and own their limits and high-water cells; sparse holes stay unallocated. Scalar cells retain alias-visible updates under readonly record fields and the recovery subset. |
 | `compiler/src/project/package_json.trb`, `compiler/src/project/package_checksum.trb`, `compiler/src/project/package_manifest.trb`, `compiler/src/project/packages.trb` | Strict package JSON, portable SHA-256 and manifest defaults, dependency-scoped package identities and deterministic lock serialization. The compiler source loader owns filesystem reads; the CLI publishes locks atomically. Package metadata is separate from checked language declarations. |
+| `compiler/src/project/config_json.trb`, `compiler/src/project/config.trb` | JSONC cursor, comments, values and object boundaries are separate from configuration records, field validation and defaults. The JSONC reader preserves the first diagnostic and its source line; strict package JSON retains its own acceptance contract. |
 | `compiler/src/backend/qbe/output.trb` | QBE output appends to zero-origin String storage. Its used-line boundary is the single shared length for emission, concatenation and chunking; output aliases see every append. Appending one output to another preserves independent subsequent appends. |
+| `compiler/src/mir/model/effects.trb`, `compiler/src/mir/analysis/call_effects.trb` | Named allocation, mutation, I/O and failure bits and their supported combinations have one encoding owner. Instruction classification and the distinct none/failure/conservative call-summary lattice consume those names. Numeric maximum is a join only for those three summary classes, not for arbitrary effect masks. |
 | `compiler/src/state/nominal_state.trb` | `CompilerNominalTypes` owns authored class, newtype and enum declarations alongside concrete class instances and receiver lookup. Template checks share authored declarations while copying concrete object and enum catalogs and mutable receiver bindings. |
 | `compiler/src/state/global_state.trb`, `compiler/src/state/callable_state.trb` | Global declarations, inferred bindings, lambda syntax and checked callable bodies have separate state owners. Template forks share authored syntax and ordering, while each fork owns inferred global types, function bindings, callable progress and checked bodies. |
 | `compiler/src/frontend/syntax/parser.trb`, `compiler/src/frontend/syntax/body_syntax.trb`, `compiler/src/frontend/syntax/declaration_syntax.trb`, `compiler/src/frontend/syntax/syntax_forms.trb` | Module/declaration routing, recursive expression/statement parsing, callable/record/default declarations, and shared token forms have distinct owners. Checking and REPL adapters import shared forms directly; there are no forwarding parser aliases. |
@@ -34,6 +36,7 @@ The directory responsibility map and enforced dependency rules are in
 | `newtype_*` modules in `frontend/syntax`, `frontend/types`, `frontend/resolution` and `mir` | Declaration syntax, nominal identities, representation/mutability resolution, method lookup, MIR construction and independent storage verification. Backend adapters use MIR storage facts while checking retains nominal identities. |
 | `compiler/src/backend/qbe/runtime/hash_key_runtime.trb`, `compiler/src/backend/qbe/runtime/hash_runtime.trb` | Scalar/union key hashing and probing are separate from table allocation, growth, deletion and snapshots. `compiler/src/mir/lowering/hashes.trb` owns checked key layout selection. |
 | `compiler/cli/repl/project.trb` | REPL project discovery, generated-import filtering and visible nominal type names. Session checking/evaluation remains in the REPL adapters. |
+| `compiler/cli/repl/operators.trb`, `compiler/cli/repl/eval.trb` | Checked scalar value operations and portable arithmetic failures are separate from token evaluation, calls and control flow. Operator dispatch unwraps values and promotes numeric operands before selecting Integer or Float evaluation; it does not repeat compiler type checking. |
 | `compiler/src/frontend/checking/program/submission.trb`, `compiler/cli/repl/check.trb` | Ordinary checked entry/exit facts and result types, plus REPL source loading and boundary mapping. Session completion and replay own fact persistence; QBE consumes only verified MIR. |
 | `recovery/src/snapshot/validation.trb` and shared snapshot/diagnostic/MIR modules | Snapshot boundary validation and shared support. |
 | `recovery/src/scalar/`, `recovery/src/aggregate/`, `recovery/src/managed/` | Retained scalar, aggregate and managed snapshot recovery, including layout, QBE, runtime and differential tests. These paths cover distinct supported capabilities. |
@@ -92,6 +95,15 @@ Keep source moves and their recovery derivation, imports, tests and operational
 consumers together. Useful shared code remains one implementation. Complete
 cohesive ownership changes without requiring another performance qualification
 for each helper extraction. Required correctness and reproducibility remain blocking.
+
+Semantic names must preserve their meaning across producers, validators and
+consumers. Effect names are parameterless Integer-literal-return functions so
+ordinary compilation and the recovery subset share one representation.
+`mir/passes/literal_calls.trb` replaces eligible verified direct calls with the
+literal while preserving the caller's value identity and origin; it does not
+recognize names or expand general helper bodies. Representation changes still
+need generated-code and compiler-cost checks. Ordinary numeric data, layout
+encodings and algorithm constants need no cosmetic wrapper.
 
 ## Current source and historical consumers
 
