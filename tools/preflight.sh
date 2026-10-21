@@ -77,7 +77,7 @@ step "reference identity" sh -c '
 step "official source controls" python3 tools/official-sources-test.py
 step "pinned official source bytes" python3 tools/official-sources.py \
 	--reference-checkout "${TYPE_RB_CHECKOUT:-$root/.type-rb}" --check
-step "Unicode data" sh -c 'python3 tools/unicode-identifier-data.py --check && python3 tools/unicode-case-data.py --check'
+step "Unicode data" sh -c 'python3 tools/unicode-identifier-data.py --check && python3 tools/unicode-case-data.py --check && python3 tools/json-diagnostic-data.py --check'
 step "formatting" "$reference" fmt --check recovery compiler corpus tools benchmarks
 step "recovery types" "$reference" check --config recovery/trbconfig.jsonc
 step "compiler types" "$reference" check --config compiler/trbconfig.jsonc
