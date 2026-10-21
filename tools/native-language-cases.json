@@ -3201,7 +3201,7 @@
         "web-middleware-short-circuit"
       ],
       "pending": [
-        "Generated Context state and bindings, typed JSON codecs, file routes and server lifecycle"
+        "Generated Context state, typed JSON codecs, combined input binding, file routes and server lifecycle"
       ],
       "note": "Pinned Request, Response, cookies and ContextKey values support ordinary imports and retained REPL ownership. Portable middleware composes ordered handlers with once-only Next calls, CORS and secure headers. These value and middleware contracts do not establish request dispatch or networking."
     },
@@ -3287,6 +3287,63 @@
         "Deterministic precedence for multiple invalid object members requires the decision in #1138"
       ],
       "note": "Pinned JSON/JSONC declarations expose recursive values, strict and comment-aware parsing, deterministic serialization, typed accessors and field lookup through owned TypeRB adapters. Ordinary file/project and retained REPL paths preserve source ownership, nominal identities and managed values. Error precedence for multiple invalid object members differs in the pinned reference; #1138 records that ambiguity."
+    },
+    {
+      "id": "web-bindings",
+      "title": "Typed Web path and query records",
+      "scope": "packages",
+      "syntax": [],
+      "cases": [
+        "web-binding-query-scalars",
+        "web-binding-path-scalars",
+        "web-binding-nullable-missing",
+        "web-binding-nullable-present",
+        "web-binding-repeated-arrays",
+        "web-binding-nullable-array-missing",
+        "web-binding-unknown-key",
+        "web-binding-missing-required",
+        "web-binding-duplicate-scalar",
+        "web-binding-invalid-integer",
+        "web-binding-invalid-boolean",
+        "web-binding-invalid-float",
+        "web-binding-malformed-query",
+        "web-binding-raw-enum",
+        "web-binding-invalid-path",
+        "web-binding-record-alias",
+        "web-binding-reject-non-record",
+        "web-binding-reject-nested-record",
+        "web-binding-reject-path-array",
+        "web-binding-reject-nullable-element",
+        "web-binding-array-integer",
+        "web-binding-array-boolean",
+        "web-binding-array-float",
+        "web-binding-array-string",
+        "web-binding-array-invalid",
+        "web-binding-nullable-array-present",
+        "web-binding-integer-overflow",
+        "web-binding-integer-whitespace",
+        "web-binding-float-exponent",
+        "web-binding-float-nonfinite",
+        "web-binding-empty-string",
+        "web-binding-decoded-nul",
+        "web-binding-raw-enum-invalid",
+        "web-binding-raw-enum-integer",
+        "web-binding-raw-enum-integer-leading-zero",
+        "web-binding-multiple-nullable-arrays",
+        "web-binding-mixed-nullable-arrays",
+        "web-binding-generic-and-handler",
+        "web-binding-flow-and",
+        "web-binding-flow-not-or",
+        "web-binding-flow-or-return",
+        "web-binding-flow-shared-truth",
+        "web-binding-flow-reject-one-sided-or",
+        "web-binding-flow-reject-stale-global"
+      ],
+      "pending": [
+        "Integer-backed raw enums and multiple non-nullable Array fields await a cross-mode reference decision (#1175)",
+        "Date/time parameter values, typed JSON and combined endpoint input binding"
+      ],
+      "note": "Loader-owned providers specialize Context#params<T> and Request#query<T> for canonical record fields through ordinary checked TypeRB bodies and verified MIR. Scalars, string-backed enums, nullable fields and query Arrays preserve field order, repeated values and typed missing/duplicate/invalid errors; multiple arrays are admitted when at most one is non-nullable. Cross-module aliases, retained REPL records and managed lifetimes remain on the ordinary path. Reference inconsistencies stay visible instead of defining a Native-only contract."
     }
   ],
   "cases": [
@@ -104398,21 +104455,21 @@
         "check": {
           "code": 1,
           "stdout": "",
-          "stderr": "<case>/main.trb:6: error[TRBN4004]: unknown class method params\n"
+          "stderr": "<case>/main.trb:6: error[TRBN4003]: web parameter binding requires a non-nullable record\n"
         },
         "build": {
           "code": 1,
           "stdout": "",
-          "stderr": "<case>/main.trb:6: error[TRBN4004]: unknown class method params\n"
+          "stderr": "<case>/main.trb:6: error[TRBN4003]: web parameter binding requires a non-nullable record\n"
         },
         "execute": null,
         "repl": {
           "code": 0,
           "stdout": "#<Request body: #<Body _bytes: Bytes[104, 101, 108, 108, 111]>, headers: #<Headers _entries: [Header(name: \"X-Mode\", value: \"demo\"), Header(name: \"Cookie\", value: \"a=1; token=x=y; a=2\")]>, method: #<HttpMethod value: \"GET\">, path: \"/items\", query_string: \"q=one&q=two&space=a+b\"> : Request\n#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[104, 101, 108, 108, 111]>, headers: #<Headers _entries: [Header(name: \"X-Mode\", value: \"demo\"), Header(name: \"Cookie\", value: \"a=1; token=x=y; a=2\")]>, method: #<HttpMethod value: \"GET\">, path: \"/items\", query_string: \"q=one&q=two&space=a+b\">> : Context\n",
-          "stderr": "(trb):5: error[TRBN4004]: unknown class method params\n"
+          "stderr": "(trb):5: error[TRBN4003]: web parameter binding requires a non-nullable record\n"
         }
       },
-      "title": "Web values: reject context binding"
+      "title": "Web values: reject non-record parameter binding"
     },
     {
       "id": "web-values-reject-key-type",
@@ -105168,6 +105225,2180 @@
         }
       },
       "title": "Web: middleware short circuit"
+    },
+    {
+      "id": "web-binding-query-scalars",
+      "title": "Web binding: query scalars",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nid: Integer\nrating: Float\nflag: Boolean\nname: String\nend\n",
+      "body": "case request(\"id=7&rating=4.5&flag=true&name=Ada+Lovelace\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.id)\nputs(value.rating)\nputs(value.flag)\nputs(value.name)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n4.5\ntrue\nAda Lovelace\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "7\n4.5\ntrue\nAda Lovelace\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n4.5\ntrue\nAda Lovelace\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "7\n4.5\ntrue\nAda Lovelace\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-path-scalars",
+      "title": "Web binding: path scalars",
+      "declarations": "import { Request, Context, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\ndef context(values: Hash<String, String>): Context\nreturn Context.new(request: request(\"\"), path_parameters: values)\nend\nrecord Sample\nid: Integer\nrating: Float\nflag: Boolean\nname: String\nend\n",
+      "body": "case context({\"id\": \"7\", \"rating\": \"4.5\", \"flag\": \"false\", \"name\": \"Ada\"}).params<Sample>()\nwhen Result::Ok(value)\nputs(value.id)\nputs(value.rating)\nputs(value.flag)\nputs(value.name)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n4.5\nfalse\nAda\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "7\n4.5\nfalse\nAda\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n4.5\nfalse\nAda\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "7\n4.5\nfalse\nAda\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-nullable-missing",
+      "title": "Web binding: nullable missing",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\npage: Integer?\nname: String?\nflag: Boolean?\ntags: Array<String>\nend\n",
+      "body": "case request(\"\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.page == nil)\nputs(value.name == nil)\nputs(value.flag == nil)\nputs(value.tags.size())\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\ntrue\ntrue\n0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\ntrue\ntrue\n0\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\ntrue\ntrue\n0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\ntrue\ntrue\n0\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-nullable-present",
+      "title": "Web binding: nullable present",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\npage: Integer?\nname: String?\nend\n",
+      "body": "case request(\"page=2&name=\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.page == nil)\nname := value.name\nif name == nil\nputs(false)\nelse\nputs(name == \"\")\nend\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "false\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "false\ntrue\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "false\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "false\ntrue\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-repeated-arrays",
+      "title": "Web binding: repeated arrays",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nids: Array<Integer>\nflags: Array<Boolean>\nnames: Array<String>\nend\n",
+      "body": "case request(\"ids=1&ids=2&flags=true&flags=false&names=a&names=b\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.ids[0] + value.ids[1])\nputs(value.flags[0])\nputs(value.flags[1])\nputs(value.names.join(\",\"))\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "# trb.local/standalone/trb/application\n../../application/module_0d6e4079e36703ebd37c00722f5891d2.go:114:17: no new variables on left side of :=\n../../application/module_0d6e4079e36703ebd37c00722f5891d2.go:114:20: cannot use make([]bool, len(values1)) (value of type []bool) as []int value in assignment\n../../application/module_0d6e4079e36703ebd37c00722f5891d2.go:128:32: cannot use parsedValue (variable of type bool) as int value in assignment\n../../application/module_0d6e4079e36703ebd37c00722f5891d2.go:130:13: cannot use trbArrayReference_88c68946bd3a95d8(parsedValues) (value of type *[]int) as *[]bool value in assignment\n../../application/module_0d6e4079e36703ebd37c00722f5891d2.go:133:17: no new variables on left side of :=\n../../application/module_0d6e4079e36703ebd37c00722f5891d2.go:133:20: cannot use make([]string, len(values2)) (value of type []string) as []int value in assignment\n../../application/module_0d6e4079e36703ebd37c00722f5891d2.go:139:32: cannot use parsedValue (variable of type string) as int value in assignment\n../../application/module_0d6e4079e36703ebd37c00722f5891d2.go:141:13: cannot use trbArrayReference_88c68946bd3a95d8(parsedValues) (value of type *[]int) as *[]string value in assignment\ntrb: go build: exit status 1\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "3\ntrue\nfalse\na,b\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:34: error[TRBN4003]: multiple non-nullable Array fields are not yet supported by typed parameter binding\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:34: error[TRBN4003]: multiple non-nullable Array fields are not yet supported by typed parameter binding\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):32: error[TRBN4003]: multiple non-nullable Array fields are not yet supported by typed parameter binding\n"
+        }
+      }
+    },
+    {
+      "id": "web-binding-nullable-array-missing",
+      "title": "Web binding: nullable array missing",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nids: Array<Integer>?\nend\n",
+      "body": "case request(\"\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.ids == nil)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-unknown-key",
+      "title": "Web binding: unknown key",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nid: Integer\nend\n",
+      "body": "case request(\"id=8&ignored=%E3%81%82\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.id)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "8\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "8\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "8\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "8\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-missing-required",
+      "title": "Web binding: missing required",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nid: Integer\nend\n",
+      "body": "case request(\"\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.id)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "missing:query:id\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "missing:query:id\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "missing:query:id\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "missing:query:id\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-duplicate-scalar",
+      "title": "Web binding: duplicate scalar",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nname: String\nend\n",
+      "body": "case request(\"name=a&name=b\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.name)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "duplicate:query:name\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "duplicate:query:name\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "duplicate:query:name\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "duplicate:query:name\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-invalid-integer",
+      "title": "Web binding: invalid integer",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nid: Integer\nend\n",
+      "body": "case request(\"id=nine\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.id)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:id:nine:Integer\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:id:nine:Integer\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:id:nine:Integer\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:id:nine:Integer\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-invalid-boolean",
+      "title": "Web binding: invalid boolean",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nflag: Boolean\nend\n",
+      "body": "case request(\"flag=TRUE\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.flag)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:flag:TRUE:Boolean\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:flag:TRUE:Boolean\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:flag:TRUE:Boolean\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:flag:TRUE:Boolean\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-invalid-float",
+      "title": "Web binding: invalid float",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nrating: Float\nend\n",
+      "body": "case request(\"rating=oops\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.rating)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:rating:oops:Float\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:rating:oops:Float\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:rating:oops:Float\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:rating:oops:Float\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-malformed-query",
+      "title": "Web binding: malformed query",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nname: String\nend\n",
+      "body": "case request(\"name=%ZZ\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.name)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "malformed:%ZZ\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "malformed:%ZZ\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "malformed:%ZZ\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "malformed:%ZZ\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-raw-enum",
+      "title": "Web binding: raw enum",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nenum Mode\nOn = \"ON\"\nOff = \"OFF\"\nend\nrecord Sample\nmode: Mode\nend\n",
+      "body": "case request(\"mode=ON\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.mode == Mode::On)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-invalid-path",
+      "title": "Web binding: invalid path",
+      "declarations": "import { Request, Context, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\ndef context(values: Hash<String, String>): Context\nreturn Context.new(request: request(\"\"), path_parameters: values)\nend\nrecord Sample\nid: Integer\nend\n",
+      "body": "case context({\"id\": \"bad\"}).params<Sample>()\nwhen Result::Ok(value)\nputs(value.id)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:path:id:bad:Integer\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:path:id:bad:Integer\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:path:id:bad:Integer\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:path:id:bad:Integer\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-record-alias",
+      "title": "Web binding: record alias",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nimport { Payload as Sample } from payload\n",
+      "body": "case request(\"id=9\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.id)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {
+        "payload.trb": "record Payload\nid: Integer\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "9\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "9\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "9\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "9\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-reject-non-record",
+      "title": "Web binding: reject non record",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\n",
+      "body": "case request(\"\").query<String>()\nwhen Result::Ok(value)\nputs(value)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:29:6: error[TRB3000]: web parameter binding type String must be a non-nullable record\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:29:6: error[TRB3000]: web parameter binding type String must be a non-nullable record\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):27:6: error[TRB3000]: web parameter binding type String must be a non-nullable record\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:29: error[TRBN4003]: web parameter binding requires a non-nullable record\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:29: error[TRBN4003]: web parameter binding requires a non-nullable record\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):27: error[TRBN4003]: web parameter binding requires a non-nullable record\n"
+        }
+      }
+    },
+    {
+      "id": "web-binding-reject-nested-record",
+      "title": "Web binding: reject nested record",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Filter\nname: String\nend\nrecord Sample\nfilter: Filter\nend\n",
+      "body": "case request(\"\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.filter.name)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:35:6: error[TRB3000]: web parameter field filter has unsupported type Filter\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:35:6: error[TRB3000]: web parameter field filter has unsupported type Filter\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):33:6: error[TRB3000]: web parameter field filter has unsupported type Filter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:35: error[TRBN4003]: web parameter field filter has unsupported type Filter\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:35: error[TRBN4003]: web parameter field filter has unsupported type Filter\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):33: error[TRBN4003]: web parameter field filter has unsupported type Filter\n"
+        }
+      }
+    },
+    {
+      "id": "web-binding-reject-path-array",
+      "title": "Web binding: reject path array",
+      "declarations": "import { Request, Context, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\ndef context(values: Hash<String, String>): Context\nreturn Context.new(request: request(\"\"), path_parameters: values)\nend\nrecord Sample\nids: Array<Integer>\nend\n",
+      "body": "case context({\"ids\": \"1\"}).params<Sample>()\nwhen Result::Ok(value)\nputs(value.ids.size())\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:35:6: error[TRB3000]: path parameter field ids cannot be an Array\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:35:6: error[TRB3000]: path parameter field ids cannot be an Array\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):33:6: error[TRB3000]: path parameter field ids cannot be an Array\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:35: error[TRBN4003]: path parameter field ids cannot be an Array\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:35: error[TRBN4003]: path parameter field ids cannot be an Array\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):33: error[TRBN4003]: path parameter field ids cannot be an Array\n"
+        }
+      }
+    },
+    {
+      "id": "web-binding-reject-nullable-element",
+      "title": "Web binding: reject nullable element",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nnames: Array<String?>\nend\n",
+      "body": "case request(\"\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.names.size())\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:32:6: error[TRB3000]: query parameter field names must use Array<T> with a non-nullable scalar T\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:32:6: error[TRB3000]: query parameter field names must use Array<T> with a non-nullable scalar T\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):30:6: error[TRB3000]: query parameter field names must use Array<T> with a non-nullable scalar T\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:32: error[TRBN4003]: web parameter field names has unsupported type Array<String?>\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:32: error[TRBN4003]: web parameter field names has unsupported type Array<String?>\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):30: error[TRBN4003]: web parameter field names has unsupported type Array<String?>\n"
+        }
+      }
+    },
+    {
+      "id": "web-binding-array-integer",
+      "title": "Web binding: array integer",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nids: Array<Integer>\nend\n",
+      "body": "case request(\"ids=-2&ids=%2B3\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.ids[0] + value.ids[1])\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-array-boolean",
+      "title": "Web binding: array boolean",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nflags: Array<Boolean>\nend\n",
+      "body": "case request(\"flags=true&flags=false\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.flags[0])\nputs(value.flags[1])\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\nfalse\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\nfalse\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\nfalse\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\nfalse\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-array-float",
+      "title": "Web binding: array float",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nratings: Array<Float>\nend\n",
+      "body": "case request(\"ratings=1.5&ratings=2.5\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.ratings[0] + value.ratings[1])\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "4.0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "4.0\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "4.0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "4.0\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-array-string",
+      "title": "Web binding: array string",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nnames: Array<String>\nend\n",
+      "body": "case request(\"names=a&names=&names=b\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.names.join(\":\"))\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "a::b\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "a::b\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "a::b\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "a::b\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-array-invalid",
+      "title": "Web binding: array invalid",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nids: Array<Integer>\nend\n",
+      "body": "case request(\"ids=1&ids=no\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.ids.size())\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:ids:no:Integer\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:ids:no:Integer\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:ids:no:Integer\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:ids:no:Integer\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-nullable-array-present",
+      "title": "Web binding: nullable array present",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nids: Array<Integer>?\nend\n",
+      "body": "case request(\"ids=1&ids=2\").query<Sample>()\nwhen Result::Ok(value)\nids := value.ids\nif ids == nil\nputs(\"nil\")\nelse\nputs(ids.size())\nend\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-integer-overflow",
+      "title": "Web binding: integer overflow",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nid: Integer\nend\n",
+      "body": "case request(\"id=9007199254740992\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.id)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:id:9007199254740992:Integer\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:id:9007199254740992:Integer\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:id:9007199254740992:Integer\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:id:9007199254740992:Integer\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-integer-whitespace",
+      "title": "Web binding: integer whitespace",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nid: Integer\nend\n",
+      "body": "case request(\"id=+7\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.id)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:id: 7:Integer\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:id: 7:Integer\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:id: 7:Integer\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:id: 7:Integer\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-float-exponent",
+      "title": "Web binding: float exponent",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nrating: Float\nend\n",
+      "body": "case request(\"rating=.5e%2B2\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.rating)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "50.0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "50.0\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "50.0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "50.0\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-float-nonfinite",
+      "title": "Web binding: float nonfinite",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nrating: Float\nend\n",
+      "body": "case request(\"rating=NaN\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.rating)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:rating:NaN:Float\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:rating:NaN:Float\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:rating:NaN:Float\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:rating:NaN:Float\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-empty-string",
+      "title": "Web binding: empty string",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nname: String\nend\n",
+      "body": "case request(\"name=\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.name.size())\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "0\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "0\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-decoded-nul",
+      "title": "Web binding: decoded nul",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nname: String\nend\n",
+      "body": "case request(\"name=A%00B\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.name.to_bytes().size())\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-raw-enum-invalid",
+      "title": "Web binding: raw enum invalid",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nenum Mode\nOn = \"ON\"\nOff = \"OFF\"\nend\nrecord Sample\nmode: Mode\nend\n",
+      "body": "case request(\"mode=unknown\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.mode == Mode::On)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:mode:unknown:Mode\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:mode:unknown:Mode\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:mode:unknown:Mode\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "invalid:query:mode:unknown:Mode\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-raw-enum-integer",
+      "title": "Web binding: raw enum integer",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nenum Mode\nOn = 1\nOff = 2\nend\nrecord Sample\nmode: Mode\nend\n",
+      "body": "case request(\"mode=1\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.mode == Mode::On)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:36: error[TRBN4003]: integer-backed enum parameters are not supported yet\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:36: error[TRBN4003]: integer-backed enum parameters are not supported yet\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):34: error[TRBN4003]: integer-backed enum parameters are not supported yet\n"
+        }
+      }
+    },
+    {
+      "id": "web-binding-raw-enum-integer-leading-zero",
+      "title": "Web binding: raw enum integer leading zero",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nenum Mode\nOn = 1\nOff = 2\nend\nrecord Sample\nmode: Mode\nend\n",
+      "body": "case request(\"mode=01\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.mode == Mode::On)\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "invalid:query:mode:01:Mode\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:36: error[TRBN4003]: integer-backed enum parameters are not supported yet\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:36: error[TRBN4003]: integer-backed enum parameters are not supported yet\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):34: error[TRBN4003]: integer-backed enum parameters are not supported yet\n"
+        }
+      }
+    },
+    {
+      "id": "web-binding-multiple-nullable-arrays",
+      "title": "Web binding: multiple nullable arrays",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nids: Array<Integer>?\nflags: Array<Boolean>?\nend\n",
+      "body": "case request(\"ids=1&flags=false\").query<Sample>()\nwhen Result::Ok(value)\nids := value.ids\nflags := value.flags\nif ids != nil && flags != nil\nputs(ids[0])\nputs(flags[0])\nend\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\nfalse\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\nfalse\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\nfalse\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\nfalse\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-mixed-nullable-arrays",
+      "title": "Web binding: mixed nullable arrays",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nnames: Array<String>\nids: Array<Integer>?\nend\n",
+      "body": "case request(\"names=a&names=b&ids=3\").query<Sample>()\nwhen Result::Ok(value)\nputs(value.names.join(\",\"))\nids := value.ids\nif ids != nil\nputs(ids[0])\nend\nwhen Result::Err(error)\nputs(render_error(error))\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "a,b\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "a,b\n3\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "a,b\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "a,b\n3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-generic-and-handler",
+      "title": "Web binding: generic helper and handler method",
+      "declarations": "import { Request, ParameterError, ParameterSource } from trb/web\nimport { Body, Headers, HttpMethod } from trb/http\nimport trb/std/result\ndef source_name(source: ParameterSource): String\ncase source\nwhen ParameterSource::Path\nreturn \"path\"\nwhen ParameterSource::Query\nreturn \"query\"\nend\nend\ndef render_error(error: ParameterError): String\ncase error\nwhen ParameterError::MalformedQuery(error)\nreturn \"malformed:\" + error.input\nwhen ParameterError::Missing(source: source, name: name)\nreturn \"missing:\" + source_name(source) + \":\" + name\nwhen ParameterError::Duplicate(source: source, name: name)\nreturn \"duplicate:\" + source_name(source) + \":\" + name\nwhen ParameterError::Invalid(source: source, name: name, value: value, expected: expected)\nreturn \"invalid:\" + source_name(source) + \":\" + name + \":\" + value + \":\" + expected\nend\nend\ndef request(query: String): Request\nreturn Request.new(method: HttpMethod.get(), path: \"/items\", query_string: query, headers: Headers.new(), body: Body.empty())\nend\nrecord Sample\nid: Integer\nend\ndef bind<T>(_tag: T): Integer\ncase request(\"id=6\").query<Sample>()\nwhen Result::Ok(value)\nreturn value.id\nwhen Result::Err(_error)\nreturn -1\nend\nend\nclass Handler\ndef call(): Integer\ncase request(\"id=6\").query<Sample>()\nwhen Result::Ok(value)\nreturn value.id\nwhen Result::Err(_error)\nreturn -1\nend\nend\nend\n",
+      "body": "puts(bind<String>(\"tag\"))\nputs(Handler.new().call())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "6\n6\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "6\n6\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "6\n6\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "6\n6\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-flow-and",
+      "title": "Web binding flow: and",
+      "declarations": "def sum(a: Array<Integer>?, b: Array<Integer>?): Integer\nif a != nil && b != nil\nreturn a[0] + b[0]\nend\nreturn -1\nend\n",
+      "body": "puts(sum([2], [3]))\nputs(sum(nil, [3]))\nputs(sum([2], nil))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "5\n-1\n-1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "5\n-1\n-1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "5\n-1\n-1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "5\n-1\n-1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-flow-not-or",
+      "title": "Web binding flow: not or",
+      "declarations": "def sum(a: Array<Integer>?, b: Array<Integer>?): Integer\nif !(a == nil || b == nil)\nreturn a[0] + b[0]\nend\nreturn -1\nend\n",
+      "body": "puts(sum([2], [3]))\nputs(sum(nil, [3]))\nputs(sum([2], nil))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "5\n-1\n-1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "5\n-1\n-1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "5\n-1\n-1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "5\n-1\n-1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-flow-or-return",
+      "title": "Web binding flow: or return",
+      "declarations": "def sum(a: Array<Integer>?, b: Array<Integer>?): Integer\nif a == nil || b == nil\nreturn -1\nend\nreturn a[0] + b[0]\nend\n",
+      "body": "puts(sum([2], [3]))\nputs(sum(nil, [3]))\nputs(sum([2], nil))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "5\n-1\n-1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "5\n-1\n-1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "5\n-1\n-1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "5\n-1\n-1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "web-binding-flow-shared-truth",
+      "title": "Web binding flow: shared truth",
+      "declarations": "def size(a: String?, b: Boolean, c: Boolean): Integer\nif (a != nil && b) || (a != nil && c)\nreturn a.size()\nend\nreturn -1\nend\n",
+      "body": "puts(size(\"hello\", false, true))\nputs(size(nil, true, true))\nputs(size(\"hello\", false, false))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:8: error[TRB3000]: type String? has no member size\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:8: error[TRB3000]: type String? has no member size\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:8: error[TRB3000]: type String? has no member size\n(trb):1:6: error[TRB3000]: function size is not declared or imported\n(trb):1:6: error[TRB3000]: function size is not declared or imported\n(trb):1:6: error[TRB3000]: function size is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: size is unavailable on String?\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: size is unavailable on String?\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4004]: size is unavailable on String?\n(trb):1: error[TRBN4003]: unresolved function size\n(trb):1: error[TRBN4003]: unresolved function size\n(trb):1: error[TRBN4003]: unresolved function size\n"
+        }
+      }
+    },
+    {
+      "id": "web-binding-flow-reject-one-sided-or",
+      "title": "Web binding flow: reject one sided or",
+      "declarations": "def unsafe(a: Array<Integer>?, b: Array<Integer>?): Integer\nif a != nil || b != nil\nreturn a.size()\nend\nreturn -1\nend\n",
+      "body": "\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:8: error[TRB3000]: type Array<Integer>? has no member size\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:8: error[TRB3000]: type Array<Integer>? has no member size\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:8: error[TRB3000]: type Array<Integer>? has no member size\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: size is unavailable on Array<Integer>?\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: size is unavailable on Array<Integer>?\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4004]: size is unavailable on Array<Integer>?\n"
+        }
+      }
+    },
+    {
+      "id": "web-binding-flow-reject-stale-global",
+      "title": "Web binding flow: reject stale global",
+      "declarations": "mut current: String? := \"kept\"\ndef reset(): Boolean\ncurrent = nil\nreturn true\nend\ndef unsafe(): Integer\nif current != nil && reset()\nreturn current.size()\nend\nreturn -1\nend\n",
+      "body": "\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:8:8: error[TRB3000]: type String? has no member size\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:8:8: error[TRB3000]: type String? has no member size\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "\"kept\" : String? [mut]\n",
+          "stderr": "(trb):8:8: error[TRB3000]: type String? has no member size\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:8: error[TRBN4004]: size is unavailable on String?\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:8: error[TRBN4004]: size is unavailable on String?\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "\"kept\" : String? [mut]\n",
+          "stderr": "(trb):8: error[TRBN4004]: size is unavailable on String?\n"
+        }
+      }
     }
   ]
 }

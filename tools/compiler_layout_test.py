@@ -34,6 +34,18 @@ class OwnershipTests(unittest.TestCase):
         self.assertIn('missing responsibility owner', errors)
         self.assertIn('missing composed module support/missing', errors)
 
+    def test_providers_attach_to_frontend_and_loader_without_backend_access(self):
+        self.write('src/project/loader', 'import frontend/providers/declarations\n')
+        self.write('src/frontend/providers/declarations', 'import project/loader\nimport frontend/resolution/types\n')
+        self.write('src/frontend/resolution/types', 'import frontend/providers/declarations\n')
+        self.write('src/frontend/checking/expression', 'import frontend/providers/declarations\n')
+        self.assertEqual(self.errors(), [])
+        self.write('src/backend/qbe/output', 'import frontend/providers/declarations\n')
+        self.assertIn('backend/qbe -> frontend/providers', self.errors()[0])
+        self.write('src/backend/qbe/output')
+        self.write('src/frontend/providers/declarations', 'import backend/qbe/output\n')
+        self.assertIn('frontend/providers -> backend/qbe', self.errors()[0])
+
     def test_support_and_backend_boundaries_are_enforced(self):
         self.write('src/support/path', 'import backend/qbe/output\n')
         self.write('src/backend/qbe/output', 'import frontend/checking/expression\n')

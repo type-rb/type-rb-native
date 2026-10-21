@@ -1,3 +1,5 @@
+import { web_binding_kind } from frontend/providers/web_declarations
+import { specialize_web_binding } from frontend/providers/web_parameters
 import { default_parameter } from state/default_kinds
 import { object_abstract_method } from frontend/types/object_types
 import { namespace_parent } from frontend/types/namespace_model
@@ -51,12 +53,12 @@ def instantiate_generic_function(mut state: CompilerState, definition: Integer, 
 		diagnostic(state, "TRBN4003", row.line, "interface method has no executable body")
 		return -1
 	end
-	return instantiate_method_signature(state, definition, arguments, depth, "")
+	return instantiate_method_signature(state, definition, arguments, depth, "", -1)
 end
 
 # Abstract contracts own signatures but never executable bodies. Inherited
 # methods specialize the receiver as well as the declaring class's arguments.
-def instantiate_method_signature(mut state: CompilerState, definition: Integer, arguments: Array<String>, depth: Integer, receiver: String): Integer
+def instantiate_method_signature(mut state: CompilerState, definition: Integer, arguments: Array<String>, depth: Integer, receiver: String, call_origin: Integer): Integer
 	row := state.type_resolution.generic_functions[definition]
 	if arguments.size() != row.type_parameters.size()
 		diagnostic(state, "TRBN4003", row.line, "generic function type argument count differs")
@@ -129,5 +131,9 @@ def instantiate_method_signature(mut state: CompilerState, definition: Integer, 
 	store_string(state.declarations.function_result_types, function, resolve_type_name(state, row.source_id, generic_substitute(row.result_type, row.type_parameters, arguments), true))
 	state.callables.checked[0].generic_binding[0] = saved_binding
 	state.global_bindings.declaration_owner[0] = saved_owner
+	kind := web_binding_kind(state, definition)
+	if kind > 0 && !specialize_web_binding(state, function, arguments[0], kind, call_origin)
+		return -1
+	end
 	return function
 end

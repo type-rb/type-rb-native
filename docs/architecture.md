@@ -125,6 +125,16 @@ MIR. The backend consumes verified plans and does not recover source-level
 Array, Range, iteration or root facts. Future decomposition should follow these
 responsibilities without duplicating the canonical compiler closure.
 
+Official package providers under `frontend/providers` attach declarations only
+to loader-owned package identities. Concrete Web parameter schemas generate
+ordinary TypeRB bodies with private aliases for canonical record and field
+types. Speculative template analysis validates the schema without modifying
+shared source syntax; ordinary checking materializes the executable body.
+Those bodies use the normal resolver, checker, verified MIR and REPL;
+the backend receives no Web parsing or record-construction rules. The pinned
+portable package sources remain unchanged. Unsettled cross-mode contracts stay
+explicitly unsupported and visible in the shared coverage registry.
+
 The CLI/REPL under `compiler/cli/` is outside the ordinary core closure.
 Snapshot recovery derives a temporary flattened source
 from the canonical modules using

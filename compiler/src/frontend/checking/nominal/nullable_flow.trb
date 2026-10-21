@@ -130,6 +130,29 @@ def nullable_nil_condition(mut state: CompilerState, mut locals: CheckedLocals, 
 	return checked_condition_value(result, truth, falsity)
 end
 
+# Both operands hold on an AND's true edge or an OR's false edge. Keep the
+# original replacement versions so conditional calls cannot revive stale facts.
+# The other edge has alternative paths and grants no additional narrowing.
+def nullable_logical_condition(mut locals: CheckedLocals, left: CheckedValue, right: CheckedValue, disjunction: Boolean, result: CheckedValue): CheckedValue
+	mut first := left.truth
+	mut combined := right.truth
+	if disjunction
+		first = left.falsity
+		combined = right.falsity
+	end
+	while first >= 0
+		fact := locals.nullable_facts[first]
+		index := locals.nullable_facts.size()
+		locals.nullable_facts.push(NullableFact.new(identity: fact.identity, field: fact.field, type_name: fact.type_name, version: fact.version, previous: combined))
+		combined = index
+		first = fact.previous
+	end
+	if disjunction
+		return checked_condition_value(result, -1, combined)
+	end
+	return checked_condition_value(result, combined, -1)
+end
+
 # Conditional assignments invalidate the parent's earlier facts; their precise
 # path-local value types do not escape a branch which may not execute.
 def nullable_finish(mut locals: CheckedLocals, parent: Integer, first: Integer, count: Integer)

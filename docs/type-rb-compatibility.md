@@ -57,8 +57,13 @@ Web Request/Response values, middleware composition, CORS and secure headers use
 the unchanged package bodies. Their internal
 `Runtime.fail<T>` service is bound by loader ownership to a verified MIR
 signature and the checked REPL evaluator. Authored source names and import paths
-cannot grant internal access. Source admission does not imply generated Web
-provider support: typed codecs, Context binding/state, routes and networking
+cannot grant internal access. Loader-owned providers specialize `Context#params<T>`
+and `Request#query<T>` for admitted record schemas through ordinary checked TypeRB
+bodies. Scalar values, string-backed enums, nullable fields and query Arrays
+(at most one non-nullable Array field) preserve the pinned errors and field identities. Integer-backed enums and
+multiple non-nullable Array fields await the cross-mode decision in
+[#1175](https://github.com/type-rb/type-rb-native/issues/1175). Time-valued parameters,
+typed JSON codecs, combined input binding, Context state, routes and networking
 remain incomplete. Packages requiring other unimplemented platform or semantic
 providers fail explicitly. The frozen import scenarios remain tracked in
 [#674](https://github.com/type-rb/type-rb-native/issues/674).

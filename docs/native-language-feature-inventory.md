@@ -35,8 +35,9 @@ Each count describes registered probes, not language coverage percentages.
 | Project imports and declaration identity | basic | 1 / 83 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
 | Target source interop | toolchain | 0 / 0 | Go/Ruby/TypeScript source emission and platform interop | NativeStatement, NativeBlock, NativeExpression |
 | Portable HTTP values | packages | 0 / 29 | Networking, streaming, transport adapters and Web semantic/type providers |  |
-| Web values and middleware | packages | 0 / 31 | Generated Context state and bindings, typed JSON codecs, file routes and server lifecycle |  |
+| Web values and middleware | packages | 0 / 31 | Generated Context state, typed JSON codecs, combined input binding, file routes and server lifecycle |  |
 | JSX and web bindings | packages | 0 / 0 | Typed JSX and official web-package boundaries | JSXElement |
 | Package capability activation | packages | 0 / 0 | Package-owned activation and resolution | ActivateStatement |
 | Retired authored attempt syntax | retired | 0 / 0 | none registered | AttemptExpression |
 | JSON values and comments | packages | 0 / 33 | Typed record codecs, wire attributes and date/time codecs; Deterministic precedence for multiple invalid object members requires the decision in #1138 |  |
+| Typed Web path and query records | packages | 3 / 44 | Integer-backed raw enums and multiple non-nullable Array fields await a cross-mode reference decision (#1175); Date/time parameter values, typed JSON and combined endpoint input binding |  |
