@@ -1,5 +1,5 @@
 import { load_standard_source, standard_source_kind } from project/standard_library
-import { standard_source_function, standard_source_internal_json, standard_source_json, standard_source_jsonc } from state/standard_source_kinds
+import { standard_source_function, standard_source_internal_json, standard_source_internal_runtime, standard_source_json, standard_source_jsonc } from state/standard_source_kinds
 import { add_module, compiler_new, has_diagnostic } from state/state
 import { load_integer, load_string, store_integer } from support/storage
 import { describe, expect, test } from trb/std/test
@@ -63,5 +63,41 @@ describe("Owned standard JSON sources") do
 		expect(standard_source_function(standard_source_jsonc(), "::stringify")).to_be_false()
 		expect(standard_source_function(standard_source_internal_json(), "::_serialize")).to_be_false()
 		expect(standard_source_function(0, "::parse")).to_be_false()
+	end
+end
+
+describe("Owned standard runtime declaration") do
+	test("authorizes Web and middleware before consulting a loaded runtime declaration") do
+		mut state := compiler_new(1048576)
+		web := add_module(state, "trb/web/index", "<trb/web/index>")
+		store_integer(state.standard_modules, web, standard_source_kind("trb/web"))
+		state.module_graph.active_module[0] = web
+		runtime := load_standard_source(state, standard_source_internal_runtime(), 1)
+		expect(runtime >= 0).to_be_true()
+		expect(has_diagnostic(state)).to_be_false()
+		expect(load_string(state.module_graph.module_names, runtime)).to_equal("trb/internal/runtime/index")
+		expect(load_standard_source(state, standard_source_internal_runtime(), 2)).to_equal(runtime)
+		middleware := add_module(state, "trb/web/middleware/index", "<trb/web/middleware/index>")
+		store_integer(state.standard_modules, middleware, standard_source_kind("trb/web/middleware"))
+		state.module_graph.active_module[0] = middleware
+		expect(load_standard_source(state, standard_source_internal_runtime(), 2)).to_equal(runtime)
+		authored := add_module(state, "application", "application.trb")
+		state.module_graph.active_module[0] = authored
+		expect(load_standard_source(state, standard_source_internal_runtime(), 3)).to_equal(-1)
+		expect(has_diagnostic(state)).to_be_true()
+		expect(load_integer(state.diagnostics.lines, 0)).to_equal(3)
+	end
+
+	test("rejects forged paths and unrelated trusted owners") do
+		[0, standard_source_json(), standard_source_kind("trb/http")].each do |kind|
+			mut state := compiler_new(1048576)
+			owner := add_module(state, "trb/web/index", "<trb/web/index>")
+			store_integer(state.standard_modules, owner, kind)
+			state.module_graph.active_module[0] = owner
+			expect(load_standard_source(state, standard_source_internal_runtime(), 7)).to_equal(-1)
+			expect(has_diagnostic(state)).to_be_true()
+		end
+		expect(standard_source_function(standard_source_internal_runtime(), "::fail")).to_be_true()
+		expect(standard_source_function(standard_source_internal_runtime(), "::other")).to_be_false()
 	end
 end

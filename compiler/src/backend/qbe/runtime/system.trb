@@ -36,6 +36,10 @@ end
 # allocating after string_alloc. The allocator initializes their two header words
 # but leaves byte storage unwritten; all other managed payloads are zeroed.
 def emit_qbe_runtime_selected(mut output: QbeOutput, project_runtime: Boolean, needs: QbeRuntimeNeeds)
+	# Runtime.fail never returns. Its String operand has already been evaluated
+	# and rooted by verified MIR; reporting cannot allocate or run a collector.
+	qbe_output_line(output, "data $trbn_runtime_fail_prefix = { b \"panic: \" }")
+	qbe_output_line(output, "function $trbn_runtime_fail(l %message) {\n@start\n\t%length_address =l add %message, 8\n\t%length =l loadl %length_address\n\t%data =l add %message, 24\n\tcall $write(w 2, l $trbn_runtime_fail_prefix, l 7)\n\tcall $write(w 2, l %data, l %length)\n\tcall $write(w 2, l $trbn_newline, l 1)\n\tcall $exit(w 2)\n\thlt\n}\n")
 	qbe_output_line(output, "data $trbn_clamp_error = { b \"panic: clamp minimum exceeds maximum\", b 10 }")
 	qbe_output_line(output, "data $trbn_slice_size_error = { b \"panic: each_slice size must be greater than zero\", b 10 }")
 	# Indexed ASCII characters use fixed static String slots in the single-mutator runtime.

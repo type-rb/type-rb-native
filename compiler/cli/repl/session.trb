@@ -20,7 +20,7 @@ import { compiler_read_source, compiler_file_exists } from compiler
 import { compiler_source_slice } from frontend/syntax/lexer
 import { path_directory, path_join, string_starts_with } from support/path
 import { native_cli_line, native_cli_eof, native_cli_tty, native_cli_write, native_cli_interrupt, native_cli_env, native_cli_mkdir } from host
-import { ReplStore, ReplEnvironment, repl_store, repl_environment, repl_type, repl_type_in, repl_activate, repl_global_key } from repl/model
+import { repl_failed, ReplStore, ReplEnvironment, repl_store, repl_environment, repl_type, repl_type_in, repl_activate, repl_global_key } from repl/model
 import { repl_binding_value, repl_render, repl_compact } from repl/values
 import { repl_statement } from repl/eval
 import { integer_string } from support/literals
@@ -115,6 +115,7 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 		return false
 	end
 	session.store.error[0] = ""
+	session.store.failed[0] = false
 	previous_count := session.environment.count[0]
 	mut flow := [repl_flow_normal()]
 	mut value := 0
@@ -139,19 +140,19 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 		if load_integer(state.source_tokens.token_lines, position[0]) >= finish_line
 			evaluating = false
 		end
-		if session.store.error[0] != ""
+		if repl_failed(session.store)
 			evaluating = false
 		end
 		if flow[repl_flow_kind_slot()] != repl_flow_normal()
 			evaluating = false
 		end
 	end
-	if session.store.error[0] != ""
+	if repl_failed(session.store)
 		session.environment.count[0] = previous_count
 	end
 	session.text[1] = repl_binding_witnesses(state, session.store, session.environment)
 	session.text[2] = repl_binding_witnesses(state, session.store, session.environment, true)
-	if session.store.error[0] != "" || flow[repl_flow_kind_slot()] != repl_flow_normal()
+	if repl_failed(session.store) || flow[repl_flow_kind_slot()] != repl_flow_normal()
 		session.facts[0] = []
 		if !repl_reset_at(session.resets, session.submissions.size())
 			session.resets.push(session.submissions.size())
@@ -159,7 +160,7 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 	else
 		session.facts[0] = state.submissions[0].after
 	end
-	if session.store.error[0] != ""
+	if repl_failed(session.store)
 		mut message := session.store.error[0]
 		if string_starts_with(message, "panic: ")
 			message = compiler_source_slice(message, 7, message.size())

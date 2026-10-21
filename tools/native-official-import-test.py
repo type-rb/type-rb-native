@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise embedded official sources through ordinary file/project/REPL imports."""
 import argparse
+from compiler_sources import stage_sources
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,7 @@ parser.add_argument('--reference', type=Path)
 args = parser.parse_args()
 binary = args.binary.resolve()
 reference = args.reference.resolve() if args.reference else None
+repository = Path(__file__).resolve().parent.parent
 source = '''import { Headers as HeaderMap, HttpMethod, Body } from trb/http
 def probe()
 puts(HeaderMap.new().size())
@@ -66,6 +68,195 @@ with tempfile.TemporaryDirectory(prefix='native-official-import-') as temporary:
     retained = run([binary, 'repl'], data=declarations + 'probe()\nclass Later\nend\nprobe()\n:quit\n')
     assert not retained.stderr and retained.stdout == expected * 2, retained
 
+    # The complete Web source and the internal failure service are canonical,
+    # even when authored files attempt to shadow their package spelling.
+    web = root / 'web values'
+    web.mkdir()
+    (web / 'trb/web').mkdir(parents=True)
+    (web / 'trb/web/index.trb').write_text('this is not a valid replacement\n')
+    (web / 'producer.trb').write_text('import { Response, ContextKey } from trb/web\n'
+        'def make_response(): Response\nreturn Response.text("kept", 202)\nend\n'
+        'def make_key(): ContextKey<String>\nreturn ContextKey<String>.new("held")\nend\n')
+    web_source = ('import { Response as Reply, ContextKey } from trb/web\n'
+        'import { make_response, make_key } from producer\n'
+        'def probe_web()\nresponse: Reply := make_response()\n'
+        'key: ContextKey<String> := make_key()\nputs(response.status)\n'
+        'puts(response.body.to_s())\nputs(key.name)\nend\n'
+        'def main()\nprobe_web()\nend\n')
+    web_main = web / 'main.trb'
+    web_main.write_text(web_source)
+    assert run([binary, 'check', web_main]).stdout == 'ok\n'
+    run([binary, 'build', '--compile', web_main, '--outfile', program])
+    assert run([program]).stdout == '202\nkept\nheld\n'
+    # Retained values must keep the official owner across later homonyms and
+    # another checked submission, without replaying their construction.
+    retained_web = ('import { make_response, make_key } from producer\n'
+        'response := make_response()\nkey := make_key()\n'
+        'class Response\ndef status(): Integer\nreturn 99\nend\nend\n'
+        'class ContextKey<T>\nreadonly @name: String\n'
+        'def initialize(name: String)\n@name = name\nend\nend\n'
+        'puts(response.status)\nputs(response.body.to_s())\nputs(key.name)\n'
+        'class Later\nend\nputs(response.status)\nputs(key.name)\n:quit\n')
+    web_main.unlink()
+    retained_config = web / 'trbconfig.jsonc'
+    retained_config.write_text(json.dumps({'name': 'web-values', 'mode': 'trb', 'sourceDir': '.'}))
+    # The authored shadow is unreachable in file mode. Do not include it in a
+    # project-wide declaration scan, which intentionally checks every module.
+    (web / 'trb/web/index.trb').unlink()
+    observed_web = run([binary, 'repl', '--config', retained_config], data=retained_web)
+    assert not observed_web.stderr, observed_web
+    assert observed_web.stdout.endswith('202\nkept\nheld\n202\nheld\n'), observed_web
+    web_main.write_text(web_source)
+    if reference:
+        reference_web_config = web / 'reference.trbconfig.jsonc'
+        reference_web_config.write_text(json.dumps({'name': 'web-values', 'mode': 'go',
+            'sourceDir': '.', 'go': {'module': 'example.com/web-values'}}))
+        run([reference, 'check', '--config', reference_web_config])
+        run([reference, 'build', '--compile', '--config', reference_web_config, '--outfile', program])
+        assert run([program]).stdout == '202\nkept\nheld\n'
+
+    # Collect at managed allocation boundaries while Request/Response updates
+    # retain prior bodies, headers and cookie records across ordinary calls.
+    lifetime = web / 'lifetime.trb'
+    lifetime.write_text('''import { Request, Response, ResponseCookie } from trb/web
+import { Body, Header, Headers, HttpMethod } from trb/http
+def exercise(index: Integer): String
+value := "payload-" + index.to_s()
+request := Request.new(method: HttpMethod.post(), path: "/probe", query_string: "", headers: Headers.new([Header.new(name: "x-id", value: index.to_s())]), body: Body.new(value.to_bytes()))
+changed := request.with_header("x-id", "kept").add_header("extra", "value")
+response := Response.text(changed.bytes().to_s()).set_cookie(ResponseCookie.new(name: "id", value: index.to_s())).vary("Origin")
+return response.body.to_s() + ":" + request.header_values("x-id").join(",") + ":" + changed.header_values("x-id").join(",")
+end
+def main()
+(0...30).each do |index|
+puts(exercise(index))
+end
+end
+''')
+    emitted = run([binary, '--internal-driver', 'emit-qbe', lifetime])
+    assert not emitted.stderr, emitted
+    forced, ordinary, hooks = [], False, 0
+    for line in emitted.stdout.splitlines():
+        if line.startswith('function '):
+            ordinary = '$trbnf' in line
+        if line == '}':
+            ordinary = False
+        if ordinary and any(marker in line for marker in (
+                'call $trbn_array_new(', 'call $trbn_array_new_reserved(',
+                'call $trbn_array_push_', 'call $trbn_array_grow_paced(',
+                'call $trbn_gc_alloc(', 'call $trbn_string_concat(')):
+            forced.append('\tcall $trbn_gc_collect(w 0)')
+            hooks += 1
+        forced.append(line)
+    assert hooks >= 4, hooks
+    il, assembly = web / 'lifetime.ssa', web / 'lifetime.s'
+    il.write_text('\n'.join(forced) + '\n')
+    run([binary.with_name('qbe'), '-o', assembly, il])
+    run(['/usr/bin/cc', assembly, '-lm', '-o', program])
+    collected = subprocess.run([str(program)], cwd=root, text=True, capture_output=True,
+        env=dict(environment, TYPE_RB_NATIVE_RUNTIME_STATS='1'), timeout=90)
+    assert collected.returncode == 0, collected
+    assert collected.stdout == ''.join(f'payload-{index}:{index}:kept\n' for index in range(30)), collected
+    statistics = {}
+    for line in collected.stderr.splitlines():
+        prefix, key, value = line.split(',')
+        assert prefix == 'type-rb-native-gc-stat-v1' and key not in statistics, line
+        statistics[key] = int(value)
+    assert statistics['collections'] >= 30, statistics
+    assert statistics['live-bytes'] == 0, statistics
+    assert statistics['allocated-bytes'] == statistics['reclaimed-bytes'], statistics
+
+    # Exercise the checked intrinsic in the Native-built REPL evaluator with
+    # messages unavailable through the pinned public package's fixed failures.
+    # The fixture grants loader ownership explicitly; authored imports above
+    # remain forbidden, including after a trusted source has been loaded.
+    probe_root = root / 'runtime probe'
+    probe_root.mkdir()
+    stage_sources([repository / 'compiler/src', repository / 'compiler/cli'], probe_root)
+    probe = probe_root / 'runtime_probe.trb'
+    probe.write_text('''import { compiler_main as core_main, check, emit_qbe } from compiler
+import { compiler_new } from state/state
+import { lex } from frontend/syntax/lexer
+import { parse_module } from frontend/syntax/parser
+import { resolve } from frontend/checking/program/resolution
+import { official_source_kind } from project/official_catalog
+import { standard_runtime_fail } from frontend/resolution/standard_intrinsics
+import { load_string, store_integer } from support/storage
+import { repl_store, repl_string, repl_failed } from repl/model
+import { repl_call } from repl/eval
+
+def compiler_main(source: String, mode: String, file_mode: Boolean): Integer
+return core_main(source, mode, file_mode)
+end
+
+def native_cli_main(): Integer
+source := "import trb/internal/runtime\\ndef main()\\nRuntime.fail<Integer>(\\"\\")\\nend\\n"
+mut state := compiler_new(1048576)
+lex(state, source)
+store_integer(state.standard_modules, state.module_graph.entry_module[0], official_source_kind("trb/web"))
+parse_module(state, 0, state.module_graph.entry_module[0])
+if !resolve(state) || !check(state)
+puts("fixture check failed")
+puts(load_string(state.diagnostics.messages, 0))
+return 1
+end
+mut function := -1
+state.scalar_mir.signatures.each do |signature|
+if standard_runtime_fail(state, signature.id)
+function = signature.id
+end
+end
+if function < 0
+puts("fixture has no intrinsic")
+return 1
+end
+mut store := repl_store()
+repl_call(state, function, [repl_string(store, "")], store)
+puts(repl_failed(store))
+puts(store.error[0].size())
+store.error[0] = ""
+store.failed[0] = false
+message := "message-with-" + "NUL\\x00-tail"
+repl_call(state, function, [repl_string(store, message)], store)
+puts(repl_failed(store))
+puts(store.error[0] == message)
+repl_call(state, function, [repl_string(store, "replacement")], store)
+puts(store.error[0] == message)
+source_with_message := "import trb/internal/runtime\\ndef message(): String\\nputs(\\"before\\")\\nreturn \\"NUL\\\\x00tail\\" + 7.to_s()\\nend\\ndef main()\\nRuntime.fail<Float>(message())\\nputs(\\"after\\")\\nend\\n"
+mut ordinary := compiler_new(1048576)
+lex(ordinary, source_with_message)
+store_integer(ordinary.standard_modules, ordinary.module_graph.entry_module[0], official_source_kind("trb/web"))
+parse_module(ordinary, 0, ordinary.module_graph.entry_module[0])
+if !resolve(ordinary) || !check(ordinary)
+puts("ordinary fixture check failed")
+puts(load_string(ordinary.diagnostics.messages, 0))
+return 1
+end
+puts("runtime-qbe-begin")
+output := emit_qbe(ordinary)
+(0...output.lines.used[0]).each do |index|
+puts(load_string(output.lines, index))
+end
+return 0
+end
+
+def main()
+native_cli_main()
+end
+''')
+    run([binary, 'build', '--compile', probe, '--outfile', program])
+    probe_output = run([program]).stdout
+    assert 'runtime-qbe-begin\n' in probe_output, probe_output
+    checks, runtime_qbe = probe_output.split('runtime-qbe-begin\n')
+    assert checks == 'true\n0\ntrue\ntrue\ntrue\n', checks
+    runtime_il, runtime_assembly = probe_root / 'runtime.ssa', probe_root / 'runtime.s'
+    runtime_il.write_text(runtime_qbe)
+    run([binary.with_name('qbe'), '-o', runtime_assembly, runtime_il])
+    run(['/usr/bin/cc', runtime_assembly, '-lm', '-o', program])
+    failure = run([program], success=False)
+    assert failure.returncode == 2 and failure.stdout == 'before\n', failure
+    assert failure.stderr == 'panic: NUL\x00tail7\n', failure
+
     # Independent importers keep the same nominal identity.
     (file_root / 'helper.trb').write_text('import { Headers } from trb/http\n'
         'def identity(value: Headers): Headers\nreturn value\nend\n')
@@ -81,7 +272,7 @@ with tempfile.TemporaryDirectory(prefix='native-official-import-') as temporary:
         ('import trb/internal/runtime', 'package imports'),
         ('import trb/platform/typescript/browser', 'unimplemented platform or semantic provider'),
         ('import trb/platform/go/cli', 'unimplemented platform or semantic provider'),
-        ('import trb/web/middleware', 'unimplemented platform or semantic provider: trb/web/index'),
+        ('import trb/web/testing', 'unimplemented platform or semantic provider: trb/web/testing/index'),
     ]:
         main.write_text(imports + '\ndef main()\nreturn\nend\n')
         rejected = run([binary, 'check', main], success=False)

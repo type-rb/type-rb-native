@@ -219,6 +219,26 @@ class OfficialSourceTests(unittest.TestCase):
             changed = dict(files, **{'packages/trb/sample/trbpackage.json': json.dumps(manifest).encode()})
             self.assertNotIn('return true', bundle.catalog_source(changed).decode())
 
+    def test_web_value_source_admission_keeps_other_provider_boundaries(self):
+        manifest = {'name': 'trb/web', 'module': 'trb/web/index', 'source': 'src/index.trb',
+                    'semanticProvider': 'trb.web', 'typeProvider': 'trb.web',
+                    'projectProvider': 'trb.web.routes'}
+        raw = 'class Response\nend\n'
+        files = {'packages/trb/web/trbpackage.json': json.dumps(manifest).encode(),
+                 'packages/trb/web/src/index.trb': raw.encode(),
+                 **{'stdlib/' + name + '.go': (self.reference / source).read_bytes()
+                    for name, source in bundle.STDLIB_SOURCES.items()}}
+        catalog = bundle.catalog_source(files).decode()
+        self.assertIn('return true', catalog.split('def official_source_supported')[1])
+        encoded = catalog.split('def official_source_text')[1].split('return ', 1)[1].splitlines()[0]
+        self.assertEqual(json.loads(encoded), raw)
+        for key, value in [('name', 'trb/other'), ('kind', 'platform'),
+                           ('targets', ['typescript']), ('semanticProvider', 'unknown'),
+                           ('typeProvider', 'unknown'), ('projectProvider', 'unknown')]:
+            changed = dict(manifest, **{key: value})
+            candidate = dict(files, **{'packages/trb/web/trbpackage.json': json.dumps(changed).encode()})
+            self.assertNotIn('return true', bundle.catalog_source(candidate).decode())
+
 
 if __name__ == "__main__":
     unittest.main()
