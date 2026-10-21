@@ -17,6 +17,12 @@ export const roles = { 'pure-go': 'Pure Go', 'typerb-go': 'TypeRB Go' };
 export const positive = value => typeof value === 'number' && Number.isFinite(value) && value > 0;
 export const sameInput = (a, b) => a && b && ['id', 'workload', 'count', 'variant', 'batches', 'size'].every(key => a[key] === b[key]);
 
+export const invalidRss = snapshot => snapshot?.platform?.startsWith('Linux') && snapshot.environment?.peakRssMethod !== 'gnu-time-child-v1';
+export function metricValue(snapshot, row, role, metric) {
+  if (metric === 'peakRssBytes' && invalidRss(snapshot)) return undefined;
+  return row?.summaries[role]?.[metric];
+}
+
 export function resultFor(snapshot, input) {
   if (!sameInput(snapshot?.inputs.find(item => item.id === input.id), input)) return undefined;
   return snapshot.rows.find(row => row.case === input.id);
@@ -36,7 +42,7 @@ export function groupResults(cases, snapshot, role, metric) {
     const counts = { better: 0, worse: 0, neutral: 0, missing: 0 };
     for (const input of inputs) {
       const row = resultFor(snapshot, input);
-      counts[verdict(row?.summaries.native?.[metric], row?.summaries[role]?.[metric], metric).tone]++;
+      counts[verdict(metricValue(snapshot, row, 'native', metric), metricValue(snapshot, row, role, metric), metric).tone]++;
     }
     return { id, ...family, inputs, counts };
   });
