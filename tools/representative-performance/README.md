@@ -40,8 +40,13 @@ without warmup or repetition. Smoke wall times do not establish speed claims.
 
 Each binary is built once and reused for the entire matrix. Compilation has a
 120-second timeout per role; each application has a 30-second deadline and the
-runtime matrix has a 15-minute deadline. The runner supports Darwin and Linux
-with `wait4` CPU/RSS accounting. Run without other heavy work. `GOMAXPROCS=1`
+runtime matrix has a 15-minute deadline. Darwin uses `wait4` CPU/RSS accounting.
+Linux requires GNU time at `/usr/bin/time`: its small launcher collects the
+command's peak RSS, excluding the Python observer's inherited pre-exec memory.
+Process wall and `wait4` CPU include that launcher, so small-input measurements
+include its overhead. The manifest records the RSS method and tool identity;
+changing collection methods starts a separate source-qualified series. Run
+without other heavy work. `GOMAXPROCS=1`
 and disabled Native instrumentation apply to ordinary observations; record the
 machine and tool versions when interpreting local diagnostics. Controls are
 optional for correctness smoke; missing controls cannot receive a win.
@@ -78,7 +83,10 @@ service pause times still need the dedicated resource/load harnesses.
 ## CI
 
 The existing Native CLI job reuses its built CLI for `--smoke`, with a two-minute
-step deadline. Controller tests run in the existing tooling job. No additional
+step deadline. Controller tests run in the existing tooling job; the existing
+Linux CLI job also checks resource attribution against an inflated observer and
+a larger child allocation. This is a small correctness check, not a speed gate.
+No additional
 compiler bootstrap, comparative timing gate or scheduled matrix runs in PR CI.
 Changing the workload/controller still uses the planner's applicable authorities;
 this does not waive full validation for this change itself.
@@ -99,6 +107,9 @@ machine-local tool paths. It rejects smoke data, partial input selections, chang
 sources and missing comparison identities. A failed attempt retains partial
 observations and the previous complete snapshot. Pages displays failures and
 unmeasured inputs explicitly; it never imports these results into the daily score.
+Linux RSS observations without the corrected collector identity remain in raw
+evidence but are unavailable in Pages and text reports. Their other metrics
+remain visible.
 
 Raw evidence and state artifacts last 90 days. Compact state retains twelve
 complete snapshots and the latest attempt; Pages falls back to its previous

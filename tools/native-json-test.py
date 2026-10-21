@@ -167,6 +167,36 @@ def main()
     run([binary, 'build', '--compile', main, '--outfile', program])
     assert run([program]).stdout == '\n'.join(outputs) + '\n'
 
+    # Decode failures still report escaped JSON Pointer paths after successful
+    # traversal, including overwritten keys and nested array/object boundaries.
+    pointer_cases = [
+        ('9007199254740992', ''),
+        ('{"":9007199254740992}', '/'),
+        ('{"~/":[0,{"β😀/~/":9007199254740992}]}', '/~0~1/1/β😀~1~0~1'),
+        ('{"~1":9007199254740992}', '/~01'),
+        ('{"z":9007199254740992,"a/":9007199254740992}', '/a~1'),
+        ('{"a":9007199254740992,"a":1}', None),
+        ('{"a":1,"a":9007199254740992}', '/a'),
+        ('[0,{"/~":[0,9007199254740992]}]', '/1/~1~0/1'),
+    ]
+    pointer_source = declarations + '''
+def report_path(source: String)
+case JSON.parse(source)
+when Result::Ok(_value)
+puts("ok")
+when Result::Err(error)
+puts(error.path)
+puts(error.message)
+end
+end
+def main()
+''' + '\n'.join(f'report_path({json.dumps(text, ensure_ascii=False)})' for text, _ in pointer_cases) + '\nend\n'
+    main.write_text(pointer_source)
+    run([binary, 'build', '--compile', main, '--outfile', program])
+    pointer_output = ''.join('ok\n' if path is None else path + '\nJSON integer is outside the portable range\n'
+                             for _, path in pointer_cases)
+    assert run([program]).stdout == pointer_output
+
     for declarations in ('import trb/internal/json as Hidden\n',
                          'module JSON\nend\nimport trb/internal/json as Hidden\n'):
         main.write_text(declarations + 'def main()\nputs("unreachable")\nend\n')
