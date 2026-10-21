@@ -1,0 +1,142 @@
+import trb/std/encoding/base64 as PublicBase64
+import trb/std/result
+import trb/internal/encoding_bytes as Octets
+
+module Base64
+end
+
+def _encode(value: Bytes, url: Boolean): String
+	mut alphabet := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+	if url
+		alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	end
+	mut parts: Array<String> := []
+	mut index := 0
+	while index < value.size()
+		first := value.at(index)
+		mut second := 0
+		mut third := 0
+		if index + 1 < value.size()
+			second = value.at(index + 1)
+		end
+		if index + 2 < value.size()
+			third = value.at(index + 2)
+		end
+		parts.push(alphabet[first / 4])
+		parts.push(alphabet[(first % 4) * 16 + second / 16])
+		if index + 1 < value.size()
+			parts.push(alphabet[(second % 16) * 4 + third / 64])
+		elsif !url
+			parts.push("=")
+		end
+		if index + 2 < value.size()
+			parts.push(alphabet[third % 64])
+		elsif !url
+			parts.push("=")
+		end
+		index += 3
+	end
+	return parts.join("")
+end
+
+def encode(value: Bytes): String
+	return _encode(value, false)
+end
+
+def url_encode(value: Bytes): String
+	return _encode(value, true)
+end
+
+def _digit(point: Integer, url: Boolean): Integer
+	if point >= 65 && point <= 90
+		return point - 65
+	elsif point >= 97 && point <= 122
+		return point - 71
+	elsif point >= 48 && point <= 57
+		return point + 4
+	elsif(url && point == 45) || (!url && point == 43)
+		return 62
+	elsif(url && point == 95) || (!url && point == 47)
+		return 63
+	end
+	return -1
+end
+
+def _error(kind: PublicBase64::DecodeErrorKind, input: String, index: Integer, message: String): Result<Bytes, PublicBase64::DecodeError>
+	return Result<Bytes, PublicBase64::DecodeError>::Err(PublicBase64::DecodeError.new(kind: kind, input: input, index: index, message: message))
+end
+
+def _decode(value: String, url: Boolean): Result<Bytes, PublicBase64::DecodeError>
+	points := value.codepoints()
+	length := points.size()
+	if url && length % 4 == 1
+		return _error(PublicBase64::DecodeErrorKind::InvalidLength, value, length, "base64url input has invalid length")
+	elsif !url && length % 4 != 0
+		return _error(PublicBase64::DecodeErrorKind::InvalidLength, value, length, "base64 input length must be a multiple of 4")
+	end
+	mut padding := 0
+	mut digits: Array<Integer> := []
+	mut index := 0
+	while index < length
+		point := points[index]
+		if point == 61
+			if url
+				return _error(PublicBase64::DecodeErrorKind::InvalidPadding, value, index, "base64url input must not contain padding")
+			end
+			padding += 1
+			if index < length - 2 || padding > 2
+				return _error(PublicBase64::DecodeErrorKind::InvalidPadding, value, index, "invalid base64 padding")
+			end
+		else
+			if padding > 0
+				return _error(PublicBase64::DecodeErrorKind::InvalidPadding, value, index, "invalid base64 padding")
+			end
+			digit := _digit(point, url)
+			if digit < 0
+				mut message := "invalid base64 character"
+				if url
+					message = "invalid base64url character"
+				end
+				return _error(PublicBase64::DecodeErrorKind::InvalidCharacter, value, index, message)
+			end
+			digits.push(digit)
+		end
+		index += 1
+	end
+	# Strict decoding requires the unused low bits of the final digit to be zero.
+	count := digits.size()
+	mut noncanonical := false
+	if count % 4 == 2
+		noncanonical = digits[count - 1] % 16 != 0
+	elsif count % 4 == 3
+		noncanonical = digits[count - 1] % 4 != 0
+	end
+	if noncanonical
+		mut message := "non-canonical base64 encoding"
+		if url
+			message = "non-canonical base64url encoding"
+		end
+		return _error(PublicBase64::DecodeErrorKind::NonCanonical, value, count - 1, message)
+	end
+	mut parts: Array<String> := []
+	index = 0
+	while index < count
+		parts.push(Octets.octet(digits[index] * 4 + digits[index + 1] / 16))
+		if index + 2 < count
+			parts.push(Octets.octet((digits[index + 1] % 16) * 16 + digits[index + 2] / 4))
+		end
+		if index + 3 < count
+			parts.push(Octets.octet((digits[index + 2] % 4) * 64 + digits[index + 3]))
+		end
+		index += 4
+	end
+	return Result<Bytes, PublicBase64::DecodeError>::Ok(parts.join("").to_bytes())
+end
+
+def decode(value: String): Result<Bytes, PublicBase64::DecodeError>
+	return _decode(value, false)
+end
+
+def url_decode(value: String): Result<Bytes, PublicBase64::DecodeError>
+	return _decode(value, true)
+end

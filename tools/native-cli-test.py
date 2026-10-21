@@ -27,6 +27,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-json-codec-test.p
 subprocess.run([sys.executable, str(repository / "tools/native-web-input-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-time-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-web-context-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-encoding-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-repl-flow-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-enum-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-raw-enum-test.py"), str(binary)], check=True)

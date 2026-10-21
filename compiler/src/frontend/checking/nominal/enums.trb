@@ -1,3 +1,11 @@
+import { raw_enum_type } from frontend/types/raw_enum_types
+import { enum_payloadless } from frontend/types/enum_types
+import { checked_category_value } from frontend/types/value_categories
+import { checked_value, scalar_mir_literal } from frontend/checking/body/values
+import { mir_control_active, mir_control_branch, mir_control_enter, mir_control_prepare } from mir/build/control
+import { mir_value_complete, mir_value_exit, mir_value_join } from mir/build/value_control
+import { mir_op_enum_test } from mir/model/instructions
+import { integer_string } from support/literals
 import { binding_use_pattern } from state/binding_kinds
 import { mir_op_enum_field } from mir/model/instructions
 import { alias_matches_type } from frontend/resolution/alias_patterns
@@ -144,4 +152,40 @@ def check_enum_bindings(mut state: CompilerState, mut locals: CheckedLocals, sel
 		nullable_replace(locals, index, type_name)
 		slot += 1
 	end
+end
+
+# Plain payloadless enums print their declaration ordinal in compiled reference
+# output. Decide that semantic projection here, using existing verified enum
+# tests and scalar joins; the backend never infers declaration order.
+def checked_enum_puts(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, origin: Integer): CheckedValue
+	owner := find_enum_type(state, value.type_name)
+	if owner < 0
+		return value
+	end
+	if !enum_payloadless(state, owner) || raw_enum_type(state, owner) != ""
+		return value
+	end
+	mir_control_prepare(state, locals)
+	if !mir_control_active(locals)
+		return checked_value("Integer", checked_category_value(), origin, 0)
+	end
+	line := load_integer(state.source_tokens.token_lines, origin)
+	mut join := mir_value_join(locals, line)
+	definition := state.nominal.enums[owner]
+	mut variant := definition.variant_start
+	finish := variant + definition.variant_count
+	while variant < finish
+		mut alternate := -1
+		if variant + 1 < finish
+			condition := mir_enum_operation(state, locals, mir_op_enum_test(), value, -1, variant, "Boolean", origin)
+			alternate = mir_control_branch(state, locals, condition, line)
+		end
+		literal := scalar_mir_literal(state, locals, "Integer", origin, integer_string(variant - definition.variant_start))
+		mir_value_exit(state, locals, join, literal)
+		if alternate >= 0
+			mir_control_enter(state, locals, alternate, line)
+		end
+		variant += 1
+	end
+	return mir_value_complete(state, locals, join, "Integer", origin)
 end

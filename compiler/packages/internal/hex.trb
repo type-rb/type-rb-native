@@ -1,0 +1,53 @@
+import trb/std/encoding/hex as PublicHex
+import trb/std/result
+import trb/internal/encoding_bytes as Octets
+
+module Hex
+end
+
+def encode(value: Bytes): String
+	mut parts: Array<String> := []
+	mut index := 0
+	while index < value.size()
+		octet := value.at(index)
+		parts.push("0123456789abcdef"[octet / 16])
+		parts.push("0123456789abcdef"[octet % 16])
+		index += 1
+	end
+	return parts.join("")
+end
+
+def _digit(point: Integer): Integer
+	if point >= 48 && point <= 57
+		return point - 48
+	elsif point >= 65 && point <= 70
+		return point - 55
+	elsif point >= 97 && point <= 102
+		return point - 87
+	end
+	return -1
+end
+
+def decode(value: String): Result<Bytes, PublicHex::DecodeError>
+	points := value.codepoints()
+	mut digits: Array<Integer> := []
+	mut index := 0
+	while index < points.size()
+		digit := _digit(points[index])
+		if digit < 0
+			return Result<Bytes, PublicHex::DecodeError>::Err(PublicHex::DecodeError.new(kind: PublicHex::DecodeErrorKind::InvalidCharacter, input: value, index: index, message: "invalid hexadecimal character"))
+		end
+		digits.push(digit)
+		index += 1
+	end
+	if digits.size() % 2 != 0
+		return Result<Bytes, PublicHex::DecodeError>::Err(PublicHex::DecodeError.new(kind: PublicHex::DecodeErrorKind::OddLength, input: value, index: digits.size(), message: "hex input has odd length"))
+	end
+	mut parts: Array<String> := []
+	index = 0
+	while index < digits.size()
+		parts.push(Octets.octet(digits[index] * 16 + digits[index + 1]))
+		index += 2
+	end
+	return Result<Bytes, PublicHex::DecodeError>::Ok(parts.join("").to_bytes())
+end

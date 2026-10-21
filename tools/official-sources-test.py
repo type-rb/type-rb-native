@@ -37,7 +37,7 @@ class OfficialSourceTests(unittest.TestCase):
         adapter = self.root / bundle.URL_ADAPTER
         adapter.parent.mkdir(parents=True, exist_ok=True)
         adapter.write_text("module URL\nend\n")
-        for name in ("json", "jsonc", "time"):
+        for name in (name for name in bundle.STDLIB_SOURCES if name != "url"):
             source = self.reference / bundle.STDLIB_SOURCES[name]
             source.write_text('package stdlib\n\nfunc ' + name + 'Source() string {\n\treturn `module ' + name.upper() + '\nend\n`\n}\n')
         (self.root / bundle.JSON_ADAPTER).write_text("module JSON\nend\n")
@@ -57,8 +57,8 @@ class OfficialSourceTests(unittest.TestCase):
     def test_exact_bytes_and_deterministic_sync(self):
         first = bundle.bundle_files(self.root)
         self.assertEqual(self.vendored.read_bytes(), self.source.read_bytes())
-        self.assertEqual(bundle.check(self.root, self.reference), 7)
-        self.assertEqual(bundle.sync(self.root, self.reference), 7)
+        self.assertEqual(bundle.check(self.root, self.reference), 3 + len(bundle.STDLIB_SOURCES))
+        self.assertEqual(bundle.sync(self.root, self.reference), 3 + len(bundle.STDLIB_SOURCES))
         self.assertEqual(first, bundle.bundle_files(self.root))
         self.assertEqual(self.git("status", "--porcelain"), "")
 
@@ -177,8 +177,8 @@ class OfficialSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(bundle.ValidationError, "unrecognized"):
             bundle.pinned_url_source(b"package stdlib\nfunc urlSource() string { return injected() }\n")
 
-    def test_json_sources_and_adapter_keep_exact_provenance(self):
-        for name in ("json", "jsonc", "time"):
+    def test_standard_sources_and_adapter_keep_exact_provenance(self):
+        for name in (name for name in bundle.STDLIB_SOURCES if name != "url"):
             path = self.root / bundle.BUNDLE / ("stdlib/" + name + ".go")
             self.assertEqual(bundle.pinned_standard_source(path.read_bytes(), name), "module " + name.upper() + "\nend\n")
             path.write_bytes(path.read_bytes().replace(b"module", b"changed"))
