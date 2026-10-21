@@ -10,7 +10,7 @@ Each count describes registered probes, not language coverage percentages.
 | Numeric and Boolean operations | basic | 1 / 50 | Remaining operators and assignment forms; mixed widening and portable failure boundaries; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
 | Bindings, constants and mutation | basic | 5 / 163 | Remaining collection-inference combinations; qualified namespace binding members (TypeRB #787) | VariableStatement, AssignmentStatement |
 | Function declarations and calls | basic | 0 / 49 | none registered | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
-| Defaults and named arguments | basic | 0 / 25 | Method, function-value and payload-enum argument parity |  |
+| Defaults and named arguments | basic | 0 / 49 | Imported method-default shadowing across execution modes (reference inconsistency); Remaining payload-enum parameter combinations |  |
 | Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
 | Loop control and transfers | basic | 0 / 10 | Additional nested transfer and diagnostic-origin differential probes | WhileStatement, BreakStatement, NextStatement |
 | Case statements and expressions | basic | 0 / 16 | none registered | CaseStatement |
@@ -22,7 +22,7 @@ Each count describes registered probes, not language coverage percentages.
 | Nominal newtypes | basic | 1 / 83 | Class/interface representation dependencies; Method-specific generic parameters with the remaining callable/generic family | NewtypeStatement |
 | Generic declarations and applications | basic | 0 / 135 | Remaining method-specific generic combinations and deferred generic class methods; Wider constraints and type applications | GenericExpression |
 | Union values, literal types and discriminated unions | basic | 10 / 218 | Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference |  |
-| Function values and lexical capture | basic | 0 / 109 | Method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
+| Function values and lexical capture | basic | 0 / 116 | Method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
 | Arrays and checked indexes | basic | 11 / 324 | Remaining receiver and inference combinations; unguarded nullable indexing (issue #1120); Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
 | Hash values and operations | basic | 12 / 69 | Wider key/value representations, dynamic Any operations, remaining inference combinations and managed lifetimes; nullable Hash reference Go lowering and unguarded indexing (issue #1120) | HashLiteral |
 | Structured and value-producing iteration | basic | 0 / 176 | Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
