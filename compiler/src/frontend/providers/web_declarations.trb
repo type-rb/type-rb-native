@@ -22,6 +22,11 @@ def declare_web_bindings(mut state: CompilerState, source: Integer)
 			definition := state.type_resolution.generic_functions.size()
 			state.type_resolution.generic_functions.push(GenericFunction.new(receiver_type: row.name, name: row.name + "::" + name, source_id: source, line: row.line, type_parameters: ["T"], parameters: [parameter], result_type: "Result<T,ParameterError>", body_start: row.origin, body_finish: row.origin))
 			state.nominal.objects[owner].methods.push(ObjectMethod.new(name: name, class_member: false, origin: row.origin, function: -1, generic_function: definition))
+			if row.name == "Context"
+				binding := state.type_resolution.generic_functions.size()
+				state.type_resolution.generic_functions.push(GenericFunction.new(receiver_type: row.name, name: "Context::bind", source_id: source, line: row.line, type_parameters: ["T"], parameters: [parameter], result_type: "Result<T,EndpointInputError>", body_start: row.origin, body_finish: row.origin))
+				state.nominal.objects[owner].methods.push(ObjectMethod.new(name: "bind", class_member: false, origin: row.origin, function: -1, generic_function: binding))
+			end
 		end
 		owner += 1
 	end
@@ -33,7 +38,7 @@ def web_binding_kind(state: CompilerState, definition: Integer): Integer
 		return 0
 	end
 	row := state.type_resolution.generic_functions[definition]
-	if sparse_integer_at(state.standard_modules, row.source_id) != official_source_kind("trb/web") || row.type_parameters.size() != 1 || row.type_parameters[0] != "T" || row.parameters.size() != 1 || row.result_type != "Result<T,ParameterError>" || row.body_start != row.body_finish
+	if sparse_integer_at(state.standard_modules, row.source_id) != official_source_kind("trb/web") || row.type_parameters.size() != 1 || row.type_parameters[0] != "T" || row.parameters.size() != 1 || row.body_start != row.body_finish
 		return 0
 	end
 	owner := object_method_owner(state, definition)
@@ -45,11 +50,14 @@ def web_binding_kind(state: CompilerState, definition: Integer): Integer
 	if object.source_id != row.source_id || object.interface_type || object.parameters.size() != 0 || row.receiver_type != object.name || parameter.name != "self" || parameter.type_name != object.name || parameter.mutable != 0 || parameter.named_only != 0 || parameter.default_start >= 0
 		return 0
 	end
-	if object.name == "Request" && row.name == "Request::query"
+	if object.name == "Request" && row.name == "Request::query" && row.result_type == "Result<T,ParameterError>"
 		return 1
 	end
-	if object.name == "Context" && row.name == "Context::params"
+	if object.name == "Context" && row.name == "Context::params" && row.result_type == "Result<T,ParameterError>"
 		return 2
+	end
+	if object.name == "Context" && row.name == "Context::bind" && row.result_type == "Result<T,EndpointInputError>"
+		return 3
 	end
 	return 0
 end

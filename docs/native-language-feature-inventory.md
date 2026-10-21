@@ -35,10 +35,11 @@ Each count describes registered probes, not language coverage percentages.
 | Project imports and declaration identity | basic | 1 / 83 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
 | Target source interop | toolchain | 0 / 0 | Go/Ruby/TypeScript source emission and platform interop | NativeStatement, NativeBlock, NativeExpression |
 | Portable HTTP values | packages | 0 / 29 | Networking, streaming, transport adapters and Web semantic/type providers |  |
-| Web values and middleware | packages | 0 / 31 | Generated Context state, combined input binding, file routes and server lifecycle |  |
+| Web values and middleware | packages | 0 / 31 | Generated Context state, file routes and server lifecycle |  |
 | JSX and web bindings | packages | 0 / 0 | Typed JSX and official web-package boundaries | JSXElement |
 | Package capability activation | packages | 0 / 0 | Package-owned activation and resolution | ActivateStatement |
 | Retired authored attempt syntax | retired | 0 / 0 | none registered | AttemptExpression |
 | JSON values and comments | packages | 0 / 33 | Date/time codecs and generic record schemas; Deterministic precedence for multiple invalid object members requires the decision in #1138 |  |
-| Typed Web path and query records | packages | 3 / 44 | Integer-backed raw enums and multiple non-nullable Array fields await a cross-mode reference decision (#1175); Date/time parameter values and combined endpoint input binding |  |
+| Typed Web path and query records | packages | 3 / 44 | Integer-backed raw enums and multiple non-nullable Array fields await a cross-mode reference decision (#1175); Date/time parameter values remain incomplete |  |
 | Typed JSON codecs and Web JSON | packages | 1 / 68 | Date/time and generic record schemas remain incomplete; recursive schemas and closed inbound newtypes retain the reference rejection; Response.json REPL invocation awaits the adapter decision in #1178; Non-finite JSON error message differs between compiled and REPL reference paths; #1179 owns the unresolved parity gap |  |
+| Combined Web endpoint inputs | packages | 1 / 55 | Renamed imported envelope records remain rejected pending canonical-identity decision #1183; Calling bind without a type argument is rejected; reference check-only acceptance differs and awaits #1184; Context state, endpoint contracts, file routes and HTTP server lifecycle remain incomplete |  |
