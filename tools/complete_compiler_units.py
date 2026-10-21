@@ -18,9 +18,25 @@ import tempfile
 import time
 
 
+# Start the measured long files before the ordinary alphabetical queue, so a
+# late source-loading suite does not leave the other worker idle. These are
+# scheduling hints only: discovery still includes every current test file.
+# Timing source: actions/runs/39569092444, compiler-units artifact.
+EARLY_TEST_FILES = (
+    "compiler/src/tests/compiler/source_loading_test.trb",
+    "compiler/src/backend/qbe/emit/constants_test.trb",
+    "compiler/src/mir/passes/optimize_test.trb",
+    "compiler/src/mir/analysis/numeric_selection_test.trb",
+)
+
+
 def test_files(root: Path) -> list[Path]:
     source = root / "compiler" / "src"
-    return sorted(path.resolve() for path in source.rglob("*_test.trb") if path.is_file())
+    priority = {name: index for index, name in enumerate(EARLY_TEST_FILES)}
+    return sorted(
+        (path.resolve() for path in source.rglob("*_test.trb") if path.is_file()),
+        key=lambda path: (priority.get(path.relative_to(root).as_posix(), len(priority)), path),
+    )
 
 
 def run_file(binary: Path, path: Path, root: Path, scratch: Path, timeout: int) -> dict:

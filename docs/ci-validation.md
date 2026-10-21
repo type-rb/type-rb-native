@@ -148,7 +148,9 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    matches the compiler tests' arm64_apple assembly and linker assumptions.
    It compiles the full test executable once, then runs every discovered test
    source with two bounded workers and isolated temporary directories. The
-   suites are split by their guarantees into colocated unit tests and feature
+   measured long-running files start first to avoid an idle worker at the end;
+   these scheduling hints never restrict discovery or skip renamed/new files.
+   The suites are split by their guarantees into colocated unit tests and feature
    or compiler system tests; each discovered source runs exactly once.
    Structured events must
    report every selected test passing, with no missing or duplicate identity.
