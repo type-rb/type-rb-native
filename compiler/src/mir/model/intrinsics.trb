@@ -1,4 +1,4 @@
-import { mir_adapter_argv, mir_adapter_collect_project_sources, mir_adapter_eputs, mir_adapter_file_exists, mir_adapter_host, mir_adapter_literal_byte, mir_adapter_none, mir_adapter_reset_temporary_storage, mir_adapter_runtime_fail, mir_adapter_source_is_utf8, mir_adapter_source_slice, mir_adapter_sqrt, mir_adapter_string_bytes, mir_signature_compiler_runtime, mir_signature_host, mir_signature_interface, mir_signature_ordinary, mir_signature_standard } from mir/model/call_kinds
+import { mir_adapter_argv, mir_adapter_collect_project_sources, mir_adapter_eputs, mir_adapter_file_exists, mir_adapter_host, mir_adapter_literal_byte, mir_adapter_none, mir_adapter_reset_temporary_storage, mir_adapter_runtime_fail, mir_adapter_source_is_utf8, mir_adapter_source_slice, mir_adapter_sqrt, mir_adapter_string_bytes, mir_adapter_time_clock, mir_adapter_time_zone_data, mir_signature_compiler_runtime, mir_signature_host, mir_signature_interface, mir_signature_ordinary, mir_signature_standard } from mir/model/call_kinds
 import { ascii_code, integer_string } from support/literals
 import { MirModule, MirSignature, mir_type_id } from mir/model/module
 import { mir_semantic_type_name, mir_semantic_value_type } from mir/model/types
@@ -27,6 +27,12 @@ def mir_call_symbol(signature: MirSignature): String
 		end
 		if signature.adapter == mir_adapter_runtime_fail()
 			return "trbn_runtime_fail"
+		end
+		if signature.adapter == mir_adapter_time_clock()
+			return "trbn_time_clock"
+		end
+		if signature.adapter == mir_adapter_time_zone_data()
+			return "trbn_time_zone_data"
 		end
 		return "sqrt"
 	end
@@ -116,6 +122,14 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 			if !valid || result == "Void" || result == "Address" || result == "Invalid"
 				return "MIR runtime failure result type is invalid"
 			end
+		elsif signature.adapter == mir_adapter_time_clock()
+			name = "trb/internal/time_host.clock"
+			parameters = ["Array<Integer>"]
+			result = "Boolean"
+		elsif signature.adapter == mir_adapter_time_zone_data()
+			name = "trb/internal/time_host.zone_data"
+			parameters = ["String"]
+			result = "String"
 		elsif signature.adapter != mir_adapter_argv()
 			return "MIR standard package adapter is invalid"
 		end
@@ -124,7 +138,11 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 		end
 		mut index := 0
 		while index < parameters.size()
-			if signature.parameter_types[index] != parameters[index] || signature.parameter_mutable[index] != 0
+			mut mutable := 0
+			if signature.adapter == mir_adapter_time_clock()
+				mutable = 1
+			end
+			if signature.parameter_types[index] != parameters[index] || signature.parameter_mutable[index] != mutable
 				return "MIR standard package parameter differs"
 			end
 			index += 1

@@ -1,3 +1,5 @@
+import { standard_time_host } from frontend/resolution/time_intrinsics
+import { native_cli_time_clock, native_cli_time_zone_data } from host
 import { standard_runtime_fail } from frontend/resolution/standard_intrinsics
 import { json_provider_function, json_provider_response } from frontend/providers/json_declarations
 import { repl_number, repl_binary_value } from repl/operators
@@ -75,6 +77,19 @@ import { repl_scalar_string, repl_binding_value, repl_assign_binding, repl_rende
 def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Integer>, mut store: ReplStore): Integer
 	if repl_failed(store)
 		return 0
+	end
+	time_host := standard_time_host(state, function)
+	if time_host == 1
+		mut parts := [0, 0]
+		ok := native_cli_time_clock(parts)
+		if ok
+			store.children[arguments[0]][0] = repl_integer(store, parts[0])
+			store.children[arguments[0]][1] = repl_integer(store, parts[1])
+		end
+		return repl_boolean(store, ok)
+	end
+	if time_host == 2
+		return repl_string(store, native_cli_time_zone_data(store.texts[arguments[0]]))
 	end
 	if standard_runtime_fail(state, function)
 		store.error[0] = store.texts[arguments[0]]

@@ -48,6 +48,13 @@ def json_codec_decode_body(schemas: Array<JsonCodecSchema>, index: Integer, valu
 	if row.kind == "record" && row.children.size() == 0
 		payload = "_" + payload
 	end
+	if row.kind == "time"
+		mut method := "try_parse"
+		if row.display == "TimeZone"
+			method = "try_get"
+		end
+		return "case " + value + "\nwhen JSON::Value::String(text" + id + ")\ncase " + node_type + "." + method + "(text" + id + ")\nwhen Result::Ok(parsed" + id + ")\nparsed" + id + "\nwhen Result::Err(_time_error" + id + ")\n" + json_codec_error(path, "invalid " + row.display) + "end\nelse\n" + json_codec_error(path, "expected String") + "end"
+	end
 	if row.kind == "nullable"
 		return "case " + value + "\nwhen JSON::Value::Null\nabsent" + id + ": " + node_type + " := nil\nabsent" + id + "\nelse\npresent" + id + ": " + node_type + " := " + json_codec_decode_body(schemas, row.children[0], value, path) + "\npresent" + id + "\nend"
 	end
@@ -118,6 +125,13 @@ end
 def json_codec_encode_body(schemas: Array<JsonCodecSchema>, index: Integer, value: String): String
 	row := schemas[index]
 	id := integer_string(index)
+	if row.kind == "time"
+		mut method := "to_s"
+		if row.display == "TimeZone"
+			method = "identifier"
+		end
+		return "JSON::Value::String(" + value + "." + method + "())"
+	end
 	if row.kind == "nullable"
 		return "if " + value + " == nil\nJSON::Value::Null\nelse\n" + json_codec_encode_body(schemas, row.children[0], value) + "\nend"
 	end

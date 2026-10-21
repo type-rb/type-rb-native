@@ -1,3 +1,4 @@
+import { time_codec_name } from frontend/providers/time_codecs
 import { TypeAlias } from frontend/types/alias_model
 import { find_enum_type } from frontend/types/enum_types
 import { nullable_element } from frontend/types/nullable_types
@@ -14,6 +15,7 @@ record WebParameterField
 	value_type: String
 	scalar_type: String
 	raw_type: String
+	time_type: String
 	nullable: Boolean
 	array: Boolean
 	expected: String
@@ -55,11 +57,11 @@ def web_parameter_fields(mut state: CompilerState, target: String, query: Boolea
 			diagnostic(state, "TRBN4003", line, "integer-backed enum parameters are not supported yet")
 			return fields
 		end
-		if scalar != "String" && scalar != "Boolean" && scalar != "Integer" && scalar != "Float" && raw == ""
+		if scalar != "String" && scalar != "Boolean" && scalar != "Integer" && scalar != "Float" && raw == "" && time_codec_name(state, scalar) == ""
 			diagnostic(state, "TRBN4003", line, "web parameter field " + name + " has unsupported type " + type_display(state, type_name))
 			return fields
 		end
-		fields.push(WebParameterField.new(name: name, value_type: value_type, scalar_type: scalar, raw_type: raw, nullable: optional != "", array: element != "", expected: type_display(state, scalar)))
+		fields.push(WebParameterField.new(name: name, value_type: value_type, scalar_type: scalar, raw_type: raw, time_type: time_codec_name(state, scalar), nullable: optional != "", array: element != "", expected: type_display(state, scalar)))
 		index += 1
 	end
 	if required_arrays > 1
@@ -92,6 +94,13 @@ def web_parameter_parse(field: WebParameterField, index: Integer, query: Boolean
 	end
 	mut body := ""
 	mut parsed := raw
+	if field.time_type != ""
+		mut method := "try_parse"
+		if field.time_type == "TimeZone"
+			method = "try_get"
+		end
+		return "case Scalar" + suffix + "." + method + "(" + raw + ")\nwhen Result::Ok(parsed" + suffix + ")\n" + prefix + "parsed" + suffix + suffix_text + "\nwhen Result::Err(_time_error" + suffix + ")\n" + invalid + "end\n"
+	end
 	if scalar == "Boolean"
 		body += "if " + raw + " != \"true\" && " + raw + " != \"false\"\n" + invalid + "end\n"
 		parsed = "(" + raw + " == \"true\")"

@@ -1,0 +1,32 @@
+import { mir_adapter_time_clock, mir_adapter_time_zone_data, mir_signature_standard } from mir/model/call_kinds
+import { MirModule } from mir/model/module
+import { QbeOutput, qbe_output_line } from backend/qbe/output
+
+# Supported profiles use the POSIX LP64 timespec and stdio ABI. These adapters
+# transfer clock values and bounded file bytes only; calendar/TZif semantics are
+# checked TypeRB library bodies. Neither adapter allocates after producing its
+# managed result, so the ordinary verified call root contract is sufficient.
+def emit_time_host_runtime(native_module: MirModule, mut output: QbeOutput)
+	mut clock := false
+	mut zone := false
+	if native_module.program.size() == 1 && native_module.program[0].cli_function >= 0
+		# The retained REPL uses the same mechanical adapters as compiled code.
+		clock = true
+		zone = true
+	end
+	native_module.signatures.each do |signature|
+		if signature.kind == mir_signature_standard()
+			if signature.adapter == mir_adapter_time_clock()
+				clock = true
+			elsif signature.adapter == mir_adapter_time_zone_data()
+				zone = true
+			end
+		end
+	end
+	if clock
+		qbe_output_line(output, "function l $trbn_time_clock(l %parts) {\n@start\n %length_address =l add %parts, 8\n %length =l loadl %length_address\n %valid =w ceql %length, 2\n jnz %valid, @read, @fail\n@read\n %timestamp =l alloc8 16\n %status =w call $clock_gettime(w 0, l %timestamp)\n %ok =w ceqw %status, 0\n jnz %ok, @copy, @fail\n@copy\n %seconds =l loadl %timestamp\n %nano_address =l add %timestamp, 8\n %nanos =l loadl %nano_address\n %data_address =l add %parts, 24\n %data =l loadl %data_address\n storel %seconds, %data\n %second =l add %data, 8\n storel %nanos, %second\n ret 1\n@fail\n ret 0\n}\n")
+	end
+	if zone
+		qbe_output_line(output, "data $trbn_time_empty = align 8 { l 0, l 0, l 0, b 0 }\ndata $trbn_time_read_mode = { b \"rb\", b 0 }\nfunction l $trbn_time_zone_data(l %path) {\n@start\n %path_data =l add %path, 24\n %file =l call $fopen(l %path_data, l $trbn_time_read_mode)\n %missing =w ceql %file, 0\n jnz %missing, @fail, @seek\n@seek\n %seek_status =w call $fseek(l %file, l 0, w 2)\n %seek_failed =w cnew %seek_status, 0\n jnz %seek_failed, @close, @length\n@length\n %length =l call $ftell(l %file)\n %negative =w csltl %length, 0\n %large =w csgtl %length, 1048576\n %invalid =w or %negative, %large\n jnz %invalid, @close, @rewind\n@rewind\n %rewind_status =w call $fseek(l %file, l 0, w 0)\n %rewind_failed =w cnew %rewind_status, 0\n jnz %rewind_failed, @close, @allocate\n@allocate\n %size =l add %length, 17\n %result =l call $trbn_string_alloc(l %size)\n %length_address =l add %result, 8\n storel %length, %length_address\n %count_address =l add %result, 16\n storel %length, %count_address\n %data =l add %result, 24\n %read =l call $fread(l %data, l 1, l %length, l %file)\n %close_status =w call $fclose(l %file)\n %short =w cnel %read, %length\n %close_failed =w cnew %close_status, 0\n %failed =w or %short, %close_failed\n jnz %failed, @fail, @done\n@done\n %end =l add %data, %length\n storeb 0, %end\n ret %result\n@close\n %ignored =w call $fclose(l %file)\n jmp @fail\n@fail\n ret $trbn_time_empty\n}\n")
+	end
+end

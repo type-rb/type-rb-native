@@ -42,7 +42,7 @@ release hook in the TypeRB repository.
 ## Bundled official sources
 
 [`vendor/type-rb/official`](../vendor/type-rb/official/provenance.json) retains the
-reference's complete `internal/official/packages` tree, the URL, JSON and JSONC
+reference's complete `internal/official/packages` tree, the URL, JSON, JSONC and time
 standard-library source wrappers and license unchanged.
 The provenance record identifies the repository, exact commit, source paths,
 byte lengths and SHA-256 hashes. A generated TypeRB catalog embeds these exact
@@ -51,8 +51,10 @@ modules through the same declaration graph without a repository or reference
 checkout at runtime. The complete portable HTTP, URL, Web value and portable
 middleware sources have ordinary import coverage. URL component encoding/decoding and ordered query operations
 use a Native-owned TypeRB adapter with the pinned nominal types and errors.
-JSON values and JSONC parsing use a Native-owned TypeRB adapter; typed record
-codecs remain incomplete.
+JSON values and JSONC parsing use a Native-owned TypeRB adapter. Typed JSON
+providers cover finite records, nullable values, containers, raw enums, newtypes
+and the six portable time value types. Generic and recursive record schemas
+remain incomplete or retain the pinned explicit rejection.
 Web Request/Response values, middleware composition, CORS and secure headers use
 the unchanged package bodies. Their internal
 `Runtime.fail<T>` service is bound by loader ownership to a verified MIR
@@ -62,11 +64,23 @@ and `Request#query<T>` for admitted record schemas through ordinary checked Type
 bodies. Scalar values, string-backed enums, nullable fields and query Arrays
 (at most one non-nullable Array field) preserve the pinned errors and field identities. Integer-backed enums and
 multiple non-nullable Array fields await the cross-mode decision in
-[#1175](https://github.com/type-rb/type-rb-native/issues/1175). Time-valued parameters,
-typed JSON codecs, combined input binding, Context state, routes and networking
-remain incomplete. Packages requiring other unimplemented platform or semantic
-providers fail explicitly. The frozen import scenarios remain tracked in
-[#674](https://github.com/type-rb/type-rb-native/issues/674).
+[#1175](https://github.com/type-rb/type-rb-native/issues/1175). Time-valued parameters
+and `Context#bind<T>` compose these providers with typed JSON body binding.
+Context state, routes and networking remain incomplete. Packages requiring other unimplemented platform or semantic
+providers fail explicitly. The shared ordinary-language registry records the delivered subsets and remaining
+import and codec gaps.
+
+The complete pinned time wrappers retain Date, TimeOfDay, DateTime, Instant,
+Duration and TimeZone declaration identities. Calendar arithmetic, ISO-shaped
+parsing, formatting, TZif decoding and local/UTC conversion are ordinary TypeRB.
+Two independently verified host adapters transfer wall-clock seconds/nanoseconds
+and bounded zone-file bytes; their [system dependencies](native-targets.md#time-services)
+remain explicit. JSON and Web codecs use the same value constructors and typed
+parsers. Reference range and execution-mode inconsistencies remain tracked in
+[#1187](https://github.com/type-rb/type-rb-native/issues/1187) and
+[#1188](https://github.com/type-rb/type-rb-native/issues/1188). Codec import-name
+restrictions remain under [#1189](https://github.com/type-rb/type-rb-native/issues/1189);
+retaining those gaps does not establish full time-service parity.
 
 After changing the reference pin, synchronize from a Git checkout containing
 that exact commit:
