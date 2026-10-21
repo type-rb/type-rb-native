@@ -148,7 +148,9 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    matches the compiler tests' arm64_apple assembly and linker assumptions.
    It compiles the full test executable once, then runs every discovered test
    source with two bounded workers and isolated temporary directories. The
-   suites are split by their guarantees into colocated unit tests and feature
+   measured long-running files start first to avoid an idle worker at the end;
+   these scheduling hints never restrict discovery or skip renamed/new files.
+   The suites are split by their guarantees into colocated unit tests and feature
    or compiler system tests; each discovered source runs exactly once.
    Structured events must
    report every selected test passing, with no missing or duplicate identity.
@@ -279,6 +281,11 @@ reordered or incomplete receipts reject an otherwise successful run. These are
 diagnostic phase durations, not controlled measurements.
 
 The B0-to-B3 recovery and B1-to-B4 ordinary generation chains stay sequential.
+B0 selects its bootstrap emitter before generating QBE; it does not first
+generate and discard ordinary managed output. Its emission, QBE and link
+durations are printed separately. Source-closure preparation validates every
+module path, creates the distinct parent directories in one command, then
+writes the sources only after directory creation succeeds.
 Independent generation commands and per-module boundary controls run with
 `TYPE_RB_NATIVE_RECOVERY_JOBS` concurrency (default `2`, accepted `1` to `4`;
 hosted CI uses `4`). Each module keeps its missing-module and malformed-module
