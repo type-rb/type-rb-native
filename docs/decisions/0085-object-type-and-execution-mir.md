@@ -72,6 +72,10 @@ stored values into the next check without calling their constructors again.
 Class/interface input framing, project imports and explicit replay use the same
 ordinary declaration and checking contracts.
 
+The [byte encoding and request ID implementation](../native-encodings.md) keeps
+encoding semantics in ordinary TypeRB bodies and gives the OS entropy bridge an
+owned signature with independently checked MIR effects and types.
+
 The [typed Web context implementation](../native-web-context.md) adds independently
 verified immutable class-copy and instance-identity operations. They preserve
 the initialization and readonly-store restrictions described above.

@@ -1,3 +1,5 @@
+import { standard_source_base64, standard_source_encoding_bytes, standard_source_entropy, standard_source_hex, standard_source_internal_base64, standard_source_internal_hex, standard_source_secure_random } from state/standard_source_kinds
+import { native_base64_source, native_encoding_bytes_source, native_entropy_source, native_hex_source, native_secure_random_source, pinned_base64_source, pinned_hex_source } from project/official_catalog
 import { standard_source_web_context } from state/standard_source_kinds
 import { native_web_context_source } from project/official_catalog
 import { declare_web_context } from frontend/providers/web_context
@@ -18,6 +20,27 @@ import { sparse_integer_at, store_integer } from support/storage
 # Portable declarations use the same parser and nominal catalogs as authored
 # modules. Their owner tag is assigned only by this loader, never by spelling.
 def standard_source_kind(path: String): Integer
+	if path == "trb/std/encoding/hex"
+		return standard_source_hex()
+	end
+	if path == "trb/internal/encoding/hex"
+		return standard_source_internal_hex()
+	end
+	if path == "trb/std/encoding/base64"
+		return standard_source_base64()
+	end
+	if path == "trb/internal/encoding/base64"
+		return standard_source_internal_base64()
+	end
+	if path == "trb/std/secure_random"
+		return standard_source_secure_random()
+	end
+	if path == "trb/internal/entropy"
+		return standard_source_entropy()
+	end
+	if path == "trb/internal/encoding_bytes"
+		return standard_source_encoding_bytes()
+	end
 	if path == "trb/internal/context_storage"
 		return standard_source_web_context()
 	end
@@ -70,6 +93,27 @@ def standard_source_kind(path: String): Integer
 end
 
 def standard_source_name(kind: Integer): String
+	if kind == standard_source_hex()
+		return "trb/std/encoding/hex/index"
+	end
+	if kind == standard_source_internal_hex()
+		return "trb/internal/encoding/hex/index"
+	end
+	if kind == standard_source_base64()
+		return "trb/std/encoding/base64/index"
+	end
+	if kind == standard_source_internal_base64()
+		return "trb/internal/encoding/base64/index"
+	end
+	if kind == standard_source_secure_random()
+		return "trb/std/secure_random/index"
+	end
+	if kind == standard_source_entropy()
+		return "trb/internal/entropy/index"
+	end
+	if kind == standard_source_encoding_bytes()
+		return "trb/internal/encoding_bytes/index"
+	end
 	if kind == standard_source_web_context()
 		return "trb/internal/context_storage/index"
 	end
@@ -122,6 +166,27 @@ def standard_source_name(kind: Integer): String
 end
 
 def standard_source_text(kind: Integer): String
+	if kind == standard_source_hex()
+		return pinned_hex_source()
+	end
+	if kind == standard_source_internal_hex()
+		return native_hex_source()
+	end
+	if kind == standard_source_base64()
+		return pinned_base64_source()
+	end
+	if kind == standard_source_internal_base64()
+		return native_base64_source()
+	end
+	if kind == standard_source_secure_random()
+		return native_secure_random_source()
+	end
+	if kind == standard_source_entropy()
+		return native_entropy_source()
+	end
+	if kind == standard_source_encoding_bytes()
+		return native_encoding_bytes_source()
+	end
 	if kind == standard_source_web_context()
 		return native_web_context_source()
 	end
@@ -176,6 +241,34 @@ def standard_source_text(kind: Integer): String
 end
 
 def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer): Integer
+	if kind == standard_source_internal_hex()
+		caller := sparse_integer_at(state.standard_modules, state.module_graph.active_module[0])
+		if caller != standard_source_hex()
+			diagnostic(state, "TRBN4003", line, "internal encoding and entropy sources are reserved for verified standard sources")
+			return -1
+		end
+	end
+	if kind == standard_source_internal_base64()
+		caller := sparse_integer_at(state.standard_modules, state.module_graph.active_module[0])
+		if caller != standard_source_base64()
+			diagnostic(state, "TRBN4003", line, "internal encoding and entropy sources are reserved for verified standard sources")
+			return -1
+		end
+	end
+	if kind == standard_source_encoding_bytes()
+		caller := sparse_integer_at(state.standard_modules, state.module_graph.active_module[0])
+		if caller != standard_source_internal_hex() && caller != standard_source_internal_base64()
+			diagnostic(state, "TRBN4003", line, "internal encoding and entropy sources are reserved for verified standard sources")
+			return -1
+		end
+	end
+	if kind == standard_source_entropy()
+		caller := sparse_integer_at(state.standard_modules, state.module_graph.active_module[0])
+		if caller != standard_source_secure_random()
+			diagnostic(state, "TRBN4003", line, "internal encoding and entropy sources are reserved for verified standard sources")
+			return -1
+		end
+	end
 	if kind == standard_source_web_context() && sparse_integer_at(state.standard_modules, state.module_graph.active_module[0]) != official_source_kind("trb/web")
 		diagnostic(state, "TRBN4003", line, "internal Web context storage is reserved for verified standard sources")
 		return -1
@@ -189,7 +282,7 @@ def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer)
 	end
 	if kind == standard_source_internal_runtime()
 		caller := sparse_integer_at(state.standard_modules, state.module_graph.active_module[0])
-		if caller != official_source_kind("trb/web") && caller != official_source_kind("trb/web/middleware") && caller != standard_source_internal_time()
+		if caller != official_source_kind("trb/web") && caller != official_source_kind("trb/web/middleware") && caller != standard_source_internal_time() && caller != standard_source_secure_random()
 			diagnostic(state, "TRBN4003", line, "internal package imports are reserved for verified standard sources: trb/internal/runtime")
 			return -1
 		end
