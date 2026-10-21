@@ -1,3 +1,4 @@
+import { standard_runtime_fail } from frontend/resolution/standard_intrinsics
 import { repl_number, repl_binary_value } from repl/operators
 import { control_syntax_case, control_syntax_guarded_transfer, control_syntax_if, control_syntax_ternary, loop_transfer_none } from state/control_kinds
 import { repl_flow_break, repl_flow_continue, repl_flow_kind_slot, repl_flow_loop_owner_slot, repl_flow_normal, repl_flow_return, repl_flow_value_slot, repl_loop_flow_offset } from repl/flow_kinds
@@ -26,7 +27,7 @@ import { repl_slice_available, repl_slice_next } from repl/sliced_iteration
 import { repl_array_sort_keys } from repl/array_sorting
 import { raw_enum_type } from frontend/types/raw_enum_types
 import { repl_raw_enum_from, repl_raw_enum_value } from repl/raw_enums
-import { repl_global_key } from repl/model
+import { repl_failed, repl_global_key } from repl/model
 import { checked_reference_name } from frontend/resolution/namespace_references
 import { enum_method_function } from frontend/resolution/enum_methods
 import { repl_range_array } from repl/range_methods
@@ -71,6 +72,14 @@ import { repl_scalar_string, repl_binding_value, repl_assign_binding, repl_rende
 # Evaluation follows the already checked token stream. Parser, resolution and
 # type checking remain owned by the ordinary compiler; no source is replayed.
 def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Integer>, mut store: ReplStore): Integer
+	if repl_failed(store)
+		return 0
+	end
+	if standard_runtime_fail(state, function)
+		store.error[0] = store.texts[arguments[0]]
+		store.failed[0] = true
+		return 0
+	end
 	if object_abstract_function(state, function)
 		return repl_interface_call(state, function, arguments, store)
 	end
@@ -171,7 +180,7 @@ def repl_complete_arguments(mut state: CompilerState, mut bindings: ArgumentBind
 			end
 			arguments := default_call_arguments(state, bindings.defaults[index], bindings.values, index)
 			bindings.values[index] = repl_call(state, bindings.defaults[index], arguments, store)
-			if store.error[0] != ""
+			if repl_failed(store)
 				return
 			end
 			bindings.provided[index] = true
@@ -237,7 +246,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		origin := position[0]
 		position[0] += 1
 		operand := repl_postfix(state, position, store, environment, "")
-		if store.error[0] != "" || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+		if repl_failed(store) || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 			return operand
 		end
 		operation := result_projection(state, origin, false)
@@ -346,7 +355,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 				return repl_reference(environment.flow[repl_flow_value_slot()])
 			end
-			if store.error[0] != ""
+			if repl_failed(store)
 				return repl_reference(0)
 			end
 			if !diverging
@@ -383,7 +392,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				position[0] += 1
 			end
 			skip_newlines(state, position)
-			if store.error[0] != ""
+			if repl_failed(store)
 				return repl_reference(0)
 			end
 		end
@@ -470,13 +479,13 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				position[0] += 1
 			end
 			skip_newlines(state, position)
-			if store.error[0] != ""
+			if repl_failed(store)
 				return repl_reference(0)
 			end
 		end
 		position[0] += 1
 		repl_complete_arguments(state, bindings, store)
-		if store.error[0] != ""
+		if repl_failed(store)
 			return repl_reference(0)
 		end
 		arguments := bindings.values
@@ -515,7 +524,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		if row.field_count > 0
 			position[0] += 1
 			skip_newlines(state, position)
-			while !token_is(state, position[0], ")") && store.error[0] == ""
+			while !token_is(state, position[0], ")") && !repl_failed(store)
 				label := parse_argument_label(state, position)
 				slot := argument_binding_slot(bindings, label)
 				if slot < 0
@@ -641,7 +650,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				end
 				position[0] += 1
 				repl_complete_arguments(state, bindings, store)
-				if store.error[0] != ""
+				if repl_failed(store)
 					return repl_reference(0)
 				end
 				return repl_reference(repl_value(store, record_type(record_index), 0, 0.0, "", bindings.values))
@@ -657,7 +666,7 @@ def repl_callable_expression(mut state: CompilerState, mut position: Array<Integ
 	position[0] += 1
 	skip_newlines(state, position)
 	mut arguments: Array<Integer> := []
-	while !token_is(state, position[0], ")") && store.error[0] == ""
+	while !token_is(state, position[0], ")") && !repl_failed(store)
 		argument := repl_expression(state, position, store, environment, 1, parts[arguments.size() + 1])
 		if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 			return repl_reference(environment.flow[repl_flow_value_slot()])
@@ -670,7 +679,7 @@ def repl_callable_expression(mut state: CompilerState, mut position: Array<Integ
 		end
 	end
 	position[0] += 1
-	if store.error[0] != ""
+	if repl_failed(store)
 		return repl_reference(0)
 	end
 	return repl_reference(repl_indirect_call(store, callable, arguments))
@@ -683,7 +692,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	mut complete := false
 	while !complete
-		if store.error[0] != ""
+		if repl_failed(store)
 			return repl_reference(0)
 		end
 		if syntax_iteration_suffix(state, position[0]) >= 0
@@ -757,7 +766,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			if token_is(state, position[0], ".") || safe_origin >= 0
 				if sparse_integer_at(state.parsed.transform_origins, position[0]) > 0
 					result = repl_reference(repl_transform(state, position, store, environment, result.value))
-					if store.error[0] != ""
+					if repl_failed(store)
 						return result
 					end
 					if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
@@ -837,7 +846,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 							skip_newlines(state, position)
 							position[0] += 1
 							result = repl_reference(repl_builtin_number_parse(state, store, result.value, kind == result_method_float(), load_string(state.callables.checked[0].builtin_result_types, origin)))
-							if safe_origin >= 0 && store.error[0] == ""
+							if safe_origin >= 0 && !repl_failed(store)
 								result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 							end
 							next
@@ -854,7 +863,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 							return repl_reference(environment.flow[repl_flow_value_slot()])
 						end
-						if store.error[0] != ""
+						if repl_failed(store)
 							return repl_reference(0)
 						end
 						skip_newlines(state, position)
@@ -865,7 +874,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						position[0] += 1
 						converted := repl_coerce(store, argument.value, argument_type)
 						result = repl_reference(repl_builtin_lookup(state, store, kind, result.value, converted, load_string(state.callables.checked[0].builtin_result_types, origin)))
-						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && !repl_failed(store)
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -905,7 +914,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 							if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 								return repl_reference(environment.flow[repl_flow_value_slot()])
 							end
-							if store.error[0] != ""
+							if repl_failed(store)
 								return repl_reference(0)
 							end
 							argument = repl_coerce(store, checked_argument.value, argument_type)
@@ -917,7 +926,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						position[0] += 1
 						result = repl_reference(repl_array_method(store, kind, result.value, argument))
-						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && !repl_failed(store)
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -932,7 +941,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 							if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 								return repl_reference(environment.flow[repl_flow_value_slot()])
 							end
-							if store.error[0] != ""
+							if repl_failed(store)
 								return repl_reference(0)
 							end
 							argument = checked_argument.value
@@ -944,7 +953,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						position[0] += 1
 						result = repl_reference(repl_bytes_method(store, kind, result.value, argument))
-						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && !repl_failed(store)
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -960,7 +969,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 							if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 								return repl_reference(environment.flow[repl_flow_value_slot()])
 							end
-							if store.error[0] != ""
+							if repl_failed(store)
 								return repl_reference(0)
 							end
 							argument = checked_argument.value
@@ -977,7 +986,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						else
 							result = repl_reference(repl_string_method(store, kind, result.value, argument))
 						end
-						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && !repl_failed(store)
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -987,7 +996,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						skip_newlines(state, position)
 						position[0] += 1
 						result = repl_reference(repl_float_method(store, float_method_kind(member), result.value))
-						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && !repl_failed(store)
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -1002,7 +1011,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 							if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 								return repl_reference(environment.flow[repl_flow_value_slot()])
 							end
-							if store.error[0] != ""
+							if repl_failed(store)
 								return repl_reference(0)
 							end
 							arguments.push(argument.value)
@@ -1014,7 +1023,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						position[0] += 1
 						result = repl_reference(repl_integer_method(store, kind, result.value, arguments))
-						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && !repl_failed(store)
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end
 						next
@@ -1067,7 +1076,7 @@ def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut 
 	end
 	mut complete := false
 	while !complete
-		if store.error[0] != ""
+		if repl_failed(store)
 			return repl_reference(0)
 		end
 		operator := load_string(state.source_tokens.token_texts, position[0])
@@ -1109,7 +1118,7 @@ def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut 
 					return repl_reference(environment.flow[repl_flow_value_slot()])
 				end
 				if precedence == 3
-					if store.error[0] != ""
+					if repl_failed(store)
 						return repl_reference(0)
 					end
 					plan := checked_range_require(state, expression_origin, origin, end_origin, position[0])
@@ -1187,7 +1196,7 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		return 0
 	end
 	mut receiver := repl_expression(state, position, store, environment, 1, plan.type_name).value
-	if store.error[0] != ""
+	if repl_failed(store)
 		return 0
 	end
 	if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
@@ -1208,7 +1217,7 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 	if plan.syntax.slice_start >= 0
 		position[0] = plan.syntax.slice_start
 		size := repl_expression(state, position, store, environment, 1, "Integer").value
-		if store.error[0] != "" || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+		if repl_failed(store) || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 			return environment.flow[repl_flow_value_slot()]
 		end
 		slice_size = store.integers[size]
@@ -1231,13 +1240,19 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 	mut values: Array<Integer> := []
 	if plan.source_kind == iteration_source_hash()
 		table := store.hashes[store.integers[receiver]]
-		mut slot := 0
-		while slot < table.keys.size()
-			if table.keys[slot] > 0
-				keys.push(table.keys[slot])
-				values.push(table.values[slot])
+		# Preserve the reference REPL's deterministic presentation while
+		# snapshotting before the block can mutate or rebuild the table.
+		mut index := 0
+		while index < table.order.size()
+			key := table.order[index]
+			if key > 0
+				slot := repl_hash_slot(store, table, key)
+				if slot >= 0
+					keys.push(table.keys[slot])
+					values.push(table.values[slot])
+				end
 			end
-			slot += 1
+			index += 1
 		end
 	end
 	mut slice_cursor := [cursor, bound, exclusive, 0]
@@ -1289,7 +1304,7 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		elsif flow[repl_flow_kind_slot()] != repl_flow_normal()
 			break
 		end
-		if store.error[0] != ""
+		if repl_failed(store)
 			break
 		end
 		if slice_size > 0
@@ -1376,7 +1391,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 			elsif flow[repl_flow_kind_slot()] != repl_flow_normal()
 				running = false
 			end
-			if store.error[0] != ""
+			if repl_failed(store)
 				running = false
 			end
 		end
@@ -1432,7 +1447,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 			presentation = sparse_string_at(state.submissions[0].presentations, origin)
 		end
 		result := repl_present(store, repl_coerce(store, value.value, expected), presentation)
-		if store.error[0] == ""
+		if !repl_failed(store)
 			repl_bind(environment, name, result, mutable, presentation)
 		end
 		return result
@@ -1441,7 +1456,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 	if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 		return environment.flow[repl_flow_value_slot()]
 	end
-	if store.error[0] != ""
+	if repl_failed(store)
 		return 0
 	end
 	operator := load_string(state.source_tokens.token_texts, position[0])
@@ -1494,7 +1509,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 		if operator != "=" && !logical
 			result = repl_binary_value(store, left.value, operator[0], result)
 		end
-		if store.error[0] == ""
+		if !repl_failed(store)
 			if hash_assignment
 				repl_hash_set(store, left.container, left.slot, result)
 				return result
@@ -1524,7 +1539,7 @@ def repl_block(mut state: CompilerState, mut position: Array<Integer>, mut store
 		if native_cli_interrupt(0) != 0
 			store.error[0] = "Interrupted"
 		end
-		if store.error[0] != ""
+		if repl_failed(store)
 			return 0
 		end
 		if syntax_block_end(state, position[0])
@@ -1564,7 +1579,7 @@ def repl_hash_method(mut state: CompilerState, mut position: Array<Integer>, mut
 	end
 	skip_newlines(state, position)
 	position[0] += 1
-	if store.error[0] != ""
+	if repl_failed(store)
 		return 0
 	end
 	table := store.hashes[store.integers[receiver]]
@@ -1591,12 +1606,16 @@ def repl_hash_method(mut state: CompilerState, mut position: Array<Integer>, mut
 	end
 	mut children: Array<Integer> := []
 	mut index := 0
-	while index < table.keys.size()
-		if table.keys[index] > 0
-			if plan.kind == hash_action_keys()
-				children.push(table.keys[index])
-			else
-				children.push(table.values[index])
+	while index < table.order.size()
+		key := table.order[index]
+		if key > 0
+			slot := repl_hash_slot(store, table, key)
+			if slot >= 0
+				if plan.kind == hash_action_keys()
+					children.push(table.keys[slot])
+				else
+					children.push(table.values[slot])
+				end
 			end
 		end
 		index += 1
@@ -1658,7 +1677,7 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	mut result := 0
 	mut index := 0
-	while index < control.branches.size() && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && store.error[0] == ""
+	while index < control.branches.size() && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && !repl_failed(store)
 		branch := control.branches[index]
 		mut selected := branch.condition < 0
 		if control.kind == control_syntax_ternary() && index == 0
@@ -1725,7 +1744,7 @@ def repl_statement_expression(mut state: CompilerState, mut position: Array<Inte
 	end
 	handler := state.parsed.catch_syntax[encoded - 1]
 	operand := repl_expression(state, position, store, environment, 1, "")
-	if store.error[0] != "" || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+	if repl_failed(store) || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 		return operand
 	end
 	operation := result_projection(state, origin, true)
@@ -1766,7 +1785,7 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 	elsif syntax.kind == transform_reduce()
 		position[0] = syntax.initial_start
 		result = repl_expression(state, position, store, environment, 1, plan.type_name).value
-		if store.error[0] != "" || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+		if repl_failed(store) || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 			return result
 		end
 	else
@@ -1783,7 +1802,7 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 		exclusive = store.integers[store.children[receiver][2]]
 	end
 	mut flow := [repl_flow_normal()]
-	while store.error[0] == ""
+	while !repl_failed(store)
 		if plan.iteration.source_kind == iteration_source_array()
 			if cursor >= store.children[receiver].size()
 				break
@@ -1807,7 +1826,7 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 		end
 		position[0] = shape.body_start
 		yielded := repl_block(state, position, store, environment, flow, -1)
-		if store.error[0] != "" || flow[repl_flow_kind_slot()] != repl_flow_normal() || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+		if repl_failed(store) || flow[repl_flow_kind_slot()] != repl_flow_normal() || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 			break
 		end
 		if syntax.kind >= transform_sort_by()
@@ -1858,7 +1877,7 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 	end
 	environment.count[0] = saved
 	position[0] = shape.finish
-	if syntax.kind >= transform_sort_by() && store.error[0] == "" && flow[repl_flow_kind_slot()] == repl_flow_normal() && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
+	if syntax.kind >= transform_sort_by() && !repl_failed(store) && flow[repl_flow_kind_slot()] == repl_flow_normal() && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
 		return repl_array_sort_keys(store, result, keys, syntax.kind == transform_sort_by_descending())
 	end
 	return result
@@ -1891,13 +1910,13 @@ def repl_nominal_method_call(mut state: CompilerState, mut position: Array<Integ
 			position[0] += 1
 		end
 		skip_newlines(state, position)
-		if store.error[0] != ""
+		if repl_failed(store)
 			return 0
 		end
 	end
 	position[0] += 1
 	repl_complete_arguments(state, bindings, store)
-	if store.error[0] != ""
+	if repl_failed(store)
 		return 0
 	end
 	return repl_call(state, function, bindings.values, store)

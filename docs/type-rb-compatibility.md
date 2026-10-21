@@ -48,14 +48,20 @@ The provenance record identifies the repository, exact commit, source paths,
 byte lengths and SHA-256 hashes. A generated TypeRB catalog embeds these exact
 sources and canonical names, so ordinary compilers load reachable official
 modules through the same declaration graph without a repository or reference
-checkout at runtime. The complete portable HTTP and URL sources have ordinary
-import coverage. URL component encoding/decoding and ordered query operations
+checkout at runtime. The complete portable HTTP, URL, Web value and portable
+middleware sources have ordinary import coverage. URL component encoding/decoding and ordered query operations
 use a Native-owned TypeRB adapter with the pinned nominal types and errors.
 JSON values and JSONC parsing use a Native-owned TypeRB adapter; typed record
 codecs remain incomplete.
-Packages requiring unimplemented platform or semantic providers fail explicitly;
-internal Runtime services and Web providers remain implementation work
-in [#674](https://github.com/type-rb/type-rb-native/issues/674).
+Web Request/Response values, middleware composition, CORS and secure headers use
+the unchanged package bodies. Their internal
+`Runtime.fail<T>` service is bound by loader ownership to a verified MIR
+signature and the checked REPL evaluator. Authored source names and import paths
+cannot grant internal access. Source admission does not imply generated Web
+provider support: typed codecs, Context binding/state, routes and networking
+remain incomplete. Packages requiring other unimplemented platform or semantic
+providers fail explicitly. The frozen import scenarios remain tracked in
+[#674](https://github.com/type-rb/type-rb-native/issues/674).
 
 After changing the reference pin, synchronize from a Git checkout containing
 that exact commit:
@@ -86,9 +92,9 @@ implemented declaration families:
 
 | TypeRB behavior | Current Native behavior |
 | --- | --- |
-| Named import | Selects an exact supported record, enum, function, alias, module or constant declaration |
+| Named import | Selects an exact supported record, class, interface, enum, function, alias, module or constant declaration |
 | Named `as` alias | Changes only the local binding; canonical declaration identity remains exact |
-| Bare project import | Selects one matching supported record, enum, generic nominal, alias, module or constant root |
+| Bare project import | Selects one matching supported record, class, interface, enum, generic nominal, alias, module or constant root |
 | Bare `as` alias | Selects the same unique declaration first, then changes its local binding |
 | Root key | Removes ASCII `_` from the logical final path segment and folds ASCII case; declaration names fold ASCII case without removing `_` |
 | Directory entry | A resolved `name/index` module uses `name` as its logical root segment; `name` and `name/index` can resolve to that same module |

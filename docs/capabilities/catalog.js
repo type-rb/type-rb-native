@@ -83,7 +83,7 @@ export const catalog = {
       title: 'Production application platform',
       description: 'The broadly reusable pieces needed to build and operate a representative full-stack service.',
       items: [
-        capability('HTTP server, router, and middleware', 'open', ['production', 'ecosystem'], 'Own request lifecycles, routing, middleware composition, streaming, and shutdown.'),
+        capability('HTTP server, router, and middleware', 'partial', ['production', 'ecosystem'], 'Pinned Web Request/Response values cover query, header and cookie lookup, body decoding, immutable updates and response construction. Portable middleware supports composition, once-only Next calls, CORS and secure headers through ordinary compilation and REPL. Generated Context state and codecs, routes, networking, streaming and shutdown remain incomplete.', ['Web and middleware coverage', 'docs/native-language-feature-inventory.md']),
         capability('JSON API and validation', 'open', ['production', 'ecosystem'], 'Decode requests, validate typed input, map failures, and serialize responses.'),
         capability('HTML rendering and static assets', 'open', ['production', 'ecosystem'], 'Render server-side HTML and serve versioned static assets with cache policy.'),
         capability('Database driver, pool, and transactions', 'open', ['production', 'ecosystem'], 'Manage database connections, pooling, transactions, timeout, and cancellation.'),
