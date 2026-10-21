@@ -214,6 +214,14 @@ Full multi-language benchmark refreshes remain manual. During MIR migration
 they supply milestone qualification separately from integration correctness;
 ordinary compiler edits do not wait for detailed costs.
 
+The representative application suite follows the
+[performance policy](performance-policy.md). The existing Native CLI build job
+builds its shared workload once and checks small exact-output inputs within a
+two-minute step deadline. The existing tooling job runs synthetic controller
+tests. Neither job compares speed or builds comparison compilers. The broad
+input matrix remains opt-in local/milestone work; daily/weekly schedules and
+their workload counts are unchanged.
+
 ## Focused compiler preflight feedback
 
 Before making a compiler PR ready, use the existing standalone workflows when

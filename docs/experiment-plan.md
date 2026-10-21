@@ -26,6 +26,9 @@ Secondary outcomes include compiler and runtime peak memory, startup latency,
 toolchain distribution size, portability, diagnostics, correctness risk, and
 maintenance cost.
 
+The [performance engineering policy](performance-policy.md) governs corpus
+selection, representative applications, input diversity and bounded CI cadence.
+
 The identical-source comparison baseline is an optimized release executable
 produced by the reference compiler's Go backend. It isolates backend and
 runtime changes, but it is not the final execution-performance ceiling.
