@@ -1,0 +1,82 @@
+"""Controller guarantees: wrong output, child failures and sparse tails stay visible."""
+import importlib.util
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+
+spec = importlib.util.spec_from_file_location("representative_measure", Path(__file__).with_name("measure.py"))
+measure = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(measure)
+report_spec = importlib.util.spec_from_file_location("representative_report", Path(__file__).with_name("report.py"))
+report = importlib.util.module_from_spec(report_spec)
+report_spec.loader.exec_module(report)
+
+
+class MeasurementTests(unittest.TestCase):
+    def test_tail_resolution(self):
+        self.assertIsNone(measure.percentile(list(range(19)), 0.95))
+        self.assertIsNone(measure.percentile(list(range(99)), 0.99))
+        self.assertEqual(measure.percentile(list(range(1, 101)), 0.99), 99)
+        self.assertEqual(measure.percentile(list(range(1, 21)), 0.95), 19)
+
+    def test_smoke_covers_every_path_without_large_inputs(self):
+        _, full = measure.load_cases()
+        _, smoke = measure.load_cases(True)
+        self.assertEqual({(c["workload"], c["variant"]) for c in full},
+                         {(c["workload"], c["variant"]) for c in smoke})
+        self.assertTrue(all(c["count"] == 23 and c["batches"] == 2 for c in smoke))
+        self.assertEqual(len({c["id"] for c in full}), len(full))
+        with self.assertRaises(ValueError):
+            measure.load_cases(selected=["typo"])
+
+    def test_known_small_outputs(self):
+        base = {"count": 3, "batches": 1}
+        self.assertEqual(measure.expected(dict(base, workload="hash", variant="hits")), b"ready\n0,3\ndone,0\n")
+        self.assertEqual(measure.expected(dict(base, workload="hash", variant="miss-heavy")), b"ready\n0,2\ndone,0\n")
+        self.assertEqual(measure.expected(dict(base, workload="arrays", variant="reverse")), b"ready\n0,14\ndone,0\n")
+        self.assertEqual(measure.expected(dict(base, workload="json-transform", variant="mixed")), b'ready\n0,47\ndone,0\n')
+
+    def test_output_and_exit_failures(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            good = measure.observe([sys.executable, "-c", "print('ok')"], root / "good", 3)
+            self.assertEqual(measure.validate(good, root / "good", b"ok\n")["status"], "pass")
+            self.assertGreater(good["peakRssBytes"], 0)
+            self.assertEqual(measure.validate(good, root / "good", b"wrong\n")["status"], "output-mismatch")
+            failed = measure.observe([sys.executable, "-c", "raise SystemExit(7)"], root / "exit", 3)
+            self.assertEqual(failed["status"], "nonzero-exit")
+            self.assertEqual(failed["exitCode"], 7)
+            noisy = measure.observe([sys.executable, "-c", "import sys; print('warning', file=sys.stderr)"], root / "noise", 3)
+            self.assertEqual(measure.validate(noisy, root / "noise", b"")["status"], "unexpected-stderr")
+
+    def test_descendant_with_open_pipe_has_a_deadline(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            code = "import subprocess,sys; subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)'])"
+            result = measure.observe([sys.executable, "-c", code], Path(temporary) / "timeout", 0.15)
+            self.assertEqual(result["status"], "timeout")
+            self.assertLess(result["wallSeconds"], 3)
+
+    def test_coalesced_markers_are_not_zero_latency_samples(self):
+        record = {"phase": "retained", "status": "pass", "wallSeconds": 1,
+                  "cpuSeconds": 0.5, "peakRssBytes": 123,
+                  "arrivals": [{"line": "ready", "seconds": 0.1, "coalesced": True},
+                               {"line": "0,3", "seconds": 0.1, "coalesced": True}]}
+        result = measure.summarize([record], 10)
+        self.assertIsNone(result["batchArrivalIntervalSeconds"])
+        self.assertIsNone(result["processWallSeconds"]["p99"])
+        record["status"] = "output-mismatch"
+        self.assertIsNone(measure.summarize([record], 10))
+
+    def test_failed_or_unrun_cases_are_visible_in_report(self):
+        result = {"status": "failed", "platform": "synthetic", "cases": [],
+                  "plannedCases": [{"id": "failed-case"}, {"id": "unrun-case"}],
+                  "error": "budget exhausted"}
+        rendered = report.render(result)
+        self.assertIn("failed-case | unknown", rendered)
+        self.assertIn("unrun-case | unknown", rendered)
+        self.assertIn("budget exhausted", rendered)
+
+
+if __name__ == "__main__":
+    unittest.main()

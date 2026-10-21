@@ -77,6 +77,8 @@ and [basic language coverage plan](docs/native-language-coverage.md). Detailed
 performance qualification follows coherent architecture milestones; current
 runtime and compilation measurements against Pure Go are in the
 [benchmark explorer](https://type-rb.github.io/type-rb-native/benchmarks/).
+The [performance policy](docs/performance-policy.md) covers representative
+applications, input diversity, measurement limits and bounded CI cost.
 See [MIR status](docs/native-mir-optimization-status.md) for the migration and
 [development history](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/development-history.md) for dated checkpoints.
 

@@ -3,6 +3,11 @@
 Status: adopted for the daily diagnostic layer. Existing correctness, safety,
 self-hosting, compiler cost and optimization acceptance authorities are unchanged.
 
+The [performance engineering policy](performance-policy.md) defines broader
+application coverage, input sensitivity, measurement interpretation and CI cost
+budgets. Its opt-in representative suite has a separate result series and does
+not expand this daily job or change its existing scores.
+
 ## Purpose and cadence
 
 The primary benchmark page answers what has changed, which supported workload
