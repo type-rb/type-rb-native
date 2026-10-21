@@ -83,4 +83,41 @@ describe("Native TypeRB frontend") do
 		expect(load_integer(state.diagnostics.lines, 0)).to_equal(6)
 		expect(load_string(state.diagnostics.messages, 0)).to_equal("call argument count does not match identity")
 	end
+
+	test("checks generic output before lowering concrete instantiations") do
+		sources := [
+			"def show<T>(value: T)\nputs(value)\nend\n\ndef main()\nputs(\"unused\")\nend\n",
+			"def show<T>(value: T)\nputs(value)\nend\n\ndef main()\nshow<Integer>(3)\nshow<String>(\"kept\")\nshow<Float>(2.5)\nshow<Boolean>(true)\nend\n",
+			"def show<T>(value: T?)\nputs(value)\nend\n\ndef main()\nshow<Integer>(9)\nshow<Integer>(nil)\nshow<String>(\"present\")\nshow<String>(nil)\nend\n",
+			"def show<T>(value: T | String)\nputs(value)\nend\n\ndef main()\nshow<Integer>(4)\nshow<Integer>(\"text\")\nend\n",
+			"def show<T>(value: T)\nputs(value)\nend\n\ndef main()\nshow<Bytes>(\"ab\".to_bytes())\nshow<Bytes?>(\"xy\".to_bytes())\nshow<Bytes?>(nil)\nend\n",
+			"def show<T>(value: T)\nputs(value)\nend\n\ndef main()\nshow<Any>(8)\nshow<Any>(\"dynamic\")\nshow<Any>(\"ab\".to_bytes())\nshow<Any?>(nil)\nend\n",
+			"def show<T>(value: T)\nputs(value)\nend\ndef forward<U>(value: U)\nshow<U>(value)\nend\n\ndef main()\nforward<String>(\"forward\")\nforward<Integer>(2)\nend\n",
+			"def printer<T>(value: T): () -> Void\nreturn fn()\nputs(value)\nend\nend\n\ndef main()\ncallback := printer<String>(\"retained\" + 1.to_s())\ncallback()\ncallback()\nend\n",
+			"def show<T>(values: Array<T>)\nvalues.each do |value|\nputs(value)\nend\nend\n\ndef main()\nshow<Integer>([1, 2])\nshow<String>([\"a\", \"b\"])\nend\n",
+			"record Box<T>\nvalue: T\nend\ndef show<T>(box: Box<T>)\nputs(box.value)\nend\n\ndef main()\nshow<String>(Box<String>.new(value: \"boxed\"))\nshow<Integer>(Box<Integer>.new(value: 6))\nend\n",
+			"class Printer<T>\ndef show(value: T)\nputs(value)\nend\nend\n\ndef main()\nPrinter<String>.new().show(\"method\")\nPrinter<Integer>.new().show(3)\nend\n",
+		]
+		sources.each do |source|
+			mut state := compiler_new(source.size() + 1)
+			expect(lex(state, source)).to_be_true()
+			expect(parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
+			expect(resolve(state)).to_be_true()
+			expect(check(state)).to_be_true()
+			expect(verify_mir(state.scalar_mir, true)).to_equal("")
+			expect(output_source(emit_qbe(state)).include?("TypeParameter#")).to_be_false()
+			expect(has_diagnostic(state)).to_be_false()
+		end
+	end
+
+	test("keeps unsupported concrete output explicit after specialization") do
+		source := "record Entry\nvalue: Integer\nend\ndef show<T>(value: T)\nputs(value)\nend\ndef main()\nshow<Entry>(Entry.new(value: 1))\nend\n"
+		mut state := compiler_new(source.size() + 1)
+		expect(lex(state, source)).to_be_true()
+		expect(parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
+		expect(resolve(state)).to_be_true()
+		expect(check(state)).to_be_false()
+		expect(load_integer(state.diagnostics.lines, 0)).to_equal(5)
+		expect(load_string(state.diagnostics.messages, 0)).to_equal("puts does not yet support Entry")
+	end
 end
