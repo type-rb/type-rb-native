@@ -118,6 +118,19 @@ class MeasurementTests(unittest.TestCase):
         self.assertIn("unrun-case | unknown", rendered)
         self.assertIn("budget exhausted", rendered)
 
+    def test_report_excludes_legacy_linux_rss_but_preserves_timing(self):
+        native = {"processWallSeconds": {"p50": 0.5}, "peakRssBytes": 64 * 1024 ** 2,
+                  "batchArrivalIntervalSeconds": None}
+        result = {"status": "pass", "platform": "Linux", "plannedCases": [{"id": "sample"}],
+                  "cases": [{"input": {"id": "sample"}, "summaries": {"native": native}}]}
+        self.assertIn("sample | 500.000 | unknown | unknown | unknown |", report.render(result))
+        self.assertIn("Legacy Linux RSS", report.render(result))
+        self.assertEqual(native["peakRssBytes"], 64 * 1024 ** 2)
+        result["environment"] = {"peakRssMethod": "gnu-time-child-v1"}
+        self.assertIn("sample | 500.000 | unknown | unknown | 64.00 |", report.render(result))
+        result.update(platform="Darwin", environment={})
+        self.assertIn("sample | 500.000 | unknown | unknown | 64.00 |", report.render(result))
+
 
 if __name__ == "__main__":
     unittest.main()

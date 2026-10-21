@@ -108,7 +108,8 @@ sources and missing comparison identities. A failed attempt retains partial
 observations and the previous complete snapshot. Pages displays failures and
 unmeasured inputs explicitly; it never imports these results into the daily score.
 Linux RSS observations without the corrected collector identity remain in raw
-evidence but are unavailable for comparison. Their other metrics remain visible.
+evidence but are unavailable in Pages and text reports. Their other metrics
+remain visible.
 
 Raw evidence and state artifacts last 90 days. Compact state retains twelve
 complete snapshots and the latest attempt; Pages falls back to its previous
