@@ -2,8 +2,8 @@ import { emit_qbe } from compiler
 import { MirBlock, MirInstruction, mir_function_index } from mir/model/module
 import { mir_op_scalar_binary, mir_op_scalar_literal } from mir/model/instructions
 import { mir_terminator_branch, mir_terminator_jump } from mir/model/control
-import { mir_flow_blocks } from mir/analysis/flow
-import { MirThreadedEdge, mir_boolean_edge_block, mir_boolean_edge_literals, mir_boolean_edge_path, mir_boolean_edge_target_retained } from mir/passes/boolean_edges
+import { mir_flow_blocks, mir_flow_parameter_slot } from mir/analysis/flow
+import { MirThreadedEdge, mir_boolean_edge_block, mir_boolean_edge_known_literals, mir_boolean_edge_literals, mir_boolean_edge_path, mir_boolean_edge_target_retained } from mir/passes/boolean_edges
 import { optimize_verified_mir } from mir/passes/optimize
 import { verify_mir } from mir/verify/module
 import { array_loop_mir_check } from testing/mir/array_loops
@@ -37,6 +37,51 @@ def boolean_edge_choice_source(): String
 end
 
 describe("MIR Boolean edge threading") do
+	test("resolves a loop-carried literal after its false exit is threaded") do
+		state := array_loop_mir_check("def count(limit: Integer): Integer\nmut running := true\nmut total := 0\nwhile running\ntotal += 1\nif total >= limit\nrunning = false\nend\nend\nreturn total\nend\ndef main()\nputs(count(1))\nputs(count(5))\nend\n")
+		function := state.scalar_mir.functions[0]
+		blocks := mir_flow_blocks(state.scalar_mir, function)
+		entry := state.scalar_mir.blocks[function.block_start + blocks[integer_string(function.entry_block)]]
+		header := state.scalar_mir.blocks[function.block_start + blocks[integer_string(entry.first_target)]]
+		expect(header.terminator).to_equal(mir_terminator_branch())
+		facts := mir_boolean_edge_known_literals(state.scalar_mir, function, blocks)
+		key := integer_string(header.condition)
+		expect(facts.values.key?(key)).to_be_true()
+		expect(state.scalar_mir.literal_texts[facts.values[key]]).to_equal("true")
+		boolean_edge_run(control_test_output(emit_qbe(state)), "1\n5\n", false)
+	end
+
+	test("keeps an external Boolean input unknown through a forwarding cycle") do
+		state := array_loop_mir_check("def count(flag: Boolean, limit: Integer): Integer\nmut running := flag\nmut total := 0\nwhile running\ntotal += 1\nif total >= limit\nrunning = false\nend\nend\nreturn total\nend\ndef main()\nputs(count(false, 5))\nputs(count(true, 5))\nend\n")
+		function := state.scalar_mir.functions[0]
+		blocks := mir_flow_blocks(state.scalar_mir, function)
+		entry := state.scalar_mir.blocks[function.block_start + blocks[integer_string(function.entry_block)]]
+		header := state.scalar_mir.blocks[function.block_start + blocks[integer_string(entry.first_target)]]
+		expect(header.terminator).to_equal(mir_terminator_branch())
+		facts := mir_boolean_edge_known_literals(state.scalar_mir, function, blocks)
+		expect(facts.values.key?(integer_string(header.condition))).to_be_false()
+		boolean_edge_run(control_test_output(emit_qbe(state)), "0\n5\n", false)
+	end
+
+	test("retains conflicting literals before an observable condition use") do
+		state := array_loop_mir_check("def choose(flag: Boolean): Integer\nmut selected := true\nif flag\nselected = false\nend\nputs(selected)\nif selected\nreturn 1\nend\nreturn 2\nend\ndef main()\nputs(choose(true))\nputs(choose(false))\nend\n")
+		function := state.scalar_mir.functions[0]
+		blocks := mir_flow_blocks(state.scalar_mir, function)
+		facts := mir_boolean_edge_known_literals(state.scalar_mir, function, blocks)
+		mut found := false
+		mut index := function.block_start
+		while index < function.block_start + function.block_count
+			block := state.scalar_mir.blocks[index]
+			if block.terminator == mir_terminator_branch() && mir_flow_parameter_slot(state.scalar_mir, block, block.condition) >= 0
+				expect(facts.values.key?(integer_string(block.condition))).to_be_false()
+				found = true
+			end
+			index += 1
+		end
+		expect(found).to_be_true()
+		boolean_edge_run(control_test_output(emit_qbe(state)), "false\n2\ntrue\n1\n", false)
+	end
+
 	test("preserves true false and unknown paths with distinct incoming values") do
 		state := array_loop_mir_check(boolean_edge_choice_source())
 		boolean_edge_run(control_test_output(emit_qbe(state)), "12\n21\n", false)

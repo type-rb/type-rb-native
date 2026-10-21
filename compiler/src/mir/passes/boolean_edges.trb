@@ -2,7 +2,7 @@ import { mir_function_control, mir_terminator_branch, mir_terminator_jump } from
 import { mir_op_scalar_literal } from mir/model/instructions
 import { mir_type_boolean } from mir/model/type_ids
 import { MirBlock, MirFunction, MirModule, mir_value_type } from mir/model/module
-import { mir_flow_blocks } from mir/analysis/flow
+import { mir_build_flow, mir_flow_alias, mir_flow_aliases, mir_flow_blocks } from mir/analysis/flow
 import { mir_live_add, mir_managed_contains } from mir/analysis/liveness
 import { mir_rewrite_confined_values } from mir/passes/rewrite
 import { integer_string } from support/literals
@@ -39,6 +39,35 @@ def mir_boolean_edge_literals(native_module: MirModule, function: MirFunction): 
 		block_index += 1
 	end
 	return MirBooleanLiterals.new(values: literals, present: present)
+end
+
+# Reuse the identity lattice rather than treating an unresolved loop input as
+# a constant. Entry parameters stay unknown; a converged literal identity has
+# the same Boolean value on every incoming path, including cyclic forwarding.
+def mir_boolean_edge_known_literals(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>): MirBooleanLiterals
+	facts := mir_boolean_edge_literals(native_module, function)
+	if !facts.present
+		return facts
+	end
+	flow := mir_build_flow(native_module, function, blocks)
+	entry := native_module.blocks[function.block_start + blocks[integer_string(function.entry_block)]]
+	aliases := mir_flow_aliases(native_module, function, flow, entry)
+	mut literals := facts.values
+	mut index := function.block_start
+	while index < function.block_start + function.block_count
+		block := native_module.blocks[index]
+		mut position := block.parameter_start
+		while position < block.parameter_start + block.parameter_count
+			value := native_module.arguments[position]
+			key := integer_string(mir_flow_alias(aliases, value))
+			if literals.key?(key)
+				literals[integer_string(value)] = literals[key]
+			end
+			position += 1
+		end
+		index += 1
+	end
+	return MirBooleanLiterals.new(values: literals, present: true)
 end
 
 def mir_boolean_edge_value(native_module: MirModule, block: MirBlock, arguments: Array<Integer>, value: Integer): Integer
@@ -196,7 +225,6 @@ def mir_thread_boolean_edges(mut native_module: MirModule): Boolean
 		if function.kind == mir_function_control()
 			facts := mir_boolean_edge_literals(native_module, function)
 			if facts.present
-				literals := facts.values
 				blocks := mir_flow_blocks(native_module, function)
 				mut identities: Array<Integer> := []
 				mut index := function.block_start
@@ -210,6 +238,10 @@ def mir_thread_boolean_edges(mut native_module: MirModule): Boolean
 				mut changed := true
 				while changed
 					changed = false
+					# A removed exit edge can make a carried parameter constant.
+					# Derive identities from the current graph on each round.
+					known := mir_boolean_edge_known_literals(native_module, function, blocks)
+					literals := known.values
 					identities.each do |id|
 						position := function.block_start + blocks[integer_string(id)]
 						block := native_module.blocks[position]
