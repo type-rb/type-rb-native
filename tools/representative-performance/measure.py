@@ -23,6 +23,11 @@ SUITE = Path(__file__).with_name("suite.json")
 SOURCE = ROOT / "benchmarks/representative/src/main.trb"
 GO_SOURCE = ROOT / "benchmarks/representative/go/main.go"
 OUTPUT_LIMIT = 1024 * 1024
+GNU_TIME = Path("/usr/bin/time")
+
+
+def rss_method():
+    return "gnu-time-child-v1" if sys.platform.startswith("linux") else "wait4-bytes-v1"
 
 
 def write(path, value):
@@ -50,7 +55,9 @@ def distribution(values):
 def observe(command, directory, timeout, env=None):
     """Observe one owned process, including CPU/RSS and stdout arrival times.
 
-    wait4 measures this child, not a cumulative maximum over preceding children.
+    Linux wait4 includes memory inherited before exec. GNU time forks the
+    command from its small address space and records that child's peak RSS.
+    Wall/CPU include this launcher; raw records identify the collection method.
     Batch timestamps are observer-side completion arrivals, including pipe and
     scheduler overhead. Coalesced lines are recorded and invalidate interval
     percentiles; they cannot be interpreted as zero-latency work.
@@ -58,8 +65,12 @@ def observe(command, directory, timeout, env=None):
     directory.mkdir(parents=True)
     started = time.monotonic()
     record = {"command": list(map(str, command)), "timeoutSeconds": timeout,
-              "status": "pass", "arrivals": []}
-    process = subprocess.Popen(record["command"], stdout=subprocess.PIPE,
+              "status": "pass", "arrivals": [], "peakRssMethod": rss_method()}
+    invocation = record["command"]
+    rss_file = directory / "rss-kib.txt"
+    if sys.platform.startswith("linux"):
+        invocation = [str(GNU_TIME), "-q", "-f", "%M", "-o", str(rss_file), "--", *invocation]
+    process = subprocess.Popen(invocation, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, start_new_session=True, env=env)
     completion = {}
     finished = threading.Event()
@@ -124,9 +135,15 @@ def observe(command, directory, timeout, env=None):
         usage = completion["usage"]
         record.update(exitCode=process.returncode, wallSeconds=completion["wallSeconds"],
                       cpuSeconds=usage.ru_utime + usage.ru_stime,
-                      peakRssBytes=int(usage.ru_maxrss * (1 if sys.platform == "darwin" else 1024)))
+                      peakRssBytes=int(usage.ru_maxrss) if sys.platform == "darwin" else None)
         if process.returncode and record["status"] == "pass":
             record["status"] = "nonzero-exit"
+        if sys.platform.startswith("linux"):
+            value = rss_file.read_text().strip() if rss_file.exists() else ""
+            if value.isdigit() and int(value) > 0:
+                record["peakRssBytes"] = int(value) * 1024
+            elif record["status"] == "pass":
+                record["status"] = "missing-resource-observation"
     finally:
         terminate()
         waiter.join()
@@ -352,7 +369,12 @@ def main():
             result["environment"] = {"GOMAXPROCS": "1", "cpuCount": os.cpu_count(),
                                      "affinity": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
                                      "filesystemCache": "uncontrolled warm cache",
-                                     "cpuPinning": "inherited single CPU" if hasattr(os, "sched_getaffinity") and len(os.sched_getaffinity(0)) == 1 else "none"}
+                                     "cpuPinning": "inherited single CPU" if hasattr(os, "sched_getaffinity") and len(os.sched_getaffinity(0)) == 1 else "none",
+                                     "peakRssMethod": rss_method(),
+                                     "timingMethod": "process wall and wait4 CPU; Linux includes GNU time launcher"}
+            if sys.platform.startswith("linux"):
+                version = subprocess.check_output([GNU_TIME, "--version"], text=True).splitlines()[0]
+                result["environment"]["rssTool"] = {"sha256": digest(GNU_TIME), "version": version}
             roles = list(binaries)
             started = time.monotonic()
             samples = 1 if args.smoke else args.samples or suite["samples"]

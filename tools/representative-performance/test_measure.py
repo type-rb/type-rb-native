@@ -52,6 +52,28 @@ class MeasurementTests(unittest.TestCase):
             noisy = measure.observe([sys.executable, "-c", "import sys; print('warning', file=sys.stderr)"], root / "noise", 3)
             self.assertEqual(measure.validate(noisy, root / "noise", b"")["status"], "unexpected-stderr")
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux exec RSS accounting")
+    def test_linux_rss_excludes_inflated_observer_and_still_tracks_child_memory(self):
+        # Touch real pages in the observer. A direct wait4 measurement of an
+        # exec child incorrectly reports this memory as the child's RSS floor.
+        observer = bytearray(128 * 1024 * 1024)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            small = measure.observe([sys.executable, "-c", "data=bytearray(4*1024*1024);print('ok')"], root / "small", 5)
+            large = measure.observe([sys.executable, "-c", "data=bytearray(64*1024*1024);print('ok')"], root / "large", 5)
+            self.assertEqual(small["status"], "pass")
+            self.assertEqual(large["status"], "pass")
+            self.assertEqual(small["peakRssMethod"], "gnu-time-child-v1")
+            self.assertLess(small["peakRssBytes"], len(observer) // 2)
+            self.assertGreater(large["peakRssBytes"], small["peakRssBytes"] + 32 * 1024 * 1024)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux resource sidecar")
+    def test_linux_missing_rss_is_not_a_successful_measurement(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(measure.Path, "exists", return_value=False):
+            result = measure.observe([sys.executable, "-c", "print('ok')"], Path(temporary) / "missing", 3)
+        self.assertEqual(result["status"], "missing-resource-observation")
+        self.assertIsNone(result["peakRssBytes"])
+
     def test_descendant_with_open_pipe_has_a_deadline(self):
         with tempfile.TemporaryDirectory() as temporary:
             code = "import subprocess,sys; subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)'])"
