@@ -1,5 +1,5 @@
 import { decode_recovery_managed_snapshot } from managed/snapshot
-import { build_recovery_managed_executable } from managed/toolchain
+import { build_compiler_recovery_executable, build_recovery_managed_executable } from managed/toolchain
 import { emit_bootstrap_qbe, emit_recovery_managed_qbe } from managed/qbe
 import { native_create_directory, native_read_text } from support/file_system
 import trb/std/process
@@ -30,6 +30,14 @@ describe("Managed recovery managed QBE runtime") do
 				expect(diagnostic.code).to_equal("TRBN0004")
 				expect(diagnostic.path).to_equal("/functions")
 				expect(diagnostic.message).to_equal("Native bootstrap requires compiler_main")
+			end
+			# Bootstrap selection must reject before file writes or external tools.
+			case build_compiler_recovery_executable(native_module, "/missing-qbe", "/missing-cc", "/missing-workspace", "/missing-output")
+			when Result::Ok(_report)
+				expect(false).to_be_true()
+			when Result::Err(error)
+				expect(error.phase).to_equal("verify")
+				expect(error.message).to_equal("TRBN0004 /functions: Native bootstrap requires compiler_main")
 			end
 		when Result::Err(diagnostic)
 			puts(diagnostic.path + ": " + diagnostic.message)

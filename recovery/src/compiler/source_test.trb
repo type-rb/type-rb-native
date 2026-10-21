@@ -2,6 +2,7 @@ import { compiler_recovery_mutations } from compiler/mutations
 import { compiler_recovery_layout } from compiler/layout
 import { RecoveryCompilerSources, compiler_source_directory, compiler_source_has_import, compiler_source_path, flatten_compiler_recovery_source, read_compiler_recovery_sources, read_required_compiler_source, valid_recovery_module_name, write_recovery_source_files } from compiler/source
 import { matched_go_empty_main_source } from driver/matched_go
+import { native_write_text } from support/file_system
 import trb/std/result
 import trb/std/process
 import { describe, expect, test } from trb/std/test
@@ -85,8 +86,9 @@ describe("Compiler recovery source closure") do
 		case Process.run("/usr/bin/mktemp", ["-d", "/tmp/trbn-source-paths.XXXXXX"])
 		when Result::Ok(created)
 			expect(created.success).to_be_true()
-			directory := created.stdout.split("\n")[0]
-			expect(directory.start_with?("/tmp/trbn-source-paths.")).to_be_true()
+			temporary := created.stdout.split("\n")[0]
+			expect(temporary.start_with?("/tmp/trbn-source-paths.")).to_be_true()
+			directory := temporary + "/source tree"
 			case write_recovery_source_files(["checking/value", "mir/value"], ["first", "second"], directory)
 			when Result::Ok(written)
 				expect(written).to_be_true()
@@ -119,7 +121,35 @@ describe("Compiler recovery source closure") do
 				expect(false).to_be_true()
 			when Result::Err(_message)
 			end
-			case Process.run("/bin/rm", ["-r", directory])
+			case write_recovery_source_files([], [], directory + "/empty")
+			when Result::Ok(written)
+				expect(written).to_be_true()
+			when Result::Err(_message)
+				expect(false).to_be_true()
+			end
+			case native_write_text(directory + "/blocked", "keep")
+			when Result::Ok(_written)
+			when Result::Err(_error)
+				expect(false).to_be_true()
+			end
+			case write_recovery_source_files(["fresh/value", "blocked/value"], ["first", "second"], directory)
+			when Result::Ok(_written)
+				expect(false).to_be_true()
+			when Result::Err(message)
+				expect(message.start_with?("mkdir:")).to_be_true()
+			end
+			case read_required_compiler_source(directory + "/fresh/value.trb")
+			when Result::Ok(_source)
+				expect(false).to_be_true()
+			when Result::Err(_message)
+			end
+			case read_required_compiler_source(directory + "/blocked")
+			when Result::Ok(source)
+				expect(source).to_equal("keep")
+			when Result::Err(_message)
+				expect(false).to_be_true()
+			end
+			case Process.run("/bin/rm", ["-r", temporary])
 			when Result::Ok(removed)
 				expect(removed.success).to_be_true()
 			when Result::Err(_error)

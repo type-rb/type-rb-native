@@ -50,12 +50,12 @@ class CompleteCompilerUnitsTest(unittest.TestCase):
         self.binary.write_text(FAKE)
         self.binary.chmod(0o755)
 
-    def run_runner(self, mode=""):
+    def run_runner(self, mode="", jobs=2):
         environment = os.environ.copy()
         environment["FAKE_MODE"] = mode
         return subprocess.run(
             [sys.executable, str(RUNNER), "--root", str(self.root),
-             "--binary", str(self.binary), "--scratch", str(self.root), "--jobs", "2",
+             "--binary", str(self.binary), "--scratch", str(self.root), "--jobs", str(jobs),
              "--timeout-seconds", "1"],
             env=environment, capture_output=True, text=True, check=False,
         )
@@ -80,6 +80,32 @@ class CompleteCompilerUnitsTest(unittest.TestCase):
         self.assertIn("2 files, 2 tests", result.stdout)
         self.assertIn("compiler/src/checking/alpha_test.trb", result.stdout)
         self.assertIn("compiler/src/mir/analysis/beta_test.trb", result.stdout)
+
+    def test_long_files_start_early_without_omitting_unlisted_files(self):
+        names = [
+            "tests/compiler/source_loading_test.trb",
+            "backend/qbe/emit/constants_test.trb",
+            "mir/passes/optimize_test.trb",
+            "mir/analysis/numeric_selection_test.trb",
+        ]
+        for name in names:
+            path = self.root / "compiler/src" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('describe("synthetic") do\nend\n')
+        result = self.run_runner(jobs=1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("6 files, 6 tests", result.stdout)
+        order = [line.split(" [", 1)[0].removeprefix("=== compiler/src/")
+                 for line in result.stdout.splitlines() if line.startswith("=== ")]
+        self.assertEqual(order, names + ["alpha_test.trb", "beta_test.trb"])
+
+        # A renamed long file remains discovered without a matching hint.
+        old = self.root / "compiler/src" / names[0]
+        old.rename(old.with_name("renamed_test.trb"))
+        result = self.run_runner(jobs=1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("6 files, 6 tests", result.stdout)
+        self.assertIn("tests/compiler/renamed_test.trb", result.stdout)
 
     def test_rejects_missing_wrong_duplicate_and_failed_cases(self):
         for mode, expected in (
