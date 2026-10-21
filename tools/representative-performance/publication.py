@@ -73,6 +73,12 @@ def validate_snapshot(snapshot):
     for binary in snapshot["binaries"].values():
         require(set(binary) == {"sha256", "bytes"} and HASH.fullmatch(binary["sha256"]) and type(binary["bytes"]) is int and binary["bytes"] > 0, "Invalid application identity")
     require(isinstance(snapshot.get("environment"), dict) and snapshot["environment"].get("GOMAXPROCS") == "1", "Invalid execution environment")
+    environment = snapshot["environment"]
+    if "peakRssMethod" in environment:
+        require(environment["peakRssMethod"] in ("gnu-time-child-v1", "wait4-bytes-v1"), "Unknown RSS method")
+        if environment["peakRssMethod"] == "gnu-time-child-v1":
+            tool = environment.get("rssTool", {})
+            require(set(tool) == {"sha256", "version"} and HASH.fullmatch(tool["sha256"]) and isinstance(tool["version"], str), "Missing RSS tool identity")
     require(isinstance(snapshot.get("samples"), int) and 1 <= snapshot["samples"] <= 100 and snapshot.get("warmups") == 1, "Invalid sampling policy")
     inputs, rows = snapshot.get("inputs"), snapshot.get("rows")
     require(isinstance(inputs, list) and 1 <= len(inputs) <= 100 and isinstance(rows, list), "Invalid case inventory")
@@ -184,6 +190,11 @@ def snapshot(manifest, attempt):
                        for name in ("native", "reference", "go")},
              "binaries": {role: {key: manifest["binaries"][role][key] for key in ("sha256", "bytes")} for role in ROLES},
              "environment": {key: manifest["environment"][key] for key in ("GOMAXPROCS", "affinity", "cpuPinning", "filesystemCache")}}
+    for key in ("peakRssMethod", "timingMethod"):
+        if key in manifest["environment"]:
+            value["environment"][key] = manifest["environment"][key]
+    if "rssTool" in manifest["environment"]:
+        value["environment"]["rssTool"] = {key: manifest["environment"]["rssTool"][key] for key in ("sha256", "version")}
     value["series"] = hashlib.sha256(json.dumps([sources, reference_revision, value["samples"], value["warmups"],
                                                value["platform"], value["machine"], value["environment"]], sort_keys=True).encode()).hexdigest()
     return validate_snapshot(value)

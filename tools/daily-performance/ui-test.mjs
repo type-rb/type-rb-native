@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assessment, change, value, metrics } from '../../docs/capabilities/benchmarks/daily-model.mjs';
-import { groupResults, resultFor, verdict } from '../../docs/capabilities/benchmarks/representative-model.mjs';
+import { groupResults, resultFor, verdict, metricValue } from '../../docs/capabilities/benchmarks/representative-model.mjs';
 test('verdicts distinguish speed, memory, build time and size without inverting ratios', () => {
   assert.deepEqual(assessment(change(80, 100), 'runtime'), { tone: 'better', label: 'Faster', detail: '20.0% less time' });
   assert.equal(assessment(change(120, 100), 'runtime').label, 'Slower');
@@ -31,6 +31,17 @@ test('representative throughput reverses time direction and zero CPU stays unkno
   assert.equal(verdict(2, 1, 'wallSeconds').label, 'Slower');
   assert.equal(verdict(0, 1, 'cpuSeconds').label, 'Not comparable');
   assert.equal(verdict(1.01, 1, 'peakRssBytes').label, 'About the same');
+});
+test('legacy Linux RSS is unavailable without changing valid timing or source data', () => {
+  const input = { id: 'json-small', workload: 'json-transform', count: 16, batches: 5, size: 'small', variant: 'valid' };
+  const row = { case: input.id, summaries: { native: { wallSeconds: 1, peakRssBytes: 60000000 }, 'pure-go': { wallSeconds: 2, peakRssBytes: 60000000 } } };
+  const snapshot = { platform: 'Linux', environment: {}, inputs: [input], rows: [row] };
+  assert.equal(groupResults([input], snapshot, 'pure-go', 'peakRssBytes')[0].counts.missing, 1);
+  assert.equal(metricValue(snapshot, row, 'native', 'wallSeconds'), 1);
+  assert.equal(row.summaries.native.peakRssBytes, 60000000);
+  snapshot.environment.peakRssMethod = 'gnu-time-child-v1';
+  assert.equal(metricValue(snapshot, row, 'native', 'peakRssBytes'), 60000000);
+  assert.equal(metricValue({ platform: 'macOS' }, row, 'native', 'peakRssBytes'), 60000000);
 });
 test('language areas use geometric means, keep the weakest workload and count missing values', async () => {
   const { areaSummary, familyCoverage } = await import('../../docs/capabilities/benchmarks/daily-model.mjs');

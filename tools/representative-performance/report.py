@@ -6,6 +6,8 @@ from pathlib import Path
 
 
 def render(result):
+    invalid_rss = (result["platform"].startswith("Linux") and
+                   result.get("environment", {}).get("peakRssMethod") != "gnu-time-child-v1")
     lines = ["# Representative performance diagnostic", "",
              f"Status: {result['status']}. Platform: {result['platform']}.",
              "", "Local diagnostic only. Ratios below 1 mean shorter Native process wall time.",
@@ -26,10 +28,13 @@ def render(result):
             values = [f"{native['processWallSeconds']['p50'] * 1000:.3f}",
                       f"{ratios['pure-go']:.3f}" if "pure-go" in ratios else "unknown",
                       f"{ratios['typerb-go']:.3f}" if "typerb-go" in ratios else "unknown",
-                      f"{native['peakRssBytes'] / 1024 ** 2:.2f}", f"{tail('p95')} / {tail('p99')}"]
+                      "unknown" if invalid_rss else f"{native['peakRssBytes'] / 1024 ** 2:.2f}",
+                      f"{tail('p95')} / {tail('p99')}"]
         lines.append("| " + case["id"] + " | " + " | ".join(values) + " |")
     lines.extend(["", "Batch arrival intervals include pipe/scheduling overhead; they are not request latency.",
                   "Coalesced markers or insufficient tail observations remain unknown."])
+    if invalid_rss:
+        lines.extend(["", "Legacy Linux RSS includes observer memory and is unavailable; other metrics and raw observations are retained."])
     if result.get("smoke"):
         lines.extend(["", "This is correctness smoke; its timings do not establish a performance comparison."])
     if result.get("error"):

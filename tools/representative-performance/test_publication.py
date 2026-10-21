@@ -42,6 +42,17 @@ class PublicationTests(unittest.TestCase):
         self.assertNotIn("/synthetic/private", json.dumps(value))
         self.assertEqual(set(value["rows"][0]["summaries"]), set(publication.ROLES))
 
+    def test_rss_method_and_tool_identity_survive_without_local_paths(self):
+        data = manifest()
+        data["environment"].update(peakRssMethod="gnu-time-child-v1", timingMethod="process tree",
+                                   rssTool={"path": "/synthetic/private/time", "sha256": "e" * 64, "version": "GNU time"})
+        value = publication.snapshot(data, attempt())
+        self.assertEqual(value["environment"]["peakRssMethod"], "gnu-time-child-v1")
+        self.assertNotIn("/synthetic/private", json.dumps(value))
+        value["environment"].pop("rssTool")
+        with self.assertRaises(ValueError):
+            publication.validate_snapshot(value)
+
     def test_smoke_wrong_source_and_selected_subsets_cannot_be_complete_results(self):
         for mutate in (lambda d: d.update(smoke=True), lambda d: d.update(repositoryRevision="b" * 40),
                        lambda d: d.update(sourceSha256="d" * 64), lambda d: d["plannedCases"].pop(),
