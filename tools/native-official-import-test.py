@@ -170,11 +170,13 @@ end
     # messages unavailable through the pinned public package's fixed failures.
     # The fixture grants loader ownership explicitly; authored imports above
     # remain forbidden, including after a trusted source has been loaded.
+    # Forward the normal driver entries so byte and host adapters retain the
+    # same canonical compiler owner as the ordinary CLI.
     probe_root = root / 'runtime probe'
     probe_root.mkdir()
     stage_sources([repository / 'compiler/src', repository / 'compiler/cli'], probe_root)
     probe = probe_root / 'runtime_probe.trb'
-    probe.write_text('''import { compiler_main as core_main, check, emit_qbe } from compiler
+    probe.write_text('''import { compiler_main as core_main, compiler_file_main as core_file_main, check, emit_qbe } from compiler
 import { compiler_new } from state/state
 import { lex } from frontend/syntax/lexer
 import { parse_module } from frontend/syntax/parser
@@ -187,6 +189,10 @@ import { repl_call } from repl/eval
 
 def compiler_main(source: String, mode: String, file_mode: Boolean): Integer
 return core_main(source, mode, file_mode)
+end
+
+def compiler_file_main(source: String, path: String, mode: String, file_mode: Boolean): Integer
+return core_file_main(source, path, mode, file_mode)
 end
 
 def native_cli_main(): Integer
@@ -241,7 +247,7 @@ return 0
 end
 
 def main()
-native_cli_main()
+return
 end
 ''')
     run([binary, 'build', '--compile', probe, '--outfile', program])
@@ -352,4 +358,4 @@ puts(read().to_s())
         expected_reference = before[:-len(replay_effects)] + 'reloaded\n' + replay_effects + after
         assert not observed.stderr and observed.stdout == expected_reference, observed
 
-print('PASS exact bundled HTTP imports, canonical identity, file/project/REPL and rejected boundaries')
+print('PASS exact bundled HTTP/Web imports, canonical identity, GC, Runtime failures, file/project/REPL and rejected boundaries')
