@@ -11,10 +11,9 @@ import { string_starts_with } from support/path
 import { find_record_type } from frontend/resolution/type_resolution
 import { repl_witness_type_name } from repl/project
 import { CompilerState } from state/state
-import { load_integer, load_string } from support/storage
 
-# Source witnesses are checked but never evaluated. Recursive declarations must
-# find a finite constructor path; optional/container fields already terminate.
+# Source witnesses are checked but never evaluated. Nominal values use typed
+# projections so retained values need neither constructors nor initializer replay.
 def repl_default(state: CompilerState, type_name: String): String
 	return repl_default_seen(state, type_name, [])
 end
@@ -89,67 +88,11 @@ def repl_default_seen(state: CompilerState, type_name: String, seen: Array<Strin
 		end
 		return selected
 	end
-	if find_newtype_type(state, type_name) >= 0 || find_object_type(state, type_name) >= 0
+	if find_newtype_type(state, type_name) >= 0 || find_object_type(state, type_name) >= 0 || find_record_type(state, type_name) >= 0 || find_enum_type(state, type_name) >= 0
 		# A typed projection witnesses an already checked value without calling
 		# a closed raw constructor or executing a user factory again.
 		name := repl_witness_type_name(state, type_name)
 		return "(fn(): " + name + "\n_witness: Array<" + name + "> := []\nreturn _witness[0]\nend)()"
 	end
-	enum_index := find_enum_type(state, type_name)
-	if enum_index >= 0
-		definition := state.nominal.enums[enum_index]
-		mut variant := definition.variant_start
-		while variant < definition.variant_start + definition.variant_count
-			row := state.nominal.enum_variants[variant]
-			mut text := repl_witness_type_name(state, type_name) + "::" + row.name
-			mut possible := true
-			mut slot := 0
-			if row.field_count > 0
-				text += "("
-			end
-			while slot < row.field_count && possible
-				field := state.nominal.enum_fields[row.field_start + slot]
-				value := repl_default_seen(state, field.type_name, path)
-				if value == ""
-					possible = false
-				end
-				if slot > 0
-					text += ", "
-				end
-				if field.named_only
-					text += field.name + ": "
-				end
-				text += value
-				slot += 1
-			end
-			if row.field_count > 0
-				text += ")"
-			end
-			if possible
-				return text
-			end
-			variant += 1
-		end
-		return ""
-	end
-	record_index := find_record_type(state, type_name)
-	if record_index < 0
-		return ""
-	end
-	start := load_integer(state.declarations.record_field_starts, record_index)
-	count := load_integer(state.declarations.record_field_counts, record_index)
-	mut text := repl_witness_type_name(state, type_name) + ".new("
-	mut index := 0
-	while index < count
-		if index > 0
-			text += ", "
-		end
-		value := repl_default_seen(state, load_string(state.declarations.field_types, start + index), path)
-		if value == ""
-			return ""
-		end
-		text += load_string(state.declarations.field_names, start + index) + ": " + value
-		index += 1
-	end
-	return text + ")"
+	return ""
 end
