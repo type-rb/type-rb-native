@@ -92,7 +92,7 @@ implemented declaration families:
 
 | TypeRB behavior | Current Native behavior |
 | --- | --- |
-| Named import | Selects an exact supported record, enum, function, alias, module or constant declaration |
+| Named import | Selects an exact supported record, class, interface, enum, function, alias, module or constant declaration |
 | Named `as` alias | Changes only the local binding; canonical declaration identity remains exact |
 | Bare project import | Selects one matching supported record, class, interface, enum, generic nominal, alias, module or constant root |
 | Bare `as` alias | Selects the same unique declaration first, then changes its local binding |
