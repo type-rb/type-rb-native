@@ -22,6 +22,7 @@ python3 "$repository_root/tools/compiler_sources.py" "$stage/compiler" \
 "$reference" compiler bootstrap-snapshot --snapshot-version 4 \
 	"$stage/compiler/compiler.trb" > "$stage/snapshot.json"
 test -s "$stage/snapshot.json"
+python3 "$repository_root/tools/bootstrap_snapshot_size.py" "$stage/snapshot.json"
 if [ -n "$output" ]; then
 	cp "$stage/snapshot.json" "$output"
 fi
