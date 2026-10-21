@@ -10,7 +10,7 @@ Each count describes registered probes, not language coverage percentages.
 | Numeric and Boolean operations | basic | 1 / 50 | Remaining operators and assignment forms; mixed widening and portable failure boundaries; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
 | Bindings, constants and mutation | basic | 5 / 163 | Remaining collection-inference combinations; qualified namespace binding members (TypeRB #787) | VariableStatement, AssignmentStatement |
 | Function declarations and calls | basic | 0 / 49 | none registered | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
-| Defaults and named arguments | basic | 0 / 22 | Method, function-value and payload-enum argument parity |  |
+| Defaults and named arguments | basic | 0 / 25 | Method, function-value and payload-enum argument parity |  |
 | Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
 | Loop control and transfers | basic | 0 / 10 | Additional nested transfer and diagnostic-origin differential probes | WhileStatement, BreakStatement, NextStatement |
 | Case statements and expressions | basic | 0 / 16 | none registered | CaseStatement |
@@ -32,8 +32,9 @@ Each count describes registered probes, not language coverage percentages.
 | Explicit interface conformance | basic | 0 / 21 | Variance and method-specific generic contracts with the reference object specification; Initialized-superclass and override dependencies | InterfaceStatement |
 | Modules and constant lookup | basic | 1 / 40 | Remaining module method and qualified mutable namespace-member boundaries | ModuleStatement |
 | Symbol values | basic | 1 / 36 | Remaining reference operator/control framing and multiline interpolation boundaries | SymbolLiteral |
-| Project imports and declaration identity | basic | 0 / 32 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
+| Project imports and declaration identity | basic | 0 / 38 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
 | Target source interop | toolchain | 0 / 0 | Go/Ruby/TypeScript source emission and platform interop | NativeStatement, NativeBlock, NativeExpression |
 | JSX and web bindings | packages | 0 / 0 | Typed JSX and official web-package boundaries | JSXElement |
 | Package capability activation | packages | 0 / 0 | Package-owned activation and resolution | ActivateStatement |
 | Retired authored attempt syntax | retired | 0 / 0 | none registered | AttemptExpression |
+| JSON values and comments | packages | 0 / 33 | Typed record codecs, wire attributes and date/time codecs; Deterministic precedence for multiple invalid object members requires the decision in #1138 |  |

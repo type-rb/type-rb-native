@@ -1,0 +1,67 @@
+import { load_standard_source, standard_source_kind } from project/standard_library
+import { standard_source_function, standard_source_internal_json, standard_source_json, standard_source_jsonc } from state/standard_source_kinds
+import { add_module, compiler_new, has_diagnostic } from state/state
+import { load_integer, load_string, store_integer } from support/storage
+import { describe, expect, test } from trb/std/test
+
+describe("Owned standard JSON sources") do
+	test("loads public JSON and the registry-owned JSONC namespace") do
+		mut state := compiler_new(1048576)
+		json := load_standard_source(state, standard_source_json(), 1)
+		jsonc := load_standard_source(state, standard_source_jsonc(), 1)
+		expect(has_diagnostic(state)).to_be_false()
+		expect(load_string(state.module_graph.module_names, json)).to_equal("trb/std/json/index")
+		expect(load_string(state.module_graph.module_names, jsonc)).to_equal("trb/std/jsonc/index")
+		mut found := false
+		state.global_bindings.namespaces.each do |namespace|
+			if namespace.name == "JSONC" && namespace.source_id == jsonc
+				found = true
+			end
+		end
+		expect(found).to_be_true()
+	end
+
+	test("authorizes both public owners before consulting the internal source cache") do
+		mut state := compiler_new(1048576)
+		json := load_standard_source(state, standard_source_json(), 1)
+		# The reference-hosted frontend has only the recovery byte constructor.
+		# Ordinary CLI tests parse/execute the adapter; here test owner admission
+		# before returning an already loaded internal module.
+		internal := add_module(state, "trb/internal/json/index", "<trb/internal/json/index>")
+		store_integer(state.standard_modules, internal, standard_source_internal_json())
+		state.module_graph.active_module[0] = json
+		expect(load_standard_source(state, standard_source_internal_json(), 1)).to_equal(internal)
+		expect(has_diagnostic(state)).to_be_false()
+		jsonc := load_standard_source(state, standard_source_jsonc(), 1)
+		state.module_graph.active_module[0] = jsonc
+		expect(load_standard_source(state, standard_source_internal_json(), 2)).to_equal(internal)
+		expect(has_diagnostic(state)).to_be_false()
+		entry := add_module(state, "main", "main.trb")
+		state.module_graph.active_module[0] = entry
+		expect(load_standard_source(state, standard_source_internal_json(), 3)).to_equal(-1)
+		expect(has_diagnostic(state)).to_be_true()
+		expect(load_integer(state.diagnostics.lines, 0)).to_equal(3)
+	end
+
+	test("rejects forged names and unrelated trusted source owners") do
+		[0, standard_source_kind("trb/std/url")].each do |kind|
+			mut state := compiler_new(1048576)
+			entry := add_module(state, "trb/std/json/index", "authored.trb")
+			store_integer(state.standard_modules, entry, kind)
+			state.module_graph.active_module[0] = entry
+			expect(load_standard_source(state, standard_source_internal_json(), 7)).to_equal(-1)
+			expect(has_diagnostic(state)).to_be_true()
+		end
+	end
+
+	test("exports only each pinned service contract") do
+		expect(standard_source_function(standard_source_json(), "::parse")).to_be_true()
+		expect(standard_source_function(standard_source_json(), "::field")).to_be_true()
+		expect(standard_source_function(standard_source_jsonc(), "::parse")).to_be_true()
+		expect(standard_source_function(standard_source_json(), "::_decode_error")).to_be_false()
+		expect(standard_source_function(standard_source_json(), "::parse_jsonc")).to_be_false()
+		expect(standard_source_function(standard_source_jsonc(), "::stringify")).to_be_false()
+		expect(standard_source_function(standard_source_internal_json(), "::_serialize")).to_be_false()
+		expect(standard_source_function(0, "::parse")).to_be_false()
+	end
+end
