@@ -124,6 +124,49 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
     run([binary, 'build', '--compile', main, '--outfile', program])
     assert run([program]).stdout == '[7]\n'
 
+    # Cover every raw non-control octet, UTF-8 width boundary and invalid
+    # prefix. JSON decoding replaces each invalid byte, unlike Bytes#to_s's
+    # maximal-subpart replacement. String escaping must also preserve HTML
+    # and JavaScript safety after a long, otherwise unescaped prefix.
+    def quoted(text):
+        encoded = json.dumps(text, ensure_ascii=False)
+        for character in ('<', '>', '&', '\u2028', '\u2029'):
+            encoded = encoded.replace(character, f'\\u{ord(character):04x}')
+        return encoded
+
+    pairs = [(bytes([octet]), chr(octet) if octet < 128 else '\ufffd')
+             for octet in range(32, 256) if octet not in (34, 92)]
+    for point in (0x80, 0x7ff, 0x800, 0xd7ff, 0xe000, 0xffff,
+                  0x10000, 0x10ffff, 0x2028, 0x2029, 0xfffd):
+        pairs.append((chr(point).encode(), chr(point)))
+    for raw in (b'\xc0\xaf', b'\xc2', b'\xe0\x9f\xbf', b'\xed\xa0\x80',
+                b'\xe2\x82', b'\xf0\x8f\xbf\xbf', b'\xf4\x90\x80\x80',
+                b'\xf0\x90\x80', b'\xf5\x80\x80\x80'):
+        pairs.append((raw, '\ufffd' * len(raw)))
+    statements, outputs = [], []
+    for raw, decoded in pairs:
+        literal = '"' + ''.join(f'\\x{octet:02x}' for octet in b'"' + raw + b'"') + '"'
+        statements.append(f'parse_and_display({literal})')
+        outputs.append(quoted(decoded))
+    for suffix in ('', '<>&', '\u2028\u2029', '"\\\n\t\x00'):
+        value = 'aβ😀' * 256 + suffix
+        statements.append(f'display(JSON::Value::String({json.dumps(value, ensure_ascii=False)}))')
+        outputs.append(quoted(value))
+    declarations = source.split('def probe()')[0].replace('import trb/std/jsonc\n', '').replace('import trb/std/url\n', '')
+    main.write_text(declarations + '''
+def parse_and_display(text: String)
+case JSON.parse(text)
+when Result::Ok(value)
+display(value)
+when Result::Err(error)
+puts(error.message)
+end
+end
+def main()
+''' + '\n'.join(statements) + '\nend\n')
+    run([binary, 'build', '--compile', main, '--outfile', program])
+    assert run([program]).stdout == '\n'.join(outputs) + '\n'
+
     for declarations in ('import trb/internal/json as Hidden\n',
                          'module JSON\nend\nimport trb/internal/json as Hidden\n'):
         main.write_text(declarations + 'def main()\nputs("unreachable")\nend\n')
