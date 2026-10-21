@@ -58,9 +58,9 @@ list in `compiler/src/tests/compiler/source_loading_test.trb` equal to the impor
 or a stale needle. Review generated mutations, then run the focused
 `Compiler recovery source closure` root test before pushing.
 Run `tools/check-bootstrap-snapshot.sh /path/to/pinned/trb` on the canonical
-compiler closure before publishing each compiler-source batch. It is a short
-snapshot-v4 compatibility check, not a check of the Native decoder's byte bound
-or a replacement for recovery-enabled suites. If a larger compiler snapshot
+compiler closure before publishing each compiler-source batch. It checks
+snapshot-v4 compatibility and the byte bound read from the recovery decoder;
+it does not replace recovery-enabled suites. If a larger compiler snapshot
 reaches that bound, measure the emitted bytes and retain exact-limit tests when
 adjusting the compiler-only limit.
 When introducing compiler-source constructs or data structures, run this short

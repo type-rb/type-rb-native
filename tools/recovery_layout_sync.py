@@ -126,6 +126,22 @@ def default_mutation(name: str, source: str) -> list[str] | None:
         bound = re.fullmatch(r"(>=|<=|==|!=|>|<) ([0-9]+)", needle)
         if bound and int(bound[2]) < 9007199254740991 and source.count(needle) == 1:
             return [name, needle, f"{bound[1]} {int(bound[2]) + 1}"]
+    # Bit-mask analyses may have no unique comparison literal. A positive
+    # remainder divisor is a typed control mutation without division by zero.
+    for match in re.finditer(STRING + r"|#[^\n]*|% [0-9]+\b", body):
+        needle = match.group(0)
+        divisor = re.fullmatch(r"% ([0-9]+)", needle)
+        if divisor and 0 < int(divisor[1]) < 9007199254740991 and source.count(needle) == 1:
+            return [name, needle, f"% {int(divisor[1]) + 1}"]
+    # Use the complete binding to distinguish repeated Boolean values without
+    # editing comments, strings, or unrelated initializers.
+    binding = r"^\t*mut [a-z_][a-z0-9_]* := (true|false)\n"
+    for match in re.finditer(STRING + r"|#[^\n]*|" + binding, body, re.MULTILINE):
+        needle = match.group(0)
+        boolean = re.fullmatch(binding, needle)
+        if boolean and source.count(needle) == 1:
+            opposite = "false" if boolean[1] == "true" else "true"
+            return [name, needle, needle[:boolean.start(1)] + opposite + "\n"]
     # Named Integer literals need neither strings nor comparisons. Include the
     # line ending so a shorter value cannot also match a longer/Float return.
     for match in re.finditer(STRING + r"|#[^\n]*|\breturn [0-9]+\n", body):

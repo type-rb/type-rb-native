@@ -163,6 +163,8 @@ record MirArrayLoop
 	cached_values: Array<MirArrayCachedValue>
 	# Duplicate the verified first header/body visit when this body is present.
 	peel_body: Integer
+	# The first visit is known to enter; later visits still test the condition.
+	peel_nonempty: Boolean
 end
 
 # One lazy scalar result cache, reset on each entry from its loop preheader.
@@ -185,10 +187,12 @@ record MirArrayJoin
 	size: Integer
 	# Verified separator literal with ASCII boundary bytes; -1 keeps runtime checks.
 	separator_literal: Integer
-	# Final binary concat represented by byte/point counts until this join; -1 otherwise.
-	size_concat: Integer
+	# Confined concat producers represented by byte/point counts at their original sites.
+	size_concats: Array<Integer>
 	appends: Array<Integer>
 	elements: Array<Integer>
+	# Verified literal identity for each element; -1 keeps runtime header loads.
+	element_literals: Array<Integer>
 end
 
 record MirRootPlan
@@ -300,8 +304,9 @@ record MirUnionTarget
 	member: String
 end
 
-# Derived singleton code identity for one indirect invocation. Captures retain
-# the existing environment ABI; effects summarize the verified target body.
+# Invocation rows prove a direct target and effects while retaining its capture
+# ABI. Constructor rows prove an unused environment and have no effects.
+# Verification rederives both from the current SSA.
 record MirCallablePlan
 	instruction: Integer
 	callee: Integer

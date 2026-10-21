@@ -15,12 +15,27 @@ import qbe_toolchain as qbe
 
 
 class BackendTest(unittest.TestCase):
+    def test_unused_copy_cycle_or_missing_dump_is_rejected(self):
+        for dump in ("", "> After GCM:\n@loop\n %left =l phi @start %a, @body %right\nret %i\n"):
+            with self.subTest(dump=dump), patch.object(
+                    qbe.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", dump)):
+                with self.assertRaisesRegex(ValueError, "dead copy cycle"):
+                    qbe.check_copy_liveness(Path("synthetic-copy-qbe"))
+
+    def test_missing_or_unconditional_contraction_is_rejected(self):
+        for assembly in ("fmul d0, d0, d1\nfadd d0, d0, d2\n", "fmadd d0, d0, d1, d2\n"):
+            with self.subTest(assembly=assembly), patch.object(
+                    qbe.subprocess, "run", return_value=subprocess.CompletedProcess(
+                        [], 0, assembly, "")):
+                with self.assertRaisesRegex(ValueError, "Float contraction"):
+                    qbe.check_contraction(Path("synthetic-contraction-qbe"))
+
     def test_identity_and_patch_tampering(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             shutil.copytree(qbe.ROOT / "tools/qbe", root / "tools/qbe")
             original = qbe.backend_identity(root)
-            self.assertEqual(original["variant"], "typerb-arm64-memory-v3")
+            self.assertEqual(original["variant"], "typerb-copy-liveness-v1")
             manifest = root / "tools/qbe/backend.json"
             for key, value in (("variant", "stock"), ("version", "1.4"),
                                ("patches", []), ("patches", original["patches"][::-1]),
@@ -88,6 +103,33 @@ class BackendTest(unittest.TestCase):
                 [], 0, previous, "")):
             with self.assertRaisesRegex(ValueError, "shared memory"):
                 qbe.check_capability(Path("synthetic-single-use-qbe"))
+
+    def test_previous_motion_does_not_claim_invariant_guard_capability(self):
+        assembly = ("fsqrt d0, d0\nsqrtsd %xmm0, %xmm0\nadd x0, x0, #7\n"
+                    "and x0, x0, #65535\nasr x0, x0, #1\n"
+                    "ldr x0, [x1, #8]\nstr x0, [x1, #16]\n"
+                    "ldr x0, [x1, x2, lsl #3]\nstr w0, [x1, x2, lsl #2]\n"
+                    "shared_memory:\nldr x0, [x1, x2, lsl #3]\n"
+                    "str x4, [x1, x2, lsl #3]\n")
+        for dump in ("", "> After GCM:\n@body\n %snk.1 =w csltl %a, %b\n@yes\n"):
+            with self.subTest(dump=dump), patch.object(
+                    qbe.subprocess, "run", return_value=subprocess.CompletedProcess(
+                        [], 0, assembly, dump)):
+                with self.assertRaisesRegex(ValueError, "invariant expression motion"):
+                    qbe.check_capability(Path("synthetic-previous-motion-qbe"))
+
+    def test_guard_only_backend_does_not_claim_address_motion(self):
+        assembly = ("fsqrt d0, d0\nsqrtsd %xmm0, %xmm0\nadd x0, x0, #7\n"
+                    "and x0, x0, #65535\nasr x0, x0, #1\n"
+                    "ldr x0, [x1, #8]\nstr x0, [x1, #16]\n"
+                    "ldr x0, [x1, x2, lsl #3]\nstr w0, [x1, x2, lsl #2]\n"
+                    "shared_memory:\nldr x0, [x1, x2, lsl #3]\n"
+                    "str x4, [x1, x2, lsl #3]\n")
+        dump = "> After GCM:\n@body\n %value =l load %address\n@yes\n@done\n"
+        with patch.object(qbe.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, assembly, dump)):
+            with self.assertRaisesRegex(ValueError, "loop address rematerialization"):
+                qbe.check_capability(Path("synthetic-guard-only-qbe"))
 
 
 if __name__ == "__main__":

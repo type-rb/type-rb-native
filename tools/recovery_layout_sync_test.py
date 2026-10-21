@@ -14,6 +14,18 @@ FRONTEND = (
 
 
 class RecoveryInventorySyncTest(unittest.TestCase):
+    def test_analysis_mutations_skip_comments_strings_and_zero_divisors(self):
+        self.assertEqual(default_mutation("effects", 'return effects % 2\n'),
+                         ["effects", "% 2", "% 3"])
+        for body in ('return value % 0\n', '# value % 2\n', 'return "% 2"\n',
+                     'return a % 2 + b % 2\n', 'return value % 9007199254740991\n'):
+            self.assertIsNone(default_mutation("no_divisor", body))
+        binding = "\tmut needed := false\n"
+        self.assertEqual(default_mutation("scan", binding + "\tmut other := false\n"),
+                         ["scan", binding, binding.replace("false", "true")])
+        self.assertIsNone(default_mutation("duplicate", binding + binding))
+        self.assertIsNone(default_mutation("comment", "# mut needed := false\n"))
+
     def test_default_mutation_covers_unique_integer_equality(self):
         source = 'def eligible(kind: Integer): Boolean\nreturn kind != 2\nend\n'
         self.assertEqual(default_mutation("eligible", source),

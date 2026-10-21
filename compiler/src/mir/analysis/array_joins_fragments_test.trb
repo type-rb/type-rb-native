@@ -16,7 +16,7 @@ describe("MIR joined size fragment counts") do
 		mut state := array_loop_mir_check("def measure(text: String): Integer\nlabel := text + \"!\"\nreturn [label, label].join(\"/\").size()\nend\ndef main()\nputs(measure(\"xy\"))\nend\n")
 		index := mir_function_index(state.scalar_mir, 0)
 		plan := state.scalar_mir.array_joins[index][0]
-		expect(plan.size_concat >= 0).to_be_true()
+		expect(plan.size_concats.size() > 0).to_be_true()
 		expect(state.scalar_mir.root_plans[index].instructions.size()).to_equal(0)
 		before := control_test_output(emit_qbe(state))
 		intrinsic_mir_erase(state)
@@ -32,26 +32,24 @@ describe("MIR joined size fragment counts") do
 				expect(false).to_be_true()
 			end
 		end
-		state.scalar_mir.array_joins[index][0] = MirArrayJoin.new(construction: plan.construction, array: plan.array, join: plan.join, size: plan.size, separator_literal: plan.separator_literal, size_concat: -1, appends: plan.appends, elements: plan.elements)
+		state.scalar_mir.array_joins[index][0] = MirArrayJoin.new(construction: plan.construction, array: plan.array, join: plan.join, size: plan.size, separator_literal: plan.separator_literal, size_concats: [], appends: plan.appends, elements: plan.elements, element_literals: plan.element_literals)
 		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR Array join plan differs")
 	end
 
-	test("retains unknown boundaries escaping values intervening calls and fused producers") do
+	test("retains unknown boundaries and escaping values") do
 		[
 			"label := text + other",
 			"label := text + \"!\"\nputs(label)",
-			"label := text + \"!\"\nputs(other)",
-			"label := \"!\" + text + \"?\"",
 			"label := text + \"\"",
 		].each do |body|
 			state := array_loop_mir_check("def measure(text: String, other: String): Integer\n" + body + "\nreturn [label, label].join(\"/\").size()\nend\ndef main()\nend\n")
 			plan := state.scalar_mir.array_joins[mir_function_index(state.scalar_mir, 0)][0]
-			expect(plan.size_concat).to_equal(-1)
+			expect(plan.size_concats.size()).to_equal(0)
 		end
 	end
 
 	test("matches materialized concatenation for arbitrary bytes") do
-		state := array_loop_mir_check("def measure(text: String): Integer\nlabel := text + \"!\"\nreturn [label, label].join(\"/\").size()\nend\ndef main()\nend\n")
+		state := array_loop_mir_check("def measure(text: String): Integer\nlabel := \"!\" + text + \"!\"\nreturn [label, label].join(\"/\").size()\nend\ndef main()\nend\n")
 		mut output := control_test_output(emit_qbe(state)).split("export function w $main(").join("function w $join_unused_main(")
 		corpus: Array<Array<Integer>> := [[], [0], [65], [194], [162], [194, 162], [226], [130, 172], [240, 159, 152, 128], [255]]
 		corpus.each.with_index do |bytes, index|
@@ -63,7 +61,7 @@ describe("MIR joined size fragment counts") do
 			output += ", b 0 }\n"
 		end
 		output += "data $suffix = align 8 { l 0, l 1, l 1, b 33, b 0 }\ndata $separator = align 8 { l 0, l 1, l 1, b 47, b 0 }\n"
-		output += "function $probe(l %text) {\n@start\n %label =l call $trbn_string_concat(l %text, l $suffix)\n %storage =l alloc8 16\n storel %label, %storage\n %second =l add %storage, 8\n storel %label, %second\n %joined =l call $trbn_string_join(l %storage, l 2, l $separator)\n %points =l add %joined, 16\n %expected =l loadl %points\n %actual =l call $trbnf0(l %text)\n %same =w ceql %actual, %expected\n jnz %same, @ok, @bad\n@bad\n call $exit(w 3)\n hlt\n@ok\n ret\n}\nexport function w $main() {\n@start\n"
+		output += "function $probe(l %text) {\n@start\n %head =l call $trbn_string_concat(l $suffix, l %text)\n %label =l call $trbn_string_concat(l %head, l $suffix)\n %storage =l alloc8 16\n storel %label, %storage\n %second =l add %storage, 8\n storel %label, %second\n %joined =l call $trbn_string_join(l %storage, l 2, l $separator)\n %points =l add %joined, 16\n %expected =l loadl %points\n %actual =l call $trbnf0(l %text)\n %same =w ceql %actual, %expected\n jnz %same, @ok, @bad\n@bad\n call $exit(w 3)\n hlt\n@ok\n ret\n}\nexport function w $main() {\n@start\n"
 		corpus.each.with_index do |_bytes, index|
 			output += " call $probe(l $fragment" + index.to_s() + ")\n"
 		end
