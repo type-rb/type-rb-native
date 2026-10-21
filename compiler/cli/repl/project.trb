@@ -7,7 +7,7 @@ import { find_newtype_type, newtype_type } from frontend/types/newtype_types
 import { union_parts } from frontend/types/union_types
 import { namespace_parent } from frontend/types/namespace_model
 import { callable_parts } from frontend/types/callable_types
-import { generic_application } from frontend/types/generic_arguments
+import { generic_application, generic_arguments, generic_base } from frontend/types/generic_arguments
 import { standard_source_kind } from project/standard_library
 import { nullable_element } from frontend/types/nullable_types
 import { hash_key_type, hash_value_type } from frontend/types/hash_types
@@ -238,20 +238,12 @@ def repl_project_source(source: String, prelude: String): String
 	return filtered + authored
 end
 
-# Display uses visible aliases. Generated witnesses use opaque names whose
-# ownership descriptors are rebound in the next checked catalog.
-def repl_type_name(state: CompilerState, type_name: String, owned: Boolean = false, source_literals: Boolean = true): String
-	if owned && (find_object_type(state, type_name) >= 0 || find_record_type(state, type_name) >= 0 || find_enum_type(state, type_name) >= 0 || find_newtype_type(state, type_name) >= 0)
-		return repl_projection_name(type_name)
-	end
+def repl_type_name(state: CompilerState, type_name: String): String
 	if type_name == "Array"
 		return "Array<Any>"
 	end
 	if literal_type_base(type_name) != ""
-		if source_literals
-			return literal_type_display(type_name)
-		end
-		return type_name
+		return literal_type_display(type_name)
 	end
 	alternatives := union_parts(type_name)
 	if alternatives.size() > 0
@@ -261,7 +253,7 @@ def repl_type_name(state: CompilerState, type_name: String, owned: Boolean = fal
 			if union_index > 0
 				text += " | "
 			end
-			text += repl_type_name(state, alternative, owned, source_literals)
+			text += repl_type_name(state, alternative)
 			union_index += 1
 		end
 		return text
@@ -274,24 +266,24 @@ def repl_type_name(state: CompilerState, type_name: String, owned: Boolean = fal
 			if parameter > 1
 				text += ", "
 			end
-			text += repl_type_name(state, parts[parameter], owned, source_literals)
+			text += repl_type_name(state, parts[parameter])
 			parameter += 1
 		end
-		return text + ") -> " + repl_type_name(state, parts[0], owned, source_literals)
+		return text + ") -> " + repl_type_name(state, parts[0])
 	end
 	if nullable_element(type_name) != ""
 		element := nullable_element(type_name)
 		if callable_parts(element).size() > 0 || union_parts(element).size() > 0
-			return "(" + repl_type_name(state, element, owned, source_literals) + ")?"
+			return "(" + repl_type_name(state, element) + ")?"
 		end
-		return repl_type_name(state, element, owned, source_literals) + "?"
+		return repl_type_name(state, element) + "?"
 	end
 	if hash_key_type(type_name) != ""
-		return "Hash<" + repl_type_name(state, hash_key_type(type_name), owned, source_literals) + ", " + repl_type_name(state, hash_value_type(type_name), owned, source_literals) + ">"
+		return "Hash<" + repl_type_name(state, hash_key_type(type_name)) + ", " + repl_type_name(state, hash_value_type(type_name)) + ">"
 	end
 	element := array_element_type(type_name)
 	if element != ""
-		return "Array<" + repl_type_name(state, element, owned, source_literals) + ">"
+		return "Array<" + repl_type_name(state, element) + ">"
 	end
 	instance := generic_instance_for_type(state, type_name)
 	if instance >= 0
@@ -303,7 +295,7 @@ def repl_type_name(state: CompilerState, type_name: String, owned: Boolean = fal
 			if argument_index > 0
 				application_name += ", "
 			end
-			application_name += repl_type_name(state, argument, owned, source_literals)
+			application_name += repl_type_name(state, argument)
 			argument_index += 1
 		end
 		return application_name + ">"
@@ -318,7 +310,7 @@ def repl_type_name(state: CompilerState, type_name: String, owned: Boolean = fal
 		end
 		mut arguments: Array<String> := []
 		row.arguments.each do |argument|
-			arguments.push(repl_type_name(state, argument, owned, source_literals))
+			arguments.push(repl_type_name(state, argument))
 		end
 		return generic_application(name, arguments)
 	end
@@ -416,11 +408,117 @@ def repl_projection_name(type_name: String): String
 end
 
 def repl_witness_type_name(state: CompilerState, type_name: String): String
-	return repl_type_name(state, type_name, true)
+	return repl_witness_type_name_at(state, type_name, [])
 end
 
-# Descriptors retain canonical literal identities, including nested type
-# arguments. Source witnesses and display keep escaped source spellings.
+def repl_witness_type_name_at(state: CompilerState, type_name: String, blocked: Array<Integer>): String
+	if find_object_type(state, type_name) >= 0 || find_record_type(state, type_name) >= 0 || find_enum_type(state, type_name) >= 0 || find_newtype_type(state, type_name) >= 0
+		return repl_projection_name(type_name)
+	end
+	mut index := 0
+	while index < state.type_resolution.alias_instances.size()
+		instance := state.type_resolution.alias_instances[index]
+		mut available := true
+		blocked.each do |used|
+			if used == index
+				available = false
+			end
+		end
+		if instance.type_name == type_name && available
+			definition := state.type_resolution.type_aliases[instance.definition]
+			mut visible := ""
+			if definition.source_id == state.module_graph.entry_module[0]
+				visible = definition.name
+			else
+				visible = repl_imported_name(state, definition.source_id, definition.name)
+			end
+			if visible != ""
+				if instance.arguments.size() == 0
+					return visible
+				end
+				mut names: Array<String> := []
+				mut nested: Array<Integer> := []
+				blocked.each do |used|
+					nested.push(used)
+				end
+				nested.push(index)
+				instance.arguments.each do |argument|
+					names.push(repl_witness_type_name_at(state, argument, nested))
+				end
+				return generic_application(visible, names)
+			end
+		end
+		index += 1
+	end
+	if literal_type_base(type_name) != ""
+		return literal_type_display(type_name)
+	end
+
+	alternatives := union_parts(type_name)
+	if alternatives.size() > 0
+		mut text := ""
+		mut union_index := 0
+		alternatives.each do |alternative|
+			if union_index > 0
+				text += " | "
+			end
+			text += repl_witness_type_name_at(state, alternative, blocked)
+			union_index += 1
+		end
+		return text
+	end
+	parts := callable_parts(type_name)
+	if parts.size() > 0 && nullable_element(type_name) == ""
+		mut text := "("
+		mut parameter := 1
+		while parameter < parts.size()
+			if parameter > 1
+				text += ", "
+			end
+			text += repl_witness_type_name_at(state, parts[parameter], blocked)
+			parameter += 1
+		end
+		return text + ") -> " + repl_witness_type_name_at(state, parts[0], blocked)
+	end
+	if nullable_element(type_name) != ""
+		element := nullable_element(type_name)
+		name := repl_witness_type_name_at(state, element, blocked)
+		if callable_parts(element).size() > 0 && name.size() > 0 && name[0] == "("
+			return "(" + name + ")?"
+		end
+		return name + "?"
+	end
+	element := array_element_type(type_name)
+	if element != ""
+		return "Array<" + repl_witness_type_name_at(state, element, blocked) + ">"
+	end
+	if hash_key_type(type_name) != ""
+		return "Hash<" + repl_witness_type_name_at(state, hash_key_type(type_name), blocked) + "," + repl_witness_type_name_at(state, hash_value_type(type_name), blocked) + ">"
+	end
+	return repl_type_name(state, type_name)
+end
+
+# Metadata keeps the canonical structure of literals, unions and callables;
+# only nominal leaves are replaced by their ownership descriptor keys.
+def repl_descriptor_type_name(state: CompilerState, type_name: String): String
+	if find_object_type(state, type_name) >= 0 || find_record_type(state, type_name) >= 0 || find_enum_type(state, type_name) >= 0 || find_newtype_type(state, type_name) >= 0
+		return repl_projection_name(type_name)
+	end
+	optional := nullable_element(type_name)
+	if optional != ""
+		return repl_descriptor_type_name(state, optional) + "?"
+	end
+	parts := generic_arguments(type_name)
+	if parts.size() > 0
+		mut arguments: Array<String> := []
+		parts.each do |part|
+			arguments.push(repl_descriptor_type_name(state, part))
+		end
+		return generic_application(generic_base(type_name), arguments)
+	end
+	return type_name
+end
+
 def repl_projected_types(state: CompilerState): Array<ProjectedType>
 	mut bindings: Array<ProjectedType> := []
 	mut index := 0
@@ -429,7 +527,7 @@ def repl_projected_types(state: CompilerState): Array<ProjectedType>
 		definition := state.nominal.objects[row.definition]
 		mut arguments: Array<String> := []
 		row.arguments.each do |argument|
-			arguments.push(repl_type_name(state, argument, true, false))
+			arguments.push(repl_descriptor_type_name(state, argument))
 		end
 		bindings.push(ProjectedType.new(name: repl_projection_name(object_instance_type(state, index)), module_name: load_string(state.module_graph.module_names, definition.source_id), declaration: definition.name, arguments: arguments))
 		index += 1
@@ -447,7 +545,7 @@ def repl_projected_types(state: CompilerState): Array<ProjectedType>
 			owner = definition.source_id
 			declaration = definition.name
 			row.arguments.each do |argument|
-				arguments.push(repl_type_name(state, argument, true, false))
+				arguments.push(repl_descriptor_type_name(state, argument))
 			end
 		end
 		bindings.push(ProjectedType.new(name: repl_projection_name(name), module_name: load_string(state.module_graph.module_names, owner), declaration: declaration, arguments: arguments))
@@ -466,7 +564,7 @@ def repl_projected_types(state: CompilerState): Array<ProjectedType>
 			owner = definition.source_id
 			declaration = definition.name
 			row.arguments.each do |argument|
-				arguments.push(repl_type_name(state, argument, true, false))
+				arguments.push(repl_descriptor_type_name(state, argument))
 			end
 		end
 		bindings.push(ProjectedType.new(name: repl_projection_name(name), module_name: load_string(state.module_graph.module_names, owner), declaration: declaration, arguments: arguments))
