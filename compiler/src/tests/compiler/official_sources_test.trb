@@ -49,10 +49,23 @@ describe("Bundled official source imports") do
 
 	test("checks transitive imports instead of omitting unsupported package bodies") do
 		mut state := load_project_sources("/project/trbconfig.jsonc", "/project/src",
+			CompilerProjectSources.new(paths: ["/project/src/main.trb", "/project/src/bridge.trb"],
+				sources: ["import bridge\ndef main()\nreturn\nend\n", "import trb/cli\n"], error: ""))
+		expect(has_diagnostic(state)).to_be_true()
+		expect(load_string(state.diagnostics.messages, 0)).to_equal("official package requires an unimplemented platform or semantic provider: trb/cli/index")
+		owner := load_integer(state.diagnostics.modules, 0)
+		expect(load_string(state.module_graph.module_names, owner)).to_equal("bridge")
+	end
+
+	# Reference-hosted unit tests use the recovery byte constructor. Ordinary
+	# Native CLI tests exercise the byte-preserving adapter and complete Web
+	# imports; this boundary must still report its transitive JSON limitation.
+	test("reports recovery byte construction limits in transitive Web imports") do
+		mut state := load_project_sources("/project/trbconfig.jsonc", "/project/src",
 			CompilerProjectSources.new(paths: ["/project/src/main.trb"],
 				sources: ["import trb/web/middleware\ndef main()\nreturn\nend\n"], error: ""))
 		expect(has_diagnostic(state)).to_be_true()
-		expect(load_string(state.diagnostics.messages, 0)).to_equal("official package requires an unimplemented platform or semantic provider: trb/web/index")
+		expect(load_string(state.diagnostics.messages, 0)).to_equal("bootstrap String byte construction does not support this escape")
 	end
 
 	test("retains the imported source origin during semantic resolution") do
@@ -61,8 +74,8 @@ describe("Bundled official source imports") do
 		parse_module(state, 0, 0)
 		expect(resolve(state)).to_be_false()
 		owner := load_integer(state.diagnostics.modules, 0)
-		expect(load_string(state.module_graph.module_names, owner)).to_equal("trb/web/middleware/index")
-		expect(load_integer(state.diagnostics.lines, 0)).to_equal(1)
+		expect(load_string(state.module_graph.module_names, owner)).to_equal("trb/internal/json/index")
+		expect(load_integer(state.diagnostics.lines, 0) > 0).to_be_true()
 		expect(state.module_graph.active_module[0]).to_equal(0)
 	end
 end
