@@ -278,7 +278,8 @@ end
         ('import trb/internal/runtime', 'package imports'),
         ('import trb/platform/typescript/browser', 'unimplemented platform or semantic provider'),
         ('import trb/platform/go/cli', 'unimplemented platform or semantic provider'),
-        ('import trb/web/testing', 'unimplemented platform or semantic provider: trb/web/testing/index'),
+        # The provider exports named dispatch; it has no default root value.
+        ('import trb/web/testing', 'no record root declaration matching testing'),
     ]:
         main.write_text(imports + '\ndef main()\nreturn\nend\n')
         rejected = run([binary, 'check', main], success=False)

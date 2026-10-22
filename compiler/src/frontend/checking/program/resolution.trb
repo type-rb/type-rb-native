@@ -1,3 +1,4 @@
+import { validate_web_routes } from frontend/checking/program/web_routes
 import { resolve_projected_types } from frontend/resolution/projected_types
 import { ProjectedType } from state/source_state
 import { standard_source_errors, standard_source_result, standard_source_unowned } from state/standard_source_kinds
@@ -23,6 +24,10 @@ import { import_path_value, resolve_bare_imports, validate_import_bindings } fro
 import { resolve_enum_declarations } from frontend/resolution/enum_resolution
 
 def resolve_declarations(mut state: CompilerState): Boolean
+	return resolve_declarations_with_entry(state, true)
+end
+
+def resolve_declarations_with_entry(mut state: CompilerState, require_entry: Boolean): Boolean
 	state.global_bindings.namespaces.each do |declaration|
 		mut kind := declaration_function()
 		while kind < declaration_namespace()
@@ -119,7 +124,7 @@ def resolve_declarations(mut state: CompilerState): Boolean
 			declared_module = module_index
 		end
 		state.module_graph.active_module[0] = module_index
-		if module_index == state.module_graph.entry_module[0]
+		if require_entry && module_index == state.module_graph.entry_module[0]
 			if load_string(state.declarations.function_names, function_index) == "main"
 				main_count += 1
 				if load_integer(state.declarations.function_parameter_counts, function_index) != 0
@@ -181,7 +186,7 @@ def resolve_declarations(mut state: CompilerState): Boolean
 		end
 		function_index += 1
 	end
-	if main_count != 1
+	if require_entry && main_count != 1
 		state.module_graph.active_module[0] = state.module_graph.entry_module[0]
 		diagnostic(state, "TRBN4003", 1, "program must declare exactly one main function")
 	end
@@ -227,6 +232,16 @@ def resolve(mut state: CompilerState): Boolean
 end
 
 def resolve_with_projected_types(mut state: CompilerState, projected_types: Array<ProjectedType>): Boolean
+	return resolve_program(state, projected_types, true)
+end
+
+# Project validation for the REPL resolves the complete graph without imposing
+# executable-entry rules. Ordinary checking retains those rules by default.
+def resolve_without_entry(mut state: CompilerState): Boolean
+	return resolve_program(state, [], false)
+end
+
+def resolve_program(mut state: CompilerState, projected_types: Array<ProjectedType>, require_entry: Boolean): Boolean
 	if state.nominal.raw_enum_values.size() > 0 || builtin_result_source(state)
 		load_standard_source(state, standard_source_result(), 1)
 		load_standard_source(state, standard_source_errors(), 1)
@@ -249,7 +264,10 @@ def resolve_with_projected_types(mut state: CompilerState, projected_types: Arra
 	if !resolve_bare_imports(state)
 		return false
 	end
-	if !resolve_declarations(state)
+	if !resolve_declarations_with_entry(state, require_entry)
+		return false
+	end
+	if !validate_web_routes(state)
 		return false
 	end
 	if !resolve_raw_enum_results(state)

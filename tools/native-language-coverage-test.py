@@ -51,6 +51,33 @@ class LanguageCoverageTests(unittest.TestCase):
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 coverage.validate(document)
 
+    def test_project_route_paths_stay_inside_the_fixture(self):
+        for name in ("routes/items/[id].trb", "routes/files/[...rest].trb", "routes/café.trb"):
+            self.assertTrue(coverage.valid_case_file(name, True))
+            self.assertFalse(coverage.valid_case_file(name, False))
+        for name in ("/routes/x.trb", "routes/../outside.trb", "routes//x.trb",
+                     "routes/./x.trb", "routes/x\\escape.trb", "routes/evil\n.trb",
+                     "routes/evil\0.trb", "main.trb"):
+            self.assertFalse(coverage.valid_case_file(name, True), name)
+        document = copy.deepcopy(self.document)
+        document["cases"][0]["projectCheck"] = "true"
+        with self.assertRaises(ValueError):
+            coverage.validate(document)
+
+    def test_project_check_explicitly_checks_the_same_route_graph_as_build(self):
+        case = copy.deepcopy(self.document["cases"][0])
+        case.update(projectCheck=True, files={"routes/[id].trb": "def get()\nend\n"})
+        calls = []
+        def observe(binary, arguments, root, *input):
+            calls.append(arguments)
+            self.assertTrue((root / "routes/[id].trb").is_file())
+            self.assertTrue((root / "trbconfig.jsonc").is_file())
+            return {"code": 1, "stdout": "", "stderr": "fixture rejected"}
+        with tempfile.TemporaryDirectory() as directory, patch.object(coverage, "observe", side_effect=observe):
+            coverage.collect(case, Path("native"), None, Path(directory))
+        self.assertEqual(calls[0], ["check", "--config", "trbconfig.jsonc"])
+        self.assertNotIn("main.trb", calls[1])
+
     def test_states_do_not_count_session_exit_zero_as_feature_support(self):
         states = [(case["title"], coverage.coverage_states(case)) for case in coverage.validate(self.document)]
         for title, repl in [("UTF-8 String literal", "matches reference"), ("while", "matches reference"),

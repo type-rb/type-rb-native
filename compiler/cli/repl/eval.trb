@@ -1,3 +1,4 @@
+import { web_dispatch_function } from frontend/resolution/web_dispatch
 import { standard_entropy } from frontend/resolution/secure_random_intrinsics
 import { native_cli_entropy } from host
 import { web_context_primitive } from frontend/resolution/web_context_intrinsics
@@ -80,6 +81,10 @@ import { repl_scalar_string, repl_binding_value, repl_assign_binding, repl_rende
 # type checking remain owned by the ordinary compiler; no source is replayed.
 def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Integer>, mut store: ReplStore): Integer
 	if repl_failed(store)
+		return 0
+	end
+	if web_dispatch_function(state, function)
+		store.error[0] = "intrinsic trb.web.testing.dispatch has no REPL runtime adapter"
 		return 0
 	end
 	context_primitive := web_context_primitive(state, function)
@@ -818,7 +823,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				if find_object_type(state, value.type_name) >= 0
 					owner := find_object_type(state, value.type_name)
 					field := object_field_index(state, owner, "@" + member)
-					if field >= 0 && (union_receiver || (!token_is(state, position[0], "(") && !token_is(state, position[0], "<")))
+					if field >= 0 && (union_receiver || (!token_is(state, position[0], "(") && (!token_is(state, position[0], "<") || nominal_application_end(state, position[0] - 1) < 0)))
 						result = ReplReference.new(value: repl_present(store, store.children[result.value][field], ""), binding: -1, container: result.value, slot: field)
 						if token_is(state, position[0], "(")
 							result = repl_callable_expression(state, position, store, environment, result.value)
