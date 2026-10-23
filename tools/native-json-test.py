@@ -191,6 +191,10 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         {f"key-{index}": "aβ😀\n<>&" for index in range(256)},
         {"left": [[], {}, [False, True]], "right": {"nested": [{}, [], None]}},
     ]
+    nested = 0
+    for _ in range(128):
+        nested = {"z": nested, "a": []}
+    structures.append(nested)
     for value in structures:
         document = json.dumps(value, ensure_ascii=False)
         statements.append(f'parse_and_display({json.dumps(document, ensure_ascii=False)})')
@@ -242,7 +246,13 @@ end
 def main()
 ''' + '\n'.join(statements) + '\nend\n')
     run([binary, 'build', '--compile', main, '--outfile', program])
-    assert run([program]).stdout == '\n'.join(outputs) + '\n'
+    actual = run([program]).stdout
+    assert actual == '\n'.join(outputs) + '\n', {
+        'expectedLines': len(outputs), 'actualLines': len(actual.splitlines()),
+        'differences': [(index + 1, expected[:160], observed[:160])
+                        for index, (expected, observed) in enumerate(zip(outputs, actual.splitlines()))
+                        if expected != observed][:3],
+    }
     emitted = run([binary, '--internal-driver', 'emit-qbe', main]).stdout
     join = re.search(r'^function l \$trbn_array_join\([^\n]*\) \{.*?^\}', emitted, re.M | re.S)
     assert join
