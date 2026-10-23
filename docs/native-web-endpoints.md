@@ -21,7 +21,7 @@ class ItemsEndpoint < Endpoint
 end
 ```
 
-The contract class directly extends the owned `Endpoint`, names exactly one
+The top-level contract class directly extends the owned `Endpoint`, names exactly one
 local file-route handler and declares one or more unique literal response
 statuses from 100 through 599. Optional `input<T>()` declares the input envelope.
 The ordinary checker resolves the handler signature, type arguments and marker
@@ -72,7 +72,8 @@ transparent alias of it describe a bodyless response. Native preserves these
 reference distinctions pending the [canonical identity decision](https://github.com/type-rb/type-rb-native/issues/1207).
 
 Owned contracts do not grant metadata privileges to unrelated class bodies or
-local declarations with the same names. General class-body call execution is
+local declarations with the same names. Nested contract classes do not acquire
+the top-level metadata capability. General class-body call execution is
 still an [ordinary language gap](https://github.com/type-rb/type-rb-native/issues/1208); it is rejected explicitly rather than silently
 removed. Browser-client generation and network serving are separate providers.
 

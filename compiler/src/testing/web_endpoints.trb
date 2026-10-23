@@ -8,7 +8,7 @@ import { expect_compiler_phase } from testing/pipeline
 
 # Shared synthetic fixture for declaration checking and document generation.
 # Tests select the phase under observation; this helper does not assert success.
-def web_endpoint_test_state(body: String, declarations: String = "", path: String = "items", additional_imports: String = ""): CompilerState
+def web_endpoint_test_state(body: String, declarations: String = "", path: String = "items", additional_imports: String = "", namespace: String = ""): CompilerState
 	mut names := "Context, Response, Endpoint"
 	if body.include?("handles(")
 		names += ", handles"
@@ -19,7 +19,11 @@ def web_endpoint_test_state(body: String, declarations: String = "", path: Strin
 	if body.include?("response<")
 		names += ", response"
 	end
-	source := "import { " + names + " } from trb/web\n" + additional_imports + "\n" + declarations + "\ndef get(_context: Context): Response\nreturn Response.new()\nend\nclass ItemsEndpoint < Endpoint\n" + body + "\nend\n"
+	mut contract := "class ItemsEndpoint < Endpoint\n" + body + "\nend\n"
+	if namespace != ""
+		contract = "module " + namespace + "\n" + contract + "end\n"
+	end
+	source := "import { " + names + " } from trb/web\n" + additional_imports + "\n" + declarations + "\ndef get(_context: Context): Response\nreturn Response.new()\nend\n" + contract
 	# Minimal owned declarations avoid exercising byte adapters in the Go-hosted
 	# unit runner. Ordinary CLI cases load and execute the exact pinned package.
 	owned := "class Context\nend\nclass Response\nend\nclass Endpoint\nend\ndef handles(handler: (Context) -> Response)\nreturn\nend\ndef input<T>()\nreturn\nend\ndef response<T>(*, status: Integer)\nreturn\nend\n"
