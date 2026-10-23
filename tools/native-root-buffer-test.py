@@ -87,7 +87,7 @@ void *observe_realloc(void *old, size_t bytes) {
     active = next; active_bytes = bytes;
     return next + 16;
 }
-void trbn_fail(const void *message, int64_t bytes) {
+void trbn_fatal(const void *message, int64_t bytes) {
     const char text[] = "panic: allocation failed\n";
     assert(expected_failure && bytes == 26 && !memcmp(message, text, sizeof text - 1));
     ++failures;
