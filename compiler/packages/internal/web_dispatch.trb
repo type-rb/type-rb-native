@@ -1,3 +1,4 @@
+import trb/internal/runtime as Runtime
 import { Body, Header, Headers, HttpMethod } from trb/http
 import { Context, Next, Request, Response } from trb/web
 import { Middleware, compose } from trb/web/middleware
@@ -129,6 +130,12 @@ class DispatchCore implements Next
 		@routes = routes
 	end
 	def call(context: Context): Response
+		action := fn(): Response
+			return self.dispatch(context)
+		end
+		return Runtime.recover<Response>(action, protocol(500, "internal_server_error"))
+	end
+	def dispatch(context: Context): Response
 		request := context.request
 		if request.body.size() > 1048576
 			return protocol(413, "payload_too_large")
@@ -187,7 +194,7 @@ class DispatchCore implements Next
 	end
 end
 
-def run(request: Request, routes: Array<Route>, middlewares: Array<Middleware>): Response
+def dispatch_request(request: Request, routes: Array<Route>, middlewares: Array<Middleware>): Response
 	mut normalized := normalized_request(request)
 	path := normalized_path(normalized.path)
 	mut terminal: Next := FixedResponse.new(protocol(400, "bad_request"))
@@ -198,6 +205,19 @@ def run(request: Request, routes: Array<Route>, middlewares: Array<Middleware>):
 	context := Context.new(request: normalized, path_parameters: {})
 	response := checked_response(compose(context, terminal, middlewares))
 	if normalized.method.to_s() == "HEAD"
+		return Response.new(status: response.status, headers: response.headers, body: Body.empty())
+	end
+	return response
+end
+
+# The outer boundary catches root middleware failures; the core boundary above
+# returns a recovered response through Next so the root middleware can resume.
+def run(request: Request, routes: Array<Route>, middlewares: Array<Middleware>): Response
+	action := fn(): Response
+		return dispatch_request(request, routes, middlewares)
+	end
+	response := Runtime.recover<Response>(action, protocol(500, "internal_server_error"))
+	if request.method.to_s().upcase() == "HEAD"
 		return Response.new(status: response.status, headers: response.headers, body: Body.empty())
 	end
 	return response

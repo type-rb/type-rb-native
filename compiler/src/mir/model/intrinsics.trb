@@ -1,4 +1,5 @@
-import { mir_adapter_argv, mir_adapter_collect_project_sources, mir_adapter_entropy, mir_adapter_eputs, mir_adapter_file_exists, mir_adapter_host, mir_adapter_literal_byte, mir_adapter_none, mir_adapter_reset_temporary_storage, mir_adapter_runtime_fail, mir_adapter_source_is_utf8, mir_adapter_source_slice, mir_adapter_sqrt, mir_adapter_string_bytes, mir_adapter_time_clock, mir_adapter_time_zone_data, mir_signature_compiler_runtime, mir_signature_host, mir_signature_interface, mir_signature_ordinary, mir_signature_standard } from mir/model/call_kinds
+import { callable_type } from frontend/types/callable_types
+import { mir_adapter_argv, mir_adapter_collect_project_sources, mir_adapter_entropy, mir_adapter_eputs, mir_adapter_file_exists, mir_adapter_host, mir_adapter_literal_byte, mir_adapter_none, mir_adapter_reset_temporary_storage, mir_adapter_runtime_fail, mir_adapter_runtime_recover, mir_adapter_source_is_utf8, mir_adapter_source_slice, mir_adapter_sqrt, mir_adapter_string_bytes, mir_adapter_time_clock, mir_adapter_time_zone_data, mir_signature_compiler_runtime, mir_signature_host, mir_signature_interface, mir_signature_ordinary, mir_signature_standard } from mir/model/call_kinds
 import { ascii_code, integer_string } from support/literals
 import { MirModule, MirSignature, mir_type_id } from mir/model/module
 import { mir_semantic_type_name, mir_semantic_value_type } from mir/model/types
@@ -30,6 +31,9 @@ def mir_call_symbol(signature: MirSignature): String
 		end
 		if signature.adapter == mir_adapter_runtime_fail()
 			return "trbn_runtime_fail"
+		end
+		if signature.adapter == mir_adapter_runtime_recover()
+			return "trbn_runtime_recover_l"
 		end
 		if signature.adapter == mir_adapter_time_clock()
 			return "trbn_time_clock"
@@ -112,10 +116,14 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 			name = "trb/std/math.sqrt"
 			parameters = ["Float"]
 			result = "Float"
-		elsif signature.adapter == mir_adapter_runtime_fail()
+		elsif signature.adapter == mir_adapter_runtime_fail() || signature.adapter == mir_adapter_runtime_recover()
 			name = "trb/internal/runtime.fail"
 			parameters = ["String"]
 			result = signature.result_type
+			if signature.adapter == mir_adapter_runtime_recover()
+				name = "trb/internal/runtime.recover"
+				parameters = [callable_type([], result), result]
+			end
 			mut valid := mir_semantic_value_type(native_module, mir_type_id(result))
 			native_module.types.each do |row|
 				if row.name == result

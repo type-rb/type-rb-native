@@ -91,7 +91,7 @@ void observe_publication(struct string *s) {
     previous_bytes = trbn_gc_heap_bytes;
     ++published;
 }
-void trbn_fail(const void *message, int64_t size) {
+void trbn_fatal(const void *message, int64_t size) {
     const char expected[] = "panic: allocation failed\n";
     assert(size == 26 && !memcmp(message, expected, sizeof expected - 1));
     fputs(expected, stderr); exit(70);
