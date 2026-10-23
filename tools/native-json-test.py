@@ -152,6 +152,8 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         value = 'aβ😀' * 256 + suffix
         statements.append(f'display(JSON::Value::String({json.dumps(value, ensure_ascii=False)}))')
         outputs.append(quoted(value))
+        statements.append(f'parse_and_display({json.dumps(quoted(value), ensure_ascii=False)})')
+        outputs.append(quoted(value))
     declarations = source.split('def probe()')[0].replace('import trb/std/jsonc\n', '').replace('import trb/std/url\n', '')
     main.write_text(declarations + '''
 def parse_and_display(text: String)
@@ -196,6 +198,15 @@ def main()
     pointer_output = ''.join('ok\n' if path is None else path + '\nJSON integer is outside the portable range\n'
                              for _, path in pointer_cases)
     assert run([program]).stdout == pointer_output
+
+    # Loading JSON's shared octets must not grant authored modules access to
+    # the internal dependency, even after the verified provider has loaded it.
+    for declarations in ('import trb/internal/encoding_bytes as Hidden\n',
+                         'import trb/std/json\nimport trb/internal/encoding_bytes as Hidden\n',
+                         'module EncodingBytes\nend\nimport trb/internal/encoding_bytes as Hidden\n'):
+        main.write_text(declarations + 'def main()\nputs("unreachable")\nend\n')
+        result = run([binary, 'check', main], success=False)
+        assert 'internal encoding and entropy sources are reserved for verified standard sources' in result.stderr, result
 
     for declarations in ('import trb/internal/json as Hidden\n',
                          'module JSON\nend\nimport trb/internal/json as Hidden\n'):
