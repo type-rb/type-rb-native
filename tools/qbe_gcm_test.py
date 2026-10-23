@@ -120,12 +120,12 @@ FLOAT_CYCLE = """export function d $float_cycle(d %a, d %b, l %n) {
 }
 """
 
-ORDERED_LOADS = """export function l $ordered_loads(l %p) {
+ORDERED_LOADS = """export function l $ordered_loads(l %p, l %other) {
 @start
  jmp @init
 @init
  storel 7, %p
- %r =l loadl %p
+ %r =l loadl %other
  jnz 1, @first, @second
 @first
  %one =l add %r, 8
@@ -149,7 +149,7 @@ extern int64_t live_cycle(int64_t, int64_t, int64_t, int64_t *);
 extern int64_t observed_cycle(int64_t, int64_t, int64_t, int64_t *);
 extern double float_cycle(double, double, int64_t);
 extern int64_t ordered_calls(int64_t *);
-extern int64_t ordered_loads(int64_t *);
+extern int64_t ordered_loads(int64_t *, int64_t *);
 static int64_t observed, calls, snapshot[2];
 void change_order(int64_t *p) { p[1] = 7; }
 int64_t *inspect_order(int64_t *p) {
@@ -162,7 +162,7 @@ int main(void) {
     unsigned checks = 0;
     int64_t data[] = {3, 3};
     if (ordered_calls(data) != 7 || data[1] != 7) return 9;
-    if (ordered_loads(data) != 15 || data[0] != 7) return 10;
+    if (ordered_loads(data, data) != 15 || data[0] != 7) return 10;
     checks += 2;
     for (unsigned a = 0; a < 6; ++a)
     for (unsigned b = 0; b < 6; ++b)
