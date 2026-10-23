@@ -55,6 +55,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        if: (needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true') && needs.plan.outputs.registry_only != 'true'
+        with:
+          node-version: '24'
       - name: Check compiler responsibility boundaries
         if: needs.plan.outputs.registry_only != 'true'
         run: |
@@ -116,6 +120,12 @@ jobs:
           sh tools/compiler-cost-test.sh
           sh tools/compiler-project-test.sh
       # Reference validity belongs to this oracle job, not the Go-free CLI chain.
+      - name: Verify browser client generation and browser-target transport
+        if: (needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true') && needs.plan.outputs.registry_only != 'true'
+        run: |
+          python3 tools/native-web-client-test.py "$RUNNER_TEMP/trb" --reference \
+            --browser-check --browser-runtime "$(command -v node)" \
+            --report "$RUNNER_TEMP/reference-browser-client.json"
       - name: Verify language fixtures against the exact reference compiler
         if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
         run: |
@@ -137,6 +147,7 @@ jobs:
           path: |
             ${{ runner.temp }}/reference-language.json
             ${{ runner.temp }}/reference-projects.json
+            ${{ runner.temp }}/reference-browser-client.json
           if-no-files-found: warn
           retention-days: 30
       - name: Check that the coverage views match the fixture registry

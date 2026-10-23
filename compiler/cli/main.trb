@@ -2,6 +2,7 @@ import { project_packages_lock } from project/packages
 import { cli_diagnostic } from diagnostics
 import { CompilerState, has_diagnostic } from state/state
 import { resolve } from frontend/checking/program/resolution
+import { web_client_source } from frontend/checking/program/web_client
 import { web_openapi_document } from frontend/checking/program/web_openapi
 import { load_string } from support/storage
 import trb/std/process
@@ -93,6 +94,7 @@ def cli_usage(): Integer
 	puts("  trbn run [SOURCE] [-- ARGS...] Build and run")
 	puts("  trbn install [--frozen] [--offline] Resolve local TypeRB path packages")
 	puts("  trbn repl                   Start a stateful REPL")
+	puts("  trbn web client             Generate a typed browser client from endpoint contracts")
 	puts("  trbn web openapi            Generate OpenAPI 3.1 from endpoint contracts")
 	puts("Options: --mode trb, --config PATH, --outfile PATH, --stdout")
 	puts("TypeRB Native is under development. Execution and QBE emission currently require mode trb.")
@@ -294,7 +296,7 @@ end
 def native_cli_main(): Integer
 	arguments := Process.argv()
 	if arguments.size() > 0 && arguments[0] == "web"
-		return cli_web_openapi(arguments)
+		return cli_web_contract(arguments)
 	end
 	if arguments.size() > 0
 		if arguments[0] == "--internal-driver"
@@ -550,10 +552,13 @@ end
 
 # Contract generation is a target-neutral command. It never asks for a host
 # target, QBE, or a linker. The pinned Web integration requires a main entry.
-def cli_web_openapi(arguments: Array<String>): Integer
-	if arguments.size() < 2 || arguments[1] != "openapi"
-		return cli_error("expected web openapi")
+def cli_web_contract(arguments: Array<String>): Integer
+	if arguments.size() < 2 || (arguments[1] != "openapi" && arguments[1] != "client")
+		return cli_error("expected web client or openapi")
 	end
+	client := arguments[1] == "client"
+	command := "web " + arguments[1]
+	mut name := "ApiClient"
 	mut config := ""
 	mut output := "-"
 	mut title := ""
@@ -572,8 +577,8 @@ def cli_web_openapi(arguments: Array<String>): Integer
 			end
 			character += 1
 		end
-		if option != "--config" && option != "--output" && option != "--title" && option != "--api-version"
-			return cli_error("web openapi: unexpected argument " + option)
+		if option != "--config" && option != "--output" && !(!client && (option == "--title" || option == "--api-version")) && !(client && option == "--name")
+			return cli_error(command + ": unexpected argument " + option)
 		end
 		index += 1
 		if !inline
@@ -587,6 +592,8 @@ def cli_web_openapi(arguments: Array<String>): Integer
 			config = value
 		elsif option == "--output"
 			output = value
+		elsif option == "--name"
+			name = value
 		elsif option == "--title"
 			title = value.strip()
 		else
@@ -625,27 +632,35 @@ def cli_web_openapi(arguments: Array<String>): Integer
 	end
 	mut document := ""
 	if !has_diagnostic(state)
-		document = web_openapi_document(state, title, version)
+		if client
+			document = web_client_source(state, name)
+		else
+			document = web_openapi_document(state, title, version)
+		end
 	end
 	if has_diagnostic(state)
 		native_cli_write(cli_diagnostic(state, config, 0) + "\n", 2)
 		return 1
 	end
+	mut artifact := "OpenAPI"
+	if client
+		artifact = "browser client"
+	end
 	if document == ""
-		return cli_error("cannot encode OpenAPI document")
+		return cli_error("cannot encode " + artifact + " document")
 	end
 	if output.strip() == "" || output == "-"
 		if native_cli_write(document, 1) < 0
-			return cli_error("cannot write OpenAPI document")
+			return cli_error("cannot write " + artifact + " document")
 		end
 		return 0
 	end
 	if string_starts_with(output, "/")
-		return cli_error("web openapi --output: path must be relative to the project root")
+		return cli_error(command + " --output: path must be relative to the project root")
 	end
 	clean := path_normalize(output)
 	if clean == ".." || string_starts_with(clean, "../")
-		return cli_error("web openapi --output: path cannot escape the project root")
+		return cli_error(command + " --output: path cannot escape the project root")
 	end
 	path := path_normalize(path_join(path_directory(config), clean))
 	if !cli_create_directory(path_directory(path))
@@ -653,15 +668,15 @@ def cli_web_openapi(arguments: Array<String>): Integer
 	end
 	temporary := native_cli_tempfile(path)
 	if temporary == ""
-		return cli_error("cannot create temporary OpenAPI output")
+		return cli_error("cannot create temporary " + artifact + " output")
 	end
 	if native_cli_save(temporary, document, 0) != 0 || native_cli_chmod(temporary, 420) != 0
 		native_cli_remove(temporary, 0)
-		return cli_error("cannot write OpenAPI output")
+		return cli_error("cannot write " + artifact + " output")
 	end
 	if native_cli_rename(temporary, path) != 0
 		native_cli_remove(temporary, 0)
-		return cli_error("cannot publish OpenAPI output")
+		return cli_error("cannot publish " + artifact + " output")
 	end
 	puts(path)
 	return 0

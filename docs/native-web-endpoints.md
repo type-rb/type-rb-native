@@ -79,10 +79,55 @@ Owned contracts do not grant metadata privileges to unrelated class bodies or
 local declarations with the same names. Nested contract classes do not acquire
 the top-level metadata capability. General class-body call execution is
 still an [ordinary language gap](https://github.com/type-rb/type-rb-native/issues/1208); it is rejected explicitly rather than silently
-removed. Browser-client generation and network serving are separate providers.
+removed. Network serving remains a separate provider.
+
+## Browser client generation
+
+```sh
+./trbn web client --config trbconfig.jsonc
+./trbn web client --name PublicClient --output generated/api_client.trb
+```
+
+The command generates TypeRB source over `trb/platform/typescript/browser`.
+It uses the same checked endpoint catalog and pinned JSON wire subset as
+OpenAPI generation. It does not run handlers, the program entry point, a server,
+an external formatter or a target toolchain. Generation works in every declared
+project mode; executing the generated client requires a browser-target consumer.
+This command does not establish Native execution of browser APIs or Native
+source-backend support.
+
+Each endpoint produces a status-tagged result enum and a client method derived
+from its name. Methods encode path parameters, omit absent nullable queries,
+repeat array query fields, encode JSON bodies and accept optional headers and
+timeouts. Declared response statuses use typed JSON decoding or bodyless
+responses. Unexpected statuses return a contract error retaining the response;
+transport and decoding failures remain explicit `Result` errors.
+
+Contract types must be imported from shared modules or packages that the browser
+consumer can resolve. The generator imports them instead of copying their
+definitions. Route-local types, colliding generated/imported names and duplicate
+or reserved method names are generation errors. Paths, methods, response statuses
+and imports have deterministic ordering.
+
+Pinned reference limitations remain explicit. A renamed shared type import can
+generate an import that the shared module does not export
+([canonical imported identity](https://github.com/type-rb/type-rb-native/issues/1183)).
+An application record named `Body` can also make an otherwise generated client
+fail browser compilation because of a transport type identity conflict
+([transport Body identity](https://github.com/type-rb/type-rb-native/issues/1212)).
+Generation success alone does not qualify these consumers. Their failures are
+retained alongside successful shared-type browser projections. Package and
+generator responsibility boundaries are subject to a separate
+[ownership review](https://github.com/type-rb/type-rb-native/issues/1211).
 
 Shared ordinary cases cover checking, compilation, execution and REPL loading.
 Provider units check ownership, corrupted catalog identities and types, and
 source-erased MIR emission. `tools/native-web-openapi-test.py` compares complete
 reference-derived documents and checks configuration modes, metadata overrides,
 output replacement, failures, path constraints and absence of external tools.
+`tools/native-web-client-test.py` compares complete reference-derived client
+sources and the same publication boundaries. Its reference mode additionally
+projects generated sources through the pinned TypeScript/browser backend and
+executes a synthetic Fetch transport harness with Node. That harness uses
+in-memory responses, not a network service or browser UI. The Go-free Native CLI
+lane independently compares its own generated source to the same fixtures.
