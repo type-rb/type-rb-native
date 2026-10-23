@@ -1,6 +1,6 @@
 import { import_kind_module, import_kind_named } from state/import_kinds
-import { token_kind_attribute, token_kind_newline } from state/token_kinds
-import { ObjectDefinition, ObjectField, ObjectMethod } from frontend/types/object_model
+import { token_kind_attribute, token_kind_identifier, token_kind_newline } from state/token_kinds
+import { ObjectDefinition, ObjectDirective, ObjectField, ObjectMethod } from frontend/types/object_model
 import { object_default_constructor, parse_object_header } from frontend/syntax/object_syntax
 import { NewtypeDefinition } from frontend/types/newtype_model
 import { newtype_type } from frontend/types/newtype_types
@@ -271,6 +271,15 @@ def parse_object_declaration(mut state: CompilerState, mut position: Array<Integ
 				break
 			end
 			fields.push(ObjectField.new(name: name, type_name: type_name, line: line, origin: origin, readonly: readonly, default_start: default_start, default_finish: default_finish))
+		elsif load_integer(state.source_tokens.token_kinds, origin) == token_kind_identifier() && (token_is(state, origin + 1, "(") || token_is(state, origin + 1, "<") || token_is(state, origin + 1, ".") || token_is(state, origin + 1, "::"))
+			if !parse_expression_syntax(state, position, 1)
+				break
+			end
+			finish := position[0]
+			if !finish_statement(state, position)
+				break
+			end
+			state.nominal.object_directives.push(ObjectDirective.new(source_id: header.source_id, owner: header.name, origin: origin, finish: finish))
 		else
 			if !parse_declaration(state, position)
 				break
