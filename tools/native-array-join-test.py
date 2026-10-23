@@ -62,6 +62,18 @@ with tempfile.TemporaryDirectory(prefix='native-array-join-') as temporary:
     assert measured['collections'] >= 300, measured
     assert measured['peak-heap-bytes'] < 4 * 1024 * 1024, measured
 
+    # Empty-separator Unicode joins reuse the concatenation constructor. Force
+    # collection in its allocation path too, including malformed boundaries and
+    # empty fragments; decoded counts must describe the completed bytes.
+    literals = repository / 'compiler/conformance/valid/array-join-literal-storage'
+    emitted = run([binary, '--internal-driver', 'emit-qbe', literals.with_suffix('.trb')])
+    collector = '\tcall $trbn_gc_maybe_collect(l %projected)'
+    assert emitted.stdout.count(collector) == 1
+    program = compile_il(emitted.stdout.replace(collector, '\tcall $trbn_gc_collect(w 0)'))
+    result = run([program], stats=True)
+    assert result.stdout == literals.with_suffix('.out').read_text(), result
+    assert statistics(result)['collections'] > 0
+
     # Bound total copying/allocation without a wall-clock performance assertion.
     source.write_text('''def main()
 mut values: Array<String> := []

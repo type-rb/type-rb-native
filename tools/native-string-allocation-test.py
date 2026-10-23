@@ -136,7 +136,7 @@ int main(int argc, char **argv) {
         clear();
     }
     /* Keep one cell alive so the next allocation actually reuses a freed cell. */
-    for (int64_t total = 16; total <= 64; ++total) {
+    for (int64_t total = 16; total <= 256; ++total) {
         void *keeper = trbn_storage_alloc(total);
         void *old = trbn_storage_alloc(total);
         memset(old, 0xa5, total);
@@ -146,13 +146,13 @@ int main(int argc, char **argv) {
         for (int64_t i = 0; i < total - 16; ++i) assert(object[8 + i] == 0);
         clear(); trbn_storage_free(keeper, total);
     }
-    for (int64_t length = 0; length <= 31; ++length) {
+    for (int64_t length = 0; length <= 223; ++length) {
         int64_t total = length + 33;
         void *keeper = trbn_storage_alloc(total);
         void *old = trbn_storage_alloc(total);
         memset(old, 0xa5, total);
         trbn_storage_free(old, total);
-        unsigned char input[32]; memset(input, 'x', sizeof input);
+        unsigned char input[224]; memset(input, 'x', sizeof input);
         struct string *s = trbn_string_from_bytes(input, length);
         assert((void *)s == (unsigned char *)old + 8);
         expect(s, input, length, length);

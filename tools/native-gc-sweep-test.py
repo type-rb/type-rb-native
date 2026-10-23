@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Check mixed-object sweep accounting, survivor links and backing-store release."""
 import argparse
-import json
 from pathlib import Path
 import re
 import subprocess
@@ -9,10 +8,18 @@ import tempfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--qbe', type=Path, required=True)
+parser.add_argument('--compiler', type=Path, required=True)
 args = parser.parse_args()
-root = Path(__file__).resolve().parent.parent / 'compiler/src/backend/qbe/runtime'
-decoded = '\n'.join(json.loads(s) for name in ['system.trb', 'managed_storage.trb']
-                    for s in re.findall(r'"(?:[^"\\]|\\.)*"', (root / name).read_text()))
+# Test actual emitted code so named bounds and emitter helpers cannot diverge
+# from the production runtime through a test-only string-literal parser.
+with tempfile.TemporaryDirectory(prefix='native-storage-emission-') as temporary:
+    source = Path(temporary) / 'main.trb'
+    source.write_text('def main()\nputs("storage")\nend\n')
+    emitted = subprocess.run([str(args.compiler.resolve()), 'emit-qbe', str(source)],
+                             check=True, capture_output=True, timeout=30)
+    assert not emitted.stderr, emitted
+    decoded = emitted.stdout.decode()
+
 bodies = []
 for name in ['trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert',
              'trbn_storage_unlink', 'trbn_array_backing_new', 'trbn_array_backing_release', 'trbn_array_backing_flush',
