@@ -1,5 +1,5 @@
 import { time_codec_name } from frontend/providers/time_codecs
-import { find_visible_alias } from frontend/resolution/declaration_lookup
+import { find_import_binding, find_visible_alias } from frontend/resolution/declaration_lookup
 import { array_element_type, find_record_type, generic_instance_for_type, resolve_type_name, type_display } from frontend/resolution/type_resolution
 import { generic_arguments, generic_base } from frontend/types/generic_arguments
 import { namespace_parent } from frontend/types/namespace_model
@@ -32,6 +32,14 @@ def openapi_authored_type_valid(mut state: CompilerState, source: Integer, raw: 
 	optional := nullable_element(raw)
 	if optional != ""
 		return openapi_authored_type_valid(state, source, optional, line, depth + 1)
+	end
+	# The pinned project schema loses nested declaration identity across an
+	# imported namespace. Local qualified types and shared aliases still work.
+	name := generic_base(raw)
+	parts := name.split("::")
+	if parts.size() > 1 && find_import_binding(state, source, parts[0]) >= 0
+		openapi_schema_error(state, line, "JSON schema type " + name + " must be a record, raw-value enum, newtype, or JSON-compatible built-in type")
+		return false
 	end
 	alias_index := find_visible_alias(state, source, generic_base(raw))
 	if alias_index >= 0

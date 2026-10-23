@@ -1,7 +1,9 @@
 import { web_openapi_document } from frontend/checking/program/web_openapi
 import { resolve } from frontend/checking/program/resolution
+import { lex_module } from frontend/syntax/lexer
+import { parse_module } from frontend/syntax/parser
 import { check } from compiler
-import { has_diagnostic } from state/state
+import { add_module, has_diagnostic } from state/state
 import { ProjectWebEndpoint, ProjectWebResponse } from state/web_routes
 import { load_string } from support/storage
 import { expect_compiler_phase } from testing/pipeline
@@ -9,6 +11,25 @@ import { web_endpoint_test_state } from testing/web_endpoints
 import { describe, expect, test } from trb/std/test
 
 describe("Checked Web OpenAPI generation") do
+	test("keeps imported namespace schema rejection separate from local qualified types") do
+		declaration := "module Models\nrecord Item\nid: Integer\nend\nend\n"
+		mut local := web_endpoint_test_state("handles(get)\nresponse<Models::Item>(status: 200)", declaration)
+		expect_compiler_phase(local, "resolve", resolve(local))
+		expect_compiler_phase(local, "check", check(local))
+		expect(web_openapi_document(local, "API", "1.0").include?("#/components/schemas/Models::Item")).to_be_true()
+		expect(has_diagnostic(local)).to_be_false()
+		mut imported := web_endpoint_test_state("handles(get)\nresponse<Models::Item>(status: 200)", "", "items", "import { Models } from contracts/models")
+		add_module(imported, "contracts/models", "/project/src/contracts/models.trb")
+		imported.module_graph.active_module[0] = 3
+		start := imported.source_tokens.token_count[0]
+		expect_compiler_phase(imported, "lex", lex_module(imported, declaration, 3))
+		expect_compiler_phase(imported, "parse", parse_module(imported, start, 3))
+		expect_compiler_phase(imported, "resolve", resolve(imported))
+		expect_compiler_phase(imported, "check", check(imported))
+		expect(web_openapi_document(imported, "API", "1.0")).to_equal("")
+		expect(load_string(imported.diagnostics.messages, 0).include?("JSON schema type Models::Item")).to_be_true()
+	end
+
 	test("rejects forged catalog identities before dereferencing source facts") do
 		mut state := web_endpoint_test_state("handles(get)\nresponse<String>(status: 200)")
 		expect_compiler_phase(state, "resolve", resolve(state))

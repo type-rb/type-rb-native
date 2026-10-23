@@ -70,6 +70,10 @@ are rejected by OpenAPI; transparent time aliases work. A renamed `Unit` import
 is an ordinary empty-record response schema, whereas canonical `Unit` and a
 transparent alias of it describe a bodyless response. Native preserves these
 reference distinctions pending the [canonical identity decision](https://github.com/type-rb/type-rb-native/issues/1207).
+Qualified types reached through an imported namespace are also rejected by the
+pinned schema provider, including nested records, enums, newtypes and aliases.
+Locally declared qualified types and aliases exported by their defining shared
+module retain their existing schema behavior.
 
 Owned contracts do not grant metadata privileges to unrelated class bodies or
 local declarations with the same names. Nested contract classes do not acquire
