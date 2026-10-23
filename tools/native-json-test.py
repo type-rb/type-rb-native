@@ -156,6 +156,16 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         literal = '"' + ''.join(f'\\x{octet:02x}' for octet in b'"' + raw + b'"') + '"'
         statements.append(f'parse_and_display({literal})')
         outputs.append(quoted(decoded))
+    # Encoding raw String bytes must preserve the same replacement boundaries
+    # without relying on the parser to have normalized invalid UTF-8 first.
+    encoded_pairs = [(bytes([octet]), chr(octet) if octet < 128 else '\ufffd')
+                     for octet in range(256)]
+    encoded_pairs.extend((raw, decoded) for raw, decoded in pairs
+                         if len(raw) > 1 and not raw.startswith(b'\\'))
+    for raw, decoded in encoded_pairs:
+        literal = '"' + ''.join(f'\\x{octet:02x}' for octet in raw) + '"'
+        statements.append(f'display(JSON::Value::String({literal}))')
+        outputs.append(quoted(decoded))
     # Exercise accumulated fragments across long ASCII/Unicode/escaped strings.
     for unit, count, tail, decoded in [
             (b'a', 8192, b'\xf0\x90\x80', 'a' * 8192 + '\ufffd' * 3),
@@ -237,7 +247,13 @@ def main()
     join = re.search(r'^function l \$trbn_array_join\([^\n]*\) \{.*?^\}', emitted, re.M | re.S)
     assert join
     assert join[0].count('@start\n') == 1
-    ssa.write_text(emitted.replace(join[0], join[0].replace('@start\n', '@start\n call $trbn_gc_collect(w 0)\n')))
+    forced = emitted.replace(join[0], join[0].replace('@start\n', '@start\n call $trbn_gc_collect(w 0)\n'))
+    # Object construction happens while ancestor key Arrays are retained on
+    # the conversion stack. Collect there as well as at string joins.
+    hash_new = re.search(r'^function l \$trbn_hash_new\([^\n]*\) \{.*?^\}', forced, re.M | re.S)
+    assert hash_new and hash_new[0].count('@start\n') == 1
+    forced = forced.replace(hash_new[0], hash_new[0].replace('@start\n', '@start\n call $trbn_gc_collect(w 0)\n'))
+    ssa.write_text(forced)
     run([binary.with_name('qbe'), '-o', assembly, ssa])
     run(['/usr/bin/cc', assembly, '-lm', '-o', forced_program])
     assert run([forced_program]).stdout == '\n'.join(outputs) + '\n'
@@ -255,6 +271,8 @@ def main()
         ('{"a":9007199254740992,"a":1}', None),
         ('{"a":1,"a":9007199254740992}', '/a'),
         ('[0,{"/~":[0,9007199254740992]}]', '/1/~1~0/1'),
+        ('{"z":{"a":9007199254740992},"a":[{"z":9007199254740992,"a":9007199254740992}]}', '/a/0/a'),
+        ('{"a":{"z":9007199254740992},"a":{"b":1},"b":{"a":9007199254740992}}', '/b/a'),
     ]
     pointer_source = declarations.replace('import trb/std/jsonc\n', '') + '''
 def report_path(source: String)
