@@ -144,10 +144,28 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
                 b'\xe2\x82', b'\xf0\x8f\xbf\xbf', b'\xf4\x90\x80\x80',
                 b'\xf0\x90\x80', b'\xf5\x80\x80\x80'):
         pairs.append((raw, '\ufffd' * len(raw)))
+    # A decoded escape can precede raw UTF-8 octets in the same join. Cached
+    # code-point counts must not mistake these split bytes for separate runes.
+    pairs.extend([
+        (b'\\u00e9' + 'β😀'.encode(), 'éβ😀'),
+        (b'\\ud83d\\ude00' + 'éβ'.encode(), '😀éβ'),
+        (b'\\u00e9' + b'\xf0\x90\x80' + 'β'.encode(), 'é' + '\ufffd' * 3 + 'β'),
+    ])
     statements, outputs = [], []
     for raw, decoded in pairs:
         literal = '"' + ''.join(f'\\x{octet:02x}' for octet in b'"' + raw + b'"') + '"'
         statements.append(f'parse_and_display({literal})')
+        outputs.append(quoted(decoded))
+    # Exercise accumulated fragments across long ASCII/Unicode/escaped strings.
+    for unit, count, tail, decoded in [
+            (b'a', 8192, b'\xf0\x90\x80', 'a' * 8192 + '\ufffd' * 3),
+            (b'\\ud83d\\ude00', 512, b'', '😀' * 512),
+            (b'\\ud800x', 512, b'', '\ufffdx' * 512)]:
+        def octets(raw):
+            return '"' + ''.join(f'\\x{octet:02x}' for octet in raw) + '"'
+        delimiter = bytes([34])
+        expression = f'{octets(delimiter)} + repeated({octets(unit)}, {count}) + {octets(tail + delimiter)}'
+        statements.append(f'parse_and_display({expression})')
         outputs.append(quoted(decoded))
     for suffix in ('', '<>&', '\u2028\u2029', '"\\\n\t\x00'):
         value = 'aβ😀' * 256 + suffix
@@ -160,14 +178,49 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
     structures = [
         [{"id": index, "name": "β😀", "items": [index, None, index % 2 == 0],
           "empty": {}} for index in range(256)],
+        {f"key-{index}": "aβ😀\n<>&" for index in range(256)},
         {"left": [[], {}, [False, True]], "right": {"nested": [{}, [], None]}},
     ]
     for value in structures:
         document = json.dumps(value, ensure_ascii=False)
         statements.append(f'parse_and_display({json.dumps(document, ensure_ascii=False)})')
-        outputs.append(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')))
-    declarations = source.split('def probe()')[0].replace('import trb/std/jsonc\n', '').replace('import trb/std/url\n', '')
+        encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+        for character in ('<', '>', '&', '\u2028', '\u2029'):
+            encoded = encoded.replace(character, f'\\u{ord(character):04x}')
+        outputs.append(encoded)
+    item = json.dumps('"aβ😀",', ensure_ascii=False)
+    last = json.dumps('"aβ😀"]', ensure_ascii=False)
+    statements.append(f'parse_and_display("[" + repeated({item}, 2047) + {last})')
+    outputs.append('[' + ','.join(['"aβ😀"'] * 2048) + ']')
+    for prefix, unit, count, suffix, expected_document in [
+            ('/*', 'β😀* ', 1024, '*/["aβ😀",true]', '["aβ😀",true]'),
+            ('// ', 'β😀', 1024, '\r\n{"value":"a\\nβ😀"}', '{"value":"a\\nβ😀"}'),
+            ('{"slashes":"/* text */ // text",/*', 'x', 4096, '*/"z":0}',
+             '{"slashes":"/* text */ // text","z":0}')]:
+        expression = (f'{json.dumps(prefix, ensure_ascii=False)} + repeated({json.dumps(unit, ensure_ascii=False)}, {count})'
+                      f' + {json.dumps(suffix, ensure_ascii=False)}')
+        statements.append(f'parse_jsonc_and_display({expression})')
+        outputs.append(expected_document)
+    declarations = source.split('def probe()')[0].replace('import trb/std/url\n', '')
     main.write_text(declarations + '''
+# Construct large runtime inputs without embedding large compiler constants.
+def repeated(text: String, count: Integer): String
+mut parts: Array<String> := []
+mut index := 0
+while index < count
+parts.push(text)
+index += 1
+end
+return parts.join("")
+end
+def parse_jsonc_and_display(text: String)
+case JSONC.parse(text)
+when Result::Ok(value)
+display(value)
+when Result::Err(error)
+puts(error.message)
+end
+end
 def parse_and_display(text: String)
 case JSON.parse(text)
 when Result::Ok(value)
@@ -180,6 +233,14 @@ def main()
 ''' + '\n'.join(statements) + '\nend\n')
     run([binary, 'build', '--compile', main, '--outfile', program])
     assert run([program]).stdout == '\n'.join(outputs) + '\n'
+    emitted = run([binary, '--internal-driver', 'emit-qbe', main]).stdout
+    join = re.search(r'^function l \$trbn_array_join\([^\n]*\) \{.*?^\}', emitted, re.M | re.S)
+    assert join
+    assert join[0].count('@start\n') == 1
+    ssa.write_text(emitted.replace(join[0], join[0].replace('@start\n', '@start\n call $trbn_gc_collect(w 0)\n')))
+    run([binary.with_name('qbe'), '-o', assembly, ssa])
+    run(['/usr/bin/cc', assembly, '-lm', '-o', forced_program])
+    assert run([forced_program]).stdout == '\n'.join(outputs) + '\n'
     if args.reference:
         assert run([args.reference.resolve(), 'run', main]).stdout == '\n'.join(outputs) + '\n'
 
@@ -195,7 +256,7 @@ def main()
         ('{"a":1,"a":9007199254740992}', '/a'),
         ('[0,{"/~":[0,9007199254740992]}]', '/1/~1~0/1'),
     ]
-    pointer_source = declarations + '''
+    pointer_source = declarations.replace('import trb/std/jsonc\n', '') + '''
 def report_path(source: String)
 case JSON.parse(source)
 when Result::Ok(_value)

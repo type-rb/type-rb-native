@@ -88,6 +88,43 @@ func transformJSON(documents []string) int64 {
 	return checksum
 }
 
+func jsonDocument(count int, variant string) string {
+	parts := make([]string, 0, count)
+	for index := 0; index < count; index++ {
+		switch variant {
+		case "wide-array":
+			parts = append(parts, "\"aβ😀\"")
+		case "wide-object":
+			parts = append(parts, "\"key-"+strconv.Itoa(index)+"\":\"aβ😀\"")
+		case "ascii":
+			parts = append(parts, "abcdef")
+		case "escaped":
+			parts = append(parts, "a\\n\\\"<>&\\u2028")
+		default:
+			parts = append(parts, "aβ😀")
+		}
+	}
+	if variant == "wide-array" {
+		return "[" + strings.Join(parts, ",") + "]"
+	}
+	if variant == "wide-object" {
+		return "{" + strings.Join(parts, ",") + "}"
+	}
+	return "\"" + strings.Join(parts, "") + "\""
+}
+
+func roundtripJSON(document string) int64 {
+	var value any
+	if err := json.Unmarshal([]byte(document), &value); err != nil {
+		return -1000000
+	}
+	output, err := json.Marshal(value)
+	if err != nil {
+		return -1000000
+	}
+	return size(string(output))
+}
+
 type workerState struct {
 	cache     []string
 	completed int64
@@ -204,6 +241,10 @@ func main() {
 	if workload == "json-transform" {
 		lines = jsonInput(count, variant)
 	}
+	document := ""
+	if workload == "json-document" {
+		document = jsonDocument(count, variant)
+	}
 	state := workerState{cache: make([]string, 128)}
 	var retained []string
 	if workload == "allocation" && variant == "retained" {
@@ -217,6 +258,8 @@ func main() {
 			checksum = aggregateLogs(lines)
 		case "json-transform":
 			checksum = transformJSON(lines)
+		case "json-document":
+			checksum = roundtripJSON(document)
 		case "worker":
 			checksum = processJobs(&state, count, batch)
 		case "hash":

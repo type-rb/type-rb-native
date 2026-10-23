@@ -1,5 +1,6 @@
 export const families = {
   'json-transform': { title: 'JSON transformation', description: 'Parse, transform and serialize Unicode documents, including invalid inputs.' },
+  'json-document': { title: 'JSON document width', description: 'Long ASCII, Unicode and escaped strings, plus wide arrays and objects; count measures units within one document.' },
   'log-pipeline': { title: 'Log processing', description: 'Parse and aggregate valid records and mixed malformed input.' },
   worker: { title: 'Persistent worker', description: 'Repeated batches with retained state; process throughput includes setup.' },
   hash: { title: 'Hash lookup', description: 'Working-set sizes with hits and predominantly missing keys.' },

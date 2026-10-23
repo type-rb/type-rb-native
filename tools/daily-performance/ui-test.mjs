@@ -63,3 +63,11 @@ test('language areas use geometric means, keep the weakest workload and count mi
   assert.deepEqual(familyCoverage(language, 'strings'), { title: 'Strings and UTF-8', probes: 2, differing: 1, pending: 1 });
   assert.equal(familyCoverage(language, 'missing'), null);
 });
+
+test('every registered representative input stays visible before a measurement', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const suite = JSON.parse(await readFile(new URL('../../docs/capabilities/benchmarks/representative-suite.json', import.meta.url), 'utf8'));
+  const groups = groupResults(suite.cases, undefined, 'pure-go', 'wallSeconds');
+  assert.deepEqual(groups.flatMap(group => group.inputs.map(input => input.id)).sort(), suite.cases.map(input => input.id).sort());
+  assert.equal(groups.reduce((total, group) => total + group.counts.missing, 0), suite.cases.length);
+});
