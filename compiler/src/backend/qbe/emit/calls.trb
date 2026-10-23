@@ -1,5 +1,5 @@
 import { qbe_runtime_process_slot } from backend/qbe/runtime_slots
-import { mir_adapter_argv, mir_adapter_sqrt, mir_signature_standard } from mir/model/call_kinds
+import { mir_adapter_argv, mir_adapter_runtime_recover, mir_adapter_sqrt, mir_signature_standard } from mir/model/call_kinds
 import { mir_call_return_find } from mir/analysis/call_returns
 import { mir_storage_name } from mir/model/types
 import { MirCallReturnGuard, MirInstruction, MirSignature } from mir/model/module
@@ -13,7 +13,11 @@ import { integer_string } from support/literals
 # ABI adaptation consumes the checked declaration; it cannot select a different
 # symbol from mutable source tokens, aliases or the frontend's lookup tables.
 def emit_declared_call(state: CompilerState, signature: MirSignature, arguments: String, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
-	text := "call $" + mir_call_symbol(signature) + "(" + arguments + ")"
+	mut symbol := mir_call_symbol(signature)
+	if signature.kind == mir_signature_standard() && signature.adapter == mir_adapter_runtime_recover() && mir_storage_name(state.scalar_mir, signature.result_type) == "Float"
+		symbol = "trbn_runtime_recover_d"
+	end
+	text := "call $" + symbol + "(" + arguments + ")"
 	if mir_storage_name(state.scalar_mir, signature.result_type) == "Void"
 		qbe_output_line(output, "\t" + text)
 		return emitted_value("", "Void")
