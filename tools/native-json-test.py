@@ -144,6 +144,13 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
                 b'\xe2\x82', b'\xf0\x8f\xbf\xbf', b'\xf4\x90\x80\x80',
                 b'\xf0\x90\x80', b'\xf5\x80\x80\x80'):
         pairs.append((raw, '\ufffd' * len(raw)))
+    # A decoded escape can precede raw UTF-8 octets in the same join. Cached
+    # code-point counts must not mistake these split bytes for separate runes.
+    pairs.extend([
+        (b'\\u00e9' + 'β😀'.encode(), 'éβ😀'),
+        (b'\\ud83d\\ude00' + 'éβ'.encode(), '😀éβ'),
+        (b'\\u00e9' + b'\xf0\x90\x80' + 'β'.encode(), 'é' + '\ufffd' * 3 + 'β'),
+    ])
     statements, outputs = [], []
     for raw, decoded in pairs:
         literal = '"' + ''.join(f'\\x{octet:02x}' for octet in b'"' + raw + b'"') + '"'
