@@ -7,17 +7,23 @@ end
 
 # Preserve raw numbers until the whole document is valid and duplicate object
 # keys have been resolved. Syntax errors precede value conversion errors.
-record JsonNode
-	kind: Integer
-	text: String
-	items: Array<Integer>
-	members: Hash<String, Integer>
+enum JsonNode
+	Null
+	Boolean(value: Boolean)
+	Number(text: String)
+	String(text: String)
+	Array(items_index: Integer)
+	Object(members_index: Integer)
 end
 
 record JsonParser
 	bytes: Bytes
 	position: Array<Integer>
 	nodes: Array<JsonNode>
+	# Enum patterns are immutable. Keep child containers under the parser's
+	# mutable ownership and store only their pool indexes in raw node variants.
+	arrays: Array<Array<Integer>>
+	objects: Array<Hash<String, Integer>>
 	failure: Array<PublicJSON::Error>
 end
 
@@ -438,31 +444,31 @@ end
 def _atom(mut parser: JsonParser, depth: Integer): Integer
 	_space(parser)
 	character := _byte(parser)
-	mut kind := 0
-	mut text := ""
+	mut node := JsonNode::Null
 	if character == 34
-		kind = 3
-		text = _string(parser)
+		node = JsonNode::String(_string(parser))
 	elsif character == 110
 		_literal(parser, "null")
 	elsif character == 116 || character == 102
-		kind = 1
-		text = "true"
+		mut text := "true"
 		if character == 102
 			text = "false"
 		end
 		_literal(parser, text)
+		node = JsonNode::Boolean(character == 116)
 	elsif character == 45 || _digit(character)
-		kind = 2
-		text = _number(parser)
+		node = JsonNode::Number(_number(parser))
 	elsif character == 91 || character == 123
 		if depth >= 10000
 			_syntax(parser, "exceeded max depth", parser.position[0])
 			return -1
 		end
-		kind = 4
 		if character == 123
-			kind = 5
+			node = JsonNode::Object(parser.objects.size())
+			parser.objects.push({})
+		else
+			node = JsonNode::Array(parser.arrays.size())
+			parser.arrays.push([])
 		end
 		parser.position[0] += 1
 	else
@@ -473,24 +479,33 @@ def _atom(mut parser: JsonParser, depth: Integer): Integer
 		return -1
 	end
 	identity := parser.nodes.size()
-	parser.nodes.push(JsonNode.new(kind: kind, text: text, items: [], members: {}))
+	parser.nodes.push(node)
 	return identity
+end
+
+# Scalars have no closing delimiter and never enter the container stack.
+def _closing_byte(node: JsonNode): Integer
+	case node
+	when JsonNode::Array(_items)
+		return 93
+	when JsonNode::Object(_members)
+		return 125
+	else
+		return -1
+	end
 end
 
 def _node(mut parser: JsonParser): Integer
 	root := _atom(parser, 0)
-	if root < 0 || parser.nodes[root].kind < 4
+	if root < 0 || _closing_byte(parser.nodes[root]) < 0
 		return root
 	end
 	mut frames := [root]
 	mut phases := [0]
 	while !frames.empty?() && parser.failure.empty?()
 		top := frames.size() - 1
-		mut node := parser.nodes[frames[top]]
-		mut closing := 93
-		if node.kind == 5
-			closing = 125
-		end
+		node := parser.nodes[frames[top]]
+		closing := _closing_byte(node)
 		_space(parser)
 		character := _byte(parser)
 		if phases[top] == 0 && character == closing
@@ -501,7 +516,7 @@ def _node(mut parser: JsonParser): Integer
 		end
 		if phases[top] != 2
 			mut key := ""
-			if node.kind == 5
+			if closing == 125
 				if character != 34
 					_bad(parser, "looking for beginning of object key string")
 					return -1
@@ -518,13 +533,18 @@ def _node(mut parser: JsonParser): Integer
 			if child < 0
 				return -1
 			end
-			if node.kind == 5
-				node.members[key] = child
+			case node
+			when JsonNode::Object(members_index)
+				parser.objects[members_index][key] = child
+			when JsonNode::Array(items_index)
+				parser.arrays[items_index].push(child)
 			else
-				node.items.push(child)
+				# Only containers enter frames; fail closed if that invariant breaks.
+				_syntax(parser, "unexpected scalar in container stack", -1)
+				return -1
 			end
 			phases[top] = 2
-			if parser.nodes[child].kind >= 4
+			if _closing_byte(parser.nodes[child]) >= 0
 				frames.push(child)
 				phases.push(0)
 			end
@@ -538,7 +558,7 @@ def _node(mut parser: JsonParser): Integer
 			parser.position[0] += 1
 			phases[top] = 1
 		else
-			if node.kind == 5
+			if closing == 125
 				_bad(parser, "after object key:value pair")
 			else
 				_bad(parser, "after array element")
@@ -566,12 +586,13 @@ def _pointer(name: String): String
 end
 
 def _atomic_value(node: JsonNode): Result<PublicJSON::Value, PublicJSON::Error>
-	if node.kind == 0
+	case node
+	when JsonNode::Null
 		return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::Null)
-	elsif node.kind == 1
-		return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::Boolean(node.text == "true"))
-	elsif node.kind == 2
-		case node.text.try_to_f()
+	when JsonNode::Boolean(boolean)
+		return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::Boolean(boolean))
+	when JsonNode::Number(text)
+		case text.try_to_f()
 		when Result::Ok(number)
 			if number < -9007199254740991.0 || number > 9007199254740991.0
 				return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(PublicJSON::ErrorKind::Decode, "JSON integer is outside the portable range", ""))
@@ -584,10 +605,12 @@ def _atomic_value(node: JsonNode): Result<PublicJSON::Value, PublicJSON::Error>
 		when Result::Err(_cause)
 			return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(PublicJSON::ErrorKind::Decode, "JSON number is not finite", ""))
 		end
-	elsif node.kind == 3
-		return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::String(node.text))
+	when JsonNode::String(text)
+		return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::String(text))
+	else
+		# Container conversion is handled by the explicit traversal stack.
+		return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::Null)
 	end
-	return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::Null)
 end
 
 def _path(parents: Array<Integer>, parts: Array<String>, identity: Integer): String
@@ -601,14 +624,14 @@ def _path(parents: Array<Integer>, parts: Array<String>, identity: Integer): Str
 	return path
 end
 
-def _value(nodes: Array<JsonNode>, identity: Integer): Result<PublicJSON::Value, PublicJSON::Error>
+def _value(parser: JsonParser, identity: Integer): Result<PublicJSON::Value, PublicJSON::Error>
 	# Node identities are dense indexes; unreachable duplicate-key nodes keep
 	# their unused placeholder without requiring a second Hash lookup per edge.
 	mut values: Array<PublicJSON::Value> := []
 	mut parents: Array<Integer> := []
 	mut parts: Array<String> := []
 	mut index := 0
-	while index < nodes.size()
+	while index < parser.nodes.size()
 		values.push(PublicJSON::Value::Null)
 		parents.push(-1)
 		parts.push("")
@@ -619,56 +642,60 @@ def _value(nodes: Array<JsonNode>, identity: Integer): Result<PublicJSON::Value,
 	while !pending.empty?()
 		top := pending.size() - 1
 		current := pending[top]
-		node := nodes[current]
-		if node.kind < 4
+		node := parser.nodes[current]
+		case node
+		when JsonNode::Array(items_index)
+			children := parser.arrays[items_index]
+			if !entered[top]
+				entered[top] = true
+				index = children.size()
+				while index > 0
+					index -= 1
+					child := children[index]
+					parents[child] = current
+					parts[child] = index.to_s()
+					pending.push(child)
+					entered.push(false)
+				end
+				next
+			end
+			mut items: Array<PublicJSON::Value> := []
+			index = 0
+			while index < children.size()
+				items.push(values[children[index]])
+				index += 1
+			end
+			values[current] = PublicJSON::Value::Array(items)
+		when JsonNode::Object(members_index)
+			children := parser.objects[members_index]
+			keys := children.keys().sort()
+			if !entered[top]
+				entered[top] = true
+				index = keys.size()
+				while index > 0
+					index -= 1
+					child := children.fetch(keys[index])
+					parents[child] = current
+					parts[child] = keys[index]
+					pending.push(child)
+					entered.push(false)
+				end
+				next
+			end
+			mut members: Hash<String, PublicJSON::Value> := {}
+			index = 0
+			while index < keys.size()
+				members[keys[index]] = values[children.fetch(keys[index])]
+				index += 1
+			end
+			values[current] = PublicJSON::Value::Object(members)
+		else
 			case _atomic_value(node)
 			when Result::Ok(value)
 				values[current] = value
 			when Result::Err(error)
 				return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(error.kind, error.message, _path(parents, parts, current)))
 			end
-		elsif !entered[top]
-			entered[top] = true
-			if node.kind == 4
-				index = node.items.size()
-				while index > 0
-					index -= 1
-					child := node.items[index]
-					parents[child] = current
-					parts[child] = index.to_s()
-					pending.push(child)
-					entered.push(false)
-				end
-			else
-				keys := node.members.keys().sort()
-				index = keys.size()
-				while index > 0
-					index -= 1
-					child := node.members.fetch(keys[index])
-					parents[child] = current
-					parts[child] = keys[index]
-					pending.push(child)
-					entered.push(false)
-				end
-			end
-			next
-		elsif node.kind == 4
-			mut items: Array<PublicJSON::Value> := []
-			index = 0
-			while index < node.items.size()
-				items.push(values[node.items[index]])
-				index += 1
-			end
-			values[current] = PublicJSON::Value::Array(items)
-		else
-			mut members: Hash<String, PublicJSON::Value> := {}
-			keys := node.members.keys().sort()
-			index = 0
-			while index < keys.size()
-				members[keys[index]] = values[node.members.fetch(keys[index])]
-				index += 1
-			end
-			values[current] = PublicJSON::Value::Object(members)
 		end
 		pending.pop()
 		entered.pop()
@@ -677,7 +704,7 @@ def _value(nodes: Array<JsonNode>, identity: Integer): Result<PublicJSON::Value,
 end
 
 def parse(source: String): Result<PublicJSON::Value, PublicJSON::Error>
-	mut parser := JsonParser.new(bytes: source.to_bytes(), position: [0], nodes: [], failure: [])
+	mut parser := JsonParser.new(bytes: source.to_bytes(), position: [0], nodes: [], arrays: [], objects: [], failure: [])
 	_space(parser)
 	if _byte(parser) < 0
 		return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(PublicJSON::ErrorKind::Syntax, "EOF", ""))
@@ -692,24 +719,26 @@ def parse(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 		if !parser.failure.empty?()
 			return Result<PublicJSON::Value, PublicJSON::Error>::Err(parser.failure[0])
 		end
-		kind := parser.nodes[trailing].kind
 		mut message := "JSON source contains multiple values"
 		mut name := ""
-		if kind == 1
+		case parser.nodes[trailing]
+		when JsonNode::Boolean(_boolean)
 			name = "bool"
-		elsif kind == 2
+		when JsonNode::Number(_text)
 			name = "number"
-		elsif kind == 3
+		when JsonNode::String(_text)
 			name = "string"
-		elsif kind == 4
+		when JsonNode::Array(_items)
 			name = "array"
+		else
+			name = ""
 		end
 		if name != ""
 			message = "json: cannot unmarshal " + name + " into Go value of type struct {}"
 		end
 		return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(PublicJSON::ErrorKind::Syntax, message, ""))
 	end
-	return _value(parser.nodes, root)
+	return _value(parser, root)
 end
 
 def parse_jsonc(source: String): Result<PublicJSON::Value, PublicJSON::Error>
