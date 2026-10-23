@@ -127,6 +127,46 @@ def transform_json(documents: Array<String>): Integer
 	return checksum
 end
 
+# Scale one document's width independently of the number of documents.
+def json_document(count: Integer, variant: String): String
+	mut parts: Array<String> := []
+	mut index := 0
+	while index < count
+		if variant == "wide-array"
+			parts.push("\"aβ😀\"")
+		elsif variant == "wide-object"
+			parts.push("\"key-" + index.to_s() + "\":\"aβ😀\"")
+		elsif variant == "ascii"
+			parts.push("abcdef")
+		elsif variant == "escaped"
+			parts.push("a\\n\\\"<>&\\u2028")
+		else
+			parts.push("aβ😀")
+		end
+		index += 1
+	end
+	if variant == "wide-array"
+		return "[" + parts.join(",") + "]"
+	elsif variant == "wide-object"
+		return "{" + parts.join(",") + "}"
+	end
+	return "\"" + parts.join("") + "\""
+end
+
+def roundtrip_json(document: String): Integer
+	case JSON.parse(document)
+	when Result::Ok(value)
+		case JSON.stringify(value)
+		when Result::Ok(text)
+			return text.size()
+		when Result::Err(_error)
+			return -1000000
+		end
+	when Result::Err(_error)
+		return -1000000
+	end
+end
+
 def hash_batch(count: Integer, variant: String): Integer
 	mut values: Hash<String, Integer> := {}
 	mut index := 0
@@ -220,6 +260,10 @@ def main()
 	elsif workload == "json-transform"
 		lines = json_input(count, variant)
 	end
+	mut document := ""
+	if workload == "json-document"
+		document = json_document(count, variant)
+	end
 	mut cache: Array<String> := []
 	mut retained: Array<String> := []
 	mut index := 0
@@ -243,6 +287,8 @@ def main()
 			checksum = aggregate_logs(lines)
 		elsif workload == "json-transform"
 			checksum = transform_json(lines)
+		elsif workload == "json-document"
+			checksum = roundtrip_json(document)
 		elsif workload == "worker"
 			checksum = state.process_jobs(count, batch)
 		elsif workload == "hash"

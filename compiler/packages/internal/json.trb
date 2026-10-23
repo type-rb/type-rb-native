@@ -44,14 +44,15 @@ def _byte(parser: JsonParser): Integer
 	return parser.bytes.at(parser.position[0])
 end
 
+# Keep byte fragments intact until joining; individual octets may split UTF-8.
 def _source_slice(mut parser: JsonParser, start: Integer, finish: Integer): String
-	mut text := ""
+	mut fragments: Array<String> := []
 	mut index := start
 	while index < finish
-		text += Octets.octet(parser.bytes.at(index))
+		fragments.push(Octets.octet(parser.bytes.at(index)))
 		index += 1
 	end
-	return text
+	return fragments.join("")
 end
 
 def _space(mut parser: JsonParser)
@@ -301,14 +302,14 @@ end
 
 def _string(mut parser: JsonParser): String
 	parser.position[0] += 1
-	mut text := ""
+	mut fragments: Array<String> := []
 	while _byte(parser) >= 0 && parser.failure.empty?()
 		character := _byte(parser)
 		if character == 34
 			parser.position[0] += 1
 			# Raw invalid bytes and unpaired surrogates were already replaced;
 			# the accumulated text is valid UTF-8 without another decoding pass.
-			return text
+			return fragments.join("")
 		end
 		if character < 32
 			_bad(parser, "in string")
@@ -317,16 +318,16 @@ def _string(mut parser: JsonParser): String
 		if character >= 128
 			width := _byte_width(parser.bytes, parser.position[0], parser.bytes.size())
 			if width == 1
-				text += _rune(65533)
+				fragments.push(_rune(65533))
 			else
-				text += _source_slice(parser, parser.position[0], parser.position[0] + width)
+				fragments.push(_source_slice(parser, parser.position[0], parser.position[0] + width))
 			end
 			parser.position[0] += width
 			next
 		end
 		parser.position[0] += 1
 		if character != 92
-			text += Octets.octet(character)
+			fragments.push(Octets.octet(character))
 			next
 		end
 		escape := _byte(parser)
@@ -335,17 +336,17 @@ def _string(mut parser: JsonParser): String
 		end
 		parser.position[0] += 1
 		if escape == 34 || escape == 92 || escape == 47
-			text += Octets.octet(escape)
+			fragments.push(Octets.octet(escape))
 		elsif escape == 98
-			text += "\x08"
+			fragments.push("\x08")
 		elsif escape == 102
-			text += "\x0c"
+			fragments.push("\x0c")
 		elsif escape == 110
-			text += "\n"
+			fragments.push("\n")
 		elsif escape == 114
-			text += "\r"
+			fragments.push("\r")
 		elsif escape == 116
-			text += "\t"
+			fragments.push("\t")
 		elsif escape == 117
 			mut point := _unicode(parser)
 			if point < 0
@@ -369,7 +370,7 @@ def _string(mut parser: JsonParser): String
 			if point >= 55296 && point <= 57343
 				point = 65533
 			end
-			text += _rune(point)
+			fragments.push(_rune(point))
 		else
 			_syntax(parser, "invalid escape sequence " + _escape_diagnostic("\\" + Octets.octet(escape)) + " in string", parser.position[0] - 1)
 			return ""
@@ -745,7 +746,7 @@ def parse_jsonc(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 	# Comments become spaces per byte, preserving the reference decoder's
 	# filtered-source locations, including CR/LF and multibyte comments.
 	bytes := source.to_bytes()
-	mut text := ""
+	mut fragments: Array<String> := []
 	mut mode := 0
 	mut escaped := false
 	mut index := 0
@@ -756,7 +757,7 @@ def parse_jsonc(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 			following = bytes.at(index + 1)
 		end
 		if mode == 1
-			text += Octets.octet(octet)
+			fragments.push(Octets.octet(octet))
 			if escaped
 				escaped = false
 			elsif octet == 92
@@ -766,33 +767,33 @@ def parse_jsonc(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 			end
 		elsif mode == 2 || mode == 3
 			if mode == 3 && octet == 42 && following == 47
-				text += "  "
+				fragments.push("  ")
 				index += 1
 				mode = 0
 			elsif octet == 10 || octet == 13
-				text += Octets.octet(octet)
+				fragments.push(Octets.octet(octet))
 				if mode == 2 && octet == 10
 					mode = 0
 				end
 			else
-				text += " "
+				fragments.push(" ")
 			end
 		elsif octet == 47 && (following == 47 || following == 42)
 			mode = 2
 			if following == 42
 				mode = 3
 			end
-			text += "  "
+			fragments.push("  ")
 			index += 1
 		else
-			text += Octets.octet(octet)
+			fragments.push(Octets.octet(octet))
 			if octet == 34
 				mode = 1
 			end
 		end
 		index += 1
 	end
-	return parse(text)
+	return parse(fragments.join(""))
 end
 
 # Most strings need only the surrounding quotes. Validate and scan bytes
@@ -822,38 +823,39 @@ def _escape(text: String): String
 	if !_needs_escape(text)
 		return "\"" + text + "\""
 	end
-	mut encoded := "\""
+	mut fragments := ["\""]
 	characters := text.chars()
 	mut index := 0
 	while index < characters.size()
 		character := characters[index]
 		octet := character.to_bytes().at(0)
 		if character == "\"" || character == "\\"
-			encoded += "\\" + character
+			fragments.push("\\" + character)
 		elsif character == "\x08"
-			encoded += "\\b"
+			fragments.push("\\b")
 		elsif character == "\x0c"
-			encoded += "\\f"
+			fragments.push("\\f")
 		elsif character == "\n"
-			encoded += "\\n"
+			fragments.push("\\n")
 		elsif character == "\r"
-			encoded += "\\r"
+			fragments.push("\\r")
 		elsif character == "\t"
-			encoded += "\\t"
+			fragments.push("\\t")
 		elsif octet < 32 || character == "<" || character == ">" || character == "&"
-			encoded += "\\u00" + "0123456789abcdef"[octet / 16] + "0123456789abcdef"[octet % 16]
+			fragments.push("\\u00" + "0123456789abcdef"[octet / 16] + "0123456789abcdef"[octet % 16])
 		elsif character == "\u2028"
-			encoded += "\\u2028"
+			fragments.push("\\u2028")
 		elsif character == "\u2029"
-			encoded += "\\u2029"
+			fragments.push("\\u2029")
 		elsif !character.to_bytes().valid_utf8?()
-			encoded += "\\ufffd"
+			fragments.push("\\ufffd")
 		else
-			encoded += character
+			fragments.push(character)
 		end
 		index += 1
 	end
-	return encoded + "\""
+	fragments.push("\"")
+	return fragments.join("")
 end
 
 def _floating(number: Float): String
@@ -952,32 +954,33 @@ def _encoding_error(value: PublicJSON::Value): PublicJSON::Error?
 	return nil
 end
 
+# Append each token once, then allocate the completed document in one join.
 def _serialize(value: PublicJSON::Value): String
 	mut values := [value]
 	mut tokens := [""]
-	mut text := ""
+	mut fragments: Array<String> := []
 	while !values.empty?()
 		current := values[values.size() - 1]
 		token := tokens[tokens.size() - 1]
 		values.pop()
 		tokens.pop()
 		if token != ""
-			text += token
+			fragments.push(token)
 			next
 		end
 		case current
 		when PublicJSON::Value::Null
-			text += "null"
+			fragments.push("null")
 		when PublicJSON::Value::Boolean(boolean)
-			text += boolean.to_s()
+			fragments.push(boolean.to_s())
 		when PublicJSON::Value::Integer(integer)
-			text += integer.to_s()
+			fragments.push(integer.to_s())
 		when PublicJSON::Value::Float(number)
-			text += _floating(number)
+			fragments.push(_floating(number))
 		when PublicJSON::Value::String(string)
-			text += _escape(string)
+			fragments.push(_escape(string))
 		when PublicJSON::Value::Array(items)
-			text += "["
+			fragments.push("[")
 			values.push(PublicJSON::Value::Null)
 			tokens.push("]")
 			mut index := items.size()
@@ -991,7 +994,7 @@ def _serialize(value: PublicJSON::Value): String
 				end
 			end
 		when PublicJSON::Value::Object(members)
-			text += "{"
+			fragments.push("{")
 			values.push(PublicJSON::Value::Null)
 			tokens.push("}")
 			keys := members.keys().sort()
@@ -1009,7 +1012,7 @@ def _serialize(value: PublicJSON::Value): String
 			end
 		end
 	end
-	return text
+	return fragments.join("")
 end
 
 def stringify(value: PublicJSON::Value): Result<String, PublicJSON::Error>

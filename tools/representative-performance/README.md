@@ -4,13 +4,20 @@ This opt-in diagnostic implements the [performance policy](../../docs/performanc
 It never modifies daily/weekly schedules, baselines, thresholds or published
 victory counts. `suite.json` registers all input variants before measurement.
 
-The single TypeRB executable contains three application workloads and four
+The single TypeRB executable contains four application workloads and four
 sensitivity families. Runtime arguments select workload, count, variant and
 batch count. Go uses ordinary standard-library facilities with matching output,
 Unicode code-point counts and observable retained lifetimes. A separate Python
 oracle checks every batch and final retained-data checksum. Setup is included
 in process wall/CPU/RSS, while the `ready` marker separates it from batch-arrival
-observations. Input parsing operates in memory; file/network I/O is not measured.
+observations. `json-transform` scales the number of small documents. `json-document` instead
+scales one document: ASCII, Unicode and escaped scalar strings, or wide arrays
+and objects. Its count is the number of repeated text units or container members;
+each batch parses and serializes the entire document. Input generation precedes
+`ready` but remains included in process costs. These are new input cases, not
+replacements for the existing small-document history.
+
+Input parsing operates in memory; file/network I/O is not measured.
 
 ## Run locally
 

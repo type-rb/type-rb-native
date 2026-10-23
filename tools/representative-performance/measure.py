@@ -177,6 +177,18 @@ def expected(case):
             checksum = sum(1 if variant == "mixed" and index % 17 == 0 else
                            len(json.dumps([index + 1, "aβ😀" * 4, True], ensure_ascii=False,
                                           separators=(",", ":"))) for index in range(count))
+        elif workload == "json-document":
+            if variant == "wide-array":
+                value = ["aβ😀"] * count
+            elif variant == "wide-object":
+                value = {f"key-{index}": "aβ😀" for index in range(count)}
+            else:
+                value = {"ascii": "abcdef", "unicode": "aβ😀",
+                         "escaped": 'a\n"<>&\u2028'}[variant] * count
+            encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            for character in ("<", ">", "&", "\u2028", "\u2029"):
+                encoded = encoded.replace(character, f"\\u{ord(character):04x}")
+            checksum = len(encoded)
         elif workload == "worker":
             checksum = 0
             for index in range(count):
