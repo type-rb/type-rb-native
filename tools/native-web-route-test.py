@@ -29,7 +29,16 @@ end
 'routes/_middleware.trb': '''import { Context, Next, Response } from trb/web
 import { RequestID } from trb/web/middleware/request_id
 def call(context: Context, next_handler: Next): Response
-return RequestID.call(context, next_handler)
+if context.request.path == "/root-before"
+zero := context.request.body.size()
+puts(1 / zero)
+end
+response := RequestID.call(context, next_handler)
+if context.request.path == "/root-after"
+zero := context.request.body.size()
+puts(1 / zero)
+end
+return response.with_header("x-root", "resumed")
 end
 ''',
 'routes/items/_middleware.trb': '''import { Context, Next, Response } from trb/web
@@ -55,8 +64,16 @@ return Response.text("bad params", 400)
 end
 end
 ''',
+'routes/bad.trb': '''import { Context, Response } from trb/web
+def get(context: Context): Response
+zero := context.request.body.size()
+puts(1 / zero)
+puts("abandoned handler continued")
+return Response.text("unreachable")
+end
+''',
 'main.trb': '''import { Body, Header, Headers, HttpMethod } from trb/http
-import { Request } from trb/web
+import { Request, Response } from trb/web
 import { dispatch } from trb/web/testing
 import trb/std/result
 def probe()
@@ -77,14 +94,33 @@ when Result::Err(_error)
 puts(false)
 end
 end
+def failing(method: String, path: String): Response
+return dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: "", headers: Headers.new(), body: Body.empty()))
+end
+def recovery_probe()
+response := failing("GET", "/bad")
+puts(response.status == 500)
+puts(response.header_values("x-root").join("") == "resumed")
+# Keep the failed response alive while another dispatch allocates and collects.
+healthy := failing("GET", "/items/42")
+puts(healthy.status == 200)
+puts(response.body.to_s() == "{\\"error\\":\\"internal_server_error\\"}")
+head := failing("HEAD", "/bad")
+puts(head.status == 500 && head.body.size() == 0)
+before := failing("GET", "/root-before")
+puts(before.status == 500 && before.header_values("x-root").size() == 0)
+after := failing("GET", "/root-after")
+puts(after.status == 500 && after.header_values("x-root").size() == 0)
+end
 def main()
 (0...8).each do |_index|
 probe()
+recovery_probe()
 end
 end
 '''
 }
-expected = 'true\n' * 32
+expected = 'true\n' * 88
 with tempfile.TemporaryDirectory(prefix='native-web-route-') as temporary:
     root = Path(temporary)
     environment = dict(os.environ, NO_COLOR='1', TERM='dumb', TRBN_HISTORY=str(root/'history'))

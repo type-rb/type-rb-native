@@ -3870,14 +3870,35 @@
         "web-routing-parenthesized-name",
         "web-routing-named-path-name",
         "web-routing-trailing-comma-name",
-        "web-routing-concatenated-name"
+        "web-routing-concatenated-name",
+        "web-unwind-handler",
+        "web-unwind-handler-root-continues",
+        "web-unwind-root-before",
+        "web-unwind-root-after",
+        "web-unwind-nested-before",
+        "web-unwind-nested-after",
+        "web-unwind-nested-twice",
+        "web-unwind-root-twice",
+        "web-unwind-head",
+        "web-unwind-bad-path-root",
+        "web-unwind-missing-path-root",
+        "web-unwind-next-dispatch",
+        "web-unwind-array-index",
+        "web-unwind-string-index",
+        "web-unwind-hash-key",
+        "web-unwind-integer-add",
+        "web-unwind-integer-multiply",
+        "web-unwind-integer-modulo",
+        "web-unwind-integer-parse",
+        "web-unwind-float-convert",
+        "web-unwind-array-empty",
+        "web-unwind-invalid-cookie"
       ],
       "pending": [
-        "Failure unwinding at the dispatch boundary remains open in #1197",
         "Network serving, streaming, cancellation, shutdown and endpoint client/OpenAPI providers remain incomplete",
         "Wider generic and helper schema combinations remain unqualified"
       ],
-      "note": "Configured application routes cover static precedence, dynamic and catch-all paths, canonical handler signatures, path-name/schema validation, root/nested middleware, request normalization, HEAD/OPTIONS, 404/405/413 and invalid responses. Project startup validates routes for the REPL without requiring main; dispatch execution itself preserves the pinned reference REPL restriction. Ordinary generated TypeRB composes handlers above MIR; a cross-module RequestID/typed-Context/JSON integration checks managed lifetimes. The double-Next runtime difference remains explicit, and these probes do not establish complete Web or release parity."
+      "note": "Configured application routes cover static precedence, dynamic and catch-all paths, canonical handler signatures, path-name/schema validation, root/nested middleware, request normalization, HEAD/OPTIONS, 404/405/413 and invalid responses. Project startup validates routes for the REPL without requiring main; dispatch execution itself preserves the pinned reference REPL restriction. Ordinary generated TypeRB composes handlers above MIR; a cross-module RequestID/typed-Context/JSON integration checks managed lifetimes. Owned recovery covers handler, nested/root middleware and double-Next failures, preserves preceding effects and root continuation, suppresses HEAD bodies and permits later healthy requests. Forced collection checks repeated recovery and captured managed values. These probes do not establish network cancellation, complete Web or release parity."
     }
   ],
   "cases": [
@@ -126346,9 +126367,9 @@
           "stderr": ""
         },
         "execute": {
-          "code": 2,
-          "stdout": "",
-          "stderr": "panic: trb/web Next.call may only be called once\n"
+          "code": 0,
+          "stdout": "500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
         },
         "repl": {
           "code": 0,
@@ -128331,6 +128352,1207 @@
         }
       },
       "title": "Object field comparison: reverse",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-handler",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nzero := context.request.body.size()\nputs(1 / zero)\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: handler",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-handler-root-continues",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nzero := context.request.body.size()\nputs(1 / zero)\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n",
+        "routes/_middleware.trb": "import { Context, Next, Response } from trb/web\ndef call(context: Context, next_handler: Next): Response\nputs(\"root-before\")\nresponse := next_handler.call(context)\nputs(\"root-after\")\nreturn response\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "root-before\nhandler-before\nroot-after\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "root-before\nhandler-before\nroot-after\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: handler root continues",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-root-before",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler\")\nreturn Response.text(\"ok\")\nend\n",
+        "routes/_middleware.trb": "import { Context, Next, Response } from trb/web\ndef call(context: Context, next_handler: Next): Response\nputs(\"middleware-before\")\nzero := context.request.body.size()\nputs(1 / zero)\nreturn next_handler.call(context)\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "middleware-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "middleware-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: root before",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-root-after",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler\")\nreturn Response.text(\"ok\")\nend\n",
+        "routes/_middleware.trb": "import { Context, Next, Response } from trb/web\ndef call(context: Context, next_handler: Next): Response\nresponse := next_handler.call(context)\nputs(\"middleware-after\")\nzero := context.request.body.size()\nputs(1 / zero)\nreturn response\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\nmiddleware-after\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\nmiddleware-after\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: root after",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-nested-before",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/items/health\")",
+      "files": {
+        "routes/items/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler\")\nreturn Response.text(\"ok\")\nend\n",
+        "routes/_middleware.trb": "import { Context, Next, Response } from trb/web\ndef call(context: Context, next_handler: Next): Response\nputs(\"root-before\")\nresponse := next_handler.call(context)\nputs(\"root-after\")\nreturn response\nend\n",
+        "routes/items/_middleware.trb": "import { Context, Next, Response } from trb/web\ndef call(context: Context, next_handler: Next): Response\nputs(\"middleware-before\")\nzero := context.request.body.size()\nputs(1 / zero)\nreturn next_handler.call(context)\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 4 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "root-before\nmiddleware-before\nroot-after\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "root-before\nmiddleware-before\nroot-after\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: nested before",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-nested-after",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/items/health\")",
+      "files": {
+        "routes/items/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler\")\nreturn Response.text(\"ok\")\nend\n",
+        "routes/_middleware.trb": "import { Context, Next, Response } from trb/web\ndef call(context: Context, next_handler: Next): Response\nputs(\"root-before\")\nresponse := next_handler.call(context)\nputs(\"root-after\")\nreturn response\nend\n",
+        "routes/items/_middleware.trb": "import { Context, Next, Response } from trb/web\ndef call(context: Context, next_handler: Next): Response\nresponse := next_handler.call(context)\nputs(\"middleware-after\")\nzero := context.request.body.size()\nputs(1 / zero)\nreturn response\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 4 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "root-before\nhandler\nmiddleware-after\nroot-after\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "root-before\nhandler\nmiddleware-after\nroot-after\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: nested after",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-nested-twice",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/items/health\")",
+      "files": {
+        "routes/items/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler\")\nreturn Response.text(\"ok\")\nend\n",
+        "routes/_middleware.trb": "import { Context, Next, Response } from trb/web\ndef call(context: Context, next_handler: Next): Response\nputs(\"root-before\")\nresponse := next_handler.call(context)\nputs(\"root-after\")\nreturn response\nend\n",
+        "routes/items/_middleware.trb": "import { Context, Next, Response } from trb/web\ndef call(context: Context, next_handler: Next): Response\nfirst := next_handler.call(context)\nputs(\"middleware-between\")\nsecond := next_handler.call(context)\nputs(\"middleware-after-second\")\nreturn second.with_header(\"x-first\", first.status.to_s())\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 4 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "root-before\nhandler\nmiddleware-between\nroot-after\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "root-before\nhandler\nmiddleware-between\nroot-after\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: nested twice",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-root-twice",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler\")\nreturn Response.text(\"ok\")\nend\n",
+        "routes/_middleware.trb": "import { Context, Next, Response } from trb/web\ndef call(context: Context, next_handler: Next): Response\nfirst := next_handler.call(context)\nputs(\"middleware-between\")\nsecond := next_handler.call(context)\nputs(\"middleware-after-second\")\nreturn second.with_header(\"x-first\", first.status.to_s())\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\nmiddleware-between\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\nmiddleware-between\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: root twice",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-head",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"HEAD\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nzero := context.request.body.size()\nputs(1 / zero)\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: head",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-bad-path-root",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/%zz\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler\")\nreturn Response.text(\"ok\")\nend\n",
+        "routes/_middleware.trb": "import { Context, Next, Response } from trb/web\ndef call(context: Context, next_handler: Next): Response\nputs(\"middleware-before\")\nzero := context.request.body.size()\nputs(1 / zero)\nreturn next_handler.call(context)\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "middleware-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "middleware-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: bad path root",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-missing-path-root",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/missing\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler\")\nreturn Response.text(\"ok\")\nend\n",
+        "routes/_middleware.trb": "import { Context, Next, Response } from trb/web\ndef call(context: Context, next_handler: Next): Response\nputs(\"middleware-before\")\nzero := context.request.body.size()\nputs(1 / zero)\nreturn next_handler.call(context)\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "middleware-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "middleware-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: missing path root",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-next-dispatch",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/bad\")\nshow(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler\")\nreturn Response.text(\"ok\")\nend\n",
+        "routes/bad.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nzero := context.request.body.size()\nputs(1 / zero)\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\nhandler\n200\nok\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\nhandler\n200\nok\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: next dispatch",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-array-index",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nvalues := [1]\nputs(values[context.request.body.size() + 4])\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: array index",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-string-index",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nvalue := \"x\"\nputs(value[context.request.body.size() + 4])\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: string index",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-hash-key",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nvalues: Hash<String, Integer> := {\"present\" => 1}\nputs(values[context.request.path])\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: hash key",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-integer-add",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nvalue := 9007199254740991 - context.request.body.size()\nputs(value + 1)\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: integer add",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-integer-multiply",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nvalue := 9007199254740991 - context.request.body.size()\nputs(value * 2)\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: integer multiply",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-integer-modulo",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nzero := context.request.body.size()\nputs(1 % zero)\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: integer modulo",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-integer-parse",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nputs(context.request.path.to_i())\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: integer parse",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-float-convert",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nvalue := 10000000000000000.0 + context.request.body.size().to_f()\nputs(value.to_i())\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: float convert",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-array-empty",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nvalues: Array<Integer> := []\nputs(values.first())\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: array empty",
+      "projectCheck": true
+    },
+    {
+      "id": "web-unwind-invalid-cookie",
+      "declarations": "import { Body, Headers, HttpMethod } from trb/http\nimport { Request } from trb/web\nimport { dispatch } from trb/web/testing\n\ndef show(method: String, path: String)\nresponse := dispatch(Request.new(method: HttpMethod.new(method), path: path, query_string: \"\", headers: Headers.new(), body: Body.empty()))\nputs(response.status)\nputs(response.body.to_s())\nputs(response.header_values(\"allow\").join(\",\"))\nend\n",
+      "body": "show(\"GET\", \"/health\")",
+      "files": {
+        "routes/health.trb": "import { Context, Response, ResponseCookie } from trb/web\ndef get(context: Context): Response\nputs(\"handler-before\")\nresponse := Response.text(\"bad\").set_cookie(ResponseCookie.new(name: \"invalid name\", value: \"value\", attributes: []))\nputs(response.status)\nputs(\"handler-after\")\nreturn Response.text(\"unreachable\")\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:13: error: intrinsic trb.web.testing.dispatch is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler-before\n500\n{\"error\":\"internal_server_error\"}\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: intrinsic trb.web.testing.dispatch has no REPL runtime adapter\n"
+        }
+      },
+      "title": "Web failure recovery: invalid cookie",
       "projectCheck": true
     },
     {

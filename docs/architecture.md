@@ -145,7 +145,27 @@ MIR nor the backend reads route filenames or reconstructs route semantics.
 The reference testing dispatcher has no REPL runtime adapter, and the owned
 Native entry preserves that rejection. REPL startup still validates the configured
 route graph, including projects without an executable main. Network serving and
-panic recovery remain separate runtime contracts in the coverage inventory.
+network cancellation remain separate runtime contracts in the coverage inventory.
+
+Web recovery uses the loader-owned `Runtime.recover<T>` callback intrinsic.
+The frontend requires runtime loader ownership. The MIR verifier checks the
+callback, fallback and result as one concrete type identity and retains
+conservative effects. Portable TypeRB code places separate core and outer
+boundaries, so a failed handler returns through the root middleware's `Next`
+while a failed root middleware abandons its remaining statements. HEAD response
+suppression remains part of the dispatcher.
+
+The QBE runtime isolates libc `setjmp`/`longjmp` in a callback trampoline;
+ordinary functions have no returns-twice call. Its immutable frame records the
+previous scope, caller root count, closure and fallback before entering the
+callback. Both completion paths restore the scope and root count without saving
+a movable root-buffer pointer. Integer/pointer and Float callbacks have distinct
+ABI adapters. Target tests check the 1024-byte, 16-byte-aligned jump environment
+against the system headers and exercise nested failures and normal returns.
+Language failures use this scope when present and retain their diagnostics and
+exit behavior otherwise. Allocation failure and invalid internal object state
+remain process-fatal. This internal mechanism does not introduce a public catch
+syntax or imply networking cancellation and deadline support.
 
 The CLI/REPL under `compiler/cli/` is outside the ordinary core closure.
 Snapshot recovery derives a temporary flattened source
