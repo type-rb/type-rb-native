@@ -84,6 +84,7 @@ step "recovery types" "$reference" check --config recovery/trbconfig.jsonc
 step "compiler types" "$reference" check --config compiler/trbconfig.jsonc
 step "CLI and core closure" sh tools/check-native-cli.sh "$reference"
 step "bootstrap snapshot v4 closure" sh tools/check-bootstrap-snapshot.sh "$reference"
+step "browser client reference contracts" python3 tools/native-web-client-test.py "$reference" --reference --browser-check --browser-runtime "$(command -v node)"
 if [ -f tools/project-scenarios.py ]; then
 	# Scenarios run with an isolated HOME; share the Go build cache as CI does.
 	if [ -z "${GOCACHE:-}" ] && command -v go > /dev/null 2>&1; then

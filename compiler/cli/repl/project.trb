@@ -28,27 +28,28 @@ record ReplProject
 	imports: String
 	root: String
 	error: String
+	configured: Boolean
 end
 
 def repl_project(config: String): ReplProject
 	if config == ""
-		return ReplProject.new(imports: repl_standard_imports([]), root: native_cli_cwd(), error: "")
+		return ReplProject.new(configured: false, imports: repl_standard_imports([]), root: native_cli_cwd(), error: "")
 	end
 	project := parse_project_config(compiler_read_source(config))
 	if project.error != ""
-		return ReplProject.new(imports: "", root: "", error: project.error)
+		return ReplProject.new(configured: false, imports: "", root: "", error: project.error)
 	end
 	if project.local_packages.size() > 0
-		return ReplProject.new(imports: "", root: "", error: "local TypeRB packages are not implemented in the REPL")
+		return ReplProject.new(configured: false, imports: "", root: "", error: "local TypeRB packages are not implemented in the REPL")
 	end
 	unsupported := project_config_support_error(project)
 	if unsupported != ""
-		return ReplProject.new(imports: "", root: "", error: unsupported)
+		return ReplProject.new(configured: false, imports: "", root: "", error: unsupported)
 	end
 	root := path_join(path_directory(config), project.source_dir)
 	bundle := compiler_collect_project_sources(root, path_join(path_directory(config), project.out_dir))
 	if bundle.error != ""
-		return ReplProject.new(imports: "", root: root, error: bundle.error)
+		return ReplProject.new(configured: false, imports: "", root: root, error: bundle.error)
 	end
 	mut web := false
 	mut routes := false
@@ -62,7 +63,7 @@ def repl_project(config: String): ReplProject
 			parse_module(state, 0, 0)
 		end
 		if has_diagnostic(state)
-			return ReplProject.new(imports: "", root: root, error: "cannot parse project module " + bundle.paths[index])
+			return ReplProject.new(configured: false, imports: "", root: root, error: "cannot parse project module " + bundle.paths[index])
 		end
 		module_name := project_module_name(state, root, bundle.paths[index])
 		if string_starts_with(module_name, "routes/")
@@ -132,7 +133,7 @@ def repl_project(config: String): ReplProject
 			resolve_without_entry(validation)
 		end
 		if has_diagnostic(validation)
-			return ReplProject.new(imports: "", root: root, error: load_string(validation.diagnostics.messages, 0))
+			return ReplProject.new(configured: false, imports: "", root: root, error: load_string(validation.diagnostics.messages, 0))
 		end
 	end
 	mut imports := repl_standard_imports(names)
@@ -151,7 +152,7 @@ def repl_project(config: String): ReplProject
 		end
 		index += 1
 	end
-	return ReplProject.new(imports: imports, root: root, error: "")
+	return ReplProject.new(configured: true, imports: imports, root: root, error: "")
 end
 
 # Filter generated imports using parsed declarations, never tokens in comments

@@ -79,5 +79,6 @@ a different representation. These display differences remain unresolved under
 [#1192](https://github.com/type-rb/type-rb-native/issues/1192); no new
 portable inspection contract or reference pin is adopted here.
 
-Endpoint declarations, routing, networking, streaming and server shutdown remain
-separate work under the [production Web application path](decisions/0086-production-web-application-path.md).
+File routing and [endpoint contracts](native-web-endpoints.md) are separate
+checked providers. Networking, streaming and server shutdown remain work under
+the [production Web application path](decisions/0086-production-web-application-path.md).

@@ -3,8 +3,10 @@
 `trbn` is TypeRB Native's command-line executable. Its default mode is
 `trb`, including a standalone file, a configuration without `mode`, and the
 REPL. An explicit configuration mode is authoritative. `go`, `ruby`, and
-`typescript` report an unsupported-mode error; they never silently run as
-native code. The reference `trb` command and its defaults are unchanged.
+`typescript` report an unsupported-mode error for execution; they never silently
+run as native code. Checking, portable package installation and Web contract
+generation accept every declared mode. The reference `trb` command and its
+defaults are unchanged.
 
 ## Build and run from a checkout
 
@@ -66,6 +68,8 @@ build may leave a lock that must be inspected before removing it.
 ./trbn run
 ./trbn /path/to/standalone.trb -- "program argument"
 ./trbn repl
+./trbn web openapi --output docs/openapi.json
+./trbn web client --name PublicClient --output generated/api_client.trb
 ```
 
 `build` writes QBE source to the configured `outDir` (default `build`), named
@@ -99,6 +103,25 @@ need no lock. Explicit Boolean values such as `--frozen=false` are accepted.
 `localPackages` maps names directly to source directories without a manifest or
 lock. Package aliases are scoped to each package's dependencies and take
 precedence over an identically spelled project import.
+
+`web openapi` generates an OpenAPI 3.1 document from checked
+[endpoint contracts](native-web-endpoints.md). It accepts `--config`, `--title`,
+`--api-version` and `--output`. Title and API version default to the project name
+and version. Output defaults to stdout; `--output -` also selects stdout.
+A file output path must be relative to and remain below the project root.
+Successful file output atomically replaces the destination and prints its path;
+failed generation preserves an existing file. No handler, program entry point,
+server or external target tool is executed. The pinned Web integration still
+requires a project with a `main` entry for contract discovery.
+
+`web client` generates TypeRB browser-client source from the same checked
+contracts. It accepts `--config`, `--name` and `--output`; the class name defaults
+to `ApiClient`. It has the same stdout, file publication, configuration discovery
+and target-tool independence rules as `web openapi`. Shared imported contract
+types must also be available to the consuming browser project. See the endpoint
+guide for generated request/response behavior and pinned consumer limitations.
+This metadata command does not provide general source-backend compilation or
+execution of browser APIs in Native programs.
 
 Git package sources, nonempty native-dependency/adapter manifest fields and
 package loading in the REPL remain unimplemented and fail explicitly. Lock
