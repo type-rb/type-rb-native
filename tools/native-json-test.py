@@ -150,11 +150,15 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         statements.append(f'parse_and_display({literal})')
         outputs.append(quoted(decoded))
     # Exercise accumulated fragments across long ASCII/Unicode/escaped strings.
-    for raw, decoded in [(b'a' * 8192 + b'\xf0\x90\x80', 'a' * 8192 + '\ufffd' * 3),
-                         (b'\\ud83d\\ude00' * 512, '😀' * 512),
-                         (b'\\ud800x' * 512, '\ufffdx' * 512)]:
-        literal = '"' + ''.join(f'\\x{octet:02x}' for octet in b'"' + raw + b'"') + '"'
-        statements.append(f'parse_and_display({literal})')
+    for unit, count, tail, decoded in [
+            (b'a', 8192, b'\xf0\x90\x80', 'a' * 8192 + '\ufffd' * 3),
+            (b'\\ud83d\\ude00', 512, b'', '😀' * 512),
+            (b'\\ud800x', 512, b'', '\ufffdx' * 512)]:
+        def octets(raw):
+            return '"' + ''.join(f'\\x{octet:02x}' for octet in raw) + '"'
+        delimiter = bytes([34])
+        expression = f'{octets(delimiter)} + repeated({octets(unit)}, {count}) + {octets(tail + delimiter)}'
+        statements.append(f'parse_and_display({expression})')
         outputs.append(quoted(decoded))
     for suffix in ('', '<>&', '\u2028\u2029', '"\\\n\t\x00'):
         value = 'aβ😀' * 256 + suffix
@@ -167,7 +171,6 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
     structures = [
         [{"id": index, "name": "β😀", "items": [index, None, index % 2 == 0],
           "empty": {}} for index in range(256)],
-        ["aβ😀" for _ in range(2048)],
         {f"key-{index}": "aβ😀\n<>&" for index in range(256)},
         {"left": [[], {}, [False, True]], "right": {"nested": [{}, [], None]}},
     ]
@@ -178,14 +181,31 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         for character in ('<', '>', '&', '\u2028', '\u2029'):
             encoded = encoded.replace(character, f'\\u{ord(character):04x}')
         outputs.append(encoded)
-    for document in ('/*' + 'β😀* ' * 1024 + '*/["aβ😀",true]',
-                     '// ' + 'β😀' * 1024 + '\r\n{"value":"a\\nβ😀"}',
-                     '{"slashes":"/* text */ // text",/*' + 'x' * 4096 + '*/"z":0}'):
-        statements.append(f'parse_jsonc_and_display({json.dumps(document, ensure_ascii=False)})')
-    outputs.extend(['["aβ😀",true]', '{"value":"a\\nβ😀"}',
-                    '{"slashes":"/* text */ // text","z":0}'])
+    item = json.dumps('"aβ😀",', ensure_ascii=False)
+    last = json.dumps('"aβ😀"]', ensure_ascii=False)
+    statements.append(f'parse_and_display("[" + repeated({item}, 2047) + {last})')
+    outputs.append('[' + ','.join(['"aβ😀"'] * 2048) + ']')
+    for prefix, unit, count, suffix, expected_document in [
+            ('/*', 'β😀* ', 1024, '*/["aβ😀",true]', '["aβ😀",true]'),
+            ('// ', 'β😀', 1024, '\r\n{"value":"a\\nβ😀"}', '{"value":"a\\nβ😀"}'),
+            ('{"slashes":"/* text */ // text",/*', 'x', 4096, '*/"z":0}',
+             '{"slashes":"/* text */ // text","z":0}')]:
+        expression = (f'{json.dumps(prefix)} + repeated({json.dumps(unit, ensure_ascii=False)}, {count})'
+                      f' + {json.dumps(suffix)}')
+        statements.append(f'parse_jsonc_and_display({expression})')
+        outputs.append(expected_document)
     declarations = source.split('def probe()')[0].replace('import trb/std/url\n', '')
     main.write_text(declarations + '''
+# Construct large runtime inputs without embedding large compiler constants.
+def repeated(text: String, count: Integer): String
+mut parts: Array<String> := []
+mut index := 0
+while index < count
+parts.push(text)
+index += 1
+end
+return parts.join("")
+end
 def parse_jsonc_and_display(text: String)
 case JSONC.parse(text)
 when Result::Ok(value)
@@ -229,7 +249,7 @@ def main()
         ('{"a":1,"a":9007199254740992}', '/a'),
         ('[0,{"/~":[0,9007199254740992]}]', '/1/~1~0/1'),
     ]
-    pointer_source = declarations + '''
+    pointer_source = declarations.replace('import trb/std/jsonc\n', '') + '''
 def report_path(source: String)
 case JSON.parse(source)
 when Result::Ok(_value)
