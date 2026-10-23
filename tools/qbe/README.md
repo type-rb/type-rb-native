@@ -70,12 +70,18 @@ phi cycles, are removed. The pass keeps all ordinary operations and leaves
 their elimination to the existing scheduler. Calls, memory operands, return
 values and loop conditions remain roots of this analysis. Functions without
 phi nodes do not need the pass.
+The scheduler visits pinned instruction groups in their original order before
+remaining pure expressions. GVN may rescue a shared expression from a folded
+branch into the entry block; recursively scheduling that expression first could
+otherwise pull a later call or load ahead of an earlier side effect. The ordered
+call probe also rejects a cached backend lacking this repair.
 The change adds no instruction, alias assumption or
 arithmetic rewrite, and applies to every target.
 Run `python3 tools/qbe_gcm_test.py --qbe /path/to/qbe`
 for six-target emission checks and an independent native oracle for shared
 predicates, signed boundaries, zero-trip loops, invariant memory addresses,
-unused copy cycles and cycles observed through calls, stores and returns.
+unused copy cycles, cycles observed through calls, stores and returns, and
+call/load ordering after constant branch folding.
 Unlike the ARM64 selector patches alone, this patch can change AMD64 emission.
 
 `fma.patch` adds the floating-point `mulc` operation: ordinary multiplication

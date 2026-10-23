@@ -79,6 +79,35 @@ COPY_CYCLE_PROBE = """export function l $copy_cycle(l %a, l %b, l %n) {
 """
 
 
+# GVN rescues the second branch address into the entry block before GCM.
+ORDERED_CALLS_PROBE = """export function l $ordered_calls(l %p) {
+@start
+ jmp @init
+@init
+ call $change_order(l %p)
+ %r =l call $inspect_order(l %p)
+ jnz 1, @first, @second
+@first
+ %one =l add %r, 8
+ %a =l loadl %one
+ ret %a
+@second
+ %two =l add %r, 8
+ %b =l loadl %two
+ ret %b
+}
+"""
+
+
+def check_ordered_effects(binary, target="arm64"):
+    result = subprocess.run([str(binary), "-t", target, "-d", "G"], input=ORDERED_CALLS_PROBE,
+                            text=True, capture_output=True, timeout=30)
+    moved = result.stderr.partition("> After GCM:")[2]
+    calls = re.findall(r"\bcall \$([a-z_]+)", moved)
+    if result.returncode or calls != ["change_order", "inspect_order"]:
+        raise ValueError("QBE lacks the required ordered side effects")
+
+
 def check_copy_liveness(binary):
     result = subprocess.run([str(binary), "-t", "arm64", "-d", "G"], input=COPY_CYCLE_PROBE,
                             text=True, capture_output=True, timeout=30)
@@ -96,7 +125,7 @@ def backend_identity(root=ROOT):
     backend = json.loads((root / "tools/qbe/backend.json").read_text())
     if set(backend) != {"name", "version", "sourceURL", "sourceSHA256", "variant", "patches"}:
         raise ValueError("invalid QBE identity shape")
-    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-copy-liveness-v1":
+    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-ordered-effects-v1":
         raise ValueError("unsupported QBE identity")
     if not backend["sourceURL"].startswith("https://") or not re.fullmatch(r"[0-9a-f]{64}", backend["sourceSHA256"]):
         raise ValueError("invalid QBE source identity")
@@ -178,6 +207,7 @@ def check_capability(binary):
         raise ValueError("QBE lacks the required single comparison rematerialization")
     check_copy_liveness(binary)
     check_contraction(binary)
+    check_ordered_effects(binary)
 
 
 def build(output, archive=None):

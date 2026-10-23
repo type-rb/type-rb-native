@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check stable natural Array ordering, retained copies and managed lifetime."""
 import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -115,6 +116,14 @@ end
             expected.extend(map(str, sorted(values, reverse=True)))
             expected.append(str(size))
     assert result.stdout == '\n'.join(expected) + '\n' and result.stderr == '', result
+
+    # Keep this small ordinary program separate: folding a dead branch in its
+    # generated code once moved the input copy ahead of the Float pushes.
+    cases = json.loads((repository / 'tools/native-language-cases.json').read_text())['cases']
+    specials = next(case for case in cases if case['id'] == 'array-sort-float-specials')
+    source.write_text('def main()\n' + specials['body'] + 'end\n')
+    result = run([binary, 'run', source])
+    assert result.stdout == specials['native']['execute']['stdout'] and result.stderr == '', result
 
     # A rejected call preserves retained source/copy storage. Replay rebuilds
     # those same independent bindings and nominal declarations cannot disturb it.

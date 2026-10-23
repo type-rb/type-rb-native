@@ -8,6 +8,8 @@ import re
 import subprocess
 import tempfile
 
+from qbe_toolchain import ORDERED_CALLS_PROBE, check_ordered_effects
+
 
 GUARD = """export function l $guard(l %a, l %b, l %c, l %n) {
 @start
@@ -118,6 +120,22 @@ FLOAT_CYCLE = """export function d $float_cycle(d %a, d %b, l %n) {
 }
 """
 
+ORDERED_LOADS = """export function l $ordered_loads(l %p) {
+@start
+ jmp @init
+@init
+ storel 7, %p
+ %r =l loadl %p
+ jnz 1, @first, @second
+@first
+ %one =l add %r, 8
+ ret %one
+@second
+ %two =l add %r, 8
+ ret %two
+}
+"""
+
 DRIVER = r"""
 #include <stdint.h>
 #include <stdio.h>
@@ -130,12 +148,22 @@ extern int64_t copy_cycle(int64_t, int64_t, int64_t, int64_t *);
 extern int64_t live_cycle(int64_t, int64_t, int64_t, int64_t *);
 extern int64_t observed_cycle(int64_t, int64_t, int64_t, int64_t *);
 extern double float_cycle(double, double, int64_t);
-static int64_t observed, calls;
+extern int64_t ordered_calls(int64_t *);
+extern int64_t ordered_loads(int64_t *);
+static int64_t observed, calls, snapshot[2];
+void change_order(int64_t *p) { p[1] = 7; }
+int64_t *inspect_order(int64_t *p) {
+    snapshot[0] = p[0]; snapshot[1] = p[1]; return snapshot;
+}
 int64_t observe(int64_t value) { observed = value; ++calls; return 0; }
 int main(void) {
     int64_t values[] = {INT64_MIN, -1, 0, 1, 17, INT64_MAX};
     int64_t trips[] = {-3, 0, 1, 2, 31, 65};
     unsigned checks = 0;
+    int64_t data[] = {3, 3};
+    if (ordered_calls(data) != 7 || data[1] != 7) return 9;
+    if (ordered_loads(data) != 15 || data[0] != 7) return 10;
+    checks += 2;
     for (unsigned a = 0; a < 6; ++a)
     for (unsigned b = 0; b < 6; ++b)
     for (unsigned c = 0; c < 6; ++c) {
@@ -242,9 +270,11 @@ def main():
         root = Path(temporary)
         source = root / "input.ssa"
         source.write_text(GUARD + SINGLE_GUARD + SHARED + ADDRESS
-                          + COPY_CYCLE + LIVE_CYCLE + OBSERVED_CYCLE + FLOAT_CYCLE)
+                          + COPY_CYCLE + LIVE_CYCLE + OBSERVED_CYCLE + FLOAT_CYCLE
+                          + ORDERED_CALLS_PROBE + ORDERED_LOADS)
         for target in targets:
             check_motion(qbe, target)
+            check_ordered_effects(qbe, target)
             subprocess.run([str(qbe), "-t", target, "-o", str(root / (target + ".s")),
                             str(source)], check=True)
         machine = platform.machine()
@@ -256,7 +286,7 @@ def main():
         subprocess.run([os.environ.get("CC", "cc"), str(driver), str(root / (native + ".s")),
                         "-o", str(program)], check=True)
         result = subprocess.run([str(program)], capture_output=True, text=True, check=True)
-        assert result.stdout == "5472 GCM semantic checks passed\n", result.stdout
+        assert result.stdout == "5474 GCM semantic checks passed\n", result.stdout
         assert not result.stderr, result.stderr
         print(result.stdout, end="")
         print("Recursive operands and invariant guards verified for six targets")
