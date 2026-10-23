@@ -18,7 +18,7 @@ CATALOG = Path("compiler/src/project/official_catalog.trb")
 URL_SOURCE = "internal/stdlib/url.go"
 URL_ADAPTER = Path("compiler/packages/internal/url.trb")
 JSON_ADAPTER = Path("compiler/packages/internal/json.trb")
-STDLIB_SOURCES = {"url": URL_SOURCE, "json": "internal/stdlib/json.go", "jsonc": "internal/stdlib/jsonc.go", "time": "internal/stdlib/time.go", "hex": "internal/stdlib/hex.go", "base64": "internal/stdlib/base64.go"}
+STDLIB_SOURCES = {"url": URL_SOURCE, "json": "internal/stdlib/json.go", "jsonc": "internal/stdlib/jsonc.go", "time": "internal/stdlib/time.go", "hex": "internal/stdlib/hex.go", "base64": "internal/stdlib/base64.go", "path": "internal/stdlib/path.go"}
 NATIVE_ADAPTERS = ["time", "time_calendar", "time_parse", "time_zones", "time_host", "web_context", "hex", "base64", "encoding_bytes", "secure_random", "entropy", "web_dispatch"]
 REPOSITORY = "https://github.com/type-rb/type-rb"
 
@@ -115,12 +115,12 @@ def typerb_string(value):
 
 def pinned_standard_source(data, name):
     boundary = rb"package stdlib\n\nfunc " + re.escape(name.encode()) + rb"Source\(\) string \{\n\treturn `([^`]*)`\n\}\n"
-    if name == "time":
+    if name in {"time", "path"}:
         # The pinned file also owns the reference intrinsic registry. Extract
         # only its final raw TypeRB wrapper, preserving every source byte.
-        marker = b"func timeSource() string {\n\treturn `"
+        marker = b"func " + name.encode() + b"Source() string {\n\treturn `"
         if data.count(marker) != 1 or not data.startswith(b"package stdlib\n"):
-            raise ValidationError("unrecognized pinned TIME source boundary")
+            raise ValidationError("unrecognized pinned " + name.upper() + " source boundary")
         boundary = rb"[\s\S]*" + re.escape(marker) + rb"([^`]*)`\n\}\n"
     match = re.fullmatch(boundary, data)
     if match is None:

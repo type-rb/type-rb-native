@@ -129,6 +129,13 @@ update options are not yet available. Configuration JSON Unicode
 escapes retain their current limitations; package manifests and locks decode
 JSON Unicode escapes separately.
 
+`trb/std/path` provides `Path` and validated `RelativePath` values. Validation,
+composition, parent lookup and private construction follow the portable source.
+`Path#join` preserves its parent text and appends the validated descendant using
+the slash separator of the supported Native targets. These value operations do
+not access the filesystem; file and directory services remain separate work.
+See [path values](native-path-values.md).
+
 The checkout root contains a small `mode: trb` example project in `examples/`.
 Reference-compiler development checks use the separate
 `recovery/trbconfig.jsonc` explicitly:
