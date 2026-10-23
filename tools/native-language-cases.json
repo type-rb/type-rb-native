@@ -3212,12 +3212,52 @@
         "web-middleware-cors-denied-origin",
         "web-middleware-secure-custom",
         "web-middleware-ordered-chain",
-        "web-middleware-short-circuit"
+        "web-middleware-short-circuit",
+        "web-browser-cors-default",
+        "web-browser-cors-no-origin",
+        "web-browser-cors-duplicate-origin",
+        "web-browser-cors-explicit-allowed",
+        "web-browser-cors-explicit-denied",
+        "web-browser-cors-credentials",
+        "web-browser-cors-exposed",
+        "web-browser-cors-preflight",
+        "web-browser-cors-preflight-reflect",
+        "web-browser-cors-preflight-explicit",
+        "web-browser-cors-preflight-denied",
+        "web-browser-cors-preflight-max-age",
+        "web-browser-cors-preflight-negative-age",
+        "web-browser-cors-options-ordinary",
+        "web-browser-secure-default",
+        "web-browser-secure-custom",
+        "web-browser-secure-empty",
+        "web-browser-stack-cors-secure",
+        "web-browser-stack-secure-cors",
+        "web-browser-stack-preflight",
+        "web-browser-cors-empty-origin",
+        "web-browser-cors-null-origin",
+        "web-browser-cors-explicit-no-origin",
+        "web-browser-cors-case-sensitive-origin",
+        "web-browser-cors-preflight-no-origin",
+        "web-browser-cors-preflight-multiple-origins",
+        "web-browser-cors-preflight-multiple-methods",
+        "web-browser-cors-request-method-on-get",
+        "web-browser-cors-lowercase-options",
+        "web-browser-cors-preflight-unlisted-method",
+        "web-browser-cors-preflight-empty-methods",
+        "web-browser-cors-preflight-zero-age",
+        "web-browser-cors-preflight-credentials",
+        "web-browser-cors-preflight-multiple-headers",
+        "web-browser-cors-preflight-denied-credentials",
+        "web-browser-secure-empty-value",
+        "web-browser-secure-content-security-policy",
+        "web-browser-compose-empty",
+        "web-browser-stack-preflight-short-circuit",
+        "web-browser-cors-factory"
       ],
       "pending": [
-        "File routes and server lifecycle; typed Context storage is tracked by the web-context family"
+        "Network serving and server lifecycle; logger, compression, timeout and authentication providers remain incomplete"
       ],
-      "note": "Pinned Request, Response, cookies and ContextKey values support ordinary imports and retained REPL ownership. Portable middleware composes ordered handlers with once-only Next calls, CORS and secure headers. These value and middleware contracts do not establish request dispatch or networking."
+      "note": "Pinned Request, Response, cookies and ContextKey values support ordinary imports and retained REPL ownership. Portable middleware composes ordered handlers with once-only Next calls. Browser middleware covers actual/preflight CORS negotiation, origin and credential rules, header reflection and retention, security-header configuration, and composition short circuits. A file-route integration combines RequestID, security headers and CORS across GET, HEAD, OPTIONS, missing and malformed paths under forced collection. These checks do not establish networking or the remaining host-backed providers."
     },
     {
       "id": "jsx",
@@ -3506,7 +3546,7 @@
       "pending": [
         "Renamed imported envelope records remain rejected pending canonical-identity decision #1183",
         "Calling bind without a type argument is rejected; reference check-only acceptance differs and awaits #1184",
-        "Endpoint contracts, file routes and HTTP server lifecycle remain incomplete; typed Context storage is tracked by the web-context family"
+        "Endpoint client/OpenAPI providers and HTTP server lifecycle remain incomplete; typed Context storage is tracked by the web-context family"
       ],
       "note": "Canonical Context#bind<T> composes checked path, query and JSON providers for nonempty records containing params, query and body sections. Evaluation follows that fixed order and preserves the first original typed error. Bounded probes cover omitted sections, nested values, local aliases and canonical imports, once-only receiver evaluation, catch/try composition, retained REPL records and forced-GC lifetimes. Source-erased MIR, signature tampering, provider ownership and speculative-fork immutability are checked independently. No backend adapter, public syntax or reference pin is changed."
     },
@@ -129513,6 +129553,2086 @@
         }
       },
       "title": "Web failure recovery: invalid cookie",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-default",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"GET\", [Header.new(name: \"origin\", value: \"https://example.test\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors default",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-no-origin",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"GET\", [])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: []>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: []>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors no origin",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-duplicate-origin",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"GET\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"origin\", value: \"https://other.test\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"origin\", value: \"https://other.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"origin\", value: \"https://other.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors duplicate origin",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-explicit-allowed",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"GET\", [Header.new(name: \"origin\", value: \"https://example.test\")])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"https://example.test\"], allow_methods: [\"GET\", \"POST\"], allow_headers: [], expose_headers: [], credentials: false, max_age: PreflightMaxAge::Disabled)))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:https://example.test\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:https://example.test\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:https://example.test\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:https://example.test\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors explicit allowed",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-explicit-denied",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"GET\", [Header.new(name: \"origin\", value: \"https://other.test\")])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"https://example.test\"], allow_methods: [\"GET\", \"POST\"], allow_headers: [], expose_headers: [], credentials: false, max_age: PreflightMaxAge::Disabled)))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://other.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://other.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors explicit denied",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-credentials",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"GET\", [Header.new(name: \"origin\", value: \"https://example.test\")])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"*\"], allow_methods: [\"GET\", \"POST\"], allow_headers: [], expose_headers: [], credentials: true, max_age: PreflightMaxAge::Disabled)))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:https://example.test\naccess-control-allow-credentials:true\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:https://example.test\naccess-control-allow-credentials:true\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:https://example.test\naccess-control-allow-credentials:true\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:https://example.test\naccess-control-allow-credentials:true\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors credentials",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-exposed",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"GET\", [Header.new(name: \"origin\", value: \"https://example.test\")])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"*\"], allow_methods: [\"GET\", \"POST\"], allow_headers: [], expose_headers: [\"X-Trace\", \"X-Count\"], credentials: false, max_age: PreflightMaxAge::Disabled)))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:X-Trace, X-Count\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:X-Trace, X-Count\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:X-Trace, X-Count\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:X-Trace, X-Count\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors exposed",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-reflect",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\"), Header.new(name: \"access-control-request-headers\", value: \"X-One, X-Two\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:X-One, X-Two\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Access-Control-Request-Headers\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\"), Header(name: \"access-control-request-headers\", value: \"X-One, X-Two\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:X-One, X-Two\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Access-Control-Request-Headers\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:X-One, X-Two\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Access-Control-Request-Headers\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\"), Header(name: \"access-control-request-headers\", value: \"X-One, X-Two\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:X-One, X-Two\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Access-Control-Request-Headers\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight reflect",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-explicit",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"*\"], allow_methods: [\"GET\", \"POST\"], allow_headers: [\"X-Custom\"], expose_headers: [], credentials: false, max_age: PreflightMaxAge::Disabled)))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:X-Custom\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:X-Custom\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:X-Custom\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:X-Custom\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight explicit",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-denied",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://other.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"https://example.test\"], allow_methods: [\"GET\", \"POST\"], allow_headers: [], expose_headers: [], credentials: false, max_age: PreflightMaxAge::Disabled)))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Origin\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://other.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Origin\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Origin\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://other.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Origin\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight denied",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-max-age",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"*\"], allow_methods: [\"GET\", \"POST\"], allow_headers: [], expose_headers: [], credentials: false, max_age: PreflightMaxAge::Seconds(60))))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:60\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:60\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:60\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:60\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight max age",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-negative-age",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"*\"], allow_methods: [\"GET\", \"POST\"], allow_headers: [], expose_headers: [], credentials: false, max_age: PreflightMaxAge::Seconds(-1))))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight negative age",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-options-ordinary",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors options ordinary",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-secure-default",
+      "declarations": "import { SecureHeaders } from trb/web/middleware/secure_headers\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "show(SecureHeaders.call(context(\"GET\", []), Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: secure default",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-secure-custom",
+      "declarations": "import { SecureHeaders, SecureHeadersOptions } from trb/web/middleware/secure_headers\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "show(SecureHeaders.call(context(\"GET\", []), Terminal.new(), SecureHeadersOptions.new(headers: {\"x-frame-options\" => \"DENY\"})))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:DENY\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:DENY\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:DENY\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:DENY\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: secure custom",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-secure-empty",
+      "declarations": "import { SecureHeaders, SecureHeadersOptions } from trb/web/middleware/secure_headers\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "show(SecureHeaders.call(context(\"GET\", []), Terminal.new(), SecureHeadersOptions.new(headers: {})))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: secure empty",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-stack-cors-secure",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { SecureHeaders } from trb/web/middleware/secure_headers\nimport { compose } from trb/web/middleware\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "show(compose(context(\"GET\", [Header.new(name: \"origin\", value: \"https://example.test\")]), Terminal.new(), [CORS.middleware(), SecureHeaders.middleware()]))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: stack cors secure",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-stack-secure-cors",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { SecureHeaders } from trb/web/middleware/secure_headers\nimport { compose } from trb/web/middleware\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "show(compose(context(\"GET\", [Header.new(name: \"origin\", value: \"https://example.test\")]), Terminal.new(), [SecureHeaders.middleware(), CORS.middleware()]))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: stack secure cors",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-stack-preflight",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { SecureHeaders } from trb/web/middleware/secure_headers\nimport { compose } from trb/web/middleware\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "show(compose(context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")]), Terminal.new(), [SecureHeaders.middleware(), CORS.middleware()]))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:nosniff\nx-frame-options:SAMEORIGIN\nreferrer-policy:no-referrer\nx-xss-protection:0\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: stack preflight",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-empty-origin",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"GET\", [Header.new(name: \"origin\", value: \"\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors empty origin",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-null-origin",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"GET\", [Header.new(name: \"origin\", value: \"null\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"null\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"null\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors null origin",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-explicit-no-origin",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"GET\", [])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"https://example.test\"], allow_methods: [\"GET\", \"POST\"], allow_headers: [], expose_headers: [], credentials: false, max_age: PreflightMaxAge::Disabled)))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: []>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: []>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors explicit no origin",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-case-sensitive-origin",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"GET\", [Header.new(name: \"origin\", value: \"https://EXAMPLE.test\")])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"https://example.test\"], allow_methods: [\"GET\", \"POST\"], allow_headers: [], expose_headers: [], credentials: false, max_age: PreflightMaxAge::Disabled)))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://EXAMPLE.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://EXAMPLE.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept|Origin\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors case sensitive origin",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-no-origin",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"access-control-request-method\", value: \"POST\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight no origin",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-multiple-origins",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"origin\", value: \"https://other.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"origin\", value: \"https://other.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"origin\", value: \"https://other.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight multiple origins",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-multiple-methods",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\"), Header.new(name: \"access-control-request-method\", value: \"PUT\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\"), Header(name: \"access-control-request-method\", value: \"PUT\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\"), Header(name: \"access-control-request-method\", value: \"PUT\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight multiple methods",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-request-method-on-get",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"GET\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors request method on get",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-lowercase-options",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"options\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"options\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"options\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors lowercase options",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-unlisted-method",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"TRACE\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"TRACE\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"TRACE\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight unlisted method",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-empty-methods",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"*\"], allow_methods: [], allow_headers: [\"X-Custom\"], expose_headers: [], credentials: false, max_age: PreflightMaxAge::Disabled)))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:X-Custom\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:X-Custom\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:X-Custom\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:X-Custom\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight empty methods",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-zero-age",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"*\"], allow_methods: [\"GET\", \"POST\"], allow_headers: [], expose_headers: [], credentials: false, max_age: PreflightMaxAge::Seconds(0))))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:0\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:0\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:0\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:0\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight zero age",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-credentials",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"*\"], allow_methods: [\"GET\", \"POST\"], allow_headers: [], expose_headers: [], credentials: true, max_age: PreflightMaxAge::Seconds(60))))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:https://example.test\naccess-control-allow-credentials:true\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:60\nvary:Origin\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:https://example.test\naccess-control-allow-credentials:true\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:60\nvary:Origin\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:https://example.test\naccess-control-allow-credentials:true\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:60\nvary:Origin\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:https://example.test\naccess-control-allow-credentials:true\naccess-control-allow-methods:GET, POST\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:60\nvary:Origin\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight credentials",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-multiple-headers",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\"), Header.new(name: \"access-control-request-headers\", value: \"X-One\"), Header.new(name: \"access-control-request-headers\", value: \"X-Two\")])\nshow(CORS.call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:X-One, X-Two\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Access-Control-Request-Headers\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\"), Header(name: \"access-control-request-headers\", value: \"X-One\"), Header(name: \"access-control-request-headers\", value: \"X-Two\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:X-One, X-Two\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Access-Control-Request-Headers\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:X-One, X-Two\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Access-Control-Request-Headers\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\"), Header(name: \"access-control-request-method\", value: \"POST\"), Header(name: \"access-control-request-headers\", value: \"X-One\"), Header(name: \"access-control-request-headers\", value: \"X-Two\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:X-One, X-Two\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Access-Control-Request-Headers\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight multiple headers",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-preflight-denied-credentials",
+      "declarations": "import { CORS, CORSOptions, PreflightMaxAge } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://other.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")])\nshow(CORS.call(ctx, Terminal.new(), CORSOptions.new(allow_origins: [\"https://example.test\"], allow_methods: [\"GET\", \"POST\"], allow_headers: [], expose_headers: [], credentials: true, max_age: PreflightMaxAge::Disabled)))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Origin\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://other.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Origin\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Origin\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://other.test\"), Header(name: \"access-control-request-method\", value: \"POST\")]>, method: #<HttpMethod value: \"OPTIONS\">, path: \"/sample\", query_string: \"\">> : Context\n204\n\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Origin\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors preflight denied credentials",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-secure-empty-value",
+      "declarations": "import { SecureHeaders, SecureHeadersOptions } from trb/web/middleware/secure_headers\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "show(SecureHeaders.call(context(\"GET\", []), Terminal.new(), SecureHeadersOptions.new(headers: {\"x-frame-options\" => \"\"})))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: secure empty value",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-secure-content-security-policy",
+      "declarations": "import { SecureHeaders, SecureHeadersOptions } from trb/web/middleware/secure_headers\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\", \"content-security-policy\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "show(SecureHeaders.call(context(\"GET\", []), Terminal.new(), SecureHeadersOptions.new(headers: {\"x-frame-options\" => \"DENY\", \"Content-Security-Policy\" => \"default-src 'self'\"})))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:DENY\nreferrer-policy:\nx-xss-protection:\ncontent-security-policy:default-src 'self'\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:DENY\nreferrer-policy:\nx-xss-protection:\ncontent-security-policy:default-src 'self'\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:DENY\nreferrer-policy:\nx-xss-protection:\ncontent-security-policy:default-src 'self'\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:DENY\nreferrer-policy:\nx-xss-protection:\ncontent-security-policy:default-src 'self'\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: secure content security policy",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-compose-empty",
+      "declarations": "import { compose } from trb/web/middleware\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "show(compose(context(\"GET\", [Header.new(name: \"origin\", value: \"https://example.test\")]), Terminal.new(), []))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: compose empty",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-stack-preflight-short-circuit",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { SecureHeaders } from trb/web/middleware/secure_headers\nimport { compose } from trb/web/middleware\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "show(compose(context(\"OPTIONS\", [Header.new(name: \"origin\", value: \"https://example.test\"), Header.new(name: \"access-control-request-method\", value: \"POST\")]), Terminal.new(), [CORS.middleware(), SecureHeaders.middleware()]))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "204\n\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:GET, HEAD, PUT, POST, DELETE, PATCH, OPTIONS\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:\nx-content-type-options:\nx-frame-options:\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: stack preflight short circuit",
+      "projectCheck": true
+    },
+    {
+      "id": "web-browser-cors-factory",
+      "declarations": "import { CORS } from trb/web/middleware/cors\nimport { Body, Header, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\n\nclass Terminal implements Next\n def call(_context: Context): Response\n  puts(\"handler\")\n  return Response.text(\"ok\").with_header(\"vary\", \"Accept\").with_header(\"x-frame-options\", \"original\")\n end\nend\n\ndef context(method: String, entries: Array<Header>): Context\n request := Request.new(method: HttpMethod.new(method), path: \"/sample\", query_string: \"\", headers: Headers.new(entries), body: Body.empty())\n return Context.new(request: request, path_parameters: {})\nend\n\ndef show(response: Response)\n puts(response.status)\n puts(response.body.to_s())\n [\"access-control-allow-origin\", \"access-control-allow-credentials\", \"access-control-allow-methods\", \"access-control-allow-headers\", \"access-control-expose-headers\", \"access-control-max-age\", \"vary\", \"x-content-type-options\", \"x-frame-options\", \"referrer-policy\", \"x-xss-protection\"].each do |name|\n  puts(name + \":\" + response.header_values(name).join(\"|\"))\n end\nend\n",
+      "body": "ctx := context(\"GET\", [Header.new(name: \"origin\", value: \"https://example.test\")])\nshow(CORS.middleware().call(ctx, Terminal.new()))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "handler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "#<Context _path_parameters: {}, _trb_context_state: nil, request: #<Request body: #<Body _bytes: Bytes[]>, headers: #<Headers _entries: [Header(name: \"origin\", value: \"https://example.test\")]>, method: #<HttpMethod value: \"GET\">, path: \"/sample\", query_string: \"\">> : Context\nhandler\n200\nok\naccess-control-allow-origin:*\naccess-control-allow-credentials:\naccess-control-allow-methods:\naccess-control-allow-headers:\naccess-control-expose-headers:\naccess-control-max-age:\nvary:Accept\nx-content-type-options:\nx-frame-options:original\nreferrer-policy:\nx-xss-protection:\n",
+          "stderr": ""
+        }
+      },
+      "title": "Browser middleware: cors factory",
       "projectCheck": true
     }
   ]
