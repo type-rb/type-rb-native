@@ -308,7 +308,7 @@ def _string(mut parser: JsonParser): String
 		if character == 34
 			parser.position[0] += 1
 			# Raw invalid bytes and unpaired surrogates were already replaced;
-			# the accumulated text is valid UTF-8 without another decoding pass.
+			# joining the fragments reconstructs valid UTF-8 across byte boundaries.
 			return fragments.join("")
 		end
 		if character < 32
@@ -320,7 +320,13 @@ def _string(mut parser: JsonParser): String
 			if width == 1
 				fragments.push(_rune(65533))
 			else
-				fragments.push(_source_slice(parser, parser.position[0], parser.position[0] + width))
+				# Append validated bytes directly instead of allocating a temporary
+				# Array and String for each multibyte code point.
+				mut offset := 0
+				while offset < width
+					fragments.push(Octets.octet(parser.bytes.at(parser.position[0] + offset)))
+					offset += 1
+				end
 			end
 			parser.position[0] += width
 			next
