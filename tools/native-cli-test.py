@@ -31,6 +31,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-encoding-test.py"
 subprocess.run([sys.executable, str(repository / "tools/native-web-route-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-web-middleware-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-web-openapi-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-web-client-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-failure-recovery-test.py"), "--qbe", str(binary.with_name("qbe"))], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-repl-flow-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-enum-test.py"), str(binary)], check=True)
