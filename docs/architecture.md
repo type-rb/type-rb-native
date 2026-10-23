@@ -147,6 +147,17 @@ Native entry preserves that rejection. REPL startup still validates the configur
 route graph, including projects without an executable main. Network serving and
 network cancellation remain separate runtime contracts in the coverage inventory.
 
+Endpoint class-body declarations retain source spans and resolve the direct
+superclass and marker functions through loader-owned identities. Checked
+metadata binds each contract to one local route and canonical response/input
+types; authored aliases remain available for the pinned generator's spelling
+restrictions. These declarations never become executable bodies. The OpenAPI
+exporter validates catalog identities and consumes checked declaration facts,
+including JSON field names and portable scalar representations. Generation-only
+schema restrictions do not change ordinary checking. The CLI writes a
+deterministic document without invoking a target toolchain, handler or server.
+MIR and QBE neither read endpoint contracts nor reconstruct their policy.
+
 Web recovery uses the loader-owned `Runtime.recover<T>` callback intrinsic.
 The frontend requires runtime loader ownership. The MIR verifier checks the
 callback, fallback and result as one concrete type identity and retains
