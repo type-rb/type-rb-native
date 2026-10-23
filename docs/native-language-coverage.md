@@ -55,7 +55,11 @@ record uncovered semantic contracts. Review those against public reference
 language and standard-library documentation when expanding or changing the pin.
 
 Both compilers execute the same authored sources, including project/import
-fixtures. Each implementation has separate reviewed expectations for ordinary
+fixtures. A case marked `projectCheck` checks its complete configured source
+graph, which is required for file-route discovery; ordinary cases retain their
+file-entry check. Route fixtures may use parameter brackets and Unicode names,
+while every fixture path remains relative and excludes traversal components.
+Each implementation has separate reviewed expectations for ordinary
 check, build, execution and REPL. Positive cases, static rejection cases and
 runtime failures are all intentional. Native acceptance of reference-invalid
 record, Array or Hash equality is a bug, not extra support. Some reference REPL

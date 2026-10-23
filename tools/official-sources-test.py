@@ -242,5 +242,26 @@ class OfficialSourceTests(unittest.TestCase):
             self.assertNotIn('return true', bundle.catalog_source(candidate).decode())
 
 
+    def test_web_testing_admission_preserves_bytes_and_provider_boundaries(self):
+        manifest = {'name': 'trb/web/testing', 'module': 'trb/web/testing/index',
+                    'source': 'src/index.trb', 'semanticProvider': 'trb.web.testing'}
+        raw = 'record _DispatchContract\nend\n'
+        path = 'packages/trb/web/testing/trbpackage.json'
+        files = {path: json.dumps(manifest).encode(),
+                 'packages/trb/web/testing/src/index.trb': raw.encode(),
+                 **{'stdlib/' + name + '.go': (self.reference / source).read_bytes()
+                    for name, source in bundle.STDLIB_SOURCES.items()}}
+        catalog = bundle.catalog_source(files).decode()
+        self.assertIn('return true', catalog.split('def official_source_supported')[1])
+        encoded = catalog.split('def official_source_text')[1].split('return ', 1)[1].splitlines()[0]
+        self.assertEqual(json.loads(encoded), raw)
+        for key, value in [('name', 'trb/other/testing'), ('kind', 'platform'),
+                           ('targets', ['go']), ('semanticProvider', 'unknown'),
+                           ('typeProvider', 'trb.web'), ('projectProvider', 'trb.web.routes')]:
+            changed = dict(manifest, **{key: value})
+            candidate = dict(files, **{path: json.dumps(changed).encode()})
+            self.assertNotIn('return true', bundle.catalog_source(candidate).decode())
+
+
 if __name__ == "__main__":
     unittest.main()

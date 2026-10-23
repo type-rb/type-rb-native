@@ -1,3 +1,6 @@
+import { append_web_route_imports, web_dispatch_source } from project/web_dispatch_source
+import { standard_source_web_dispatch } from state/standard_source_kinds
+import { native_web_dispatch_source } from project/official_catalog
 import { standard_source_base64, standard_source_encoding_bytes, standard_source_entropy, standard_source_hex, standard_source_internal_base64, standard_source_internal_hex, standard_source_secure_random } from state/standard_source_kinds
 import { native_base64_source, native_encoding_bytes_source, native_entropy_source, native_hex_source, native_secure_random_source, pinned_base64_source, pinned_hex_source } from project/official_catalog
 import { standard_source_web_context } from state/standard_source_kinds
@@ -20,6 +23,9 @@ import { sparse_integer_at, store_integer } from support/storage
 # Portable declarations use the same parser and nominal catalogs as authored
 # modules. Their owner tag is assigned only by this loader, never by spelling.
 def standard_source_kind(path: String): Integer
+	if path == "trb/internal/web_dispatch"
+		return standard_source_web_dispatch()
+	end
 	if path == "trb/std/encoding/hex"
 		return standard_source_hex()
 	end
@@ -93,6 +99,9 @@ def standard_source_kind(path: String): Integer
 end
 
 def standard_source_name(kind: Integer): String
+	if kind == standard_source_web_dispatch()
+		return "trb/internal/web_dispatch/index"
+	end
 	if kind == standard_source_hex()
 		return "trb/std/encoding/hex/index"
 	end
@@ -166,6 +175,9 @@ def standard_source_name(kind: Integer): String
 end
 
 def standard_source_text(kind: Integer): String
+	if kind == standard_source_web_dispatch()
+		return native_web_dispatch_source()
+	end
 	if kind == standard_source_hex()
 		return pinned_hex_source()
 	end
@@ -241,6 +253,10 @@ def standard_source_text(kind: Integer): String
 end
 
 def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer): Integer
+	if kind == standard_source_web_dispatch() && sparse_integer_at(state.standard_modules, state.module_graph.active_module[0]) != official_source_kind("trb/web/testing")
+		diagnostic(state, "TRBN4003", line, "internal Web dispatch is reserved for the owned testing provider")
+		return -1
+	end
 	if kind == standard_source_internal_hex()
 		caller := sparse_integer_at(state.standard_modules, state.module_graph.active_module[0])
 		if caller != standard_source_hex()
@@ -315,9 +331,16 @@ def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer)
 	store_integer(state.standard_modules, owner, kind)
 	state.module_graph.active_module[0] = owner
 	start := state.source_tokens.token_count[0]
-	lex_module(state, standard_source_text(kind), owner)
+	mut source := standard_source_text(kind)
+	if kind == official_source_kind("trb/web/testing")
+		source += web_dispatch_source(state)
+	end
+	lex_module(state, source, owner)
 	if !has_diagnostic(state)
 		parse_module(state, start, owner)
+	end
+	if kind == official_source_kind("trb/web/testing") && !has_diagnostic(state)
+		append_web_route_imports(state, owner)
 	end
 	if kind == official_source_kind("trb/web") && !has_diagnostic(state)
 		append_import(state, "trb/internal/context_storage", "", "", import_kind_module(), 1)

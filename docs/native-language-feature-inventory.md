@@ -15,7 +15,7 @@ Each count describes registered probes, not language coverage percentages.
 | Loop control and transfers | basic | 0 / 10 | Additional nested transfer and diagnostic-origin differential probes | WhileStatement, BreakStatement, NextStatement |
 | Case statements and expressions | basic | 0 / 16 | none registered | CaseStatement |
 | Records and field bindings | basic | 0 / 41 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
-| Member access and projections | basic | 1 / 8 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
+| Member access and projections | basic | 1 / 12 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 12 / 100 | Class/callback and general pattern narrowing; remaining collection/union optional conversions; unguarded nullable indexing (issue #1120); Nullable standard-library methods beyond the currently implemented Native APIs |  |
 | Enums and tagged values | basic | 4 / 176 | Method-specific type parameters, attribute output-mode effects and remaining pattern/control combinations; Reference REPL initializer replay (TypeRB #768) and shadowed standard error identity (#769); imported/nested REPL presentation parity | EnumStatement, EnumMemberStatement |
 | Transparent aliases | basic | 3 / 110 | Authored alias spelling in diagnostics, nominal import display and nullable union alternative ordering (#455); Transparent alias compatibility at conditional branch joins (proposal #1128) | TypeAliasStatement |
@@ -28,7 +28,7 @@ Each count describes registered probes, not language coverage percentages.
 | Structured and value-producing iteration | basic | 0 / 176 | Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
 | Range values and boundaries | basic | 0 / 19 | none registered | RangeExpression |
 | Result and typed propagation | basic | 0 / 81 | General union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |
-| Classes, fields and methods | basic | 0 / 85 | Initialized superclass storage and constructor chaining; inherited overrides (TypeRB #797) | ClassStatement, FieldStatement |
+| Classes, fields and methods | basic | 0 / 89 | Initialized superclass storage and constructor chaining; inherited overrides (TypeRB #797) | ClassStatement, FieldStatement |
 | Explicit interface conformance | basic | 0 / 21 | Variance and method-specific generic contracts with the reference object specification; Initialized-superclass and override dependencies | InterfaceStatement |
 | Modules and constant lookup | basic | 1 / 40 | Remaining module method and qualified mutable namespace-member boundaries | ModuleStatement |
 | Symbol values | basic | 1 / 36 | Remaining reference operator/control framing and multiline interpolation boundaries | SymbolLiteral |
@@ -46,3 +46,4 @@ Each count describes registered probes, not language coverage percentages.
 | Portable time values and Web time codecs | packages | 17 / 92 | Portable constructor/parser bounds and Duration integer limits await consistent reference semantics (#1187); TimeOfDay/DateTime error prefixes and Duration leading-plus parsing differ between reference execution modes (#1188); Renamed time codec imports retain the reference restriction pending #1189; implicitly required but otherwise unused imports also intersect #1180. Project-startup versus interactive-submission rejection remains an imports-family REPL gap; System zone data is required; TZ/ZONEINFO overrides, zip or embedded databases, TZif v4 and broader environment parity remain unqualified; Monotonic clocks and scheduling remain incomplete |  |
 | Typed Web context values | packages | 0 / 56 | REPL binding display of opaque Context storage awaits the portable inspection decision in #1192; deterministic value-operation probes do not establish display parity |  |
 | Hex, Base64 and secure random bytes | packages | 0 / 74 | Host-failure diagnostic equivalence across implementations remains unqualified |  |
+| File routes and in-process Web dispatch | packages | 1 / 53 | Failure unwinding at the dispatch boundary remains open in #1197; Network serving, streaming, cancellation, shutdown and endpoint client/OpenAPI providers remain incomplete; Wider generic and helper schema combinations remain unqualified |  |
