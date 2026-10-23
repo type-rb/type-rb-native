@@ -1,3 +1,4 @@
+import { discover_web_routes } from project/web_routes
 import { emit_entropy_runtime } from backend/qbe/runtime/entropy
 import { emit_time_host_runtime } from backend/qbe/runtime/time_host
 import { emit_integer_to_string_runtime } from backend/qbe/runtime/integer_strings
@@ -1006,28 +1007,41 @@ def load_configured_sources(
 	return load_package_project_sources(config_path, CompilerProjectSources.new(paths: paths, sources: sources, error: ""), names, owners, packages)
 end
 
-def load_project_sources(
+def load_project_sources(config_path: String, source_root: String, bundle: CompilerProjectSources): CompilerState
+	return load_project_sources_with_entry(config_path, source_root, bundle, true)
+end
+
+def load_named_project_sources(config_path: String, bundle: CompilerProjectSources, names: Array<String>): CompilerState
+	return load_named_project_sources_with_entry(config_path, bundle, names, true)
+end
+
+def load_package_project_sources(config_path: String, bundle: CompilerProjectSources, names: Array<String>, owners: Array<Integer>, packages: ProjectPackages): CompilerState
+	return load_package_project_sources_with_entry(config_path, bundle, names, owners, packages, true)
+end
+
+def load_project_sources_with_entry(
 		config_path: String,
 		source_root: String,
 		bundle: CompilerProjectSources,
+		require_entry: Boolean,
 	): CompilerState
 	mut validation := compiler_new(1024)
 	mut names: Array<String> := []
 	if !project_append_source_names(validation, source_root, "", bundle, names)
 		return project_error_state(config_path, 1, load_string(validation.diagnostics.messages, 0))
 	end
-	return load_named_project_sources(config_path, bundle, names)
+	return load_named_project_sources_with_entry(config_path, bundle, names, require_entry)
 end
 
-def load_named_project_sources(config_path: String, bundle: CompilerProjectSources, names: Array<String>): CompilerState
+def load_named_project_sources_with_entry(config_path: String, bundle: CompilerProjectSources, names: Array<String>, require_entry: Boolean): CompilerState
 	mut owners: Array<Integer> := []
 	bundle.paths.each do |_path|
 		owners.push(-1)
 	end
-	return load_package_project_sources(config_path, bundle, names, owners, project_packages_new(""))
+	return load_package_project_sources_with_entry(config_path, bundle, names, owners, project_packages_new(""), require_entry)
 end
 
-def load_package_project_sources(config_path: String, bundle: CompilerProjectSources, names: Array<String>, owners: Array<Integer>, packages: ProjectPackages): CompilerState
+def load_package_project_sources_with_entry(config_path: String, bundle: CompilerProjectSources, names: Array<String>, owners: Array<Integer>, packages: ProjectPackages, require_entry: Boolean): CompilerState
 	if bundle.paths.size() == 0
 		return project_error_state(config_path, 1, "no production .trb files found")
 	end
@@ -1066,8 +1080,15 @@ def load_package_project_sources(config_path: String, bundle: CompilerProjectSou
 		end
 		module_index += 1
 	end
-	if !project_select_entry(state)
+	if !discover_web_routes(state, ordered_owners)
 		return state
+	end
+	if require_entry
+		if !project_select_entry(state)
+			return state
+		end
+	else
+		state.module_graph.entry_module[0] = 0
 	end
 	resolve_project_imports(state, ordered_owners, packages)
 	return state

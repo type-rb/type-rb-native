@@ -135,6 +135,18 @@ the backend receives no Web parsing or record-construction rules. The pinned
 portable package sources remain unchanged. Unsettled cross-mode contracts stay
 explicitly unsupported and visible in the shared coverage registry.
 
+File-route discovery reads configured application sources and records handler,
+pattern and middleware identities before checking. The loader-owned testing
+provider generates ordinary TypeRB wrappers with resolved import bindings;
+private TypeRB code handles dispatch and protocol responses. The generated
+dispatcher belongs to the application compilation unit because it calls that
+application's handlers. Other package units retain their cycle checks. Neither
+MIR nor the backend reads route filenames or reconstructs route semantics.
+The reference testing dispatcher has no REPL runtime adapter, and the owned
+Native entry preserves that rejection. REPL startup still validates the configured
+route graph, including projects without an executable main. Network serving and
+panic recovery remain separate runtime contracts in the coverage inventory.
+
 The CLI/REPL under `compiler/cli/` is outside the ordinary core closure.
 Snapshot recovery derives a temporary flattened source
 from the canonical modules using

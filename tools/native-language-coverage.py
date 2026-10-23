@@ -107,6 +107,19 @@ def parity_gaps(case):
     return gaps
 
 
+def valid_case_file(name, project_check=False):
+    if not isinstance(name, str) or name == "main.trb":
+        return False
+    if any(part in ("", ".", "..") for part in name.split("/")):
+        return False
+    if re.fullmatch(r"[a-z][a-z0-9_/-]*\.trb", name):
+        return True
+    # File routes include Unicode, bracket parameters and punctuation. They
+    # remain relative ordinary files below routes/, never traversal or escapes.
+    return (project_check and name.startswith("routes/") and name.endswith(".trb")
+            and not re.search(r"[\x00-\x1f\x7f\\]", name))
+
+
 def validate(document):
     if (not isinstance(document, dict)
             or set(document) != {"schemaVersion", "referenceAstSha256", "features", "cases"}
@@ -120,7 +133,9 @@ def validate(document):
     identities = set()
     for case in cases:
         if (not isinstance(case, dict)
-                or set(case) != {"id", "title", "declarations", "body", "files", "reference", "native"}
+                or set(case) not in ({"id", "title", "declarations", "body", "files", "reference", "native"},
+                                    {"id", "title", "declarations", "body", "files", "reference", "native", "projectCheck"})
+                or ("projectCheck" in case and type(case["projectCheck"]) is not bool)
                 or not all(isinstance(case[key], str) for key in ("id", "title", "declarations", "body"))
                 or not re.fullmatch(r"[a-z][a-z0-9-]*", case["id"])
                 or not case["title"] or not case["body"]):
@@ -131,9 +146,8 @@ def validate(document):
         if not isinstance(case["files"], dict):
             raise ValueError("invalid case files")
         for name, source in case["files"].items():
-            if (not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_/-]*\.trb", name)
-                    or any(part in ("", ".", "..") for part in name.split("/"))
-                    or name == "main.trb" or not isinstance(source, str)):
+            if (not valid_case_file(name, case.get("projectCheck", False))
+                    or not isinstance(source, str)):
                 raise ValueError("invalid case file")
         validate_outcomes(case["reference"])
         validate_outcomes(case["native"])
@@ -272,15 +286,16 @@ def collect(case, native, reference, root):
     for role, binary in (("reference", reference), ("native", native)):
         if binary is None:
             continue
-        if case["files"]:
+        if case["files"] or case.get("projectCheck", False):
             # Same source graph; select the implementation's execution mode.
             (root / "trbconfig.jsonc").write_text(json.dumps({
                 "name": "language-case", "mode": "go" if role == "reference" else "trb",
                 "sourceDir": ".", "outDir": "out", "go": {"module": "example.com/language-case"}}))
         executable = root / (role + "-program")
-        result = {"check": observe(binary, ["check", "main.trb"], root)}
+        check_arguments = ["check", "--config", "trbconfig.jsonc"] if case.get("projectCheck", False) else ["check", "main.trb"]
+        result = {"check": observe(binary, check_arguments, root)}
         build_arguments = ["build", "--compile", "--outfile", str(executable)]
-        if not case["files"]:
+        if not case["files"] and not case.get("projectCheck", False):
             build_arguments.append("main.trb")
         result["build"] = observe(binary, build_arguments, root)
         if result["build"]["code"] == 0:

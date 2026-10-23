@@ -1,3 +1,4 @@
+import { resolve_without_entry } from frontend/checking/program/resolution
 import { ProjectedType } from state/source_state
 import { import_kind_module, import_kind_named } from state/import_kinds
 import { standard_source_result, standard_source_unit, standard_source_url } from state/standard_source_kinds
@@ -11,11 +12,11 @@ import { generic_application, generic_arguments, generic_base } from frontend/ty
 import { standard_source_kind } from project/standard_library
 import { nullable_element } from frontend/types/nullable_types
 import { hash_key_type, hash_value_type } from frontend/types/hash_types
-import { compiler_collect_project_sources, compiler_read_source, project_module_name } from compiler
+import { compiler_collect_project_sources, compiler_read_source, load_project_sources_with_entry, project_module_name } from compiler
 import { compiler_source_slice, lex } from frontend/syntax/lexer
 import { native_cli_cwd } from host
 import { parse_module } from frontend/syntax/parser
-import { path_directory, path_join } from support/path
+import { path_directory, path_join, string_starts_with } from support/path
 import { parse_project_config, project_config_support_error } from project/config
 import { enum_type, find_enum_type } from frontend/types/enum_types
 import { standard_package_root, standard_package_target } from frontend/resolution/import_resolution
@@ -49,6 +50,8 @@ def repl_project(config: String): ReplProject
 	if bundle.error != ""
 		return ReplProject.new(imports: "", root: root, error: bundle.error)
 	end
+	mut web := false
+	mut routes := false
 	mut names: Array<String> := []
 	mut modules: Array<String> := []
 	mut index := 0
@@ -62,6 +65,17 @@ def repl_project(config: String): ReplProject
 			return ReplProject.new(imports: "", root: root, error: "cannot parse project module " + bundle.paths[index])
 		end
 		module_name := project_module_name(state, root, bundle.paths[index])
+		if string_starts_with(module_name, "routes/")
+			routes = true
+		end
+		mut imported := 0
+		while imported < state.module_graph.import_count[0]
+			path := load_string(state.module_graph.import_paths, imported)
+			if path == "trb/web" || string_starts_with(path, "trb/web/")
+				web = true
+			end
+			imported += 1
+		end
 		mut item := 0
 		while item < state.declarations.function_count[0]
 			name := load_string(state.declarations.function_names, item)
@@ -108,6 +122,18 @@ def repl_project(config: String): ReplProject
 			modules.push(module_name)
 		end
 		index += 1
+	end
+	# Route diagnostics belong to project startup, including files whose handler
+	# names collide and therefore are not imported into the session prelude.
+	# A REPL project does not require an executable main entry.
+	if web && routes
+		mut validation := load_project_sources_with_entry(config, root, bundle, false)
+		if !has_diagnostic(validation)
+			resolve_without_entry(validation)
+		end
+		if has_diagnostic(validation)
+			return ReplProject.new(imports: "", root: root, error: load_string(validation.diagnostics.messages, 0))
+		end
 	end
 	mut imports := repl_standard_imports(names)
 	index = 0
