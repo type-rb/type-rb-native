@@ -61,17 +61,32 @@ with tempfile.TemporaryDirectory(prefix='native-keyed-sorting-') as temporary:
     assert statistics['peak-heap-bytes'] < 4 * 1024 * 1024, statistics
 
     # Preserve the original identity on equal keys in both directions. The host
-    # oracle covers empty runs, odd tails and every power-of-two boundary to 67.
+    # oracle covers ordered, reverse, constant and late-inversion inputs, empty
+    # runs, odd tails and every power-of-two boundary to 67.
     source.write_text('''record Entry
 key: Integer
 identity: Integer
 end
 
 def main()
+(0...5).each do |shape|
 (0...68).each do |size|
 mut values: Array<Entry> := []
 (0...size).each do |index|
-values.push(Entry.new(key: (index * 37 + size * 11) % 7 - 3, identity: index))
+mut key := (index * 37 + size * 11) % 7 - 3
+if shape == 1
+key = index / 3
+elsif shape == 2
+key = -(index / 3)
+elsif shape == 3
+key = 0
+elsif shape == 4
+key = index / 3
+if index == size - 1
+key = -100
+end
+end
+values.push(Entry.new(key: key, identity: index))
 end
 mut calls := 0
 values.sort_by { |value| calls += 1; value.key }.each { |value| puts(value.identity) }
@@ -80,15 +95,29 @@ puts(calls)
 values.each { |value| puts(value.identity) }
 end
 end
+end
 ''')
     result = run([binary, 'run', source])
     expected = []
-    for size in range(68):
-        values = [((index * 37 + size * 11) % 7 - 3, index) for index in range(size)]
-        expected.extend(str(identity) for _, identity in sorted(values, key=lambda value: value[0]))
-        expected.extend(str(identity) for _, identity in sorted(values, key=lambda value: value[0], reverse=True))
-        expected.append(str(2 * size))
-        expected.extend(map(str, range(size)))
+    for shape in range(5):
+        for size in range(68):
+            def key(index):
+                if shape == 1:
+                    return index // 3
+                if shape == 2:
+                    return -(index // 3)
+                if shape == 3:
+                    return 0
+                if shape == 4 and index == size - 1:
+                    return -100
+                if shape == 4:
+                    return index // 3
+                return (index * 37 + size * 11) % 7 - 3
+            values = [(key(index), index) for index in range(size)]
+            expected.extend(str(identity) for _, identity in sorted(values, key=lambda value: value[0]))
+            expected.extend(str(identity) for _, identity in sorted(values, key=lambda value: value[0], reverse=True))
+            expected.append(str(2 * size))
+            expected.extend(map(str, range(size)))
     assert result.stdout == '\n'.join(expected) + '\n' and result.stderr == '', result
 
     retained = run([binary, 'repl'], data='''mut values := [3, 1, 2]

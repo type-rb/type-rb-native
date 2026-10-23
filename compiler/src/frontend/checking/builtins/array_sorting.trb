@@ -85,6 +85,37 @@ def mir_sort_item(mut state: CompilerState, mut locals: CheckedLocals, owner: In
 	return mir_checked_array_operation(state, locals, mir_op_array_load(), checked_mir_value(array), checked_mir_value(index), 0, element, origin)
 end
 
+# Stop at the first inversion. Reusing the merge comparison preserves stable
+# ties and places Float NaNs last in both directions without calling key blocks.
+def mir_sort_is_ordered(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, size: Integer, element: String, descending: Boolean, origin: Integer): CheckedValue
+	outer := locals.count[0]
+	line := load_integer(state.source_tokens.token_lines, origin)
+	initial := scalar_mir_literal(state, locals, "Boolean", origin, "true")
+	result := mir_array_query_binding(state, locals, "$sort.ordered", initial, origin)
+	zero := scalar_mir_literal(state, locals, "Integer", origin, "0")
+	previous := mir_array_query_binding(state, locals, "$sort.ordered.previous", zero, origin)
+	one := scalar_mir_literal(state, locals, "Integer", origin, "1")
+	cursor := mir_array_query_binding(state, locals, "$sort.ordered.cursor", one, origin)
+	exit := mir_control_loop_begin(state, locals, origin, line)
+	index := mir_binding_read(state, locals, cursor, origin)
+	limit := mir_binding_read(state, locals, size, origin)
+	present := scalar_mir_binary(state, locals, "<", index, limit, "Boolean", origin)
+	mir_control_loop_branch(state, locals, present, exit, line)
+	current := mir_sort_item(state, locals, owner, cursor, element, origin)
+	prior := mir_sort_item(state, locals, owner, previous, element, origin)
+	before := mir_sort_before(state, locals, current, prior, descending, origin)
+	absent := scalar_mir_literal(state, locals, "Boolean", origin, "false")
+	ordered := scalar_mir_binary(state, locals, "==", before, absent, "Boolean", origin)
+	mir_sort_assign(locals, result, ordered)
+	mir_control_loop_branch(state, locals, ordered, exit, line)
+	mir_array_query_advance(state, locals, previous, origin)
+	mir_array_query_advance(state, locals, cursor, origin)
+	mir_control_loop_end(state, locals, line)
+	value := mir_binding_read(state, locals, result, origin)
+	locals.count[0] = outer
+	return value
+end
+
 # Select the left run on ties, without reading either exhausted run.
 def mir_sort_take_left(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, left: Integer, right: Integer, middle: Integer, finish: Integer, element: String, keys: Integer, key_type: String, descending: Boolean, origin: Integer): CheckedValue
 	outer := locals.count[0]
@@ -205,6 +236,16 @@ def mir_sort_buffers(mut state: CompilerState, mut locals: CheckedLocals, copy: 
 	size := mir_array_query_binding(state, locals, "$sort.size", length, origin)
 	one := scalar_mir_literal(state, locals, "Integer", origin, "1")
 	width := mir_array_query_binding(state, locals, "$sort.width", one, origin)
+	mut ordering_owner := owner
+	mut ordering_type := array_element_type(copy.type_name)
+	if keys >= 0
+		ordering_owner = keys
+		ordering_type = key_type
+	end
+	ordered := mir_sort_is_ordered(state, locals, ordering_owner, size, ordering_type, descending, origin)
+	absent := scalar_mir_literal(state, locals, "Boolean", origin, "false")
+	needs_sort := scalar_mir_binary(state, locals, "==", ordered, absent, "Boolean", origin)
+	join := mir_control_branch(state, locals, needs_sort, line)
 	exit := mir_control_loop_begin(state, locals, origin, line)
 	step := mir_binding_read(state, locals, width, origin)
 	limit := mir_binding_read(state, locals, size, origin)
@@ -226,6 +267,8 @@ def mir_sort_buffers(mut state: CompilerState, mut locals: CheckedLocals, copy: 
 	next_width := mir_sort_bound(state, locals, current_width, current_width, current_size, origin)
 	mir_sort_assign(locals, width, next_width)
 	mir_control_loop_end(state, locals, line)
+	mir_control_jump(state, locals, join, locals.count[0])
+	mir_control_enter(state, locals, join, line)
 	result := mir_binding_read(state, locals, owner, origin)
 	locals.count[0] = outer
 	return checked_value(copy.type_name, result.category, origin, 1)
