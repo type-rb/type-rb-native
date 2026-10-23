@@ -5,7 +5,6 @@ QBE loads/stores are not sanitizer-instrumented. These checks independently
 validate live bytes, owner prefixes, backing bounds and immediate page release.
 """
 import argparse
-import json
 from pathlib import Path
 import re
 import subprocess
@@ -13,9 +12,18 @@ import tempfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--qbe', type=Path, required=True)
+parser.add_argument('--compiler', type=Path, required=True)
 args = parser.parse_args()
-source = Path(__file__).resolve().parent.parent / 'compiler/src/backend/qbe/runtime/managed_storage.trb'
-decoded = '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', source.read_text()))
+# Test actual emitted code so named bounds and emitter helpers cannot diverge
+# from the production runtime through a test-only string-literal parser.
+with tempfile.TemporaryDirectory(prefix='native-storage-emission-') as temporary:
+    source = Path(temporary) / 'main.trb'
+    source.write_text('def main()\nputs("storage")\nend\n')
+    emitted = subprocess.run([str(args.compiler.resolve()), 'emit-qbe', str(source)],
+                             check=True, capture_output=True, timeout=30)
+    assert not emitted.stderr, emitted
+    decoded = emitted.stdout.decode()
+
 data = re.findall(r'^data \$trbn_storage_available = [^\n]+', decoded, re.M)
 assert len(data) == 1
 bodies = ['export ' + data[0]]
@@ -32,7 +40,7 @@ observer = r'''
 #include <string.h>
 extern void *trbn_storage_alloc(int64_t);
 extern void trbn_storage_free(void *, int64_t);
-extern uintptr_t trbn_storage_available[7];
+extern uintptr_t trbn_storage_available[31];
 #define LIMIT 2048
 #define PAGE_BYTES 16384
 #define HEADER_BYTES 64
@@ -42,7 +50,7 @@ static struct block blocks[LIMIT];
 static struct object objects[LIMIT];
 static size_t allocations, releases, last_request;
 static int fail_allocation;
-static int small(size_t n) { return n >= 16 && n <= 64; }
+static int small(size_t n) { return n >= 16 && n <= 256; }
 static void guard(struct block *b) {
     for (unsigned i = 0; i < 32; ++i) {
         assert(b->base[-32 + (int)i] == 0xd7);
@@ -126,7 +134,7 @@ static void check(void) {
         assert(page[3] <= (uintptr_t)page + HEADER_BYTES + capacity * stride);
         assert((page[3] - (uintptr_t)page - HEADER_BYTES) % stride == 0);
         unsigned class_index = (unsigned)(stride / 8 - 3);
-        assert(class_index < 7 && page[7] == (uintptr_t)&trbn_storage_available[class_index]);
+        assert(class_index < 31 && page[7] == (uintptr_t)&trbn_storage_available[class_index]);
         unsigned found = 0, traversed = 0;
         uintptr_t previous = 0;
         for (uintptr_t cursor = trbn_storage_available[class_index]; cursor;) {
@@ -143,12 +151,12 @@ static void check(void) {
 static void empty(void) {
     for (unsigned i = 0; i < LIMIT; ++i) if (objects[i].base) drop(i);
     check(); assert(allocations == releases);
-    for (unsigned i = 0; i < 7; ++i) assert(!trbn_storage_available[i]);
+    for (unsigned i = 0; i < 31; ++i) assert(!trbn_storage_available[i]);
 }
 int main(void) {
     /* Every byte-size boundary, three full pages plus a partial page, then
        full-to-available reuse and head/interior/last page removal. */
-    for (size_t size = 16; size <= 64; ++size) {
+    for (size_t size = 16; size <= 256; ++size) {
         unsigned capacity = (unsigned)((PAGE_BYTES - HEADER_BYTES) / (((size + 7) & ~(size_t)7) + 8));
         unsigned count = capacity * 3 + 1;
         assert(count <= LIMIT);
@@ -168,7 +176,7 @@ int main(void) {
     /* Sparse retained pages, mixed classes and large direct fallbacks. */
     for (unsigned wave = 0; wave < 8; ++wave) {
         for (unsigned i = 0; i < 1200; ++i) if (!objects[i].base)
-            put(i, i % 11 == 0 ? 65 + i % 4097 : 16 + i % 49);
+            put(i, i % 11 == 0 ? 257 + i % 4097 : 16 + i % 241);
         check();
         for (unsigned i = 0; i < 1200; ++i) if (objects[i].base && (i + wave) % 17) drop(i);
         check();
@@ -177,12 +185,12 @@ int main(void) {
     /* Small invalid sizes retain the direct allocation contract. Large signed
        and wrapping inputs must reach malloc unchanged, never a class index. */
     for (size_t size = 0; size < 16; ++size) { put(0, size); check(); empty(); }
-    int64_t invalid[] = {-1, INT64_MIN, INT64_MAX, 65, 8192};
+    int64_t invalid[] = {-1, INT64_MIN, INT64_MAX, 257, 8192};
     fail_allocation = 1;
     for (unsigned i = 0; i < sizeof invalid / sizeof *invalid; ++i) {
         assert(!trbn_storage_alloc(invalid[i])); assert(last_request == (size_t)invalid[i]);
     }
-    for (int64_t size = 16; size <= 64; ++size) {
+    for (int64_t size = 16; size <= 256; ++size) {
         assert(!trbn_storage_alloc(size)); assert(last_request == PAGE_BYTES);
         check();
     }

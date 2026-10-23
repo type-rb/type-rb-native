@@ -1,3 +1,4 @@
+import { has_diagnostic } from state/state
 import { intrinsic_mir_erase } from testing/mir/intrinsics
 import { check, emit_qbe } from compiler
 import { qbe_runtime_needs } from backend/qbe/runtime/requirements
@@ -10,6 +11,8 @@ def runtime_requirements_output(source: String): String
 	mut state := logical_checked_source(source)
 	expect_compiler_phase(state, "check", check(state))
 	before := output_source(emit_qbe(state))
+	expect_compiler_phase(state, "emit-qbe", !has_diagnostic(state))
+	expect(before.size() > 0).to_be_true()
 	intrinsic_mir_erase(state)
 	expect(output_source(emit_qbe(state))).to_equal(before)
 	return before
@@ -34,6 +37,12 @@ describe("QBE runtime requirements") do
 		expect(ordered.include?("function l $trbn_string_before(")).to_be_true()
 		expect(ordered.include?("function l $trbn_array_copy(")).to_be_true()
 		expect(ordered.include?("$trbn_string_split")).to_be_false()
+	end
+
+	test("retains the shared concatenation constructor for Array joins") do
+		qbe := runtime_requirements_output("def joined(values: Array<String>): String\nreturn values.join(\"\")\nend\ndef main()\nputs(joined([\"a\", \"b\"]))\nend\n")
+		expect(qbe.include?("function l $trbn_string_concat_many(")).to_be_true()
+		expect(qbe.include?("call $trbn_string_concat_many(")).to_be_true()
 	end
 
 	test("includes requirements from uncalled bodies and nested callable bodies") do
