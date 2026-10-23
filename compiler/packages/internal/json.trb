@@ -646,6 +646,9 @@ def _value(parser: JsonParser, identity: Integer): Result<PublicJSON::Value, Pub
 	end
 	mut pending := [identity]
 	mut entered := [false]
+	# Keep each active object's canonical order across its child traversal.
+	# Nested objects push and pop their own keys without sorting a parent twice.
+	mut object_keys: Array<Array<String>> := []
 	while !pending.empty?()
 		top := pending.size() - 1
 		current := pending[top]
@@ -675,8 +678,9 @@ def _value(parser: JsonParser, identity: Integer): Result<PublicJSON::Value, Pub
 			values[current] = PublicJSON::Value::Array(items)
 		when JsonNode::Object(members_index)
 			children := parser.objects[members_index]
-			keys := children.keys().sort()
 			if !entered[top]
+				keys := children.keys().sort()
+				object_keys.push(keys)
 				entered[top] = true
 				index = keys.size()
 				while index > 0
@@ -689,6 +693,8 @@ def _value(parser: JsonParser, identity: Integer): Result<PublicJSON::Value, Pub
 				end
 				next
 			end
+			keys := object_keys[object_keys.size() - 1]
+			object_keys.pop()
 			mut members: Hash<String, PublicJSON::Value> := {}
 			index = 0
 			while index < keys.size()
@@ -805,8 +811,7 @@ end
 # Most strings need only the surrounding quotes. Validate and scan bytes
 # once before taking that path; malformed UTF-8 still uses the reference's
 # per-code-point replacement and HTML/JavaScript escaping below.
-def _needs_escape(text: String): Boolean
-	bytes := text.to_bytes()
+def _needs_escape(bytes: Bytes): Boolean
 	mut index := 0
 	while index < bytes.size()
 		octet := bytes.at(index)
@@ -826,37 +831,53 @@ def _needs_escape(text: String): Boolean
 end
 
 def _escape(text: String): String
-	if !_needs_escape(text)
+	bytes := text.to_bytes()
+	if !_needs_escape(bytes)
 		return "\"" + text + "\""
 	end
 	mut fragments := ["\""]
-	characters := text.chars()
 	mut index := 0
-	while index < characters.size()
-		character := characters[index]
-		octet := character.to_bytes().at(0)
-		if character == "\"" || character == "\\"
-			fragments.push("\\" + character)
-		elsif character == "\x08"
+	while index < bytes.size()
+		octet := bytes.at(index)
+		if octet >= 128
+			width := _byte_width(bytes, index, bytes.size())
+			if width == 1
+				# Preserve String#chars normalization before JSON quoting.
+				fragments.push("\ufffd")
+			elsif octet == 226 && width == 3 && bytes.at(index + 1) == 128 && bytes.at(index + 2) == 168
+				fragments.push("\\u2028")
+			elsif octet == 226 && width == 3 && bytes.at(index + 1) == 128 && bytes.at(index + 2) == 169
+				fragments.push("\\u2029")
+			else
+				# Valid UTF-8 can be joined from shared octets without allocating
+				# a character String and Bytes value for every code point.
+				mut offset := 0
+				while offset < width
+					fragments.push(Octets.octet(bytes.at(index + offset)))
+					offset += 1
+				end
+			end
+			index += width
+			next
+		end
+		if octet == 34
+			fragments.push("\\\"")
+		elsif octet == 92
+			fragments.push("\\\\")
+		elsif octet == 8
 			fragments.push("\\b")
-		elsif character == "\x0c"
+		elsif octet == 12
 			fragments.push("\\f")
-		elsif character == "\n"
+		elsif octet == 10
 			fragments.push("\\n")
-		elsif character == "\r"
+		elsif octet == 13
 			fragments.push("\\r")
-		elsif character == "\t"
+		elsif octet == 9
 			fragments.push("\\t")
-		elsif octet < 32 || character == "<" || character == ">" || character == "&"
+		elsif octet < 32 || octet == 60 || octet == 62 || octet == 38
 			fragments.push("\\u00" + "0123456789abcdef"[octet / 16] + "0123456789abcdef"[octet % 16])
-		elsif character == "\u2028"
-			fragments.push("\\u2028")
-		elsif character == "\u2029"
-			fragments.push("\\u2029")
-		elsif !character.to_bytes().valid_utf8?()
-			fragments.push("\\ufffd")
 		else
-			fragments.push(character)
+			fragments.push(Octets.octet(octet))
 		end
 		index += 1
 	end
