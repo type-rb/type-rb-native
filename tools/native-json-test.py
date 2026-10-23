@@ -190,8 +190,8 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
             ('// ', 'β😀', 1024, '\r\n{"value":"a\\nβ😀"}', '{"value":"a\\nβ😀"}'),
             ('{"slashes":"/* text */ // text",/*', 'x', 4096, '*/"z":0}',
              '{"slashes":"/* text */ // text","z":0}')]:
-        expression = (f'{json.dumps(prefix)} + repeated({json.dumps(unit, ensure_ascii=False)}, {count})'
-                      f' + {json.dumps(suffix)}')
+        expression = (f'{json.dumps(prefix, ensure_ascii=False)} + repeated({json.dumps(unit, ensure_ascii=False)}, {count})'
+                      f' + {json.dumps(suffix, ensure_ascii=False)}')
         statements.append(f'parse_jsonc_and_display({expression})')
         outputs.append(expected_document)
     declarations = source.split('def probe()')[0].replace('import trb/std/url\n', '')
