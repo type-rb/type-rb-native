@@ -10,6 +10,7 @@ import tempfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument('binary', type=Path)
+parser.add_argument('--reference', type=Path)
 args = parser.parse_args()
 binary = args.binary.resolve()
 source = r'''import trb/std/json
@@ -154,6 +155,17 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         outputs.append(quoted(value))
         statements.append(f'parse_and_display({json.dumps(quoted(value), ensure_ascii=False)})')
         outputs.append(quoted(value))
+    # Sibling containers and scalar variants must remain independent while the
+    # parser stores their raw nodes and the conversion stack revisits parents.
+    structures = [
+        [{"id": index, "name": "β😀", "items": [index, None, index % 2 == 0],
+          "empty": {}} for index in range(256)],
+        {"left": [[], {}, [False, True]], "right": {"nested": [{}, [], None]}},
+    ]
+    for value in structures:
+        document = json.dumps(value, ensure_ascii=False)
+        statements.append(f'parse_and_display({json.dumps(document, ensure_ascii=False)})')
+        outputs.append(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')))
     declarations = source.split('def probe()')[0].replace('import trb/std/jsonc\n', '').replace('import trb/std/url\n', '')
     main.write_text(declarations + '''
 def parse_and_display(text: String)
@@ -168,6 +180,8 @@ def main()
 ''' + '\n'.join(statements) + '\nend\n')
     run([binary, 'build', '--compile', main, '--outfile', program])
     assert run([program]).stdout == '\n'.join(outputs) + '\n'
+    if args.reference:
+        assert run([args.reference.resolve(), 'run', main]).stdout == '\n'.join(outputs) + '\n'
 
     # Decode failures still report escaped JSON Pointer paths after successful
     # traversal, including overwritten keys and nested array/object boundaries.
