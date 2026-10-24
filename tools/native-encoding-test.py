@@ -137,9 +137,9 @@ def error_source():
         lines.extend([
             f'case {module}.{method}({literal})',
             'when Result::Ok(_value)', 'puts(false)', 'when Result::Err(error)',
-            f'puts(error.kind == {module}::DecodeErrorKind::{kind}',
-            f'&& error.input == {literal} && error.index == {index}',
-            f'&& error.message == {json.dumps(message)})', 'end',
+            f'puts(error.kind == {module}::DecodeErrorKind::{kind}'
+            f' && error.input == {literal} && error.index == {index}'
+            f' && error.message == {json.dumps(message)})', 'end',
         ])
     return '\n'.join(lines + ['end', ''])
 
