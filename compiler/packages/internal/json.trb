@@ -46,10 +46,11 @@ end
 
 # Keep byte fragments intact until joining; individual octets may split UTF-8.
 def _source_slice(mut parser: JsonParser, start: Integer, finish: Integer): String
+	octets := Octets.table()
 	mut fragments: Array<String> := []
 	mut index := start
 	while index < finish
-		fragments.push(Octets.octet(parser.bytes.at(index)))
+		fragments.push(octets[parser.bytes.at(index)])
 		index += 1
 	end
 	return fragments.join("")
@@ -230,14 +231,15 @@ def _hex_byte(character: Integer): Integer
 end
 
 def _rune(point: Integer): String
+	octets := Octets.table()
 	if point < 128
-		return Octets.octet(point)
+		return octets[point]
 	elsif point < 2048
-		return Octets.octet(192 + point / 64) + Octets.octet(128 + point % 64)
+		return octets[192 + point / 64] + octets[128 + point % 64]
 	elsif point < 65536
-		return Octets.octet(224 + point / 4096) + Octets.octet(128 + point / 64 % 64) + Octets.octet(128 + point % 64)
+		return octets[224 + point / 4096] + octets[128 + point / 64 % 64] + octets[128 + point % 64]
 	end
-	return Octets.octet(240 + point / 262144) + Octets.octet(128 + point / 4096 % 64) + Octets.octet(128 + point / 64 % 64) + Octets.octet(128 + point % 64)
+	return octets[240 + point / 262144] + octets[128 + point / 4096 % 64] + octets[128 + point / 64 % 64] + octets[128 + point % 64]
 end
 
 def _escape_diagnostic(sequence: String): String
@@ -301,6 +303,7 @@ def _unicode(mut parser: JsonParser): Integer
 end
 
 def _string(mut parser: JsonParser): String
+	octets := Octets.table()
 	parser.position[0] += 1
 	mut fragments: Array<String> := []
 	while _byte(parser) >= 0 && parser.failure.empty?()
@@ -324,7 +327,7 @@ def _string(mut parser: JsonParser): String
 				# Array and String for each multibyte code point.
 				mut offset := 0
 				while offset < width
-					fragments.push(Octets.octet(parser.bytes.at(parser.position[0] + offset)))
+					fragments.push(octets[parser.bytes.at(parser.position[0] + offset)])
 					offset += 1
 				end
 			end
@@ -333,7 +336,7 @@ def _string(mut parser: JsonParser): String
 		end
 		parser.position[0] += 1
 		if character != 92
-			fragments.push(Octets.octet(character))
+			fragments.push(octets[character])
 			next
 		end
 		escape := _byte(parser)
@@ -342,7 +345,7 @@ def _string(mut parser: JsonParser): String
 		end
 		parser.position[0] += 1
 		if escape == 34 || escape == 92 || escape == 47
-			fragments.push(Octets.octet(escape))
+			fragments.push(octets[escape])
 		elsif escape == 98
 			fragments.push("\x08")
 		elsif escape == 102
@@ -378,7 +381,7 @@ def _string(mut parser: JsonParser): String
 			end
 			fragments.push(_rune(point))
 		else
-			_syntax(parser, "invalid escape sequence " + _escape_diagnostic("\\" + Octets.octet(escape)) + " in string", parser.position[0] - 1)
+			_syntax(parser, "invalid escape sequence " + _escape_diagnostic("\\" + octets[escape]) + " in string", parser.position[0] - 1)
 			return ""
 		end
 	end
@@ -755,6 +758,7 @@ def parse(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 end
 
 def parse_jsonc(source: String): Result<PublicJSON::Value, PublicJSON::Error>
+	octets := Octets.table()
 	# Comments become spaces per byte, preserving the reference decoder's
 	# filtered-source locations, including CR/LF and multibyte comments.
 	bytes := source.to_bytes()
@@ -769,7 +773,7 @@ def parse_jsonc(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 			following = bytes.at(index + 1)
 		end
 		if mode == 1
-			fragments.push(Octets.octet(octet))
+			fragments.push(octets[octet])
 			if escaped
 				escaped = false
 			elsif octet == 92
@@ -783,7 +787,7 @@ def parse_jsonc(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 				index += 1
 				mode = 0
 			elsif octet == 10 || octet == 13
-				fragments.push(Octets.octet(octet))
+				fragments.push(octets[octet])
 				if mode == 2 && octet == 10
 					mode = 0
 				end
@@ -798,7 +802,7 @@ def parse_jsonc(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 			fragments.push("  ")
 			index += 1
 		else
-			fragments.push(Octets.octet(octet))
+			fragments.push(octets[octet])
 			if octet == 34
 				mode = 1
 			end
@@ -835,6 +839,7 @@ def _escape(text: String): String
 	if !_needs_escape(bytes)
 		return "\"" + text + "\""
 	end
+	octets := Octets.table()
 	mut fragments := ["\""]
 	mut index := 0
 	while index < bytes.size()
@@ -853,7 +858,7 @@ def _escape(text: String): String
 				# a character String and Bytes value for every code point.
 				mut offset := 0
 				while offset < width
-					fragments.push(Octets.octet(bytes.at(index + offset)))
+					fragments.push(octets[bytes.at(index + offset)])
 					offset += 1
 				end
 			end
@@ -877,7 +882,7 @@ def _escape(text: String): String
 		elsif octet < 32 || octet == 60 || octet == 62 || octet == 38
 			fragments.push("\\u00" + "0123456789abcdef"[octet / 16] + "0123456789abcdef"[octet % 16])
 		else
-			fragments.push(Octets.octet(octet))
+			fragments.push(octets[octet])
 		end
 		index += 1
 	end
