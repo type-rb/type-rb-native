@@ -101,6 +101,48 @@ check_bytes(stored)
 :quit
 '''
 
+# The byte-oriented fast path must retain code-point indexes and the reference
+# precedence between length, character, padding and canonical-bit failures.
+decode_errors = [
+    ('hex', 'abc', 'OddLength', 3, 'hex input has odd length'),
+    ('hex', '0g0', 'InvalidCharacter', 1, 'invalid hexadecimal character'),
+    ('hex', '0é0', 'InvalidCharacter', 1, 'invalid hexadecimal character'),
+    ('hex', '00😀0', 'InvalidCharacter', 2, 'invalid hexadecimal character'),
+    ('hex', '00\x000', 'InvalidCharacter', 2, 'invalid hexadecimal character'),
+    ('base64', 'é', 'InvalidLength', 1, 'base64 input length must be a multiple of 4'),
+    ('base64', 'A=é', 'InvalidLength', 3, 'base64 input length must be a multiple of 4'),
+    ('base64', 'AAAé', 'InvalidCharacter', 3, 'invalid base64 character'),
+    ('base64', 'AA😀=', 'InvalidCharacter', 2, 'invalid base64 character'),
+    ('base64', 'AA=é', 'InvalidPadding', 3, 'invalid base64 padding'),
+    ('base64', '=éAA', 'InvalidPadding', 0, 'invalid base64 padding'),
+    ('base64', 'AB==', 'NonCanonical', 1, 'non-canonical base64 encoding'),
+    ('base64', 'AAB=', 'NonCanonical', 2, 'non-canonical base64 encoding'),
+    ('url', 'AAAAé', 'InvalidLength', 5, 'base64url input has invalid length'),
+    ('url', 'AAAé', 'InvalidCharacter', 3, 'invalid base64url character'),
+    ('url', 'AA+é', 'InvalidCharacter', 2, 'invalid base64url character'),
+    ('url', 'AA=é', 'InvalidPadding', 2, 'base64url input must not contain padding'),
+    ('url', 'AB', 'NonCanonical', 1, 'non-canonical base64url encoding'),
+    ('url', 'AAB', 'NonCanonical', 2, 'non-canonical base64url encoding'),
+]
+
+
+def error_source():
+    lines = ['import trb/std/encoding/hex', 'import trb/std/encoding/base64',
+             'import trb/std/result', 'def main()']
+    for decoder, value, kind, index, message in decode_errors:
+        module = 'Hex' if decoder == 'hex' else 'Base64'
+        method = 'url_decode' if decoder == 'url' else 'decode'
+        # TypeRB uses \x00 rather than JSON's \u0000 spelling.
+        literal = json.dumps(value, ensure_ascii=False).replace('\\u0000', '\\x00')
+        lines.extend([
+            f'case {module}.{method}({literal})',
+            'when Result::Ok(_value)', 'puts(false)', 'when Result::Err(error)',
+            f'puts(error.kind == {module}::DecodeErrorKind::{kind}',
+            f'&& error.input == {literal} && error.index == {index}',
+            f'&& error.message == {json.dumps(message)})', 'end',
+        ])
+    return '\n'.join(lines + ['end', ''])
+
 with tempfile.TemporaryDirectory(prefix='native-encoding-') as temporary:
     root = Path(temporary)
     environment = dict(os.environ, NO_COLOR='1', TERM='dumb', TRBN_HISTORY=str(root / 'history'))
@@ -211,5 +253,19 @@ int getentropy(void *buffer, size_t length) {
                 assert observed.returncode != 0 and not observed.stdout, observed
                 assert observed.stderr == 'panic: secure_random.bytes length must be between 0 and 65536\n', observed
         print('Entropy OS chunk bounds and failure checks passed.')
+
+    (root / 'encoding_values.trb').unlink()
+    main.write_text(error_source())
+    error_expected = 'true\n' * len(decode_errors)
+    if args.reference:
+        reference_config = root / 'reference.trbconfig.jsonc'
+        run([reference, 'check', '--config', reference_config])
+        run([reference, 'build', '--config', reference_config, '--compile', '--outfile', program])
+        assert run([program]).stdout == error_expected
+    if not args.reference_only:
+        assert run([binary, 'check', main]).stdout == 'ok\n'
+        run([binary, 'build', '--compile', main, '--outfile', program])
+        assert run([program]).stdout == error_expected
+    print('Decode Unicode offsets and error precedence checks passed.')
 
 print('Encoding, request ID, retained-session and storage checks passed.')

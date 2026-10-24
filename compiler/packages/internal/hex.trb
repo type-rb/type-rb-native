@@ -29,25 +29,25 @@ def _digit(point: Integer): Integer
 end
 
 def decode(value: String): Result<Bytes, PublicHex::DecodeError>
-	points := value.codepoints()
-	mut digits: Array<Integer> := []
+	bytes := value.to_bytes()
 	mut index := 0
-	while index < points.size()
-		digit := _digit(points[index])
+	# Every accepted character is ASCII. At the first invalid character,
+	# the byte offset is therefore also the reference code-point offset.
+	while index < bytes.size()
+		digit := _digit(bytes.at(index))
 		if digit < 0
 			return Result<Bytes, PublicHex::DecodeError>::Err(PublicHex::DecodeError.new(kind: PublicHex::DecodeErrorKind::InvalidCharacter, input: value, index: index, message: "invalid hexadecimal character"))
 		end
-		digits.push(digit)
 		index += 1
 	end
-	if digits.size() % 2 != 0
-		return Result<Bytes, PublicHex::DecodeError>::Err(PublicHex::DecodeError.new(kind: PublicHex::DecodeErrorKind::OddLength, input: value, index: digits.size(), message: "hex input has odd length"))
+	if bytes.size() % 2 != 0
+		return Result<Bytes, PublicHex::DecodeError>::Err(PublicHex::DecodeError.new(kind: PublicHex::DecodeErrorKind::OddLength, input: value, index: bytes.size(), message: "hex input has odd length"))
 	end
 	octets := Octets.table()
 	mut parts: Array<String> := []
 	index = 0
-	while index < digits.size()
-		parts.push(octets[digits[index] * 16 + digits[index + 1]])
+	while index < bytes.size()
+		parts.push(octets[_digit(bytes.at(index)) * 16 + _digit(bytes.at(index + 1))])
 		index += 2
 	end
 	return Result<Bytes, PublicHex::DecodeError>::Ok(parts.join("").to_bytes())
