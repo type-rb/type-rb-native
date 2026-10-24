@@ -159,8 +159,9 @@ with tempfile.TemporaryDirectory(prefix="native packages ") as temporary:
     assert "incompatible requirements" in run("install", success=False)
     assert lock_path.read_bytes() == saved
     config({"remote": "v1.0.0"})
-    assert "Git TypeRB packages are not implemented" in run("install", success=False)
+    assert "cannot resolve an unlocked TypeRB package while offline" in run("install", "--offline", success=False)
     assert lock_path.read_bytes() == saved
 
 subprocess.run([sys.executable, str(repository / "tools/native-package-install-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-git-package-test.py"), str(binary), "--native"], check=True)
 print("Native local source maps, path packages, alias scopes and atomic lock checks passed")

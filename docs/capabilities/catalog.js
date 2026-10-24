@@ -101,7 +101,7 @@ export const catalog = {
       title: 'Packages and native integration',
       description: 'Reproducible package graphs and safe extension boundaries for non-standard functionality.',
       items: [
-        capability('TypeRB package resolution', 'partial', ['parity', 'production', 'ecosystem'], 'Local path packages retain canonical import identities and deterministic atomic locks. Frozen installation validates direct and transitive manifests without replacing the lock; offline installation resolves local paths. Git packages, package updates and executable extension providers remain incomplete.', ['Package commands', 'docs/native-cli.md']),
+        capability('TypeRB package resolution', 'partial', ['parity', 'production', 'ecosystem'], 'Local path and Git packages retain canonical identities, scoped aliases and content-verified locks. Install, add, remove and selected or full updates share the graph; ordinary compilation and REPL load it without fetching. Frozen and cached offline installation preserve the lock. The pinned transitive-offline exception and executable extension providers remain incomplete.', ['Package commands', 'docs/native-cli.md']),
         capability('C ABI and shared-library adapter', 'open', ['production', 'ecosystem'], 'Type symbols, calling conventions, errors, and resource lifetimes.'),
         capability('Package-owned native adapter', 'open', ['production', 'ecosystem'], 'Let a package own a bounded dependency on a database, TLS, image, or system library.'),
         capability('Extension sandbox and security', 'unassessed', ['production', 'ecosystem'], 'Constrain compiler extensions and build hooks by explicit capabilities.'),
