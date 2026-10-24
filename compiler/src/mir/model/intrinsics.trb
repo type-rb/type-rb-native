@@ -1,5 +1,5 @@
 import { callable_type } from frontend/types/callable_types
-import { mir_adapter_argv, mir_adapter_collect_project_sources, mir_adapter_entropy, mir_adapter_eputs, mir_adapter_file_exists, mir_adapter_host, mir_adapter_literal_byte, mir_adapter_none, mir_adapter_reset_temporary_storage, mir_adapter_runtime_fail, mir_adapter_runtime_recover, mir_adapter_source_is_utf8, mir_adapter_source_slice, mir_adapter_sqrt, mir_adapter_string_bytes, mir_adapter_time_clock, mir_adapter_time_zone_data, mir_signature_compiler_runtime, mir_signature_host, mir_signature_interface, mir_signature_ordinary, mir_signature_standard } from mir/model/call_kinds
+import { mir_adapter_argv, mir_adapter_collect_package_files, mir_adapter_collect_project_sources, mir_adapter_entropy, mir_adapter_eputs, mir_adapter_file_exists, mir_adapter_host, mir_adapter_literal_byte, mir_adapter_none, mir_adapter_reset_temporary_storage, mir_adapter_runtime_fail, mir_adapter_runtime_recover, mir_adapter_source_is_utf8, mir_adapter_source_slice, mir_adapter_sqrt, mir_adapter_string_bytes, mir_adapter_time_clock, mir_adapter_time_zone_data, mir_signature_compiler_runtime, mir_signature_host, mir_signature_interface, mir_signature_ordinary, mir_signature_standard } from mir/model/call_kinds
 import { ascii_code, integer_string } from support/literals
 import { MirModule, MirSignature, mir_type_id } from mir/model/module
 import { mir_semantic_type_name, mir_semantic_value_type } from mir/model/types
@@ -7,6 +7,9 @@ import { mir_semantic_type_name, mir_semantic_value_type } from mir/model/types
 # The checked declaration owns the adapter. Source aliases and call-site spelling
 # never select a runtime operation, and the backend never resolves them again.
 def mir_runtime_adapter(name: String): Integer
+	if name == "compiler_collect_package_files"
+		return mir_adapter_collect_package_files()
+	end
 	if name == "compiler_literal_byte"
 		return mir_adapter_literal_byte()
 	end
@@ -48,6 +51,9 @@ def mir_call_symbol(signature: MirSignature): String
 	end
 	if signature.kind == mir_signature_host()
 		return signature.name
+	end
+	if signature.adapter == mir_adapter_collect_package_files()
+		return "trbn_collect_package_files"
 	end
 	if signature.adapter == mir_adapter_literal_byte()
 		return "trbn_literal_byte"
@@ -180,7 +186,7 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 		end
 		return ""
 	end
-	if signature.kind != mir_signature_compiler_runtime() || adapter < mir_adapter_file_exists() || (adapter > mir_adapter_reset_temporary_storage() && adapter != mir_adapter_literal_byte())
+	if signature.kind != mir_signature_compiler_runtime() || adapter < mir_adapter_file_exists() || (adapter > mir_adapter_reset_temporary_storage() && adapter != mir_adapter_literal_byte() && adapter != mir_adapter_collect_package_files())
 		return "MIR external adapter is invalid"
 	end
 	if mir_runtime_adapter(signature.name) != adapter
@@ -194,8 +200,11 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 		result = "Array<Integer>"
 	elsif adapter == mir_adapter_source_slice()
 		parameters = ["String", "Integer", "Integer"]
-	elsif adapter == mir_adapter_collect_project_sources()
-		parameters = ["String", "String"]
+	elsif adapter == mir_adapter_collect_project_sources() || adapter == mir_adapter_collect_package_files()
+		parameters = ["String"]
+		if adapter == mir_adapter_collect_project_sources()
+			parameters.push("String")
+		end
 		result = signature.result_type
 		if !mir_project_sources_result(native_module, result)
 			return "MIR project source result layout differs"

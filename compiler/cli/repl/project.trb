@@ -12,12 +12,12 @@ import { generic_application, generic_arguments, generic_base } from frontend/ty
 import { standard_source_kind } from project/standard_library
 import { nullable_element } from frontend/types/nullable_types
 import { hash_key_type, hash_value_type } from frontend/types/hash_types
-import { compiler_collect_project_sources, compiler_read_source, load_project_sources_with_entry, project_module_name } from compiler
+import { compiler_collect_project_sources, compiler_read_source, load_project_packages, load_configured_sources_with_mode, load_project_sources_with_entry, project_module_name } from compiler
 import { compiler_source_slice, lex } from frontend/syntax/lexer
 import { native_cli_cwd } from host
 import { parse_module } from frontend/syntax/parser
 import { path_directory, path_join, string_starts_with } from support/path
-import { parse_project_config, project_config_support_error } from project/config
+import { parse_project_config } from project/config
 import { enum_type, find_enum_type } from frontend/types/enum_types
 import { standard_package_root, standard_package_target } from frontend/resolution/import_resolution
 import { array_element_type, find_record_type, generic_instance_for_type, record_type } from frontend/resolution/type_resolution
@@ -25,6 +25,7 @@ import { CompilerState, compiler_new, has_diagnostic } from state/state
 import { load_integer, load_string } from support/storage
 
 record ReplProject
+	configuration: String
 	imports: String
 	root: String
 	error: String
@@ -33,23 +34,24 @@ end
 
 def repl_project(config: String): ReplProject
 	if config == ""
-		return ReplProject.new(configured: false, imports: repl_standard_imports([]), root: native_cli_cwd(), error: "")
+		return ReplProject.new(configuration: "", configured: false, imports: repl_standard_imports([]), root: native_cli_cwd(), error: "")
 	end
 	project := parse_project_config(compiler_read_source(config))
 	if project.error != ""
-		return ReplProject.new(configured: false, imports: "", root: "", error: project.error)
+		return ReplProject.new(configuration: "", configured: false, imports: "", root: "", error: project.error)
 	end
-	if project.local_packages.size() > 0
-		return ReplProject.new(configured: false, imports: "", root: "", error: "local TypeRB packages are not implemented in the REPL")
-	end
-	unsupported := project_config_support_error(project)
-	if unsupported != ""
-		return ReplProject.new(configured: false, imports: "", root: "", error: unsupported)
+	mut configuration := ""
+	if project.local_packages.size() > 0 || project.packages.size() > 0
+		configuration = config
+		packages := load_project_packages(project, config)
+		if packages.error[0] != ""
+			return ReplProject.new(configuration: "", configured: false, imports: "", root: "", error: packages.error[0])
+		end
 	end
 	root := path_join(path_directory(config), project.source_dir)
 	bundle := compiler_collect_project_sources(root, path_join(path_directory(config), project.out_dir))
 	if bundle.error != ""
-		return ReplProject.new(configured: false, imports: "", root: root, error: bundle.error)
+		return ReplProject.new(configuration: "", configured: false, imports: "", root: root, error: bundle.error)
 	end
 	mut web := false
 	mut routes := false
@@ -63,7 +65,7 @@ def repl_project(config: String): ReplProject
 			parse_module(state, 0, 0)
 		end
 		if has_diagnostic(state)
-			return ReplProject.new(configured: false, imports: "", root: root, error: "cannot parse project module " + bundle.paths[index])
+			return ReplProject.new(configuration: "", configured: false, imports: "", root: root, error: "cannot parse project module " + bundle.paths[index])
 		end
 		module_name := project_module_name(state, root, bundle.paths[index])
 		if string_starts_with(module_name, "routes/")
@@ -129,11 +131,14 @@ def repl_project(config: String): ReplProject
 	# A REPL project does not require an executable main entry.
 	if web && routes
 		mut validation := load_project_sources_with_entry(config, root, bundle, false)
+		if configuration != ""
+			validation = load_configured_sources_with_mode(project, config, root, path_join(path_directory(config), project.out_dir), bundle, false, false)
+		end
 		if !has_diagnostic(validation)
 			resolve_without_entry(validation)
 		end
 		if has_diagnostic(validation)
-			return ReplProject.new(configured: false, imports: "", root: root, error: load_string(validation.diagnostics.messages, 0))
+			return ReplProject.new(configuration: "", configured: false, imports: "", root: root, error: load_string(validation.diagnostics.messages, 0))
 		end
 	end
 	mut imports := repl_standard_imports(names)
@@ -152,7 +157,7 @@ def repl_project(config: String): ReplProject
 		end
 		index += 1
 	end
-	return ReplProject.new(configured: true, imports: imports, root: root, error: "")
+	return ReplProject.new(configuration: configuration, configured: true, imports: imports, root: root, error: "")
 end
 
 # Filter generated imports using parsed declarations, never tokens in comments

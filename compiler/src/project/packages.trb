@@ -7,6 +7,9 @@ import { string_starts_with } from support/path
 record ResolvedLocalPackage
 	root: String
 	path: String
+	source: String
+	revision: String
+	checksum: String
 	manifest: PackageManifest
 	aliases: Array<String>
 	names: Array<String>
@@ -146,7 +149,12 @@ def project_packages_lock(packages: ProjectPackages): String
 			result += ",\n"
 		end
 		package := packages.packages[order[index]]
-		result += "    " + package_json_quote(package.manifest.name) + ": {\n      \"version\": " + package_json_quote(package.manifest.version) + ",\n      \"path\": " + package_json_quote(package.path) + ",\n      \"manifestChecksum\": " + package_json_quote(package.manifest.checksum)
+		result += "    " + package_json_quote(package.manifest.name) + ": {\n      \"version\": " + package_json_quote(package.manifest.version)
+		if package.path != ""
+			result += ",\n      \"path\": " + package_json_quote(package.path) + ",\n      \"manifestChecksum\": " + package_json_quote(package.manifest.checksum)
+		else
+			result += ",\n      \"source\": " + package_json_quote(package.source) + ",\n      \"revision\": " + package_json_quote(package.revision) + ",\n      \"checksum\": " + package_json_quote(package.checksum)
+		end
 		if package.aliases.size() > 0
 			result += ",\n      \"dependencies\": " + package_mapping_json(package.aliases, package.names, "      ")
 		end
@@ -154,4 +162,41 @@ def project_packages_lock(packages: ProjectPackages): String
 		index += 1
 	end
 	return result + "\n  }\n}\n"
+end
+
+record PackageContent
+	checksum: String
+	error: String
+end
+
+# nftw returns raw filesystem spelling. Compute the relative byte sequence
+# without decoding filenames as Unicode, and reject paths outside the root.
+def package_relative_file_bytes(root: Array<Integer>, path: Array<Integer>): Array<Integer>
+	mut length := root.size()
+	if length > 0 && root[length - 1] == 47
+		length -= 1
+	end
+	if path.size() < length
+		return []
+	end
+	mut index := 0
+	while index < length
+		if root[index] != path[index]
+			return []
+		end
+		index += 1
+	end
+	if path.size() == length
+		return [46]
+	end
+	if path[length] != 47
+		return []
+	end
+	mut result: Array<Integer> := []
+	index = length + 1
+	while index < path.size()
+		result.push(path[index])
+		index += 1
+	end
+	return result
 end

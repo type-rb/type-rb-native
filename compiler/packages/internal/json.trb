@@ -46,11 +46,10 @@ end
 
 # Keep byte fragments intact until joining; individual octets may split UTF-8.
 def _source_slice(mut parser: JsonParser, start: Integer, finish: Integer): String
-	octets := Octets.table()
 	mut fragments: Array<String> := []
 	mut index := start
 	while index < finish
-		fragments.push(octets[parser.bytes.at(index)])
+		fragments.push(Octets.octet(parser.bytes.at(index)))
 		index += 1
 	end
 	return fragments.join("")
@@ -231,15 +230,14 @@ def _hex_byte(character: Integer): Integer
 end
 
 def _rune(point: Integer): String
-	octets := Octets.table()
 	if point < 128
-		return octets[point]
+		return Octets.octet(point)
 	elsif point < 2048
-		return octets[192 + point / 64] + octets[128 + point % 64]
+		return Octets.octet(192 + point / 64) + Octets.octet(128 + point % 64)
 	elsif point < 65536
-		return octets[224 + point / 4096] + octets[128 + point / 64 % 64] + octets[128 + point % 64]
+		return Octets.octet(224 + point / 4096) + Octets.octet(128 + point / 64 % 64) + Octets.octet(128 + point % 64)
 	end
-	return octets[240 + point / 262144] + octets[128 + point / 4096 % 64] + octets[128 + point / 64 % 64] + octets[128 + point % 64]
+	return Octets.octet(240 + point / 262144) + Octets.octet(128 + point / 4096 % 64) + Octets.octet(128 + point / 64 % 64) + Octets.octet(128 + point % 64)
 end
 
 def _escape_diagnostic(sequence: String): String
@@ -303,7 +301,6 @@ def _unicode(mut parser: JsonParser): Integer
 end
 
 def _string(mut parser: JsonParser): String
-	octets := Octets.table()
 	parser.position[0] += 1
 	mut fragments: Array<String> := []
 	while _byte(parser) >= 0 && parser.failure.empty?()
@@ -327,7 +324,7 @@ def _string(mut parser: JsonParser): String
 				# Array and String for each multibyte code point.
 				mut offset := 0
 				while offset < width
-					fragments.push(octets[parser.bytes.at(parser.position[0] + offset)])
+					fragments.push(Octets.octet(parser.bytes.at(parser.position[0] + offset)))
 					offset += 1
 				end
 			end
@@ -336,7 +333,7 @@ def _string(mut parser: JsonParser): String
 		end
 		parser.position[0] += 1
 		if character != 92
-			fragments.push(octets[character])
+			fragments.push(Octets.octet(character))
 			next
 		end
 		escape := _byte(parser)
@@ -345,7 +342,7 @@ def _string(mut parser: JsonParser): String
 		end
 		parser.position[0] += 1
 		if escape == 34 || escape == 92 || escape == 47
-			fragments.push(octets[escape])
+			fragments.push(Octets.octet(escape))
 		elsif escape == 98
 			fragments.push("\x08")
 		elsif escape == 102
@@ -381,7 +378,7 @@ def _string(mut parser: JsonParser): String
 			end
 			fragments.push(_rune(point))
 		else
-			_syntax(parser, "invalid escape sequence " + _escape_diagnostic("\\" + octets[escape]) + " in string", parser.position[0] - 1)
+			_syntax(parser, "invalid escape sequence " + _escape_diagnostic("\\" + Octets.octet(escape)) + " in string", parser.position[0] - 1)
 			return ""
 		end
 	end
@@ -623,28 +620,73 @@ def _atomic_value(node: JsonNode): Result<PublicJSON::Value, PublicJSON::Error>
 	end
 end
 
-def _path(parents: Array<Integer>, parts: Array<String>, identity: Integer): String
-	# Both traversals keep raw keys; escape only when an error needs its path.
+def _path(parents: Array<Integer>, parts: Array<String>, positions: Array<Integer>, identity: Integer): String
+	# Keep raw keys and numeric indexes until the selected error needs its path.
 	mut path := ""
 	mut index := identity
 	while parents[index] >= 0
-		path = "/" + _pointer(parts[index]) + path
+		mut part := parts[index]
+		if positions[index] >= 0
+			part = positions[index].to_s()
+		else
+			part = _pointer(part)
+		end
+		path = "/" + part + path
 		index = parents[index]
 	end
 	return path
+end
+
+def _decoding_path(parser: JsonParser, identity: Integer): String
+	# Raw nodes have unique identities and at most one parent. Resolve path
+	# metadata only after conversion fails, including the final duplicate keys.
+	mut parents: Array<Integer> := []
+	mut parts: Array<String> := []
+	mut positions: Array<Integer> := []
+	mut index := 0
+	while index < parser.nodes.size()
+		parents.push(-1)
+		parts.push("")
+		positions.push(-1)
+		index += 1
+	end
+	index = 0
+	while index < parser.nodes.size()
+		case parser.nodes[index]
+		when JsonNode::Array(items_index)
+			children := parser.arrays[items_index]
+			mut position := 0
+			while position < children.size()
+				child := children[position]
+				parents[child] = index
+				positions[child] = position
+				position += 1
+			end
+		when JsonNode::Object(members_index)
+			children := parser.objects[members_index]
+			keys := children.keys()
+			mut position := 0
+			while position < keys.size()
+				child := children.fetch(keys[position])
+				parents[child] = index
+				parts[child] = keys[position]
+				position += 1
+			end
+		else
+			nil
+		end
+		index += 1
+	end
+	return _path(parents, parts, positions, identity)
 end
 
 def _value(parser: JsonParser, identity: Integer): Result<PublicJSON::Value, PublicJSON::Error>
 	# Node identities are dense indexes; unreachable duplicate-key nodes keep
 	# their unused placeholder without requiring a second Hash lookup per edge.
 	mut values: Array<PublicJSON::Value> := []
-	mut parents: Array<Integer> := []
-	mut parts: Array<String> := []
 	mut index := 0
 	while index < parser.nodes.size()
 		values.push(PublicJSON::Value::Null)
-		parents.push(-1)
-		parts.push("")
 		index += 1
 	end
 	mut pending := [identity]
@@ -665,8 +707,6 @@ def _value(parser: JsonParser, identity: Integer): Result<PublicJSON::Value, Pub
 				while index > 0
 					index -= 1
 					child := children[index]
-					parents[child] = current
-					parts[child] = index.to_s()
 					pending.push(child)
 					entered.push(false)
 				end
@@ -689,8 +729,6 @@ def _value(parser: JsonParser, identity: Integer): Result<PublicJSON::Value, Pub
 				while index > 0
 					index -= 1
 					child := children.fetch(keys[index])
-					parents[child] = current
-					parts[child] = keys[index]
 					pending.push(child)
 					entered.push(false)
 				end
@@ -710,7 +748,7 @@ def _value(parser: JsonParser, identity: Integer): Result<PublicJSON::Value, Pub
 			when Result::Ok(value)
 				values[current] = value
 			when Result::Err(error)
-				return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(error.kind, error.message, _path(parents, parts, current)))
+				return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(error.kind, error.message, _decoding_path(parser, current)))
 			end
 		end
 		pending.pop()
@@ -758,7 +796,6 @@ def parse(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 end
 
 def parse_jsonc(source: String): Result<PublicJSON::Value, PublicJSON::Error>
-	octets := Octets.table()
 	# Comments become spaces per byte, preserving the reference decoder's
 	# filtered-source locations, including CR/LF and multibyte comments.
 	bytes := source.to_bytes()
@@ -773,7 +810,7 @@ def parse_jsonc(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 			following = bytes.at(index + 1)
 		end
 		if mode == 1
-			fragments.push(octets[octet])
+			fragments.push(Octets.octet(octet))
 			if escaped
 				escaped = false
 			elsif octet == 92
@@ -787,7 +824,7 @@ def parse_jsonc(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 				index += 1
 				mode = 0
 			elsif octet == 10 || octet == 13
-				fragments.push(octets[octet])
+				fragments.push(Octets.octet(octet))
 				if mode == 2 && octet == 10
 					mode = 0
 				end
@@ -802,7 +839,7 @@ def parse_jsonc(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 			fragments.push("  ")
 			index += 1
 		else
-			fragments.push(octets[octet])
+			fragments.push(Octets.octet(octet))
 			if octet == 34
 				mode = 1
 			end
@@ -839,7 +876,6 @@ def _escape(text: String): String
 	if !_needs_escape(bytes)
 		return "\"" + text + "\""
 	end
-	octets := Octets.table()
 	mut fragments := ["\""]
 	mut index := 0
 	while index < bytes.size()
@@ -858,7 +894,7 @@ def _escape(text: String): String
 				# a character String and Bytes value for every code point.
 				mut offset := 0
 				while offset < width
-					fragments.push(octets[bytes.at(index + offset)])
+					fragments.push(Octets.octet(bytes.at(index + offset)))
 					offset += 1
 				end
 			end
@@ -882,7 +918,7 @@ def _escape(text: String): String
 		elsif octet < 32 || octet == 60 || octet == 62 || octet == 38
 			fragments.push("\\u00" + "0123456789abcdef"[octet / 16] + "0123456789abcdef"[octet % 16])
 		else
-			fragments.push(octets[octet])
+			fragments.push(Octets.octet(octet))
 		end
 		index += 1
 	end
@@ -947,10 +983,11 @@ def _floating(number: Float): String
 	return result + exponent.to_s()
 end
 
-def _encoding_error(value: PublicJSON::Value): PublicJSON::Error?
+def _encoding_error_path(value: PublicJSON::Value): PublicJSON::Error?
 	mut values := [value]
 	mut parents := [-1]
 	mut parts := [""]
+	mut positions := [-1]
 	mut pending := [0]
 	while !pending.empty?()
 		current := pending[pending.size() - 1]
@@ -958,7 +995,7 @@ def _encoding_error(value: PublicJSON::Value): PublicJSON::Error?
 		case values[current]
 		when PublicJSON::Value::Float(number)
 			if !number.finite?()
-				return _error(PublicJSON::ErrorKind::Encode, "JSON Float must be finite", _path(parents, parts, current))
+				return _error(PublicJSON::ErrorKind::Encode, "JSON Float must be finite", _path(parents, parts, positions, current))
 			end
 		when PublicJSON::Value::Array(items)
 			mut index := items.size()
@@ -967,7 +1004,8 @@ def _encoding_error(value: PublicJSON::Value): PublicJSON::Error?
 				pending.push(values.size())
 				values.push(items[index])
 				parents.push(current)
-				parts.push(index.to_s())
+				parts.push("")
+				positions.push(index)
 			end
 		when PublicJSON::Value::Object(members)
 			keys := members.keys()
@@ -978,6 +1016,39 @@ def _encoding_error(value: PublicJSON::Value): PublicJSON::Error?
 				values.push(members.fetch(keys[index]))
 				parents.push(current)
 				parts.push(keys[index])
+				positions.push(-1)
+			end
+		else
+			nil
+		end
+	end
+	return nil
+end
+
+# Valid documents need only the pending values. Keep diagnostic paths and
+# already visited values alive only when a nonfinite number requires an error.
+def _encoding_error(value: PublicJSON::Value): PublicJSON::Error?
+	mut pending := [value]
+	while !pending.empty?()
+		current := pending[pending.size() - 1]
+		pending.pop()
+		case current
+		when PublicJSON::Value::Float(number)
+			if !number.finite?()
+				return _encoding_error_path(value)
+			end
+		when PublicJSON::Value::Array(items)
+			mut index := items.size()
+			while index > 0
+				index -= 1
+				pending.push(items[index])
+			end
+		when PublicJSON::Value::Object(members)
+			keys := members.keys()
+			mut index := keys.size()
+			while index > 0
+				index -= 1
+				pending.push(members.fetch(keys[index]))
 			end
 		else
 			nil

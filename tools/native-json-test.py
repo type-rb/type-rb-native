@@ -191,6 +191,13 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         {f"key-{index}": "aβ😀\n<>&" for index in range(256)},
         {"left": [[], {}, [False, True]], "right": {"nested": [{}, [], None]}},
     ]
+    # Exercise longer multibyte text beside escapes and in object keys.
+    for width in (15, 16, 17, 31, 32, 33):
+        structures.extend([
+            'a' * width + 'β😀' + 'z' * width,
+            'a' * width + '\n"<>&\u2028' + 'β😀' * width,
+            {'a' * width + 'β/~/😀': ['β😀' * width, 'a' * width]},
+        ])
     nested = 0
     for _ in range(128):
         nested = {"z": nested, "a": []}
@@ -283,6 +290,9 @@ def main()
         ('[0,{"/~":[0,9007199254740992]}]', '/1/~1~0/1'),
         ('{"z":{"a":9007199254740992},"a":[{"z":9007199254740992,"a":9007199254740992}]}', '/a/0/a'),
         ('{"a":{"z":9007199254740992},"a":{"b":1},"b":{"a":9007199254740992}}', '/b/a'),
+        ('[' + '0,' * 64 + '9007199254740992]', '/64'),
+        ('{"old":[{"bad":9007199254740992}],"old":0,"live":[0,{"~/":9007199254740992}]}', '/live/1/~0~1'),
+        ('{"old":{"bad":[9007199254740992]},"old":{"ok":[]}}', None),
     ]
     pointer_source = declarations.replace('import trb/std/jsonc\n', '') + '''
 def report_path(source: String)
@@ -301,6 +311,61 @@ def main()
     pointer_output = ''.join('ok\n' if path is None else path + '\nJSON integer is outside the portable range\n'
                              for _, path in pointer_cases)
     assert run([program]).stdout == pointer_output
+
+    # Path metadata can be constructed lazily after discovering an invalid
+    # number. Retain the original traversal order, mixed keys and array indexes.
+    encoding_source = '''import trb/std/json
+import trb/std/result
+def report_encoding(value: JSON::Value)
+case JSON.stringify(value)
+when Result::Ok(_text)
+puts("ok")
+when Result::Err(error)
+puts(error.path)
+puts(error.message)
+end
+end
+def main()
+bad := JSON::Value::Float(1.0 / 0.0)
+negative := JSON::Value::Float(-1.0 / 0.0)
+nan := JSON::Value::Float(0.0 / 0.0)
+report_encoding(bad)
+report_encoding(JSON::Value::Array([JSON::Value::Integer(0), negative, nan]))
+report_encoding(JSON::Value::Object({"~/β😀" => JSON::Value::Array([JSON::Value::Null, bad])}))
+report_encoding(JSON::Value::Array([JSON::Value::Object({"" => nan}), bad]))
+mut items: Array<JSON::Value> := []
+mut index := 0
+while index < 64
+items.push(JSON::Value::Integer(index))
+index += 1
+end
+items.push(bad)
+report_encoding(JSON::Value::Array(items))
+report_encoding(JSON::Value::Object({"valid" => JSON::Value::Array([JSON::Value::Float(-0.0), JSON::Value::Null])}))
+end
+'''
+    encoding_output = ''.join(path + '\nJSON Float must be finite\n'
+                              for path in ('', '/1', '/~0~1β😀/1', '/0/', '/64')) + 'ok\n'
+    main.write_text(encoding_source)
+    run([binary, 'build', '--compile', main, '--outfile', program])
+    assert run([program]).stdout == encoding_output
+    if args.reference:
+        # These objects contain only one failing member, avoiding the separate
+        # unresolved multi-member precedence and REPL-message specifications.
+        assert run([args.reference.resolve(), 'run', main]).stdout == encoding_output
+
+    for regression_source, regression_output in ((pointer_source, pointer_output),
+                                                  (encoding_source, encoding_output)):
+        main.write_text(regression_source)
+        emitted = run([binary, '--internal-driver', 'emit-qbe', main]).stdout
+        conversion = re.search(r'^function l \$trbn_integer_to_string\([^\n]*\) \{.*?^\}', emitted, re.M | re.S)
+        assert conversion and conversion[0].count('@start\n') == 1
+        forced = emitted.replace(conversion[0], conversion[0].replace(
+            '@start\n', '@start\n call $trbn_gc_collect(w 0)\n'))
+        ssa.write_text(forced)
+        run([binary.with_name('qbe'), '-o', assembly, ssa])
+        run(['/usr/bin/cc', assembly, '-lm', '-o', forced_program])
+        assert run([forced_program]).stdout == regression_output
 
     # Loading JSON's shared octets must not grant authored modules access to
     # the internal dependency, even after the verified provider has loaded it.

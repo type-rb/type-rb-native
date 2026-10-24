@@ -89,20 +89,52 @@ Configurations follow the reference schema and validation, including `lint`,
 `packageOptions`, `jobs`, `db` and the mode-specific sections. `check` accepts
 every declared mode (`go`, `ruby`, `typescript` and `trb`). Commands that build,
 run or evaluate a program need mode `trb` and report that other modes are not
-available. `install` resolves portable local TypeRB path packages in every
-mode and atomically writes `trb.lock` with reference-compatible checksums and
-package identities. It does not install host-language dependencies. `check`
-and builds require a current lock for `packages`; edits to package source files
-do not require reinstalling, while configuration or manifest edits do.
-`install --frozen` requires a current lock and preserves its contents,
-modification time and file identity. Missing or stale locks and changed direct
-or transitive manifests are rejected.
-`install --offline` resolves local paths without network access, including when
-creating or refreshing their lock. The flags can be combined. Empty projects
-need no lock. Explicit Boolean values such as `--frozen=false` are accepted.
-`localPackages` maps names directly to source directories without a manifest or
-lock. Package aliases are scoped to each package's dependencies and take
+available. `install` resolves portable TypeRB local-path and Git packages in
+every declared mode. It writes reference-compatible `trb.lock` metadata and
+uses a content-addressed `.trb/packages` cache. Git must be installed and on
+`PATH`; TypeRB passes argument vectors to it without a shell. Git handles normal
+SSH/HTTPS credentials. Password-bearing URLs, URL queries/fragments and
+unsupported version ranges are rejected before acquisition. Host-language
+dependencies and executable package providers remain separate capabilities.
+
+Git requirements accept exact semantic-version tags, `latest` (the greatest
+semantic-version tag), or a commit revision. Exact refs retain short versions
+and build metadata, such as `v1.2` and `v1.2.3+build.9`; version precedence is
+used only to select `latest`. The manifest identity determines
+the canonical import name; configured aliases can differ. Dependencies retain
+their own alias scopes. Conflicting canonical identities, dependency cycles,
+tag/manifest version mismatches and unsupported package modes are rejected.
+Successful acquisition removes Git metadata and verifies every regular file's
+raw bytes and relative path. Symlinks are rejected. Temporary fetch trees are
+removed on success or failure; cached trees are reused by checksum.
+
+`check`, build, run and REPL read the current lock and verify cached contents;
+they never fetch a missing dependency or repair a stale lock implicitly. Local
+package source edits remain live, while local manifest edits require install.
+Git cache edits fail checksum verification. `localPackages` also maps names
+directly to source directories without a manifest or lock. Aliases take
 precedence over an identically spelled project import.
+
+`install --frozen` requires a current lock and preserves its bytes, modification
+time and file identity. It may restore a missing Git cache from the locked
+revision when online. `--offline` requires cached Git packages and rejects an
+unlocked direct Git requirement; the flags can be combined. **Pinned reference
+exception:** fresh resolution through a local-path requirement can still fetch
+its transitive Git dependencies during `--offline`. This is retained for
+compatibility and tracked by [proposal #1224](https://github.com/type-rb/type-rb-native/issues/1224).
+Do not treat that fresh local/transitive path as an unconditional no-Git mode.
+Current locked offline installations do not invoke Git. Empty projects need no
+lock. Explicit Boolean flag values such as `--frozen=false` are accepted.
+
+`add [--source GIT | --path DIRECTORY] PACKAGE [VERSION]` changes the configured
+requirement and resolves the graph. `PACKAGE@VERSION` is also accepted; an
+omitted Git version means `latest`. `remove PACKAGE` removes a direct requirement.
+Both follow the reference's full-resolution behavior. `update` resolves all
+requirements again, while `update PACKAGE...` requires a current lock and pins
+the unselected dependency graphs. A selected graph that conflicts with a pinned
+graph fails without replacing the lock. Each metadata file is published by
+atomic replacement after successful resolution; configuration and lock are two
+separate files, not a filesystem transaction. Resolution failures preserve both.
 
 `web openapi` generates an OpenAPI 3.1 document from checked
 [endpoint contracts](native-web-endpoints.md). It accepts `--config`, `--title`,
@@ -123,9 +155,8 @@ guide for generated request/response behavior and pinned consumer limitations.
 This metadata command does not provide general source-backend compilation or
 execution of browser APIs in Native programs.
 
-Git package sources, nonempty native-dependency/adapter manifest fields and
-package loading in the REPL remain unimplemented and fail explicitly. Lock
-update options are not yet available. Configuration JSON Unicode
+Nonempty native-dependency/adapter manifest fields and target-language
+dependency-management options remain unimplemented and fail explicitly. Configuration JSON Unicode
 escapes retain their current limitations; package manifests and locks decode
 JSON Unicode escapes separately.
 
@@ -233,8 +264,8 @@ The ordinary compiler's language and package restrictions still apply,
 including the remaining Unicode-escape and String API gaps. Ordinary UTF-8
 literals, code-point size/indexing and concatenation work in compiled programs
 and the REPL; invalid source encoding is rejected before token decoding.
-Formatting, tests, language-server commands and package-management operations
-beyond local path installation are not implemented by `trbn`.
+Formatting, tests, language-server commands and host-language dependency
+management are not implemented by `trbn`.
 The editor does not yet provide the reference formatter's full canonical
 spacing, every readline/vi binding, import-repair and argument-aware completion,
 or full Unicode grapheme-cluster segmentation (for example joined emoji).
