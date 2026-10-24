@@ -15,6 +15,13 @@ import qbe_toolchain as qbe
 
 
 class BackendTest(unittest.TestCase):
+    def test_reordered_calls_or_missing_dump_is_rejected(self):
+        for dump in ("", "> After GCM:\ncall $inspect_order\ncall $change_order\n"):
+            with self.subTest(dump=dump), patch.object(
+                    qbe.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", dump)):
+                with self.assertRaisesRegex(ValueError, "ordered side effects"):
+                    qbe.check_ordered_effects(Path("synthetic-order-qbe"))
+
     def test_unused_copy_cycle_or_missing_dump_is_rejected(self):
         for dump in ("", "> After GCM:\n@loop\n %left =l phi @start %a, @body %right\nret %i\n"):
             with self.subTest(dump=dump), patch.object(
@@ -35,7 +42,7 @@ class BackendTest(unittest.TestCase):
             root = Path(temporary)
             shutil.copytree(qbe.ROOT / "tools/qbe", root / "tools/qbe")
             original = qbe.backend_identity(root)
-            self.assertEqual(original["variant"], "typerb-copy-liveness-v1")
+            self.assertEqual(original["variant"], "typerb-ordered-effects-v1")
             manifest = root / "tools/qbe/backend.json"
             for key, value in (("variant", "stock"), ("version", "1.4"),
                                ("patches", []), ("patches", original["patches"][::-1]),

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check stable natural Array ordering, retained copies and managed lifetime."""
 import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -64,26 +65,65 @@ with tempfile.TemporaryDirectory(prefix='native-array-sorting-') as temporary:
     assert statistics['allocated-bytes'] == statistics['reclaimed-bytes'], statistics
     assert statistics['peak-heap-bytes'] < 4 * 1024 * 1024, statistics
 
-    # Odd tails, repeated keys, empty runs and power-of-two boundaries use an
+    # Ordered, reverse, constant and late-inversion inputs join random odd tails
+    # and power-of-two boundaries in an
     # independent host oracle. A single authored sort body covers every length.
     source.write_text('''def main()
+(0...5).each do |shape|
 (0...68).each do |size|
 mut values: Array<Integer> := []
-(0...size).each { |index| values.push((index * 37 + size * 11) % 23 - 11) }
+(0...size).each do |index|
+mut value := (index * 37 + size * 11) % 23 - 11
+if shape == 1
+value = index / 3
+elsif shape == 2
+value = -(index / 3)
+elsif shape == 3
+value = 0
+elsif shape == 4
+value = index
+if index == size - 1
+value = -100
+end
+end
+values.push(value)
+end
 values.sort().each { |value| puts(value) }
 values.sort_descending().each { |value| puts(value) }
 puts(values.size())
 end
 end
+end
 ''')
     result = run([binary, 'run', source])
     expected = []
-    for size in range(68):
-        values = [(index * 37 + size * 11) % 23 - 11 for index in range(size)]
-        expected.extend(map(str, sorted(values)))
-        expected.extend(map(str, sorted(values, reverse=True)))
-        expected.append(str(size))
+    for shape in range(5):
+        for size in range(68):
+            def key(index):
+                if shape == 1:
+                    return index // 3
+                if shape == 2:
+                    return -(index // 3)
+                if shape == 3:
+                    return 0
+                if shape == 4 and index == size - 1:
+                    return -100
+                if shape == 4:
+                    return index
+                return (index * 37 + size * 11) % 23 - 11
+            values = [key(index) for index in range(size)]
+            expected.extend(map(str, sorted(values)))
+            expected.extend(map(str, sorted(values, reverse=True)))
+            expected.append(str(size))
     assert result.stdout == '\n'.join(expected) + '\n' and result.stderr == '', result
+
+    # Keep this small ordinary program separate: folding a dead branch in its
+    # generated code once moved the input copy ahead of the Float pushes.
+    cases = json.loads((repository / 'tools/native-language-cases.json').read_text())['cases']
+    specials = next(case for case in cases if case['id'] == 'array-sort-float-specials')
+    source.write_text('def main()\n' + specials['body'] + 'end\n')
+    result = run([binary, 'run', source])
+    assert result.stdout == specials['native']['execute']['stdout'] and result.stderr == '', result
 
     # A rejected call preserves retained source/copy storage. Replay rebuilds
     # those same independent bindings and nominal declarations cannot disturb it.

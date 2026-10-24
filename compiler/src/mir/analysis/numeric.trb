@@ -391,11 +391,13 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 					if !right_nonnegative
 						right_nonnegative = mir_nonnegative_value(nonnegative, instruction.second)
 					end
-					mut mode := mir_numeric_mode(instruction.payload, left_small, right_small, left_nonnegative, right_nonnegative, false, selected_budget, loop)
-					if mode > mir_numeric_default_mode() && (instruction.payload == binary_add() || instruction.payload == mir_scalar_inline_add())
-						if mir_guarded_increment_proven(native_module, function, flow, block_index - function.block_start, instruction)
-							mode = mir_numeric_proven_arithmetic_mode()
-						end
+					# Removing a proven check does not expand code. It must neither
+					# consume the reserve nor depend on earlier functions spending it.
+					mut mode := mir_numeric_default_mode()
+					if (instruction.payload == binary_add() || instruction.payload == mir_scalar_inline_add()) && mir_guarded_increment_proven(native_module, function, flow, block_index - function.block_start, instruction)
+						mode = mir_numeric_proven_arithmetic_mode()
+					else
+						mode = mir_numeric_mode(instruction.payload, left_small, right_small, left_nonnegative, right_nonnegative, false, selected_budget, loop)
 					end
 					if mode == mir_numeric_checked_mode() && instruction.payload == binary_subtract()
 						if mir_managed_contains(reflected, position)
