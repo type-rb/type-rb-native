@@ -1,3 +1,7 @@
+import { LockedPackage, PackageLock, package_lock_parse } from project/package_lock
+import { PackageContent, package_relative_file_bytes } from project/packages
+import { compiler_string_bytes } from support/compiler_bytes
+import { emit_package_files_runtime } from backend/qbe/runtime/package_files
 import { discover_web_routes } from project/web_routes
 import { emit_entropy_runtime } from backend/qbe/runtime/entropy
 import { emit_time_host_runtime } from backend/qbe/runtime/time_host
@@ -9,11 +13,11 @@ import { mir_signature_compiler_runtime, mir_signature_standard } from mir/model
 import { validate_compilation_units } from frontend/resolution/module_components
 import { qbe_runtime_needs } from backend/qbe/runtime/requirements
 import { mir_program_error } from mir/verify/program
-import { package_checksum } from project/package_checksum
+import { package_checksum, package_checksum_bytes } from project/package_checksum
 import { emit_bytes_runtime } from backend/qbe/emit/bytes
-import { package_manifest_parse, package_requirement_names, package_requirements_json } from project/package_manifest
-import { package_json_canonical, package_json_parse, package_name_less, package_sorted_indices } from project/package_json
-import { ProjectPackages, ResolvedLocalPackage, package_canonical_import, package_path_safe, package_relative_path, project_packages_fail, project_packages_lock, project_packages_new } from project/packages
+import { package_manifest_parse, package_requirements_json } from project/package_manifest
+import { package_name_less, package_sorted_indices } from project/package_json
+import { ProjectPackages, ResolvedLocalPackage, package_canonical_import, package_path_safe, project_packages_fail, project_packages_new } from project/packages
 import { emit_object_dispatch } from backend/qbe/emit/object_dispatch
 import { object_abstract_function } from frontend/types/object_types
 import { emit_number_parsing_runtime } from backend/qbe/runtime/number_parsing
@@ -35,7 +39,7 @@ import { integer_string } from support/literals
 import { mir_declare_signatures } from mir/lowering/calls
 import { parse_module } from frontend/syntax/parser
 import { path_basename, path_directory, path_join, path_normalize, string_ends_with, string_starts_with, string_without_suffix } from support/path
-import { ProjectConfig, ProjectPackageRequirement, parse_project_config } from project/config
+import { ProjectConfig, parse_project_config } from project/config
 import { emit_record_descriptors, emit_static_strings } from backend/qbe/emit/constants
 import { QbeOutput, qbe_output_chunk, qbe_output_line, qbe_output_new } from backend/qbe/output
 import { emit_boolean_puts_runtime, emit_float_array_runtime, emit_float_to_integer_runtime, emit_process_runtime, emit_qbe_runtime_selected } from backend/qbe/runtime/system
@@ -67,6 +71,10 @@ def compiler_read_source(_path: String): String
 end
 
 def compiler_collect_project_sources(_source_root: String, _out_root: String): CompilerProjectSources
+	return CompilerProjectSources.new(paths: [], sources: [], error: "")
+end
+
+def compiler_collect_package_files(_root: String): CompilerProjectSources
 	return CompilerProjectSources.new(paths: [], sources: [], error: "")
 end
 
@@ -255,6 +263,9 @@ def emit_qbe(mut state: CompilerState): QbeOutput
 	emit_object_dispatch(state.scalar_mir, output)
 	compiler_runtime := program.compiler_function >= 0
 	emit_qbe_runtime_selected(output, compiler_runtime, qbe_runtime_needs(state.scalar_mir, compiler_runtime))
+	if compiler_runtime
+		emit_package_files_runtime(output)
+	end
 	emit_bytes_runtime(state.scalar_mir, output)
 	emit_time_host_runtime(state.scalar_mir, output)
 	emit_entropy_runtime(state.scalar_mir, output)
@@ -763,38 +774,84 @@ def resolve_project_imports(mut state: CompilerState, owners: Array<Integer>, pa
 	return true
 end
 
-def resolve_local_package(mut packages: ProjectPackages, requirement: ProjectPackageRequirement, base_root: String, project_root: String, mode: String): String
-	if requirement.path == ""
-		project_packages_fail(packages, "Git TypeRB packages are not implemented")
-		return ""
+# Read-only package loading is shared by check, build, run and REPL. It never
+# resolves a ref, downloads a repository or rewrites the lock.
+def compiler_package_root(locked: LockedPackage, project_root: String): String
+	if locked.path != ""
+		if string_starts_with(locked.path, "/")
+			return path_normalize(locked.path)
+		end
+		return path_normalize(path_join(project_root, locked.path))
 	end
-	mut root := requirement.path
-	if !string_starts_with(root, "/")
-		root = path_join(base_root, root)
+	return path_join(path_join(project_root, ".trb/packages"), compiler_source_slice(locked.checksum, 7, locked.checksum.size()))
+end
+
+def compiler_package_content(root: String): PackageContent
+	if !package_path_safe(root)
+		return PackageContent.new(checksum: "", error: "package path contains NUL")
 	end
-	root = path_normalize(root)
+	files := compiler_collect_package_files(root)
+	if files.error != ""
+		return PackageContent.new(checksum: "", error: "cannot read regular package files: " + files.error)
+	end
+	mut bytes: Array<Integer> := []
+	root_bytes := compiler_string_bytes(root)
+	mut index := 0
+	while index < files.paths.size()
+		name := package_relative_file_bytes(root_bytes, compiler_string_bytes(files.paths[index]))
+		if name.size() == 0
+			return PackageContent.new(checksum: "", error: "package file is outside its root")
+		end
+		compiler_string_bytes(integer_string(name.size()) + ":").each do |byte|
+			bytes.push(byte)
+		end
+		name.each do |byte|
+			bytes.push(byte)
+		end
+		bytes.push(58)
+		compiler_string_bytes(files.sources[index]).each do |byte|
+			bytes.push(byte)
+		end
+		bytes.push(0)
+		index += 1
+	end
+	return PackageContent.new(checksum: package_checksum_bytes(bytes), error: "")
+end
+
+def compiler_load_locked_package(mut packages: ProjectPackages, locked: LockedPackage, project_root: String, mode: String)
+	root := compiler_package_root(locked, project_root)
 	if !package_path_safe(root)
 		project_packages_fail(packages, "package path contains NUL")
-		return ""
+		return
+	end
+	if locked.checksum != ""
+		content := compiler_package_content(root)
+		if content.error != ""
+			project_packages_fail(packages, content.error)
+			return
+		end
+		if content.checksum != locked.checksum
+			project_packages_fail(packages, "TypeRB package " + locked.name + " checksum mismatch in cache")
+			return
+		end
 	end
 	manifest_path := path_join(root, "trbpackage.json")
 	if !compiler_file_exists(manifest_path)
 		project_packages_fail(packages, "cannot read package manifest " + manifest_path)
-		return ""
+		return
 	end
 	manifest := package_manifest_parse(compiler_read_source(manifest_path))
 	if manifest.error != ""
-		project_packages_fail(packages, manifest_path + ": " + manifest.error)
-		return ""
+		project_packages_fail(packages, manifest.error)
+		return
 	end
-	if !package_path_safe(manifest.source_dir)
-		project_packages_fail(packages, "package sourceDir contains NUL")
-		return ""
+	if locked.path != "" && manifest.checksum != locked.manifest_checksum
+		project_packages_fail(packages, "local TypeRB package manifest changed: " + locked.name + "; run trb install")
+		return
 	end
-	source_root := path_normalize(path_join(root, manifest.source_dir))
-	if !compiler_file_exists(path_join(source_root, "."))
-		project_packages_fail(packages, "package sourceDir must be a readable directory: " + source_root)
-		return ""
+	if manifest.name != locked.name || manifest.version != locked.version
+		project_packages_fail(packages, "locked package identity differs from manifest: " + locked.name)
+		return
 	end
 	mut supported := false
 	manifest.modes.each do |declared|
@@ -804,67 +861,53 @@ def resolve_local_package(mut packages: ProjectPackages, requirement: ProjectPac
 	end
 	if !supported
 		project_packages_fail(packages, "TypeRB package " + manifest.name + " does not support mode " + mode)
-		return ""
+		return
 	end
-	mut index := 0
-	while index < packages.packages.size()
-		previous := packages.packages[index]
-		if previous.manifest.name == manifest.name
-			if packages.loading[index]
-				project_packages_fail(packages, "package dependency cycle involving " + manifest.name)
-			elsif previous.root != root || previous.manifest.version != manifest.version
-				project_packages_fail(packages, "package " + manifest.name + " resolves to incompatible requirements")
-			end
-			return manifest.name
-		end
-		index += 1
+	if !package_path_safe(manifest.source_dir) || !compiler_file_exists(path_join(path_join(root, manifest.source_dir), "."))
+		project_packages_fail(packages, "package sourceDir must be a readable directory")
+		return
 	end
-	owner := packages.packages.size()
-	packages.packages.push(ResolvedLocalPackage.new(root: root, path: package_relative_path(project_root, root), manifest: manifest, aliases: [], names: []))
-	packages.loading.push(true)
-	manifest.packages.each do |dependency|
-		if packages.error[0] == ""
-			canonical := resolve_local_package(packages, dependency, root, project_root, mode)
-			packages.packages[owner].aliases.push(dependency.name)
-			packages.packages[owner].names.push(canonical)
-		end
-	end
-	packages.loading[owner] = false
-	return manifest.name
+	packages.packages.push(ResolvedLocalPackage.new(root: root, path: locked.path, source: locked.source, revision: locked.revision, checksum: locked.checksum, manifest: manifest, aliases: locked.aliases, names: locked.names))
+	packages.loading.push(false)
 end
 
-def load_project_packages(config: ProjectConfig, config_path: String, require_lock: Boolean): ProjectPackages
+def compiler_load_package_lock(config: ProjectConfig, config_path: String, lock: PackageLock): ProjectPackages
+	mut packages := project_packages_new(package_checksum(package_requirements_json(config.packages)))
+	if lock.error != ""
+		project_packages_fail(packages, lock.error)
+		return packages
+	end
+	if lock.checksum != packages.checksum
+		project_packages_fail(packages, "trb.lock does not match trbconfig.jsonc; run trb install")
+		return packages
+	end
+	mut index := 0
+	while index < lock.aliases.size()
+		packages.aliases.push(lock.aliases[index])
+		packages.names.push(lock.names[index])
+		index += 1
+	end
+	root := path_normalize(path_directory(config_path))
+	lock.packages.each do |locked|
+		if packages.error[0] == ""
+			compiler_load_locked_package(packages, locked, root, config.mode)
+		end
+	end
+	return packages
+end
+
+def load_project_packages(config: ProjectConfig, config_path: String): ProjectPackages
 	mut packages := project_packages_new(package_checksum(package_requirements_json(config.packages)))
 	if config.packages.size() == 0
 		return packages
 	end
 	project_root := path_normalize(path_directory(config_path))
 	lock_path := path_join(project_root, "trb.lock")
-	if require_lock && !compiler_file_exists(lock_path)
+	if !compiler_file_exists(lock_path)
 		project_packages_fail(packages, "TypeRB packages are not installed; run trb install")
 		return packages
 	end
-	order := package_sorted_indices(package_requirement_names(config.packages))
-	order.each do |index|
-		if packages.error[0] == ""
-			requirement := config.packages[index]
-			canonical := resolve_local_package(packages, requirement, project_root, project_root, config.mode)
-			packages.aliases.push(requirement.name)
-			packages.names.push(canonical)
-		end
-	end
-	if require_lock && packages.error[0] == ""
-		actual := package_json_parse(compiler_read_source(lock_path))
-		if actual.error[0] != ""
-			project_packages_fail(packages, lock_path + ": " + actual.error[0])
-		else
-			expected := package_json_parse(project_packages_lock(packages))
-			if package_json_canonical(actual, 0) != package_json_canonical(expected, 0)
-				project_packages_fail(packages, "trb.lock does not match the configuration or local manifests; run trb install")
-			end
-		end
-	end
-	return packages
+	return compiler_load_package_lock(config, config_path, package_lock_parse(compiler_read_source(lock_path)))
 end
 
 def load_configured_project(config_source: String, config_path: String): CompilerState
@@ -918,7 +961,11 @@ def load_configured_sources(
 		out_root: String,
 		bundle: CompilerProjectSources,
 	): CompilerState
-	packages := load_project_packages(config, config_path, true)
+	return load_configured_sources_with_mode(config, config_path, source_root, out_root, bundle, true, false)
+end
+
+def load_configured_sources_with_mode(config: ProjectConfig, config_path: String, source_root: String, out_root: String, bundle: CompilerProjectSources, require_entry: Boolean, interactive: Boolean): CompilerState
+	packages := load_project_packages(config, config_path)
 	if packages.error[0] != ""
 		return project_error_state(config_path, 1, packages.error[0])
 	end
@@ -1004,7 +1051,7 @@ def load_configured_sources(
 			file += 1
 		end
 	end
-	return load_package_project_sources(config_path, CompilerProjectSources.new(paths: paths, sources: sources, error: ""), names, owners, packages)
+	return load_package_project_sources_with_mode(config_path, CompilerProjectSources.new(paths: paths, sources: sources, error: ""), names, owners, packages, require_entry, interactive)
 end
 
 def load_project_sources(config_path: String, source_root: String, bundle: CompilerProjectSources): CompilerState
@@ -1042,6 +1089,10 @@ def load_named_project_sources_with_entry(config_path: String, bundle: CompilerP
 end
 
 def load_package_project_sources_with_entry(config_path: String, bundle: CompilerProjectSources, names: Array<String>, owners: Array<Integer>, packages: ProjectPackages, require_entry: Boolean): CompilerState
+	return load_package_project_sources_with_mode(config_path, bundle, names, owners, packages, require_entry, false)
+end
+
+def load_package_project_sources_with_mode(config_path: String, bundle: CompilerProjectSources, names: Array<String>, owners: Array<Integer>, packages: ProjectPackages, require_entry: Boolean, interactive: Boolean): CompilerState
 	if bundle.paths.size() == 0
 		return project_error_state(config_path, 1, "no production .trb files found")
 	end
@@ -1050,7 +1101,7 @@ def load_package_project_sources_with_entry(config_path: String, bundle: Compile
 	end
 	order := project_source_order(bundle, names, owners, packages)
 	mut ordered_owners: Array<Integer> := []
-	mut state := compiler_new(4194304)
+	mut state := compiler_new_with_mode(4194304, interactive)
 	mut module_index := 0
 	while module_index < order.size()
 		state.module_graph.active_module[0] = module_index
@@ -1091,6 +1142,37 @@ def load_package_project_sources_with_entry(config_path: String, bundle: Compile
 		state.module_graph.entry_module[0] = 0
 	end
 	resolve_project_imports(state, ordered_owners, packages)
+	return state
+end
+
+# REPL package imports use the same validated graph and canonical ownership as
+# ordinary configured compilation, with a separate synthetic interactive entry.
+def load_configured_repl(config_path: String, source: String): CompilerState
+	config := parse_project_config(compiler_read_source(config_path))
+	if config.error != ""
+		return project_error_state(config_path, config.error_line, config.error)
+	end
+	root := path_directory(config_path)
+	source_root := path_normalize(project_join(root, config.source_dir))
+	out_root := path_normalize(project_join(root, config.out_dir))
+	mut bundle := compiler_collect_project_sources(source_root, out_root)
+	if bundle.error != ""
+		return project_error_state(config_path, 1, bundle.error)
+	end
+	entry_path := path_join(source_root, "__repl__.trb")
+	bundle.paths.each do |path|
+		if path == entry_path
+			return project_error_state(path, 1, "project file conflicts with the REPL entry")
+		end
+	end
+	bundle.paths.push(entry_path)
+	bundle.sources.push(source)
+	mut state := load_configured_sources_with_mode(config, config_path, source_root, out_root, bundle, false, true)
+	if !has_diagnostic(state)
+		entry := find_module(state, "__repl__")
+		state.module_graph.entry_module[0] = entry
+		state.module_graph.active_module[0] = entry
+	end
 	return state
 end
 
