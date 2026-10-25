@@ -272,11 +272,12 @@ def main()
     assert join
     assert join[0].count('@start\n') == 1
     forced = emitted.replace(join[0], join[0].replace('@start\n', '@start\n call $trbn_gc_collect(w 0)\n'))
-    # Object construction happens while ancestor key Arrays are retained on
-    # the conversion stack. Collect there as well as at string joins.
-    hash_new = re.search(r'^function l \$trbn_hash_new\([^\n]*\) \{.*?^\}', forced, re.M | re.S)
-    assert hash_new and hash_new[0].count('@start\n') == 1
-    forced = forced.replace(hash_new[0], hash_new[0].replace('@start\n', '@start\n call $trbn_gc_collect(w 0)\n'))
+    # Collect during parser-owned pool and object-member creation as well as
+    # joins. Partially initialized state and retained ancestors must stay live.
+    for allocator in ('trbn_array_new', 'trbn_hash_new'):
+        allocation = re.search(r'^function l \$' + allocator + r'\([^\n]*\) \{.*?^\}', forced, re.M | re.S)
+        assert allocation and allocation[0].count('@start\n') == 1
+        forced = forced.replace(allocation[0], allocation[0].replace('@start\n', '@start\n call $trbn_gc_collect(w 0)\n'))
     ssa.write_text(forced)
     run([binary.with_name('qbe'), '-o', assembly, ssa])
     run(['/usr/bin/cc', assembly, '-lm', '-o', forced_program])

@@ -16,15 +16,19 @@ enum JsonNode
 	Object(members_index: Integer)
 end
 
-record JsonParser
-	bytes: Bytes
-	position: Array<Integer>
-	nodes: Array<JsonNode>
+# Parsing helpers share one cursor without wrapping each scalar in an Array.
+class JsonParser
+	@bytes: Bytes
+	@position: Integer := 0
+	@nodes: Array<JsonNode> := []
 	# Enum patterns are immutable. Keep child containers under the parser's
 	# mutable ownership and store only their pool indexes in raw node variants.
-	arrays: Array<Array<Integer>>
-	objects: Array<Hash<String, Integer>>
-	failure: Array<PublicJSON::Error>
+	@arrays: Array<Array<Integer>> := []
+	@objects: Array<Hash<String, Integer>> := []
+	@failure: PublicJSON::Error? := nil
+	def initialize(bytes: Bytes)
+		@bytes = bytes
+	end
 end
 
 def _slice(source: String, start: Integer, finish: Integer): String
@@ -38,10 +42,10 @@ def _slice(source: String, start: Integer, finish: Integer): String
 end
 
 def _byte(parser: JsonParser): Integer
-	if parser.position[0] >= parser.bytes.size()
+	if parser.position >= parser.bytes.size()
 		return -1
 	end
-	return parser.bytes.at(parser.position[0])
+	return parser.bytes.at(parser.position)
 end
 
 # Keep byte fragments intact until joining; individual octets may split UTF-8.
@@ -59,7 +63,7 @@ end
 def _space(mut parser: JsonParser)
 	mut character := _byte(parser)
 	while character == 32 || character == 10 || character == 13 || character == 9
-		parser.position[0] += 1
+		parser.position += 1
 		character = _byte(parser)
 	end
 end
@@ -101,11 +105,11 @@ def _byte_width(bytes: Bytes, position: Integer, finish: Integer): Integer
 end
 
 def _syntax(mut parser: JsonParser, message: String, location: Integer)
-	if !parser.failure.empty?()
+	if parser.failure != nil
 		return
 	end
 	if location < 0
-		parser.failure.push(_error(PublicJSON::ErrorKind::Syntax, message, ""))
+		parser.failure = _error(PublicJSON::ErrorKind::Syntax, message, "")
 		return
 	end
 	# The reference counts runes before the error's final byte, consuming each
@@ -122,7 +126,7 @@ def _syntax(mut parser: JsonParser, message: String, location: Integer)
 		end
 		index += _byte_width(parser.bytes, index, location)
 	end
-	parser.failure.push(PublicJSON::Error.new(kind: PublicJSON::ErrorKind::Syntax, message: message, path: "", line: line, column: column))
+	parser.failure = PublicJSON::Error.new(kind: PublicJSON::ErrorKind::Syntax, message: message, path: "", line: line, column: column)
 end
 
 def _diagnostic_hex(value: Integer, width: Integer): String
@@ -202,9 +206,9 @@ def _bad(mut parser: JsonParser, context: String)
 	if _byte(parser) < 0
 		_syntax(parser, "unexpected EOF", -1)
 	else
-		width := _byte_width(parser.bytes, parser.position[0], parser.bytes.size())
-		character := _source_slice(parser, parser.position[0], parser.position[0] + width)
-		_syntax(parser, "invalid character " + _quoted(character) + " " + context, parser.position[0] + width - 1)
+		width := _byte_width(parser.bytes, parser.position, parser.bytes.size())
+		character := _source_slice(parser, parser.position, parser.position + width)
+		_syntax(parser, "invalid character " + _quoted(character) + " " + context, parser.position + width - 1)
 	end
 end
 
@@ -276,17 +280,17 @@ end
 def _unicode(mut parser: JsonParser): Integer
 	mut value := 0
 	mut count := 0
-	start := parser.position[0]
+	start := parser.position
 	mut valid := true
-	while count < 4 && parser.position[0] < parser.bytes.size()
-		character := parser.bytes.at(parser.position[0])
+	while count < 4 && parser.position < parser.bytes.size()
+		character := parser.bytes.at(parser.position)
 		digit := _hex_byte(character)
 		if digit < 0
 			valid = false
 		else
 			value = value * 16 + digit
 		end
-		parser.position[0] += 1
+		parser.position += 1
 		count += 1
 	end
 	if count < 4 && _byte(parser) < 0 && valid
@@ -295,21 +299,21 @@ def _unicode(mut parser: JsonParser): Integer
 	end
 	if !valid || count != 4
 		# Successful escapes need only the code point, not a diagnostic String.
-		sequence := "\\u" + _source_slice(parser, start, parser.position[0])
-		_syntax(parser, "invalid escape sequence " + _escape_diagnostic(sequence) + " in string", parser.position[0] - 1)
+		sequence := "\\u" + _source_slice(parser, start, parser.position)
+		_syntax(parser, "invalid escape sequence " + _escape_diagnostic(sequence) + " in string", parser.position - 1)
 		return -1
 	end
 	return value
 end
 
 def _string(mut parser: JsonParser): String
-	parser.position[0] += 1
+	parser.position += 1
 	octets := Octets.table()
 	mut fragments: Array<String> := []
-	while parser.position[0] < parser.bytes.size() && parser.failure.empty?()
-		character := parser.bytes.at(parser.position[0])
+	while parser.position < parser.bytes.size() && parser.failure == nil
+		character := parser.bytes.at(parser.position)
 		if character == 34
-			parser.position[0] += 1
+			parser.position += 1
 			# Raw invalid bytes and unpaired surrogates were already replaced;
 			# joining the fragments reconstructs valid UTF-8 across byte boundaries.
 			return fragments.join("")
@@ -319,7 +323,7 @@ def _string(mut parser: JsonParser): String
 			return ""
 		end
 		if character >= 128
-			width := _byte_width(parser.bytes, parser.position[0], parser.bytes.size())
+			width := _byte_width(parser.bytes, parser.position, parser.bytes.size())
 			if width == 1
 				fragments.push(_rune(65533))
 			else
@@ -327,14 +331,14 @@ def _string(mut parser: JsonParser): String
 				# Array and String for each multibyte code point.
 				mut offset := 0
 				while offset < width
-					fragments.push(octets[parser.bytes.at(parser.position[0] + offset)])
+					fragments.push(octets[parser.bytes.at(parser.position + offset)])
 					offset += 1
 				end
 			end
-			parser.position[0] += width
+			parser.position += width
 			next
 		end
-		parser.position[0] += 1
+		parser.position += 1
 		if character != 92
 			fragments.push(octets[character])
 			next
@@ -343,7 +347,7 @@ def _string(mut parser: JsonParser): String
 		if escape < 0
 			break
 		end
-		parser.position[0] += 1
+		parser.position += 1
 		if escape == 34 || escape == 92 || escape == 47
 			fragments.push(octets[escape])
 		elsif escape == 98
@@ -362,7 +366,7 @@ def _string(mut parser: JsonParser): String
 				return ""
 			end
 			if point >= 55296 && point <= 56319
-				start := parser.position[0]
+				start := parser.position
 				if start + 6 <= parser.bytes.size() && parser.bytes.at(start) == 92 && parser.bytes.at(start + 1) == 117
 					mut low := 0
 					mut offset := 2
@@ -372,7 +376,7 @@ def _string(mut parser: JsonParser): String
 					end
 					if offset == 6 && low >= 56320 && low <= 57343
 						point = 65536 + (point - 55296) * 1024 + low - 56320
-						parser.position[0] += 6
+						parser.position += 6
 					end
 				end
 			end
@@ -381,7 +385,7 @@ def _string(mut parser: JsonParser): String
 			end
 			fragments.push(_rune(point))
 		else
-			_syntax(parser, "invalid escape sequence " + _escape_diagnostic("\\" + Octets.octet(escape)) + " in string", parser.position[0] - 1)
+			_syntax(parser, "invalid escape sequence " + _escape_diagnostic("\\" + Octets.octet(escape)) + " in string", parser.position - 1)
 			return ""
 		end
 	end
@@ -394,45 +398,45 @@ def _digit(character: Integer): Boolean
 end
 
 def _number(mut parser: JsonParser): String
-	start := parser.position[0]
+	start := parser.position
 	if _byte(parser) == 45
-		parser.position[0] += 1
+		parser.position += 1
 	end
 	if !_digit(_byte(parser))
 		_bad(parser, "in numeric literal")
 		return ""
 	end
 	if _byte(parser) == 48
-		parser.position[0] += 1
+		parser.position += 1
 	else
 		while _digit(_byte(parser))
-			parser.position[0] += 1
+			parser.position += 1
 		end
 	end
 	if _byte(parser) == 46
-		parser.position[0] += 1
+		parser.position += 1
 		if !_digit(_byte(parser))
 			_bad(parser, "in numeric literal")
 			return ""
 		end
 		while _digit(_byte(parser))
-			parser.position[0] += 1
+			parser.position += 1
 		end
 	end
 	if _byte(parser) == 101 || _byte(parser) == 69
-		parser.position[0] += 1
+		parser.position += 1
 		if _byte(parser) == 43 || _byte(parser) == 45
-			parser.position[0] += 1
+			parser.position += 1
 		end
 		if !_digit(_byte(parser))
 			_bad(parser, "in numeric literal")
 			return ""
 		end
 		while _digit(_byte(parser))
-			parser.position[0] += 1
+			parser.position += 1
 		end
 	end
-	return _source_slice(parser, start, parser.position[0])
+	return _source_slice(parser, start, parser.position)
 end
 
 def _literal(mut parser: JsonParser, literal: String)
@@ -443,7 +447,7 @@ def _literal(mut parser: JsonParser, literal: String)
 			_bad(parser, "in literal " + literal + " (expecting '" + literal[index] + "')")
 			return
 		end
-		parser.position[0] += 1
+		parser.position += 1
 		index += 1
 	end
 end
@@ -470,7 +474,7 @@ def _atom(mut parser: JsonParser, depth: Integer): Integer
 		node = JsonNode::Number(_number(parser))
 	elsif character == 91 || character == 123
 		if depth >= 10000
-			_syntax(parser, "exceeded max depth", parser.position[0])
+			_syntax(parser, "exceeded max depth", parser.position)
 			return -1
 		end
 		if character == 123
@@ -480,12 +484,12 @@ def _atom(mut parser: JsonParser, depth: Integer): Integer
 			node = JsonNode::Array(parser.arrays.size())
 			parser.arrays.push([])
 		end
-		parser.position[0] += 1
+		parser.position += 1
 	else
 		_bad(parser, "looking for beginning of value")
 		return -1
 	end
-	if !parser.failure.empty?()
+	if parser.failure != nil
 		return -1
 	end
 	identity := parser.nodes.size()
@@ -512,14 +516,14 @@ def _node(mut parser: JsonParser): Integer
 	end
 	mut frames := [root]
 	mut phases := [0]
-	while !frames.empty?() && parser.failure.empty?()
+	while !frames.empty?() && parser.failure == nil
 		top := frames.size() - 1
 		node := parser.nodes[frames[top]]
 		closing := _closing_byte(node)
 		_space(parser)
 		character := _byte(parser)
 		if phases[top] == 0 && character == closing
-			parser.position[0] += 1
+			parser.position += 1
 			frames.pop()
 			phases.pop()
 			next
@@ -537,7 +541,7 @@ def _node(mut parser: JsonParser): Integer
 					_bad(parser, "after object key")
 					return -1
 				end
-				parser.position[0] += 1
+				parser.position += 1
 			end
 			child := _atom(parser, frames.size())
 			if child < 0
@@ -561,11 +565,11 @@ def _node(mut parser: JsonParser): Integer
 			next
 		end
 		if character == closing
-			parser.position[0] += 1
+			parser.position += 1
 			frames.pop()
 			phases.pop()
 		elsif character == 44
-			parser.position[0] += 1
+			parser.position += 1
 			phases[top] = 1
 		else
 			if closing == 125
@@ -761,20 +765,22 @@ def _value(parser: JsonParser, identity: Integer): Result<PublicJSON::Value, Pub
 end
 
 def parse(source: String): Result<PublicJSON::Value, PublicJSON::Error>
-	mut parser := JsonParser.new(bytes: source.to_bytes(), position: [0], nodes: [], arrays: [], objects: [], failure: [])
+	mut parser := JsonParser.new(source.to_bytes())
 	_space(parser)
 	if _byte(parser) < 0
 		return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(PublicJSON::ErrorKind::Syntax, "EOF", ""))
 	end
 	root := _node(parser)
-	if !parser.failure.empty?()
-		return Result<PublicJSON::Value, PublicJSON::Error>::Err(parser.failure[0])
+	failure := parser.failure
+	if failure != nil
+		return Result<PublicJSON::Value, PublicJSON::Error>::Err(failure)
 	end
 	_space(parser)
 	if _byte(parser) >= 0
 		trailing := _node(parser)
-		if !parser.failure.empty?()
-			return Result<PublicJSON::Value, PublicJSON::Error>::Err(parser.failure[0])
+		trailing_failure := parser.failure
+		if trailing_failure != nil
+			return Result<PublicJSON::Value, PublicJSON::Error>::Err(trailing_failure)
 		end
 		mut message := "JSON source contains multiple values"
 		mut name := ""
