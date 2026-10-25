@@ -878,14 +878,9 @@ def _needs_escape(bytes: Bytes): Boolean
 	return false
 end
 
-def _append_escaped(mut builder: StringBuilder, text: String)
-	bytes := text.to_bytes()
+# The caller has already classified these bytes; retain that work when escaping.
+def _append_escape_required(mut builder: StringBuilder, bytes: Bytes)
 	builder.append("\"")
-	if !_needs_escape(bytes)
-		builder.append(text)
-		builder.append("\"")
-		return
-	end
 	mut index := 0
 	mut span_start := 0
 	while index < bytes.size()
@@ -943,9 +938,24 @@ def _append_escaped(mut builder: StringBuilder, text: String)
 	builder.append("\"")
 end
 
+def _append_escaped(mut builder: StringBuilder, text: String)
+	bytes := text.to_bytes()
+	if !_needs_escape(bytes)
+		builder.append("\"")
+		builder.append(text)
+		builder.append("\"")
+		return
+	end
+	_append_escape_required(builder, bytes)
+end
+
 def _escape(text: String): String
+	bytes := text.to_bytes()
+	if !_needs_escape(bytes)
+		return "\"" + text + "\""
+	end
 	mut builder := StringBuilder.new()
-	_append_escaped(builder, text)
+	_append_escape_required(builder, bytes)
 	return builder.to_s()
 end
 
@@ -1080,8 +1090,9 @@ def _encoding_error(value: PublicJSON::Value): PublicJSON::Error?
 	return nil
 end
 
-# Append each token once, then allocate the completed document in one join.
-def _serialize(value: PublicJSON::Value): String
+# Explicit stacks keep nesting independent of the machine call stack.
+# One shared buffer accumulates compound values before taking a String snapshot.
+def _serialize_compound(value: PublicJSON::Value): String
 	mut values := [value]
 	mut tokens := [""]
 	mut builder := StringBuilder.new()
@@ -1139,6 +1150,24 @@ def _serialize(value: PublicJSON::Value): String
 		end
 	end
 	return builder.to_s()
+end
+
+# Scalar roots need neither traversal stacks nor a mutable document buffer.
+def _serialize(value: PublicJSON::Value): String
+	case value
+	when PublicJSON::Value::Null
+		return "null"
+	when PublicJSON::Value::Boolean(boolean)
+		return boolean.to_s()
+	when PublicJSON::Value::Integer(integer)
+		return integer.to_s()
+	when PublicJSON::Value::Float(number)
+		return _floating(number)
+	when PublicJSON::Value::String(string)
+		return _escape(string)
+	else
+		return _serialize_compound(value)
+	end
 end
 
 def stringify(value: PublicJSON::Value): Result<String, PublicJSON::Error>
