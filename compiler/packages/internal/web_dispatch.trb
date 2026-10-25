@@ -126,8 +126,10 @@ end
 
 class DispatchCore implements Next
 	@routes: Array<Route>
-	def initialize(routes: Array<Route>)
+	@limit: Integer
+	def initialize(routes: Array<Route>, limit: Integer)
 		@routes = routes
+		@limit = limit
 	end
 	def call(context: Context): Response
 		action := fn(): Response
@@ -137,7 +139,7 @@ class DispatchCore implements Next
 	end
 	def dispatch(context: Context): Response
 		request := context.request
-		if request.body.size() > 1048576
+		if request.body.size() > @limit
 			return protocol(413, "payload_too_large")
 		end
 		mut segments: Array<String> := []
@@ -194,13 +196,18 @@ class DispatchCore implements Next
 	end
 end
 
-def dispatch_request(request: Request, routes: Array<Route>, middlewares: Array<Middleware>): Response
+def dispatch_request(request: Request, routes: Array<Route>, middlewares: Array<Middleware>, limit: Integer, status: Integer): Response
 	mut normalized := normalized_request(request)
 	path := normalized_path(normalized.path)
 	mut terminal: Next := FixedResponse.new(protocol(400, "bad_request"))
-	if path != nil
+	if path != nil && status == 0
 		normalized = Request.new(method: normalized.method, path: path, query_string: normalized.query_string, headers: normalized.headers, body: normalized.body)
-		terminal = DispatchCore.new(routes)
+		terminal = DispatchCore.new(routes, limit)
+	end
+	if status == 413
+		terminal = FixedResponse.new(protocol(413, "payload_too_large"))
+	elsif status == 431
+		terminal = FixedResponse.new(protocol(431, "request_header_fields_too_large"))
 	end
 	context := Context.new(request: normalized, path_parameters: {})
 	response := checked_response(compose(context, terminal, middlewares))
@@ -212,9 +219,9 @@ end
 
 # The outer boundary catches root middleware failures; the core boundary above
 # returns a recovered response through Next so the root middleware can resume.
-def run(request: Request, routes: Array<Route>, middlewares: Array<Middleware>): Response
+def run(request: Request, routes: Array<Route>, middlewares: Array<Middleware>, limit: Integer = 1048576, status: Integer = 0): Response
 	action := fn(): Response
-		return dispatch_request(request, routes, middlewares)
+		return dispatch_request(request, routes, middlewares, limit, status)
 	end
 	response := Runtime.recover<Response>(action, protocol(500, "internal_server_error"))
 	if request.method.to_s().upcase() == "HEAD"

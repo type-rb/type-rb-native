@@ -1,3 +1,4 @@
+import { standard_source_web_server } from state/standard_source_kinds
 import { official_source_kind } from project/official_catalog
 import { standard_source_base64, standard_source_hex, standard_source_internal_base64, standard_source_internal_hex, standard_source_internal_json, standard_source_internal_url, standard_source_json, standard_source_jsonc, standard_source_time, standard_source_time_host, standard_source_url } from state/standard_source_kinds
 import { CompilerState, diagnostic } from state/state
@@ -108,7 +109,7 @@ def compilation_unit_owner(state: CompilerState, source: Integer, owners: Array<
 	owned := sparse_integer_at(state.standard_modules, source)
 	# The testing dispatcher is generated for the application and calls its
 	# route handlers. It shares that unit, while retaining its owned identity.
-	if owned == official_source_kind("trb/web/testing")
+	if owned == official_source_kind("trb/web/testing") || owned == standard_source_web_server()
 		return -1
 	end
 	mut time_service := false
@@ -156,7 +157,14 @@ def visit_compilation_unit(mut state: CompilerState, owner: Integer, owners: Arr
 				target := load_integer(state.module_graph.import_targets, binding)
 				if target >= 0
 					target_owner := compilation_unit_owner(state, target, owners)
-					if target_owner != owner && !visit_compilation_unit(state, target_owner, owners, colors)
+					# Web.serve is a project-provider entry. Its implementation binds
+					# application routes; this exact loader-owned edge is not a
+					# dependency from an authored package to the application.
+					mut provider := false
+					if sparse_integer_at(state.standard_modules, source) == official_source_kind("trb/web") && sparse_integer_at(state.standard_modules, target) == standard_source_web_server()
+						provider = true
+					end
+					if !provider && target_owner != owner && !visit_compilation_unit(state, target_owner, owners, colors)
 						state.module_graph.active_module[0] = source
 						diagnostic(state, "TRBN4003", load_integer(state.module_graph.import_lines, binding), "compilation unit dependency cycle")
 						return false

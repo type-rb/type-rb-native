@@ -105,6 +105,11 @@ outward-facing text before publication.
 - Documents describe the current contract. Record how a change was delivered in
   its PR and issue; do not append per-feature or per-update narratives, dated
   status or hand-counted totals to docs. Regenerate generated views instead.
+- For external dependency changes, update `docs/native-dependencies.json` and
+  the applicable source pins in the same PR. Regenerate the GitHub Pages
+  dependency register with `tools/dependency-pages.py --write` and verify
+  `--check`. Distinguish current dependencies from candidates; retain target ABI,
+  linked-library, configuration and license evidence with release artifacts.
 - For source organization, follow `docs/repository-organization.md`, including
   recovery sources and symbols. At accepted optimization checkpoints,
   advance a bounded cleanup or record its concrete blocker within the task's
