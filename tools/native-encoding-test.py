@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise byte encodings and request ID propagation across modules and forced GC."""
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -83,9 +84,56 @@ when Result::Err(_error)
 puts(false)
 end
 puts(SecureRandom.bytes(257).size() == 257)
+check_classifications()
 end
 '''
-expected = "true\n" * 11
+# Check every possible input octet against Python's codecs and the reference.
+# Raw literals include invalid UTF-8 so table indexes 128..255 are exercised too.
+classification_source = ['CLASSIFICATION_INPUTS := [']
+classification_source.extend(f'"\\x{point:02x}",' for point in range(256))
+classification_source += [']', 'def check_classifications()',
+                          'CLASSIFICATION_INPUTS.each do |input|',
+                          'check_hex_digit(input)', 'check_base64_digit(input)',
+                          'check_url_digit(input)', 'end', 'end']
+for name, module, method in [('hex', 'Hex', 'decode'),
+                             ('base64', 'Base64', 'decode'),
+                             ('url', 'Base64', 'url_decode')]:
+    suffix = '0' if name == 'hex' else 'AAA'
+    message = ('invalid hexadecimal character' if name == 'hex' else
+               'invalid base64url character' if name == 'url' else
+               'invalid base64 character')
+    classification_source += [f'def check_{name}_digit(input: String)',
+        f'text := input + "{suffix}"', f'case {module}.{method}(text)',
+        'when Result::Ok(value)', 'puts("ok")', 'puts(Hex.encode(value))',
+        'when Result::Err(error)', 'puts("error")',
+        f'mut kind := {module}::DecodeErrorKind::InvalidCharacter',
+        f'mut message := "{message}"']
+    if name != 'hex':
+        padding_message = ('base64url input must not contain padding' if name == 'url'
+                           else 'invalid base64 padding')
+        classification_source += ['if input == "="',
+            'kind = Base64::DecodeErrorKind::InvalidPadding',
+            f'message = "{padding_message}"', 'end']
+    classification_source += [
+        'puts(error.kind == kind && error.input == text && error.index == 0 && error.message == message)',
+        'end', 'end']
+producer += '\n'.join(classification_source) + '\n'
+classification_expected = []
+for point in range(256):
+    octet = bytes([point])
+    for name in ['hex', 'base64', 'url']:
+        alphabet = (b'0123456789abcdefABCDEF' if name == 'hex' else
+                    b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789' +
+                    (b'-_' if name == 'url' else b'+/'))
+        if point in alphabet:
+            value = (bytes.fromhex((octet + b'0').decode('ascii')) if name == 'hex' else
+                     base64.b64decode(octet + b'AAA',
+                                      altchars=b'-_' if name == 'url' else None,
+                                      validate=True))
+            classification_expected += ['ok\n', value.hex() + '\n']
+        else:
+            classification_expected += ['error\n', 'true\n']
+expected = 'true\n' * 11 + ''.join(classification_expected)
 retained_input = r'''import { make_bytes, check_bytes } from encoding_values
 stored := make_bytes()
 record Hex

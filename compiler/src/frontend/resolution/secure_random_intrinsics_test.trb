@@ -26,18 +26,26 @@ def entropy_test_state(): CompilerState
 	return state
 end
 
+def expect_codec_recovery_boundary(source: String, expected_owner: String)
+	mut state := compiler_new(1048576)
+	expect_compiler_phase(state, "lex", lex(state, source))
+	expect_compiler_phase(state, "parse", parse_module(state, 0, 0))
+	# Reference-hosted units retain the published recovery byte constructor.
+	# Complete library execution uses the ordinary Native CLI byte adapter.
+	expect(resolve(state)).to_be_false()
+	expect(load_string(state.diagnostics.messages, 0)).to_equal("bootstrap String byte construction does not support this escape")
+	owner := load_integer(state.diagnostics.modules, 0)
+	expect(load_string(state.module_graph.module_names, owner)).to_equal(expected_owner)
+	expect(load_integer(state.diagnostics.lines, 0) > 0).to_be_true()
+	expect(state.module_graph.active_module[0]).to_equal(0)
+end
+
 describe("Trusted entropy adapter") do
-	test("reports the recovery byte constructor boundary for the octet table") do
-		source := "import trb/std/encoding/hex\nimport trb/std/encoding/base64\ndef main()\nputs(Hex.encode(\"raw\".to_bytes()))\nputs(Base64.encode(\"raw\".to_bytes()))\nend\n"
-		mut state := compiler_new(1048576)
-		expect_compiler_phase(state, "lex", lex(state, source))
-		expect_compiler_phase(state, "parse", parse_module(state, 0, 0))
-		# Reference-hosted units retain the published recovery byte constructor.
-		# Complete library execution uses the ordinary Native CLI byte adapter.
-		expect(resolve(state)).to_be_false()
-		expect(load_string(state.diagnostics.messages, 0)).to_equal("bootstrap String byte construction does not support this escape")
-		owner := load_integer(state.diagnostics.modules, 0)
-		expect(load_string(state.module_graph.module_names, owner)).to_equal("trb/internal/encoding_bytes/index")
+	test("reports recovery byte construction limits at each codec table") do
+		hex_source := "import trb/std/encoding/hex\nimport trb/std/encoding/base64\ndef main()\nputs(Hex.encode(\"raw\".to_bytes()))\nputs(Base64.encode(\"raw\".to_bytes()))\nend\n"
+		expect_codec_recovery_boundary(hex_source, "trb/internal/encoding/hex/index")
+		base64_source := "import trb/std/encoding/base64\ndef main()\nputs(Base64.encode(\"raw\".to_bytes()))\nend\n"
+		expect_codec_recovery_boundary(base64_source, "trb/internal/encoding/base64/index")
 	end
 
 	test("preserves typed allocation and I/O through source-erased MIR") do

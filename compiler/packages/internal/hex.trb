@@ -5,6 +5,11 @@ import trb/internal/encoding_bytes as Octets
 module Hex
 end
 
+# One decoded nibble per input octet; the sentinel marks every other byte.
+# Raw literal bytes are read through Bytes, never as Unicode characters.
+INVALID_DIGIT := 255
+DECODE_DIGITS := "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\xff\xff\xff\xff\xff\xff\xff\x0a\x0b\x0c\x0d\x0e\x0f\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x0a\x0b\x0c\x0d\x0e\x0f\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
+
 def encode(value: Bytes): String
 	mut parts: Array<String> := []
 	mut index := 0
@@ -17,25 +22,15 @@ def encode(value: Bytes): String
 	return parts.join("")
 end
 
-def _digit(point: Integer): Integer
-	if point >= 48 && point <= 57
-		return point - 48
-	elsif point >= 65 && point <= 70
-		return point - 55
-	elsif point >= 97 && point <= 102
-		return point - 87
-	end
-	return -1
-end
-
 def decode(value: String): Result<Bytes, PublicHex::DecodeError>
+	digits := DECODE_DIGITS.to_bytes()
 	bytes := value.to_bytes()
 	mut index := 0
 	# Every accepted character is ASCII. At the first invalid character,
 	# the byte offset is therefore also the reference code-point offset.
 	while index < bytes.size()
-		digit := _digit(bytes.at(index))
-		if digit < 0
+		digit := digits.at(bytes.at(index))
+		if digit == INVALID_DIGIT
 			return Result<Bytes, PublicHex::DecodeError>::Err(PublicHex::DecodeError.new(kind: PublicHex::DecodeErrorKind::InvalidCharacter, input: value, index: index, message: "invalid hexadecimal character"))
 		end
 		index += 1
@@ -47,7 +42,7 @@ def decode(value: String): Result<Bytes, PublicHex::DecodeError>
 	mut parts: Array<String> := []
 	index = 0
 	while index < bytes.size()
-		parts.push(octets[_digit(bytes.at(index)) * 16 + _digit(bytes.at(index + 1))])
+		parts.push(octets[digits.at(bytes.at(index)) * 16 + digits.at(bytes.at(index + 1))])
 		index += 2
 	end
 	return Result<Bytes, PublicHex::DecodeError>::Ok(parts.join("").to_bytes())
