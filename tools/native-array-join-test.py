@@ -74,6 +74,34 @@ with tempfile.TemporaryDirectory(prefix='native-array-join-') as temporary:
     assert result.stdout == literals.with_suffix('.out').read_text(), result
     assert statistics(result)['collections'] > 0
 
+    # One-byte and empty fragments must preserve raw bytes with either copy
+    # path. Cover every octet, NUL and a long span after a healed UTF-8 seam.
+    octets = ['"\\x%02x"' % value for value in range(256)]
+    source.write_text('''def joined(values: Array<String>, separator: String): String
+return values.join(separator)
+end
+def main()
+values := [''' + ', '.join(octets) + ''']
+puts(joined(values, ""))
+puts(joined(values, "/"))
+puts(joined(["", "\\xc2", "", "\\xa2", "abcdefghijklmnopqrstuvwxyz0123456789", "\\x00", ""], ""))
+puts(joined([], ""))
+puts(joined([""], ""))
+puts(joined(["", "", ""], ""))
+end
+''')
+    emitted = run([binary, '--internal-driver', 'emit-qbe', source])
+    assert emitted.stdout.count(collector) == 1
+    program = compile_il(emitted.stdout.replace(collector, '\tcall $trbn_gc_collect(w 0)'))
+    # Arbitrary bytes cannot be decoded by the text-mode helper above.
+    raw = subprocess.run([program], capture_output=True,
+                         env=dict(env, TYPE_RB_NATIVE_RUNTIME_STATS='1'), timeout=60)
+    expected = (bytes(range(256)) + b'\n' + b'/'.join(bytes([i]) for i in range(256)) +
+                b'\n\xc2\xa2abcdefghijklmnopqrstuvwxyz0123456789\x00\n\n\n\n')
+    assert raw.returncode == 0 and raw.stdout == expected, raw
+    raw.stderr = raw.stderr.decode()
+    assert statistics(raw)['collections'] > 0
+
     # Bound total copying/allocation without a wall-clock performance assertion.
     source.write_text('''def main()
 mut values: Array<String> := []

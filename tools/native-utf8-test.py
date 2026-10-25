@@ -146,6 +146,22 @@ end
     compile_source('def main()\ntext := "A\0😀\0B"\npart := text.slice(1..3)\nputs(part)\nputs(part.size())\nputs(text.slice(5...5).size())\nend\n',
                    '\0😀\0\n3\n0\n'.encode(), force_gc=True)
 
+    # Count runtime input across short tails and ASCII runs after valid or
+    # malformed UTF-8. Literal headers cannot supply these cached counts.
+    count_inputs, count_output = [], []
+    payloads = [(b'\xc2\xa2', 1), (b'\xe6\x97\xa5', 1), (b'\xf0\x9f\x98\x80', 1),
+                (b'\xff', 1), (b'\xe3\x81', 2), (b'\xed\xa0\x80', 3)]
+    for prefix in range(9):
+        for tail in (0, 1, 7, 8, 9, 31, 64):
+            for payload, points in payloads:
+                count_inputs.append(b'a' * prefix + payload + b'b' * tail + payload)
+                count_output.append(str(prefix + tail + points * 2))
+    compile_source('''import trb/std/process
+def main()
+Process.argv().each { |text| puts(text.size()) }
+end
+''', ('\n'.join(count_output) + '\n').encode(), force_gc=True, arguments=count_inputs)
+
     slice_source = '''import trb/std/process
 def main()
 value := Process.argv()[0]
