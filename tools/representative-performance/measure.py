@@ -246,7 +246,16 @@ def summarize(records, units):
                 coalesced |= arrival["coalesced"]
                 intervals.append(arrival["seconds"] - previous)
                 previous = arrival["seconds"]
+    medians = {"wallSeconds": percentile(walls, 0.5),
+               "cpuSeconds": statistics.median(r["cpuSeconds"] for r in retained),
+               "peakRssBytes": statistics.median(r["peakRssBytes"] for r in retained)}
+    medians["unitsPerSecond"] = units / medians["wallSeconds"]
+    ranges = {}
+    for metric, median in medians.items():
+        values = [units / r["wallSeconds"] if metric == "unitsPerSecond" else r[metric] for r in retained]
+        ranges[metric] = {"count": len(values), "minimum": min(values), "p50": median, "maximum": max(values)}
     return {"processWallSeconds": distribution(walls),
+            "sampleRanges": ranges,
             "cpuSeconds": statistics.median(r["cpuSeconds"] for r in retained),
             "peakRssBytes": statistics.median(r["peakRssBytes"] for r in retained),
             "unitsPerSecond": units / statistics.median(walls),
@@ -255,9 +264,15 @@ def summarize(records, units):
             "firstProcessWallSeconds": records[0]["wallSeconds"]}
 
 
-def load_cases(smoke=False, selected=None):
+def load_cases(smoke=False, selected=None, profile="registered"):
     suite = json.loads(SUITE.read_text())
-    cases = suite["cases"]
+    if profile not in suite["inputProfiles"]:
+        raise ValueError("Unknown input profile: " + profile)
+    if smoke and profile != "registered":
+        raise ValueError("Correctness smoke uses only the registered profile")
+    policy = suite["inputProfiles"][profile]
+    cases = [dict(case, batches=case["batches"] * policy.get("caseMultipliers", {}).get(
+        case["id"], policy["batchMultipliers"][case["size"]])) for case in suite["cases"]]
     if selected:
         known = {c["id"] for c in cases}
         if set(selected) - known:
@@ -335,6 +350,7 @@ def main():
     parser.add_argument("--go", type=Path, help="Go executable for the hand-written control")
     parser.add_argument("--evidence", required=True, type=Path, help="New output directory")
     parser.add_argument("--smoke", action="store_true", help="Small correctness-only inputs")
+    parser.add_argument("--profile", default="registered", help="Fixed input profile from suite.json (default: registered)")
     parser.add_argument("--case", action="append", help="Select an exact case ID (repeatable)")
     parser.add_argument("--samples", type=int, help="Fixed retained process count, 1..100")
     parser.add_argument("--gc-probes", action="store_true", help="Separate untimed Native worker/allocation counters")
@@ -348,7 +364,7 @@ def main():
     for name in ("native", "reference", "go"):
         if getattr(args, name):
             setattr(args, name, getattr(args, name).resolve(strict=True))
-    suite, cases = load_cases(args.smoke, args.case)
+    suite, cases = load_cases(args.smoke, args.case, args.profile)
     evidence = args.evidence.resolve()
     evidence.mkdir(parents=True, exist_ok=False)
     env = dict(os.environ, GOMAXPROCS="1", NO_COLOR="1", TERM="dumb")
@@ -359,7 +375,7 @@ def main():
               "platform": platform.platform(), "machine": platform.machine(),
               "sourceSha256": digest(SOURCE), "goSourceSha256": digest(GO_SOURCE),
               "suiteSha256": digest(SUITE), "cases": [], "status": "running",
-              "plannedCases": cases,
+              "plannedCases": cases, "inputProfile": args.profile,
               "coverageGaps": ["file/network input", "request queueing and service latency", "parallel scaling"],
               "measurementScope": "fresh-process wall/CPU/peak RSS; observer-side batch completion intervals include pipe/scheduler overhead"}
     write(evidence / "manifest.json", result)

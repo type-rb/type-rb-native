@@ -113,7 +113,7 @@ if (process.argv.includes('--check')) {
 // Keep the full coverage catalog visible even before the first measurement.
 const representativeSuite = JSON.parse(await readFile(resolve(root, 'tools/representative-performance/suite.json'), 'utf8'));
 const catalogPath = resolve(root, 'docs/capabilities/benchmarks/representative-suite.json');
-const catalog = `${JSON.stringify({ schemaVersion: 1, cases: representativeSuite.cases }, null, 2)}\n`;
+const catalog = `${JSON.stringify({ schemaVersion: 1, cases: representativeSuite.cases, inputProfiles: representativeSuite.inputProfiles }, null, 2)}\n`;
 if (process.argv.includes('--check')) {
   if (await readFile(catalogPath, 'utf8').catch(() => '') !== catalog) {
     console.error('Representative Pages catalog is stale; run node tools/benchmark-pages-data.mjs');
