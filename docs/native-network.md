@@ -100,12 +100,16 @@ existing Web error dispatcher; an oversized body retains its accepted prefix up
 to the configured limit for middleware inspection. Peer EOF terminates an
 incomplete request without dispatch, matching the pinned server.
 
-llhttp's strict framing is retained. In particular, a request containing both
-`Content-Length` and `Transfer-Encoding` receives 400; Go's `net/http` instead
-discards Content-Length. These low-level parser differences are explicit in the
-shared acceptance test. They are not evidence of byte-for-byte equivalence to
-every `net/http` behavior. Protocol upgrades, streaming and HTTP/2 need separate
-transport contracts.
+The transport retains llhttp's strict parser with one explicit reference
+compatibility setting: chunked Transfer-Encoding takes precedence over
+Content-Length, and the latter is removed before application dispatch. The shared
+suite checks the decoded body and the following request boundary. Other leniency
+flags stay disabled. A common policy that rejects conflicting framing before
+middleware is tracked in [proposal #1239](https://github.com/type-rb/type-rb-native/issues/1239).
+Adopting stricter behavior requires agreement across implementations rather than a
+Native-only change.
+This slice does not establish byte-for-byte equivalence to every `net/http`
+behavior. Protocol upgrades, streaming and HTTP/2 need separate transport contracts.
 
 ## Validation and remaining work
 

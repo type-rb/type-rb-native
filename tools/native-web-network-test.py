@@ -72,7 +72,7 @@ end
     'routes/meta.trb': """import { Context, Response } from trb/web
 def post(context: Context): Response
 request := context.request
-return Response.text(request.method.to_s() + "|" + request.path + "|" + request.query_string + "|" + request.headers.key?("host").to_s() + "|" + request.headers.key?("transfer-encoding").to_s() + "|" + request.headers.key?("x-trailer").to_s())
+return Response.text(request.method.to_s() + "|" + request.path + "|" + request.query_string + "|" + request.headers.key?("host").to_s() + "|" + request.headers.key?("transfer-encoding").to_s() + "|" + request.headers.key?("x-trailer").to_s() + "|" + request.headers.key?("content-length").to_s())
 end
 """,
     'routes/large.trb': """import { Context, Response } from trb/web
@@ -200,7 +200,7 @@ def exercise(program, port, environment, reference=False):
             assert wire.response()[2] == b'\x00\xff\xc0\x80'
             passed.append('binary body')
             wire.send(b'POST /meta?q=a%2Bb&x=2 HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nTrailer: X-Trailer\r\n\r\n0\r\nX-Trailer: hidden\r\n\r\n')
-            assert wire.response()[2] == b'POST|/meta|q=a%2Bb&x=2|false|false|false'
+            assert wire.response()[2] == b'POST|/meta|q=a%2Bb&x=2|false|false|false|false'
             passed.append('request metadata and trailer boundary')
             wire.send(b'POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 3\r\nExpect: 100-continue\r\n\r\n')
             assert wire.response()[0] == 100
@@ -259,13 +259,16 @@ def exercise(program, port, environment, reference=False):
             assert code == 413 and headers[b'x-root'] == [b'resumed'], code
             assert headers[b'x-body-size'] == [b'32'], headers
             passed.append('custom body limit')
-        # net/http discards Content-Length when Transfer-Encoding is present;
-        # llhttp deliberately rejects the ambiguous framing instead.
+        # Match the pinned server's chunked precedence; discard Content-Length
+        # before application middleware and preserve the next request boundary.
         with Wire(port) as wire:
-            wire.send(b'POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n')
-            code, headers, _ = wire.response()
-            assert code == (200 if reference else 400)
-            assert (b'x-root' in headers) == reference, headers
+            wire.send(b'POST /meta HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n')
+            code, headers, body = wire.response()
+            assert code == 200 and headers[b'x-root'] == [b'resumed'], headers
+            assert body == b'POST|/meta||false|false|false|false', body
+            assert headers[b'x-body-size'] == [b'3'], headers
+            wire.send(b'GET / HTTP/1.1\r\nHost: localhost\r\n\r\n')
+            assert wire.response()[2] == b'hello'
         for bad, dispatched in [
             (b'POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\nab', False),
             (b'GET / HTTP/1.1\r\nHost: localhost\r\nBad Header: no\r\n\r\n', False),
