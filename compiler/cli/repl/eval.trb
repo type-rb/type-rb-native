@@ -1,3 +1,6 @@
+import { standard_string_builder } from frontend/resolution/string_builder_intrinsics
+import { builder_method, builder_parameters } from mir/model/string_builder_contract
+import { repl_builder_call } from repl/string_builder
 import { web_dispatch_function, web_serve_function } from frontend/resolution/web_dispatch
 import { standard_entropy } from frontend/resolution/secure_random_intrinsics
 import { native_cli_entropy } from host
@@ -95,6 +98,10 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 	context_primitive := web_context_primitive(state, function)
 	if context_primitive > 0
 		return repl_web_context_primitive(state, function, context_primitive, arguments, store)
+	end
+	builder := standard_string_builder(state, function)
+	if builder >= 0
+		return repl_builder_call(store, builder, arguments)
 	end
 	if standard_entropy(state, function)
 		return repl_string(store, native_cli_entropy(store.integers[arguments[0]]))
@@ -970,6 +977,34 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						position[0] += 1
 						result = repl_reference(repl_array_method(store, kind, result.value, argument))
+						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && !repl_failed(store)
+							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
+						end
+						next
+					end
+					if value.type_name == "StringBuilder"
+						kind := builder_method(member)
+						parameters := builder_parameters(kind)
+						position[0] += 1
+						skip_newlines(state, position)
+						mut arguments := [result.value]
+						if parameters.size() > 1
+							argument := repl_expression(state, position, store, environment, 1, parameters[1])
+							if environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+								return repl_reference(environment.flow[repl_flow_value_slot()])
+							end
+							if repl_failed(store)
+								return repl_reference(0)
+							end
+							arguments.push(argument.value)
+							skip_newlines(state, position)
+							if token_is(state, position[0], ",")
+								position[0] += 1
+								skip_newlines(state, position)
+							end
+						end
+						position[0] += 1
+						result = repl_reference(repl_builder_call(store, kind, arguments))
 						if safe_origin >= 0 && environment.flow[repl_flow_kind_slot()] == repl_flow_normal() && !repl_failed(store)
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.callables.checked[0].safe_types, safe_origin)))
 						end

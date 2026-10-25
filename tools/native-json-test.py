@@ -278,6 +278,14 @@ def main()
         allocation = re.search(r'^function l \$' + allocator + r'\([^\n]*\) \{.*?^\}', forced, re.M | re.S)
         assert allocation and allocation[0].count('@start\n') == 1
         forced = forced.replace(allocation[0], allocation[0].replace('@start\n', '@start\n call $trbn_gc_collect(w 0)\n'))
+    # Collection after the span helper installs both roots exercises buffer
+    # growth with a live input Bytes value and a retained builder owner.
+    span = re.search(r'^function \$trbn_builder_append_span\([^\n]*\) \{.*?^\}', forced, re.M | re.S)
+    assert span
+    root_hook = ' call $trbn_gc_temp_push(l %value)\n'
+    assert span[0].count(root_hook) == 1
+    forced = forced.replace(span[0], span[0].replace(
+        root_hook, root_hook + ' call $trbn_gc_collect(w 0)\n'))
     ssa.write_text(forced)
     run([binary.with_name('qbe'), '-o', assembly, ssa])
     run(['/usr/bin/cc', assembly, '-lm', '-o', forced_program])

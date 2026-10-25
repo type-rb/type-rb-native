@@ -1,3 +1,5 @@
+import { builder_method, builder_mutates, builder_parameters } from mir/model/string_builder_contract
+import { mir_builder_call } from frontend/checking/builtins/string_builder
 import { checked_enum_puts } from frontend/checking/nominal/enums
 import { mir_array_mutate_unshift, mir_convert_boolean_to_string, mir_convert_float_to_string, mir_convert_integer_to_string, mir_convert_string_to_float, mir_convert_string_to_integer } from mir/model/operation_modes
 import { checked_category_function, checked_category_initializer, checked_category_math, checked_category_system, checked_category_value } from frontend/types/value_categories
@@ -328,7 +330,7 @@ def check_method_call(
 		checked_array_numeric_record(locals, receiver, conversion)
 		return result
 	end
-	if bytes_method_kind(receiver.type_name, method) > bytes_method_none() || (receiver.type_name == "Range<Integer>" && method == "to_a") || (receiver.type_name == "Integer" && integer_method_kind(method) > integer_method_none()) || (receiver.type_name == "Float" && float_method_kind(method) > float_method_none()) || (receiver.type_name == "String" && string_method_kind(method) > string_method_none()) || (array_element_type(receiver.type_name) != "" && array_method_kind(method) > array_method_none()) || (receiver.type_name == "Array" && method == "empty?")
+	if (receiver.type_name == "StringBuilder" && builder_method(method) >= 0) || bytes_method_kind(receiver.type_name, method) > bytes_method_none() || (receiver.type_name == "Range<Integer>" && method == "to_a") || (receiver.type_name == "Integer" && integer_method_kind(method) > integer_method_none()) || (receiver.type_name == "Float" && float_method_kind(method) > float_method_none()) || (receiver.type_name == "String" && string_method_kind(method) > string_method_none()) || (array_element_type(receiver.type_name) != "" && array_method_kind(method) > array_method_none()) || (receiver.type_name == "Array" && method == "empty?")
 		return check_primitive_method(state, position, locals, receiver, method)
 	end
 	line := load_integer(state.source_tokens.token_lines, position[0])
@@ -464,7 +466,21 @@ def check_primitive_method(mut state: CompilerState, mut position: Array<Integer
 	mut kind := integer_method_kind(method)
 	mut arity := integer_method_arity(kind)
 	mut argument_type := "Integer"
-	if bytes_method_kind(receiver.type_name, method) > bytes_method_none()
+	if receiver.type_name == "StringBuilder"
+		kind = builder_method(method)
+		parameters := builder_parameters(kind)
+		arity = parameters.size() - 1
+		if arity > 0
+			argument_type = parameters[1]
+		end
+		if builder_mutates(kind)
+			if receiver.mutable == 0
+				diagnostic(state, "TRBN4004", line, method + " receiver is immutable")
+			elsif !receiver.binding
+				diagnostic(state, "TRBN4004", line, method + " requires a mutable binding")
+			end
+		end
+	elsif bytes_method_kind(receiver.type_name, method) > bytes_method_none()
 		kind = bytes_method_kind(receiver.type_name, method)
 		arity = bytes_method_arity(kind)
 		argument_type = bytes_method_argument_type(kind)
@@ -538,6 +554,13 @@ def check_primitive_method(mut state: CompilerState, mut position: Array<Integer
 	end
 	if has_diagnostic(state)
 		return checked_value("Invalid", checked_category_value(), origin, 0)
+	end
+	if receiver.type_name == "StringBuilder"
+		mut values := [checked_mir_value(receiver)]
+		arguments.each do |argument|
+			values.push(checked_mir_value(argument))
+		end
+		return mir_builder_call(state, locals, method, values, origin)
 	end
 	if bytes_method_kind(receiver.type_name, method) > bytes_method_none()
 		if arity == 0

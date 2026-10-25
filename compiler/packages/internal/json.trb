@@ -1,3 +1,5 @@
+import trb/std/string_builder
+import trb/internal/string_builder_storage as BuilderStorage
 import { Result } from trb/std/result
 import trb/std/json as PublicJSON
 import trb/internal/encoding_bytes as Octets
@@ -48,16 +50,11 @@ def _byte(parser: JsonParser): Integer
 	return parser.bytes.at(parser.position)
 end
 
-# Keep byte fragments intact until joining; individual octets may split UTF-8.
+# Preserve byte offsets until the complete span has been copied.
 def _source_slice(mut parser: JsonParser, start: Integer, finish: Integer): String
-	octets := Octets.table()
-	mut fragments: Array<String> := []
-	mut index := start
-	while index < finish
-		fragments.push(octets[parser.bytes.at(index)])
-		index += 1
-	end
-	return fragments.join("")
+	mut builder := StringBuilder.new()
+	BuilderStorage.append_bytes(builder, parser.bytes, start, finish)
+	return builder.to_s()
 end
 
 def _space(mut parser: JsonParser)
@@ -308,15 +305,14 @@ end
 
 def _string(mut parser: JsonParser): String
 	parser.position += 1
-	octets := Octets.table()
-	mut fragments: Array<String> := []
+	mut builder := StringBuilder.new()
+	mut span_start := parser.position
 	while parser.position < parser.bytes.size() && parser.failure == nil
 		character := parser.bytes.at(parser.position)
 		if character == 34
+			BuilderStorage.append_bytes(builder, parser.bytes, span_start, parser.position)
 			parser.position += 1
-			# Raw invalid bytes and unpaired surrogates were already replaced;
-			# joining the fragments reconstructs valid UTF-8 across byte boundaries.
-			return fragments.join("")
+			return builder.to_s()
 		end
 		if character < 32
 			_bad(parser, "in string")
@@ -325,41 +321,37 @@ def _string(mut parser: JsonParser): String
 		if character >= 128
 			width := _byte_width(parser.bytes, parser.position, parser.bytes.size())
 			if width == 1
-				fragments.push(_rune(65533))
+				BuilderStorage.append_bytes(builder, parser.bytes, span_start, parser.position)
+				builder.append_codepoint(65533)
+				parser.position += 1
+				span_start = parser.position
 			else
-				# Append validated bytes directly instead of allocating a temporary
-				# Array and String for each multibyte code point.
-				mut offset := 0
-				while offset < width
-					fragments.push(octets[parser.bytes.at(parser.position + offset)])
-					offset += 1
-				end
+				parser.position += width
 			end
-			parser.position += width
 			next
 		end
 		parser.position += 1
 		if character != 92
-			fragments.push(octets[character])
 			next
 		end
+		BuilderStorage.append_bytes(builder, parser.bytes, span_start, parser.position - 1)
 		escape := _byte(parser)
 		if escape < 0
 			break
 		end
 		parser.position += 1
 		if escape == 34 || escape == 92 || escape == 47
-			fragments.push(octets[escape])
+			builder.append_codepoint(escape)
 		elsif escape == 98
-			fragments.push("\x08")
+			builder.append("\x08")
 		elsif escape == 102
-			fragments.push("\x0c")
+			builder.append("\x0c")
 		elsif escape == 110
-			fragments.push("\n")
+			builder.append("\n")
 		elsif escape == 114
-			fragments.push("\r")
+			builder.append("\r")
 		elsif escape == 116
-			fragments.push("\t")
+			builder.append("\t")
 		elsif escape == 117
 			mut point := _unicode(parser)
 			if point < 0
@@ -383,11 +375,12 @@ def _string(mut parser: JsonParser): String
 			if point >= 55296 && point <= 57343
 				point = 65533
 			end
-			fragments.push(_rune(point))
+			builder.append_codepoint(point)
 		else
 			_syntax(parser, "invalid escape sequence " + _escape_diagnostic("\\" + Octets.octet(escape)) + " in string", parser.position - 1)
 			return ""
 		end
+		span_start = parser.position
 	end
 	_syntax(parser, "unexpected EOF", -1)
 	return ""
@@ -885,66 +878,75 @@ def _needs_escape(bytes: Bytes): Boolean
 	return false
 end
 
-def _escape(text: String): String
+def _append_escaped(mut builder: StringBuilder, text: String)
 	bytes := text.to_bytes()
+	builder.append("\"")
 	if !_needs_escape(bytes)
-		return "\"" + text + "\""
+		builder.append(text)
+		builder.append("\"")
+		return
 	end
-	octets := Octets.table()
-	mut fragments := ["\""]
 	mut index := 0
+	mut span_start := 0
 	while index < bytes.size()
 		octet := bytes.at(index)
 		if octet >= 128
 			width := _byte_width(bytes, index, bytes.size())
+			mut replacement := ""
 			if width == 1
-				# Preserve String#chars normalization before JSON quoting.
-				fragments.push("\ufffd")
+				replacement = "\ufffd"
 			elsif octet == 226 && width == 3 && bytes.at(index + 1) == 128 && bytes.at(index + 2) == 168
-				fragments.push("\\u2028")
+				replacement = "\\u2028"
 			elsif octet == 226 && width == 3 && bytes.at(index + 1) == 128 && bytes.at(index + 2) == 169
-				fragments.push("\\u2029")
-			else
-				# Valid UTF-8 can be joined from shared octets without allocating
-				# a character String and Bytes value for every code point.
-				mut offset := 0
-				while offset < width
-					fragments.push(octets[bytes.at(index + offset)])
-					offset += 1
-				end
+				replacement = "\\u2029"
+			end
+			if replacement != ""
+				BuilderStorage.append_bytes(builder, bytes, span_start, index)
+				builder.append(replacement)
+				span_start = index + width
 			end
 			index += width
 			next
 		end
+		if octet >= 32 && octet != 34 && octet != 92 && octet != 60 && octet != 62 && octet != 38
+			index += 1
+			next
+		end
+		BuilderStorage.append_bytes(builder, bytes, span_start, index)
 		if octet == 34
-			fragments.push("\\\"")
+			builder.append("\\\"")
 		elsif octet == 92
-			fragments.push("\\\\")
+			builder.append("\\\\")
 		elsif octet == 8
-			fragments.push("\\b")
+			builder.append("\\b")
 		elsif octet == 12
-			fragments.push("\\f")
+			builder.append("\\f")
 		elsif octet == 10
-			fragments.push("\\n")
+			builder.append("\\n")
 		elsif octet == 13
-			fragments.push("\\r")
+			builder.append("\\r")
 		elsif octet == 9
-			fragments.push("\\t")
+			builder.append("\\t")
 		elsif octet == 60
-			fragments.push("\\u003c")
+			builder.append("\\u003c")
 		elsif octet == 62
-			fragments.push("\\u003e")
+			builder.append("\\u003e")
 		elsif octet == 38
-			fragments.push("\\u0026")
+			builder.append("\\u0026")
 		elsif octet < 32
-			fragments.push("\\u00" + "0123456789abcdef"[octet / 16] + "0123456789abcdef"[octet % 16])
-		else
-			fragments.push(octets[octet])
+			builder.append("\\u00" + "0123456789abcdef"[octet / 16] + "0123456789abcdef"[octet % 16])
 		end
 		index += 1
+		span_start = index
 	end
-	fragments.push("\"")
-	return fragments.join("")
+	BuilderStorage.append_bytes(builder, bytes, span_start, index)
+	builder.append("\"")
+end
+
+def _escape(text: String): String
+	mut builder := StringBuilder.new()
+	_append_escaped(builder, text)
+	return builder.to_s()
 end
 
 def _floating(number: Float): String
@@ -1082,29 +1084,29 @@ end
 def _serialize(value: PublicJSON::Value): String
 	mut values := [value]
 	mut tokens := [""]
-	mut fragments: Array<String> := []
+	mut builder := StringBuilder.new()
 	while !values.empty?()
 		current := values[values.size() - 1]
 		token := tokens[tokens.size() - 1]
 		values.pop()
 		tokens.pop()
 		if token != ""
-			fragments.push(token)
+			builder.append(token)
 			next
 		end
 		case current
 		when PublicJSON::Value::Null
-			fragments.push("null")
+			builder.append("null")
 		when PublicJSON::Value::Boolean(boolean)
-			fragments.push(boolean.to_s())
+			builder.append(boolean.to_s())
 		when PublicJSON::Value::Integer(integer)
-			fragments.push(integer.to_s())
+			builder.append(integer.to_s())
 		when PublicJSON::Value::Float(number)
-			fragments.push(_floating(number))
+			builder.append(_floating(number))
 		when PublicJSON::Value::String(string)
-			fragments.push(_escape(string))
+			_append_escaped(builder, string)
 		when PublicJSON::Value::Array(items)
-			fragments.push("[")
+			builder.append("[")
 			values.push(PublicJSON::Value::Null)
 			tokens.push("]")
 			mut index := items.size()
@@ -1118,7 +1120,7 @@ def _serialize(value: PublicJSON::Value): String
 				end
 			end
 		when PublicJSON::Value::Object(members)
-			fragments.push("{")
+			builder.append("{")
 			values.push(PublicJSON::Value::Null)
 			tokens.push("}")
 			keys := members.keys().sort()
@@ -1136,7 +1138,7 @@ def _serialize(value: PublicJSON::Value): String
 			end
 		end
 	end
-	return fragments.join("")
+	return builder.to_s()
 end
 
 def stringify(value: PublicJSON::Value): Result<String, PublicJSON::Error>
