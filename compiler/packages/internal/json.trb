@@ -878,85 +878,66 @@ def _needs_escape(bytes: Bytes): Boolean
 	return false
 end
 
-# The caller has already classified these bytes; retain that work when escaping.
-def _append_escape_required(mut builder: StringBuilder, bytes: Bytes)
-	builder.append("\"")
-	mut index := 0
-	mut span_start := 0
-	while index < bytes.size()
-		octet := bytes.at(index)
-		if octet >= 128
-			width := _byte_width(bytes, index, bytes.size())
-			mut replacement := ""
-			if width == 1
-				replacement = "\ufffd"
-			elsif octet == 226 && width == 3 && bytes.at(index + 1) == 128 && bytes.at(index + 2) == 168
-				replacement = "\\u2028"
-			elsif octet == 226 && width == 3 && bytes.at(index + 1) == 128 && bytes.at(index + 2) == 169
-				replacement = "\\u2029"
-			end
-			if replacement != ""
-				BuilderStorage.append_bytes(builder, bytes, span_start, index)
-				builder.append(replacement)
-				span_start = index + width
-			end
-			index += width
-			next
-		end
-		if octet >= 32 && octet != 34 && octet != 92 && octet != 60 && octet != 62 && octet != 38
-			index += 1
-			next
-		end
-		BuilderStorage.append_bytes(builder, bytes, span_start, index)
-		if octet == 34
-			builder.append("\\\"")
-		elsif octet == 92
-			builder.append("\\\\")
-		elsif octet == 8
-			builder.append("\\b")
-		elsif octet == 12
-			builder.append("\\f")
-		elsif octet == 10
-			builder.append("\\n")
-		elsif octet == 13
-			builder.append("\\r")
-		elsif octet == 9
-			builder.append("\\t")
-		elsif octet == 60
-			builder.append("\\u003c")
-		elsif octet == 62
-			builder.append("\\u003e")
-		elsif octet == 38
-			builder.append("\\u0026")
-		elsif octet < 32
-			builder.append("\\u00" + "0123456789abcdef"[octet / 16] + "0123456789abcdef"[octet % 16])
-		end
-		index += 1
-		span_start = index
-	end
-	BuilderStorage.append_bytes(builder, bytes, span_start, index)
-	builder.append("\"")
-end
-
-def _append_escaped(mut builder: StringBuilder, text: String)
-	bytes := text.to_bytes()
-	if !_needs_escape(bytes)
-		builder.append("\"")
-		builder.append(text)
-		builder.append("\"")
-		return
-	end
-	_append_escape_required(builder, bytes)
-end
-
 def _escape(text: String): String
 	bytes := text.to_bytes()
 	if !_needs_escape(bytes)
 		return "\"" + text + "\""
 	end
-	mut builder := StringBuilder.new()
-	_append_escape_required(builder, bytes)
-	return builder.to_s()
+	octets := Octets.table()
+	mut fragments := ["\""]
+	mut index := 0
+	while index < bytes.size()
+		octet := bytes.at(index)
+		if octet >= 128
+			width := _byte_width(bytes, index, bytes.size())
+			if width == 1
+				# Preserve String#chars normalization before JSON quoting.
+				fragments.push("\ufffd")
+			elsif octet == 226 && width == 3 && bytes.at(index + 1) == 128 && bytes.at(index + 2) == 168
+				fragments.push("\\u2028")
+			elsif octet == 226 && width == 3 && bytes.at(index + 1) == 128 && bytes.at(index + 2) == 169
+				fragments.push("\\u2029")
+			else
+				# Valid UTF-8 can be joined from shared octets without allocating
+				# a character String and Bytes value for every code point.
+				mut offset := 0
+				while offset < width
+					fragments.push(octets[bytes.at(index + offset)])
+					offset += 1
+				end
+			end
+			index += width
+			next
+		end
+		if octet == 34
+			fragments.push("\\\"")
+		elsif octet == 92
+			fragments.push("\\\\")
+		elsif octet == 8
+			fragments.push("\\b")
+		elsif octet == 12
+			fragments.push("\\f")
+		elsif octet == 10
+			fragments.push("\\n")
+		elsif octet == 13
+			fragments.push("\\r")
+		elsif octet == 9
+			fragments.push("\\t")
+		elsif octet == 60
+			fragments.push("\\u003c")
+		elsif octet == 62
+			fragments.push("\\u003e")
+		elsif octet == 38
+			fragments.push("\\u0026")
+		elsif octet < 32
+			fragments.push("\\u00" + "0123456789abcdef"[octet / 16] + "0123456789abcdef"[octet % 16])
+		else
+			fragments.push(octets[octet])
+		end
+		index += 1
+	end
+	fragments.push("\"")
+	return fragments.join("")
 end
 
 def _floating(number: Float): String
@@ -1115,7 +1096,7 @@ def _serialize_compound(value: PublicJSON::Value): String
 		when PublicJSON::Value::Float(number)
 			builder.append(_floating(number))
 		when PublicJSON::Value::String(string)
-			_append_escaped(builder, string)
+			builder.append(_escape(string))
 		when PublicJSON::Value::Array(items)
 			builder.append("[")
 			values.push(PublicJSON::Value::Null)
