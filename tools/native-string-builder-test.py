@@ -23,7 +23,133 @@ def run(args, data=None, success=True, env=env):
 with tempfile.TemporaryDirectory(prefix="native-builder-") as temporary:
     tmp = Path(temporary)
     env["TRBN_HISTORY"] = str(tmp / "history")
-    cases = [('boundaries', 'import trb/std/string_builder\n\ndef extend(mut writer: StringBuilder)\n\twriter.append("!")\nend\n\ndef main()\n\tmut writer := StringBuilder.from_string("A")\n\tmut shared := writer\n\twriter.append("\\xf0\\x9f")\n\tputs(writer.size())\n\tearly := writer.to_s()\n\tshared.append("\\x98\\x80")\n\textend(shared)\n\tsnapshot := writer.to_s()\n\tputs(snapshot)\n\tputs(writer.size())\n\tputs(early.to_bytes().size())\n\twriter.clear()\n\tputs(writer.empty?())\n\twriter.append_codepoint(12354)\n\twriter.append_codepoint(0)\n\twriter.append("Z")\n\tputs(writer.size())\n\tputs(writer.to_s().to_bytes().size())\n\tputs(snapshot)\n\tputs(shared.to_s() == writer.to_s())\n\tmut separate := StringBuilder.new()\n\tseparate.append("x")\n\tputs(writer.size())\nend\n', '3\nA😀!\n3\n3\ntrue\n3\n5\nA😀!\ntrue\n3\n'), ('growth', 'import trb/std/string_builder\n\nrecord Held\n\twriter: StringBuilder\n\ttext: String\nend\n\ndef update(mut writer: StringBuilder, count: Integer)\n\tmut i := 0\n\twhile i < count\n\t\twriter.append("a😀")\n\t\ti += 1\n\tend\nend\n\ndef main()\n\tmut writer := StringBuilder.new()\n\tupdate(writer, 1024)\n\tsnapshot := writer.to_s()\n\theld := Held.new(writer: writer, text: snapshot)\n\tmut writers := [writer]\n\tmut shared := writers[0]\n\tupdate(shared, 1024)\n\tputs(held.text.size())\n\tputs(writer.size())\n\tputs(held.writer.to_s().to_bytes().size())\n\twriter.clear()\n\twriter.append("after")\n\tputs(held.text.size())\n\tputs(held.writer.to_s())\n\tmut retained: Array<String> := []\n\tmut i := 0\n\twhile i < 512\n\t\tmut item := StringBuilder.from_string("saved-")\n\t\titem.append(i.to_s())\n\t\tretained.push(item.to_s())\n\t\titem.clear()\n\t\titem.append("changed")\n\t\ti += 1\n\tend\n\tputs(retained[0])\n\tputs(retained[511])\nend\n', '2048\n4096\n10240\n2048\nafter\nsaved-0\nsaved-511\n'), ('display', 'import trb/std/string_builder\ndef show(value: Any)\nputs(value)\nend\ndef main()\nmut writer := StringBuilder.from_string("text")\nputs(writer)\nshow(writer)\nwriter.append("!")\nshow(writer)\nwriter.clear()\nputs(writer.to_s().to_bytes().size())\nputs(writer)\nend\n', 'text\ntext\ntext!\n0\n\n')]
+    cases = [
+        (
+            'boundaries',
+            """import trb/std/string_builder
+
+def extend(mut writer: StringBuilder)
+	writer.append("!")
+end
+
+def main()
+	mut writer := StringBuilder.from_string("A")
+	mut shared := writer
+	writer.append("\\xf0\\x9f")
+	puts(writer.size())
+	early := writer.to_s()
+	shared.append("\\x98\\x80")
+	extend(shared)
+	snapshot := writer.to_s()
+	puts(snapshot)
+	puts(writer.size())
+	puts(early.to_bytes().size())
+	writer.clear()
+	puts(writer.empty?())
+	writer.append_codepoint(12354)
+	writer.append_codepoint(0)
+	writer.append("Z")
+	puts(writer.size())
+	puts(writer.to_s().to_bytes().size())
+	puts(snapshot)
+	puts(shared.to_s() == writer.to_s())
+	mut separate := StringBuilder.new()
+	separate.append("x")
+	puts(writer.size())
+end
+""",
+            """3
+A😀!
+3
+3
+true
+3
+5
+A😀!
+true
+3
+""",
+        ),
+        (
+            'growth',
+            """import trb/std/string_builder
+
+record Held
+	writer: StringBuilder
+	text: String
+end
+
+def update(mut writer: StringBuilder, count: Integer)
+	mut i := 0
+	while i < count
+		writer.append("a😀")
+		i += 1
+	end
+end
+
+def main()
+	mut writer := StringBuilder.new()
+	update(writer, 1024)
+	snapshot := writer.to_s()
+	held := Held.new(writer: writer, text: snapshot)
+	mut writers := [writer]
+	mut shared := writers[0]
+	update(shared, 1024)
+	puts(held.text.size())
+	puts(writer.size())
+	puts(held.writer.to_s().to_bytes().size())
+	writer.clear()
+	writer.append("after")
+	puts(held.text.size())
+	puts(held.writer.to_s())
+	mut retained: Array<String> := []
+	mut i := 0
+	while i < 512
+		mut item := StringBuilder.from_string("saved-")
+		item.append(i.to_s())
+		retained.push(item.to_s())
+		item.clear()
+		item.append("changed")
+		i += 1
+	end
+	puts(retained[0])
+	puts(retained[511])
+end
+""",
+            """2048
+4096
+10240
+2048
+after
+saved-0
+saved-511
+""",
+        ),
+        (
+            'display',
+            """import trb/std/string_builder
+def show(value: Any)
+puts(value)
+end
+def main()
+mut writer := StringBuilder.from_string("text")
+puts(writer)
+show(writer)
+writer.append("!")
+show(writer)
+writer.clear()
+puts(writer.to_s().to_bytes().size())
+puts(writer)
+end
+""",
+            """text
+text
+text!
+0
+
+""",
+        ),
+    ]
     for name, code, expected in cases:
         source = tmp / (name + ".trb")
         source.write_text(code)
