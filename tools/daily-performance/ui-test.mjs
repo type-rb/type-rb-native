@@ -71,3 +71,39 @@ test('every registered representative input stays visible before a measurement',
   assert.deepEqual(groups.flatMap(group => group.inputs.map(input => input.id)).sort(), suite.cases.map(input => input.id).sort());
   assert.equal(groups.reduce((total, group) => total + group.counts.missing, 0), suite.cases.length);
 });
+
+test('observed ranges expose overlap, sparse and zero samples without changing median screening', async () => {
+  const { rangeComparison, sampleRange } = await import('../../docs/capabilities/benchmarks/representative-model.mjs');
+  const range = (minimum, maximum, count = 3) => ({ minimum, maximum, count });
+  const row = { sampleRanges: { native: { cpuSeconds: range(1, 4) }, 'pure-go': { cpuSeconds: range(3, 6) } } };
+  assert.match(rangeComparison({}, row, 'pure-go', 'cpuSeconds'), /overlap;.*uncertain/);
+  assert.equal(verdict(2, 5, 'cpuSeconds').tone, 'better');
+  row.sampleRanges.native.cpuSeconds.maximum = 2;
+  assert.match(rangeComparison({}, row, 'pure-go', 'cpuSeconds'), /not overlap;.*not a confidence/);
+  row.sampleRanges.native.cpuSeconds.minimum = 0;
+  assert.match(rangeComparison({}, row, 'pure-go', 'cpuSeconds'), /zero observations/);
+  row.sampleRanges.native.cpuSeconds.count = 1;
+  assert.match(rangeComparison({}, row, 'pure-go', 'cpuSeconds'), /Range unavailable/);
+  assert.match(rangeComparison({}, {}, 'pure-go', 'cpuSeconds'), /Range unavailable/);
+  row.sampleRanges.native.peakRssBytes = range(1, 4);
+  assert.equal(sampleRange({ platform: 'Linux', environment: {} }, row, 'native', 'peakRssBytes'), undefined);
+});
+
+test('fixed profile display preserves historical inputs and lists new unmeasured cases', async () => {
+  const { displayCases, profileCases } = await import('../../docs/capabilities/benchmarks/representative-model.mjs');
+  const input = { id: 'json-small', workload: 'json-transform', count: 16, batches: 5, size: 'small', variant: 'valid' };
+  const catalog = { cases: [input, { ...input, id: 'new-case' }], inputProfiles: {
+    registered: { batchMultipliers: { small: 1 } },
+    'sustained-v1': { batchMultipliers: { small: 200 }, caseMultipliers: { 'new-case': 40 } },
+  } };
+  assert.deepEqual(profileCases(catalog), catalog.cases);
+  const longer = profileCases(catalog, 'sustained-v1');
+  assert.equal(longer[0].batches, 1000);
+  assert.equal(longer[1].batches, 200);
+  const snapshot = { inputProfile: 'sustained-v1', inputs: [longer[0]], rows: [] };
+  assert.deepEqual(displayCases(catalog, snapshot), longer);
+  assert.deepEqual(displayCases(catalog, { inputs: [input] }), catalog.cases);
+  const historical = { ...input, batches: 7 };
+  assert.equal(displayCases(catalog, { inputs: [historical] })[0].batches, 7);
+  assert.equal(resultFor(snapshot, input), undefined);
+});

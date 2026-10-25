@@ -24,6 +24,32 @@ export function metricValue(snapshot, row, role, metric) {
   return row?.summaries[role]?.[metric];
 }
 
+export function sampleRange(snapshot, row, role, metric) {
+  if (metric === 'peakRssBytes' && invalidRss(snapshot)) return undefined;
+  return row?.sampleRanges?.[role]?.[metric];
+}
+
+export function rangeComparison(snapshot, row, role, metric) {
+  const current = sampleRange(snapshot, row, 'native', metric), control = sampleRange(snapshot, row, role, metric);
+  if (!current || !control || current.count < 2 || control.count < 2) return 'Range unavailable; median comparison only.';
+  if (!positive(current.minimum) || !positive(control.minimum)) return 'Includes zero observations; differences may be below measurement resolution.';
+  const overlap = Math.max(current.minimum, control.minimum) <= Math.min(current.maximum, control.maximum);
+  return overlap ? 'Observed ranges overlap; the median difference is uncertain.' : 'Observed ranges do not overlap; this is not a confidence interval.';
+}
+
+export function profileCases(catalog, profile = 'registered') {
+  const policy = catalog.inputProfiles?.[profile];
+  if (!policy) return profile === 'registered' ? catalog.cases : [];
+  return catalog.cases.map(input => ({ ...input, batches: input.batches * (policy.caseMultipliers?.[input.id] ?? policy.batchMultipliers[input.size]) }));
+}
+
+export function displayCases(catalog, snapshot) {
+  // Retained snapshots own their dimensions. Never relabel old samples with
+  // a newer profile; append genuinely new cases as unmeasured coverage.
+  const current = profileCases(catalog, snapshot?.inputProfile ?? 'registered');
+  return snapshot ? [...snapshot.inputs, ...current.filter(input => !snapshot.inputs.some(old => old.id === input.id))] : current;
+}
+
 export function resultFor(snapshot, input) {
   if (!sameInput(snapshot?.inputs.find(item => item.id === input.id), input)) return undefined;
   return snapshot.rows.find(row => row.case === input.id);

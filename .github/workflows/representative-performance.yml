@@ -2,6 +2,14 @@ name: Representative performance snapshot
 
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: Fixed input batches (starts a separate measurement series)
+        type: choice
+        default: registered
+        options:
+          - registered
+          - sustained-v1
 
 permissions:
   contents: read
@@ -56,12 +64,14 @@ jobs:
 
       - name: Measure every registered input on one logical CPU
         id: measurement
+        env:
+          INPUT_PROFILE: ${{ inputs.profile }}
         run: |
           sudo swapoff -a
           cpu=$(python3 -c 'import os; print(min(os.sched_getaffinity(0)))')
           taskset -c "$cpu" python3 tools/representative-performance/measure.py \
             --native bin/trbn --reference "$RUNNER_TEMP/trb" --go "$(command -v go)" \
-            --gc-probes --evidence "$RUNNER_TEMP/measurements"
+            --profile "$INPUT_PROFILE" --gc-probes --evidence "$RUNNER_TEMP/measurements"
 
       - name: Retain measurements including unsuccessful attempts
         id: evidence

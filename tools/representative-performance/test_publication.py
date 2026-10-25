@@ -36,6 +36,50 @@ def manifest():
 
 
 class PublicationTests(unittest.TestCase):
+    def test_profile_identity_separates_series_and_rejects_relabelled_inputs(self):
+        original = publication.snapshot(manifest(), attempt())
+        data = manifest()
+        data["inputProfile"] = "sustained-v1"
+        with self.assertRaises(ValueError):
+            publication.snapshot(data, attempt())
+        cases = publication.catalog("sustained-v1")
+        data["plannedCases"] = cases
+        for row, case in zip(data["cases"], cases):
+            row["input"] = case
+        sustained = publication.snapshot(data, attempt())
+        self.assertNotEqual(original["series"], sustained["series"])
+        self.assertEqual(sustained["inputProfile"], "sustained-v1")
+        legacy = copy.deepcopy(original)
+        legacy.pop("inputProfile")
+        state = {**publication.empty(), "latest": sustained, "history": [legacy, sustained]}
+        self.assertEqual(publication.validate(state)["history"][0], legacy)
+        self.assertNotEqual(legacy["inputs"][0]["batches"], sustained["inputs"][0]["batches"])
+
+    def test_public_sample_ranges_are_validated_and_match_medians(self):
+        data = manifest()
+        for row in data["cases"]:
+            for summary in row["summaries"].values():
+                values = {"wallSeconds": summary["processWallSeconds"]["p50"],
+                          **{key: summary[key] for key in ("cpuSeconds", "peakRssBytes", "unitsPerSecond")}}
+                summary["sampleRanges"] = {key: {"count": 3, "minimum": value / 2, "p50": value, "maximum": value * 2}
+                                           for key, value in values.items()}
+        value = publication.snapshot(data, attempt())
+        self.assertEqual(value["rows"][0]["sampleRanges"]["native"]["cpuSeconds"]["minimum"], .5)
+        for mutation in (lambda r: r.update(count=2), lambda r: r.update(minimum=9),
+                         lambda r: r.update(maximum=float("inf")), lambda r: r.update(p50=1.2),
+                         lambda r: r.update(path="/synthetic/private")):
+            changed = copy.deepcopy(value)
+            mutation(changed["rows"][0]["sampleRanges"]["native"]["cpuSeconds"])
+            with self.assertRaises(ValueError):
+                publication.validate_snapshot(changed)
+        changed = copy.deepcopy(value)
+        changed["rows"][0]["sampleRanges"].pop("pure-go")
+        with self.assertRaises(ValueError):
+            publication.validate_snapshot(changed)
+        data["cases"][0]["summaries"]["pure-go"].pop("sampleRanges")
+        with self.assertRaises(ValueError):
+            publication.snapshot(data, attempt())
+
     def test_snapshot_preserves_all_cases_without_tool_paths(self):
         value = publication.snapshot(manifest(), attempt())
         self.assertEqual(len(value["rows"]), len(publication.catalog()))
