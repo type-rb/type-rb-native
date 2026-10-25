@@ -67,18 +67,20 @@ def _error(kind: PublicBase64::DecodeErrorKind, input: String, index: Integer, m
 end
 
 def _decode(value: String, url: Boolean): Result<Bytes, PublicBase64::DecodeError>
-	points := value.codepoints()
-	length := points.size()
+	# Length errors take precedence and use the String's code-point count.
+	length := value.size()
 	if url && length % 4 == 1
 		return _error(PublicBase64::DecodeErrorKind::InvalidLength, value, length, "base64url input has invalid length")
 	elsif !url && length % 4 != 0
 		return _error(PublicBase64::DecodeErrorKind::InvalidLength, value, length, "base64 input length must be a multiple of 4")
 	end
+	bytes := value.to_bytes()
 	mut padding := 0
-	mut digits: Array<Integer> := []
 	mut index := 0
+	# Accepted characters are ASCII, so the first invalid character has
+	# the same byte and code-point offset. No digit Array is needed.
 	while index < length
-		point := points[index]
+		point := bytes.at(index)
 		if point == 61
 			if url
 				return _error(PublicBase64::DecodeErrorKind::InvalidPadding, value, index, "base64url input must not contain padding")
@@ -99,17 +101,16 @@ def _decode(value: String, url: Boolean): Result<Bytes, PublicBase64::DecodeErro
 				end
 				return _error(PublicBase64::DecodeErrorKind::InvalidCharacter, value, index, message)
 			end
-			digits.push(digit)
 		end
 		index += 1
 	end
 	# Strict decoding requires the unused low bits of the final digit to be zero.
-	count := digits.size()
+	count := length - padding
 	mut noncanonical := false
 	if count % 4 == 2
-		noncanonical = digits[count - 1] % 16 != 0
+		noncanonical = _digit(bytes.at(count - 1), url) % 16 != 0
 	elsif count % 4 == 3
-		noncanonical = digits[count - 1] % 4 != 0
+		noncanonical = _digit(bytes.at(count - 1), url) % 4 != 0
 	end
 	if noncanonical
 		mut message := "non-canonical base64 encoding"
@@ -118,15 +119,20 @@ def _decode(value: String, url: Boolean): Result<Bytes, PublicBase64::DecodeErro
 		end
 		return _error(PublicBase64::DecodeErrorKind::NonCanonical, value, count - 1, message)
 	end
+	octets := Octets.table()
 	mut parts: Array<String> := []
 	index = 0
 	while index < count
-		parts.push(Octets.octet(digits[index] * 4 + digits[index + 1] / 16))
+		first := _digit(bytes.at(index), url)
+		second := _digit(bytes.at(index + 1), url)
+		parts.push(octets[first * 4 + second / 16])
 		if index + 2 < count
-			parts.push(Octets.octet((digits[index + 1] % 16) * 16 + digits[index + 2] / 4))
-		end
-		if index + 3 < count
-			parts.push(Octets.octet((digits[index + 2] % 4) * 64 + digits[index + 3]))
+			third := _digit(bytes.at(index + 2), url)
+			parts.push(octets[(second % 16) * 16 + third / 4])
+			if index + 3 < count
+				fourth := _digit(bytes.at(index + 3), url)
+				parts.push(octets[(third % 4) * 64 + fourth])
+			end
 		end
 		index += 4
 	end
