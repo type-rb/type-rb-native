@@ -46,10 +46,11 @@ end
 
 # Keep byte fragments intact until joining; individual octets may split UTF-8.
 def _source_slice(mut parser: JsonParser, start: Integer, finish: Integer): String
+	octets := Octets.table()
 	mut fragments: Array<String> := []
 	mut index := start
 	while index < finish
-		fragments.push(Octets.octet(parser.bytes.at(index)))
+		fragments.push(octets[parser.bytes.at(index)])
 		index += 1
 	end
 	return fragments.join("")
@@ -302,9 +303,10 @@ end
 
 def _string(mut parser: JsonParser): String
 	parser.position[0] += 1
+	octets := Octets.table()
 	mut fragments: Array<String> := []
-	while _byte(parser) >= 0 && parser.failure.empty?()
-		character := _byte(parser)
+	while parser.position[0] < parser.bytes.size() && parser.failure.empty?()
+		character := parser.bytes.at(parser.position[0])
 		if character == 34
 			parser.position[0] += 1
 			# Raw invalid bytes and unpaired surrogates were already replaced;
@@ -324,7 +326,7 @@ def _string(mut parser: JsonParser): String
 				# Array and String for each multibyte code point.
 				mut offset := 0
 				while offset < width
-					fragments.push(Octets.octet(parser.bytes.at(parser.position[0] + offset)))
+					fragments.push(octets[parser.bytes.at(parser.position[0] + offset)])
 					offset += 1
 				end
 			end
@@ -333,7 +335,7 @@ def _string(mut parser: JsonParser): String
 		end
 		parser.position[0] += 1
 		if character != 92
-			fragments.push(Octets.octet(character))
+			fragments.push(octets[character])
 			next
 		end
 		escape := _byte(parser)
@@ -342,7 +344,7 @@ def _string(mut parser: JsonParser): String
 		end
 		parser.position[0] += 1
 		if escape == 34 || escape == 92 || escape == 47
-			fragments.push(Octets.octet(escape))
+			fragments.push(octets[escape])
 		elsif escape == 98
 			fragments.push("\x08")
 		elsif escape == 102
@@ -859,8 +861,13 @@ def _needs_escape(bytes: Bytes): Boolean
 		if octet < 32 || octet == 34 || octet == 92 || octet == 60 || octet == 62 || octet == 38
 			return true
 		end
+		# ASCII needs no further width or validity check after escape screening.
+		if octet < 128
+			index += 1
+			next
+		end
 		width := _byte_width(bytes, index, bytes.size())
-		if octet >= 128 && width == 1
+		if width == 1
 			return true
 		end
 		if octet == 226 && width == 3 && bytes.at(index + 1) == 128 && (bytes.at(index + 2) == 168 || bytes.at(index + 2) == 169)
@@ -876,6 +883,7 @@ def _escape(text: String): String
 	if !_needs_escape(bytes)
 		return "\"" + text + "\""
 	end
+	octets := Octets.table()
 	mut fragments := ["\""]
 	mut index := 0
 	while index < bytes.size()
@@ -894,7 +902,7 @@ def _escape(text: String): String
 				# a character String and Bytes value for every code point.
 				mut offset := 0
 				while offset < width
-					fragments.push(Octets.octet(bytes.at(index + offset)))
+					fragments.push(octets[bytes.at(index + offset)])
 					offset += 1
 				end
 			end
@@ -918,7 +926,7 @@ def _escape(text: String): String
 		elsif octet < 32 || octet == 60 || octet == 62 || octet == 38
 			fragments.push("\\u00" + "0123456789abcdef"[octet / 16] + "0123456789abcdef"[octet % 16])
 		else
-			fragments.push(Octets.octet(octet))
+			fragments.push(octets[octet])
 		end
 		index += 1
 	end
