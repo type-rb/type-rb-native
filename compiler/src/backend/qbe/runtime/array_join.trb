@@ -25,6 +25,7 @@ end
 # For Unicode fragments without a separator, reuse the concatenation runtime
 # and its cached point counts and boundary checks. ASCII joins keep the compact
 # copy-and-count loop. Both paths perform the same portable byte-limit checks.
+# Empty separators need no copy; one-byte fragments avoid a dynamic-size call.
 def emit_array_join_runtime(mut output: QbeOutput)
 	emit_string_join_size_runtime(output)
 	qbe_output_line(output, "\nfunction l $trbn_array_join(l %array, l %separator) {\n")
@@ -44,10 +45,13 @@ def emit_array_join_runtime(mut output: QbeOutput)
 	qbe_output_line(output, "@concatenate\n %joined =l call $trbn_string_concat_many(l %storage, l %count)\n ret %joined\n")
 	qbe_output_line(output, "@allocate\n %payload =l add %size, 17\n %result =l call $trbn_string_alloc(l %payload)\n %result_length_address =l add %result, 8\n storel %size, %result_length_address\n %data =l add %result, 24\n jmp @copy\n")
 	qbe_output_line(output, "@copy\n %position =l phi @allocate 0, @copied %next_position\n %cursor =l phi @allocate %data, @copied %next_cursor\n %finished =w ceql %position, %count\n jnz %finished, @finish, @copy_start\n")
-	qbe_output_line(output, "@copy_start\n %initial =w ceql %position, 0\n jnz %initial, @copy_initial, @copy_separator\n")
+	qbe_output_line(output, "@copy_start\n %initial =w ceql %position, 0\n %skip_separator =w or %initial, %no_separator\n jnz %skip_separator, @copy_initial, @copy_separator\n")
 	qbe_output_line(output, "@copy_separator\n call $memcpy(l %cursor, l %separator_data, l %separator_length)\n %after_separator =l add %cursor, %separator_length\n jmp @copy_element\n")
 	qbe_output_line(output, "@copy_initial\n jmp @copy_element\n")
-	qbe_output_line(output, "@copy_element\n %target =l phi @copy_initial %cursor, @copy_separator %after_separator\n %item_offset =l mul %position, 8\n %item_slot =l add %storage, %item_offset\n %text =l loadl %item_slot\n %text_length_address =l add %text, 8\n %text_length =l loadl %text_length_address\n %text_data =l add %text, 24\n call $memcpy(l %target, l %text_data, l %text_length)\n %next_cursor =l add %target, %text_length\n %next_position =l add %position, 1\n jmp @copied\n")
+	qbe_output_line(output, "@copy_element\n %target =l phi @copy_initial %cursor, @copy_separator %after_separator\n %item_offset =l mul %position, 8\n %item_slot =l add %storage, %item_offset\n %text =l loadl %item_slot\n %text_length_address =l add %text, 8\n %text_length =l loadl %text_length_address\n %text_data =l add %text, 24\n %single_byte =w ceql %text_length, 1\n jnz %single_byte, @copy_byte, @copy_span")
+	qbe_output_line(output, "\n@copy_byte\n %byte =w loadub %text_data\n storeb %byte, %target\n jmp @copy_advance")
+	qbe_output_line(output, "\n@copy_span\n call $memcpy(l %target, l %text_data, l %text_length)\n jmp @copy_advance")
+	qbe_output_line(output, "\n@copy_advance\n %next_cursor =l add %target, %text_length\n %next_position =l add %position, 1\n jmp @copied\n")
 	qbe_output_line(output, "@copied\n jmp @copy\n")
 	qbe_output_line(output, "@finish\n storeb 0, %cursor\n %points =l call $trbn_utf8_count(l %data, l %size)\n %points_address =l add %result, 16\n storel %points, %points_address\n ret %result\n")
 	qbe_output_line(output, "@fail\n call $trbn_fatal(l $trbn_allocation_error, l 25)\n hlt\n}\n")
