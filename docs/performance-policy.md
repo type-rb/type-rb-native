@@ -144,3 +144,21 @@ remaining gaps are recorded, not when every conceivable benchmark has been won.
   [runtime benchmark suite](https://github.com/rust-lang/rustc-perf/tree/main/collector/runtime-benchmarks).
 - [V8's retirement of Octane](https://v8.dev/blog/retiring-octane) documents cases
   where benchmark-specific improvements regressed real applications.
+
+### Fixed process batches and observed dispersion
+
+Representative measurements default to the original `registered` inputs. The
+opt-in `sustained-v1` profile repeats fixed batches from `suite.json` to reduce
+the fraction of startup overhead. Batch counts are selected before execution;
+there is no runtime calibration or retry-until-pass. Working-set sizes, outputs,
+first-process separation and existing deadlines remain explicit. Different
+profiles are different input series, including when the case IDs are shared.
+Historical measurements retain their own batch counts, dates and source hashes.
+
+Report retained wall, CPU, RSS and throughput ranges alongside medians. Minimum
+and maximum describe the observed samples, not confidence intervals. Overlap is
+an uncertainty warning; non-overlap does not establish significance. Keep median
+screening labels and numerical thresholds unchanged, and do not infer missing
+historical ranges. Method diagnostics use a separately registered same-executable
+comparison and never replace or erase earlier candidate observations. Routine
+CI retains its small correctness smoke; longer profiles remain opt-in.
