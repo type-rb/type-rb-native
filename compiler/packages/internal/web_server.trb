@@ -8,8 +8,11 @@ import { Web, Request, Response } from trb/web
 # same bound route/middleware declarations as Web testing; host callbacks never
 # call a managed handler. All managed work runs after next_request returns.
 def serve(config: Web::ServerConfig)
-	if config.host.strip() == "" || config.host.codepoints().include?(0)
+	if config.host.strip() == ""
 		Runtime.fail<Integer>("trb/web ServerConfig.host must not be empty")
+	end
+	if config.host.codepoints().include?(0)
+		Runtime.fail<Integer>("trb/web ServerConfig.host must not contain NUL")
 	end
 	if config.port < 1 || config.port > 65535
 		Runtime.fail<Integer>("trb/web ServerConfig.port must be between 1 and 65535")
@@ -34,7 +37,7 @@ def serve(config: Web::ServerConfig)
 			return 1
 		end
 		if Runtime.recover<Integer>(action, 0) == 0
-			NetworkHost.write(connection, encode_response(protocol(500, "internal_server_error"), false), true)
+			NetworkHost.write(connection, encode_response(protocol(500, "internal_server_error"), false, "1.1", true), true)
 		end
 	end
 	NetworkHost.stop()
@@ -42,11 +45,21 @@ def serve(config: Web::ServerConfig)
 end
 
 def respond(connection: Integer, limit: Integer)
+	status := NetworkHost.status(connection)
+	# Negative status denotes a framing/header failure before a valid request.
+	# As in the reference server, it must not enter application middleware.
+	if status < 0
+		mut error := "bad_request"
+		if status == -431
+			error = "request_header_fields_too_large"
+		end
+		NetworkHost.write(connection, encode_response(protocol(0 - status, error), false, "1.1", true), true)
+		return
+	end
 	target := NetworkHost.read(connection, 0).to_s()
 	method := NetworkHost.read(connection, 1).to_s()
 	raw_headers := NetworkHost.read(connection, 2).to_s()
 	body := NetworkHost.read(connection, 3)
-	mut status := NetworkHost.status(connection)
 	version := NetworkHost.read(connection, 4).to_s()
 	mut entries: Array<Header> := []
 	mut host_count := 0
@@ -69,7 +82,8 @@ def respond(connection: Integer, limit: Integer)
 		end
 	end
 	if status == 100 && (!host_valid || host_count > 1 || (version == "1.1" && host_count == 0))
-		status = 400
+		NetworkHost.write(connection, encode_response(protocol(400, "bad_request"), false, version, true), true)
+		return
 	end
 	mut filtered: Array<Header> := []
 	chunked := Headers.new(entries).key?("transfer-encoding")
@@ -105,7 +119,7 @@ def respond(connection: Integer, limit: Integer)
 	if status == 100
 		expectations := request.headers.values("expect")
 		if expectations.size() > 0 && (expectations.size() != 1 || expectations[0].downcase() != "100-continue")
-			NetworkHost.write(connection, encode_response(protocol(417, "expectation_failed"), false, version), true)
+			NetworkHost.write(connection, encode_response(protocol(417, "expectation_failed"), false, version, true), true)
 			return
 		end
 		mut interim := "".to_bytes()
@@ -116,20 +130,45 @@ def respond(connection: Integer, limit: Integer)
 		return
 	end
 	response := dispatch_network(request, limit, status)
-	mut close := status != 0
-	response.headers.values("connection").each do |value|
-		if value.downcase().split(",").include?("close")
-			close = true
+	mut close := status != 0 || version == "1.0"
+	request.headers.values("connection").each do |value|
+		value.downcase().split(",").each do |token|
+			if token.strip() == "keep-alive" && status == 0
+				close = false
+			end
 		end
 	end
-	NetworkHost.write(connection, encode_response(response, method.upcase() == "HEAD", version), close)
+	request.headers.values("connection").each do |value|
+		value.downcase().split(",").each do |token|
+			if token.strip() == "close"
+				close = true
+			end
+		end
+	end
+	response.headers.values("connection").each do |value|
+		value.downcase().split(",").each do |token|
+			if token.strip() == "close"
+				close = true
+			end
+		end
+	end
+	NetworkHost.write(connection, encode_response(response, method.upcase() == "HEAD", version, close), close)
 	return
 end
 
 # Transport framing is generated from validated values. Never trust a handler's
 # Content-Length or Transfer-Encoding when serializing the actual byte buffer.
-def encode_response(value: Response, head: Boolean, version: String = "1.1"): Bytes
+def encode_response(value: Response, head: Boolean, version: String = "1.1", close: Boolean = false): Bytes
 	response := checked_response(value)
+	mut final := "".to_bytes()
+	if response.status < 200 && response.status != 101
+		# Like the reference ResponseWriter, a returned informational status is
+		# followed by the implicit final 200 when the handler writes its body.
+		final = encode_response(Response.new(status: 200, headers: response.headers, body: response.body), head, version, close)
+		if version == "1.0"
+			return final
+		end
+	end
 	mut body := response.body.bytes()
 	bodyless := head || response.status == 204 || response.status == 304 || response.status < 200
 	if bodyless
@@ -145,5 +184,12 @@ def encode_response(value: Response, head: Boolean, version: String = "1.1"): By
 	if !bodyless || head
 		headers += "Content-Length: " + body.size().to_s() + "\r\n"
 	end
-	return (headers + "\r\n").to_bytes().concat(body)
+	if response.status >= 200
+		if close
+			headers += "Connection: close\r\n"
+		elsif version == "1.0"
+			headers += "Connection: keep-alive\r\n"
+		end
+	end
+	return (headers + "\r\n").to_bytes().concat(body).concat(final)
 end

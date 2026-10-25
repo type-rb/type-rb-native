@@ -54,6 +54,21 @@ puts(1 / zero)
 return Response.text("unreachable")
 end
 ''',
+    'routes/informational.trb': '''import { Context, Response } from trb/web
+def get(_context: Context): Response
+return Response.text("final body", 103)
+end
+''',
+    'routes/no_content.trb': '''import { Context, Response } from trb/web
+def get(_context: Context): Response
+return Response.text("must not be sent", 204)
+end
+''',
+    'routes/items/_middleware.trb': '''import { Context, Next, Response } from trb/web
+def call(context: Context, next_handler: Next): Response
+return next_handler.call(context).with_header("x-directory", "items")
+end
+''',
     'routes/meta.trb': """import { Context, Response } from trb/web
 def post(context: Context): Response
 request := context.request
@@ -72,7 +87,7 @@ end
     'routes/invalid_response.trb': 'import { Context, Response } from trb/web\ndef get(_context: Context): Response\nreturn Response.text("bad").with_header("x-bad", "bad\\r\\nheader")\nend\n',
     'routes/_middleware.trb': '''import { Context, Next, Response } from trb/web
 def call(context: Context, next_handler: Next): Response
-return next_handler.call(context).with_header("x-root", "resumed")
+return next_handler.call(context).with_header("x-root", "resumed").with_header("x-body-size", context.request.body.size().to_s())
 end
 ''',
     'routes/items/[id].trb': '''import { Context, Response } from trb/web
@@ -155,6 +170,12 @@ def run_server(program, port, environment):
 
 
 def exercise(program, port, environment, reference=False):
+    if not reference:
+        missing = dict(environment, TRBN_NETWORK_LIB_DIR=str(program.parent / 'missing-libraries'))
+        result = subprocess.run([str(program)], env=missing, capture_output=True, timeout=5)
+        assert result.returncode != 0 and b'TRBN_NETWORK_LIB_DIR' in result.stderr, result
+        if environment.get('TRBN_NETWORK_TEST_ALLOCATIONS') == '1':
+            assert b'network-test-live-allocations=0\n' in result.stderr, result.stderr
     for argument, diagnostic in [('host', b'ServerConfig.host'), ('port', b'ServerConfig.port'),
                                  ('limit', b'ServerConfig.body_limit_bytes'), ('timeout', b'ServerConfig.shutdown_timeout_milliseconds')]:
         result = subprocess.run([str(program), argument], env=environment, capture_output=True, timeout=5)
@@ -171,8 +192,9 @@ def exercise(program, port, environment, reference=False):
             assert headers[b'x-root'] == [b'resumed'], headers
             passed += ['static route', 'root middleware']
             wire.send(b'GET /items/42 HTTP/1.1\r\nHost: localhost\r\n\r\n')
-            code, _, body = wire.response()
+            code, headers, body = wire.response()
             assert code == 200 and json.loads(body) == {'id': 42}, (code, body)
+            assert headers[b'x-directory'] == [b'items']
             passed += ['typed input and JSON', 'keepalive']
             wire.send(b'POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\n\r\n\x00\xff\xc0\x80')
             assert wire.response()[2] == b'\x00\xff\xc0\x80'
@@ -207,6 +229,12 @@ def exercise(program, port, environment, reference=False):
             assert wire.response(head=True)[0] == 200
             wire.send(b'OPTIONS / HTTP/1.1\r\nHost: localhost\r\n\r\n')
             assert wire.response()[0] == 204
+            wire.send(b'GET /no_content HTTP/1.1\r\nHost: localhost\r\n\r\n')
+            assert wire.response()[0] == 204
+            wire.send(b'GET /informational HTTP/1.1\r\nHost: localhost\r\n\r\n')
+            assert wire.response()[0] == 103
+            code, _, body = wire.response()
+            assert (code, body) == (200, b'final body'), (code, body)
             passed.append('HEAD and OPTIONS')
             wire.send(b'GET /bad HTTP/1.1\r\nHost: localhost\r\n\r\n')
             code, headers, _ = wire.response()
@@ -218,23 +246,36 @@ def exercise(program, port, environment, reference=False):
             wire.send(b'GET / HTTP/1.0\r\n\r\n')
             assert wire.response()[2] == b'hello'
         with Wire(port) as wire:
+            wire.send(b'GET / HTTP/1.0\r\nConnection: keep-alive\r\n\r\n')
+            code, headers, body = wire.response()
+            assert code == 200 and body == b'hello' and headers[b'connection'] == [b'keep-alive']
+            wire.send(b'GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n')
+            code, headers, body = wire.response()
+            assert code == 200 and headers[b'connection'] == [b'close']
+            assert wire.file.read(1) == b''
+        with Wire(port) as wire:
             wire.send(b'POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 33\r\n\r\n' + b'a' * 33)
             code, headers, _ = wire.response()
             assert code == 413 and headers[b'x-root'] == [b'resumed'], code
+            assert headers[b'x-body-size'] == [b'32'], headers
             passed.append('custom body limit')
         # net/http discards Content-Length when Transfer-Encoding is present;
         # llhttp deliberately rejects the ambiguous framing instead.
         with Wire(port) as wire:
             wire.send(b'POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n')
-            assert wire.response()[0] == (200 if reference else 400)
-        for bad in [
-            b'POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\nab',
-            b'GET / HTTP/1.1\r\nHost: localhost\r\nBad Header: no\r\n\r\n',
-            b'GET /a%2fb HTTP/1.1\r\nHost: localhost\r\n\r\n',
+            code, headers, _ = wire.response()
+            assert code == (200 if reference else 400)
+            assert (b'x-root' in headers) == reference, headers
+        for bad, dispatched in [
+            (b'POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\nab', False),
+            (b'GET / HTTP/1.1\r\nHost: localhost\r\nBad Header: no\r\n\r\n', False),
+            (b'GET /a%2fb HTTP/1.1\r\nHost: localhost\r\n\r\n', True),
         ]:
             with Wire(port) as wire:
                 wire.send(bad)
-                assert wire.response()[0] == 400, bad
+                code, headers, _ = wire.response()
+                assert code == 400, bad
+                assert (b'x-root' in headers) == dispatched, headers
         passed += ['conflicting framing', 'invalid header and path']
         with Wire(port) as partial, Wire(port) as complete:
             partial.send(b'POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\n\r\na')
@@ -243,6 +284,11 @@ def exercise(program, port, environment, reference=False):
             partial.send(b'bcd')
             assert partial.response()[2] == b'abcd'
         passed.append('concurrent partial connections')
+        with Wire(port) as wire:
+            wire.send(b'POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\n\r\nab')
+            wire.socket.shutdown(socket.SHUT_WR)
+            # The pinned server closes an incomplete request on peer EOF.
+            assert wire.file.read(1) == b''
         for _ in range(20):
             with Wire(port) as wire:
                 wire.send(b'GET / HTTP/1.1\r\nHost:')
@@ -255,11 +301,22 @@ def exercise(program, port, environment, reference=False):
         if environment.get('TRBN_NETWORK_TEST_ALLOCATIONS') == '1':
             assert b'network-test-live-allocations=0\n' in duplicate.stderr, duplicate.stderr
         passed.append('bind failure')
-        family, kind, protocol, _, address = socket.getaddrinfo(CLIENT_HOST, port, type=socket.SOCK_STREAM)[0]
-        stalled = socket.socket(family, kind, protocol)
-        stalled.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024)
-        stalled.settimeout(5)
-        stalled.connect(address)
+        # A hostname may resolve to both families while the listener binds one.
+        # Try the addresses like create_connection, setting the small receive
+        # buffer before the TCP handshake so the stalled-write probe is bounded.
+        stalled = None
+        for family, kind, protocol, _, address in socket.getaddrinfo(CLIENT_HOST, port, type=socket.SOCK_STREAM):
+            candidate = socket.socket(family, kind, protocol)
+            candidate.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024)
+            candidate.settimeout(5)
+            try:
+                candidate.connect(address)
+            except OSError:
+                candidate.close()
+                continue
+            stalled = candidate
+            break
+        assert stalled is not None, 'no resolved address accepted a connection'
         stalled.sendall(b'GET /large HTTP/1.1\r\nHost: localhost\r\n\r\n')
         assert stalled.recv(1) == b'H'
         before = time.monotonic()

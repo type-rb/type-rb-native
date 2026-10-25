@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory(prefix='web-network-repl-') as temporary:
     (root / 'src').mkdir()
     (root / 'src/main.trb').write_text('def main()\nreturn\nend\n')
     config = root / 'trbconfig.jsonc'
-    config.write_text(json.dumps({'mode': 'go' if args.reference else 'trb', 'sourceDir': 'src',
+    config.write_text(json.dumps({'name': 'network-repl', 'mode': 'go' if args.reference else 'trb', 'sourceDir': 'src',
                                  'go': {'module': 'example.com/network-repl'}}))
     for invocation in ['Web.serve()', 'Web.serve(Web::ServerConfig.new(port: 0))']:
         result = subprocess.run([str(args.binary.resolve()), 'repl', '--config', str(config)],

@@ -4,6 +4,8 @@ The Native Web project provider connects the pinned `Web.serve(ServerConfig)`
 API to libuv for TCP and event delivery, and llhttp for HTTP/1.1 framing. Routing,
 request/response values, typed input, middleware and recovery remain TypeRB
 implementations. The public package source remains pinned to `TYPE_RB_REVISION`.
+The public [dependency register](https://type-rb.github.io/type-rb-native/dependencies/)
+tracks runtime, tooling and candidate dependencies separately.
 
 Compile a file-route project that calls `Web.serve()` or passes a
 `Web::ServerConfig`. The server supports IPv4, IPv6 and host-name binding. REPL
@@ -92,7 +94,11 @@ dispatcher. The transport handles fragmented headers and bodies, chunked input,
 binary bodies, keep-alive, pipelining and `Expect: 100-continue`. Request method
 tokens retain the public `HttpMethod` semantics rather than llhttp's narrower
 method enumeration. Host and transfer-framing headers do not become application
-headers; trailers are not promoted into them.
+headers; trailers are not promoted into them. Framing/header failures are rejected
+before application middleware. Decoded-body parsing failures and limits enter the
+existing Web error dispatcher; an oversized body retains its accepted prefix up
+to the configured limit for middleware inspection. Peer EOF terminates an
+incomplete request without dispatch, matching the pinned server.
 
 llhttp's strict framing is retained. In particular, a request containing both
 `Content-Length` and `Transfer-Encoding` receives 400; Go's `net/http` instead
