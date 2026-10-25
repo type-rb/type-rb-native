@@ -112,3 +112,33 @@ describe("Owned standard runtime declaration") do
 		expect(standard_source_function(standard_source_internal_runtime(), "::other")).to_be_false()
 	end
 end
+
+describe("Owned network sources") do
+	test("rejects authored and unrelated owners before reusing a loaded adapter") do
+		["trb/internal/network_host", "trb/internal/web_server"].each do |path|
+			[0, standard_source_kind("trb/std/json")].each do |kind|
+				mut state := compiler_new(1048576)
+				owner := add_module(state, "trb/internal/web_server/index", "authored.trb")
+				store_integer(state.standard_modules, owner, kind)
+				state.module_graph.active_module[0] = owner
+				# A matching path and an already present module do not grant access.
+				cached := add_module(state, path + "/index", "cached.trb")
+				store_integer(state.standard_modules, cached, standard_source_kind(path))
+				expect(load_standard_source(state, standard_source_kind(path), 19)).to_equal(-1)
+				expect(load_integer(state.diagnostics.lines, 0)).to_equal(19)
+			end
+		end
+	end
+
+	test("grants the server only its exact network and recovery dependencies") do
+		mut state := compiler_new(1048576)
+		owner := add_module(state, "trb/internal/web_server/index", "<server>")
+		store_integer(state.standard_modules, owner, standard_source_kind("trb/internal/web_server"))
+		state.module_graph.active_module[0] = owner
+		expect(load_standard_source(state, standard_source_kind("trb/internal/network_host"), 1) >= 0).to_be_true()
+		expect(load_standard_source(state, standard_source_internal_runtime(), 2) >= 0).to_be_true()
+		expect(has_diagnostic(state)).to_be_false()
+		expect(load_standard_source(state, standard_source_entropy(), 3)).to_equal(-1)
+		expect(has_diagnostic(state)).to_be_true()
+	end
+end

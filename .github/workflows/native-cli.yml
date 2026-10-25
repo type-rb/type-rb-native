@@ -38,6 +38,17 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y lld time
       - name: Build from the pinned native seed and verify fixed points
         run: ./trbn --version
+      - name: Build pinned HTTP transport dependencies and verify their ABI
+        run: |
+          python3 tools/build-network-dependencies.py \
+            --archives "$RUNNER_TEMP/network-archives" --output "$RUNNER_TEMP/network-libraries"
+      - name: Exercise real HTTP transport and forced collection
+        run: |
+          python3 tools/native-web-network-test.py bin/trbn --libraries "$RUNNER_TEMP/network-libraries"
+          python3 tools/native-web-network-test.py bin/trbn --libraries "$RUNNER_TEMP/network-libraries" --gc-stress
+          python3 tools/native-web-network-test.py bin/trbn --libraries "$RUNNER_TEMP/network-libraries" --host localhost
+          python3 tools/native-web-network-test.py bin/trbn --libraries "$RUNNER_TEMP/network-libraries" --host ::1
+          python3 tools/native-web-network-repl-test.py bin/trbn
       - name: Check every reviewed conformance source with the built core compiler
         env:
           PLATFORM: ${{ matrix.platform }}
@@ -133,6 +144,8 @@ jobs:
           cp docs/native-cli.md dist/package/README.md
           cp LICENSE dist/package/LICENSE
           cp docs/licenses/qbe-1.3.txt dist/package/QBE-LICENSE
+          cp docs/native-network.md dist/package/HTTP-NETWORK.md
+          cp -R "$RUNNER_TEMP/network-libraries" dist/package/network
           tar -czf "dist/trbn-$PLATFORM.tar.gz" -C dist/package .
           cd dist
           shasum -a 256 "trbn-$PLATFORM.tar.gz" > "trbn-$PLATFORM.tar.gz.sha256"

@@ -8,6 +8,16 @@ The same GitHub Pages artifact also contains a
 [benchmark explorer](benchmarks/README.md). Its committed data is generated
 from the formal runtime and build median TSV files under `results/`.
 
+The [dependency register](dependencies/) is generated from
+`docs/native-dependencies.json`, `tools/network-dependencies.json` and the QBE
+manifest. It distinguishes dependencies in the current source from candidates,
+and separates application runtime, system data, build and validation needs.
+Update the records in the implementing PR, run
+`python3 tools/dependency-pages.py --write`, and verify `--check` before publishing.
+The deployment workflow checks the same generated view. Dependency qualification
+still requires actual artifact imports, versions/configuration and license
+receipts; this page does not replace per-artifact inventories.
+
 The four evidence states have narrow meanings:
 
 - `verified`: reproducible public evidence exists for the stated scope;

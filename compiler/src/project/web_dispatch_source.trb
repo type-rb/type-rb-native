@@ -8,7 +8,7 @@ import { load_integer, load_string, store_integer } from support/storage
 
 # Route targets enter through loader-owned bindings, never interpolated source
 # paths or backend symbol guesses. Ordinary checking resolves every call.
-def web_dispatch_source(state: CompilerState): String
+def web_dispatch_source(state: CompilerState, server: Boolean): String
 	mut source := "\nimport { Route as DispatchRoute, run as dispatch_run } from trb/internal/web_dispatch\n"
 	if state.module_graph.web_routes.size() > 0 || state.module_graph.web_middlewares.size() > 0
 		source += "import { Context, Next } from trb/web\n"
@@ -28,7 +28,11 @@ def web_dispatch_source(state: CompilerState): String
 		source += "class _RouteMiddleware" + id + " implements Middleware\ndef call(context: Context, next_handler: Next): Response\nreturn route_middleware_" + id + "(context, next_handler)\nend\nend\n"
 		index += 1
 	end
-	source += "def dispatch(request: Request): Response\nmut routes: Array<DispatchRoute> := []\n"
+	if server
+		source += "def dispatch_network(request: Request, limit: Integer, status: Integer): Response\nmut routes: Array<DispatchRoute> := []\n"
+	else
+		source += "def dispatch(request: Request): Response\nmut routes: Array<DispatchRoute> := []\n"
+	end
 	index = 0
 	while index < state.module_graph.web_routes.size()
 		route := state.module_graph.web_routes[index]
@@ -56,7 +60,11 @@ def web_dispatch_source(state: CompilerState): String
 		end
 		index += 1
 	end
-	source += "return dispatch_run(request, routes, [" + web_route_join(roots, ", ") + "])\nend\n"
+	mut extra := ""
+	if server
+		extra = ", limit, status"
+	end
+	source += "return dispatch_run(request, routes, [" + web_route_join(roots, ", ") + "]" + extra + ")\nend\n"
 	return source
 end
 
