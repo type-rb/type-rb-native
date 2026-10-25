@@ -276,11 +276,10 @@ end
 def _unicode(mut parser: JsonParser): Integer
 	mut value := 0
 	mut count := 0
-	mut sequence := "\\u"
+	start := parser.position[0]
 	mut valid := true
-	while count < 4 && _byte(parser) >= 0
-		character := _byte(parser)
-		sequence += Octets.octet(character)
+	while count < 4 && parser.position[0] < parser.bytes.size()
+		character := parser.bytes.at(parser.position[0])
 		digit := _hex_byte(character)
 		if digit < 0
 			valid = false
@@ -295,6 +294,8 @@ def _unicode(mut parser: JsonParser): Integer
 		return -1
 	end
 	if !valid || count != 4
+		# Successful escapes need only the code point, not a diagnostic String.
+		sequence := "\\u" + _source_slice(parser, start, parser.position[0])
 		_syntax(parser, "invalid escape sequence " + _escape_diagnostic(sequence) + " in string", parser.position[0] - 1)
 		return -1
 	end
@@ -923,7 +924,13 @@ def _escape(text: String): String
 			fragments.push("\\r")
 		elsif octet == 9
 			fragments.push("\\t")
-		elsif octet < 32 || octet == 60 || octet == 62 || octet == 38
+		elsif octet == 60
+			fragments.push("\\u003c")
+		elsif octet == 62
+			fragments.push("\\u003e")
+		elsif octet == 38
+			fragments.push("\\u0026")
+		elsif octet < 32
 			fragments.push("\\u00" + "0123456789abcdef"[octet / 16] + "0123456789abcdef"[octet % 16])
 		else
 			fragments.push(octets[octet])

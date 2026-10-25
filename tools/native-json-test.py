@@ -183,6 +183,13 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         outputs.append(quoted(value))
         statements.append(f'parse_and_display({json.dumps(quoted(value), ensure_ascii=False)})')
         outputs.append(quoted(value))
+    # Force collection while a failed Unicode escape reconstructs its raw
+    # diagnostic. Earlier object members must remain rooted across that join.
+    for digits in ("x000", "0x00", "00x0", "000x", "12xz"):
+        sequence = "\\u" + digits
+        document = '{"held":"aβ😀","bad":"' + sequence + '"}'
+        statements.append(f'parse_and_display({json.dumps(document, ensure_ascii=False)})')
+        outputs.append("invalid escape sequence `" + sequence + "` in string")
     # Sibling containers and scalar variants must remain independent while the
     # parser stores their raw nodes and the conversion stack revisits parents.
     structures = [
