@@ -8,6 +8,10 @@ run as native code. Checking, portable package installation and Web contract
 generation accept every declared mode. The reference `trb` command and its
 defaults are unchanged.
 
+Compiled Web projects can call `Web.serve` using the pinned
+[HTTP network libraries](native-network.md). Install those libraries once and
+set `TRBN_NETWORK_LIB_DIR` when running a server application.
+
 ## Build and run from a checkout
 
 On Darwin arm64, install the Xcode command-line tools. On Linux arm64, install
@@ -282,7 +286,10 @@ the desired revision. The same checkout launcher builds Darwin arm64 and
 Linux arm64, verifies fixed points, runs CLI and real-terminal tests, and
 uploads `trbn-<platform>` artifacts containing a tarball and checksum. Each
 archive includes `trbn`, QBE, build metadata, this guide, and the project
-license. Artifacts are development CI outputs, not supported releases.
+license. The `network` directory contains qualified libuv and llhttp
+binaries, dependency notices and a build receipt; `HTTP-NETWORK.md` describes
+their runtime configuration. Artifacts are development CI outputs, not supported
+releases.
 
 Run the same integration tests locally after building:
 

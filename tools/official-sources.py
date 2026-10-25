@@ -19,7 +19,7 @@ URL_SOURCE = "internal/stdlib/url.go"
 URL_ADAPTER = Path("compiler/packages/internal/url.trb")
 JSON_ADAPTER = Path("compiler/packages/internal/json.trb")
 STDLIB_SOURCES = {"url": URL_SOURCE, "json": "internal/stdlib/json.go", "jsonc": "internal/stdlib/jsonc.go", "time": "internal/stdlib/time.go", "hex": "internal/stdlib/hex.go", "base64": "internal/stdlib/base64.go", "path": "internal/stdlib/path.go"}
-NATIVE_ADAPTERS = ["time", "time_calendar", "time_parse", "time_zones", "time_host", "web_context", "hex", "base64", "encoding_bytes", "secure_random", "entropy", "web_dispatch"]
+NATIVE_ADAPTERS = ["time", "time_calendar", "time_parse", "time_zones", "time_host", "web_context", "hex", "base64", "encoding_bytes", "secure_random", "entropy", "web_dispatch", "network_host", "web_server"]
 REPOSITORY = "https://github.com/type-rb/type-rb"
 
 

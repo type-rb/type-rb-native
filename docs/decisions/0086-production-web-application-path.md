@@ -10,13 +10,11 @@ project goal ([MIR consolidation](../mir-consolidation.md)). The end state is on
 unchanged application source that works in every mode of the TypeRB-authored
 toolchain: `mode: trb` for Native executables, and the `go`, `ruby` and
 `typescript` modes. This decision covers the path to `mode: trb`. The
-three-language emission track reuses the package semantics decided here. The current Native
-toolchain cannot load such projects:
-
-- `trbn` rejects the package and lint configuration fields.
-- It has no test runner and no package management.
-- Its runtime is one single-threaded, stop-the-world collector without
-  networking, process supervision or concurrency services.
+three-language emission track reuses the package semantics decided here. Native
+now loads official package projects and implements package management, portable
+HTTP/Web values, typed route input and in-process route dispatch. Real networking,
+database adapters and job execution require separately qualified platform
+services. Its collector still has one managed-heap mutator.
 
 The [memory evidence](../runtime-memory-stability.md) does not cover sockets,
 foreign handles, supervision or real job queues.
@@ -57,6 +55,22 @@ Driver timeouts alone do not satisfy these contracts.
 
 Cooperative scheduling inside a process is deferred. It starts only when the
 blocking baseline misses frozen throughput, p99 latency or memory targets.
+
+### HTTP transport
+
+Use libuv for TCP/event delivery and llhttp for HTTP/1.1 framing, behind narrow
+TypeRB-owned adapters. Pin their source revisions, build configuration, licenses
+and ABI, and qualify the actual library binaries on each target. The
+[network transport contract](../native-network.md) describes the implementation
+and its qualification boundary.
+
+The event loop buffers incomplete requests and writes while the TypeRB handler
+loop remains single-threaded. Foreign callbacks cannot enter managed code or
+retain managed pointers. This transport loop does not introduce a managed task
+scheduler, replace the blocking-process baseline, or qualify process supervision.
+Handler cancellation/checkpoints and independently progressing job heartbeats
+remain required follow-up work. Using a mature transport first does not preclude
+a later replacement supported by measured benefit and equivalent correctness.
 
 ### Database access
 
