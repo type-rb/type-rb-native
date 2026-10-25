@@ -11,6 +11,11 @@ import tempfile
 import time
 
 CLIENT_HOST = '127.0.0.1'
+QBE_TARGETS = {
+    'darwin-arm64-v0': 'arm64_apple',
+    'linux-arm64-v0': 'arm64',
+    'linux-amd64-v0': 'amd64_sysv',
+}
 
 FILES = {
     'main.trb': '''import trb/web
@@ -430,6 +435,7 @@ def main():
     parser.add_argument('--libraries', type=Path)
     parser.add_argument('--reference', action='store_true')
     parser.add_argument('--core', action='store_true')
+    parser.add_argument('--target', choices=QBE_TARGETS)
     parser.add_argument('--qbe', type=Path)
     parser.add_argument('--gc-stress', action='store_true')
     parser.add_argument('--host', default='127.0.0.1')
@@ -438,6 +444,10 @@ def main():
         parser.error('--reference cannot be combined with --core or --gc-stress')
     if not args.reference and not args.libraries:
         parser.error('Native execution requires --libraries')
+    if args.core and (not args.qbe or not args.target):
+        parser.error('--core requires --qbe and --target')
+    if args.target and not args.core:
+        parser.error('--target requires --core')
     CLIENT_HOST = args.host
     with tempfile.TemporaryDirectory(prefix='native-http-') as temporary:
         root = Path(temporary)
@@ -455,8 +465,7 @@ def main():
         if args.libraries:
             environment['TRBN_NETWORK_LIB_DIR'] = str(args.libraries.resolve())
         if args.core:
-            assert args.qbe, '--core requires --qbe'
-            command = [args.binary.resolve(), 'build', config, '--output', program, '--qbe', args.qbe.resolve(), '--cc', '/usr/bin/cc']
+            command = [args.binary.resolve(), 'build', config, '--output', program, '--qbe', args.qbe.resolve(), '--cc', '/usr/bin/cc', '--target', args.target]
         else:
             command = [args.binary.resolve(), 'build', '--config', config, '--compile', '--outfile', program]
         built = subprocess.run(list(map(str, command)), capture_output=True, env=environment, timeout=180)
@@ -484,8 +493,10 @@ def main():
             il, assembly, checker = root / 'stress.ssa', root / 'stress.s', root / 'allocator-check.c'
             il.write_text('\n'.join(lines) + '\n')
             checker.write_text(ALLOCATOR_CHECK)
-            subprocess.run([str(qbe), '-o', str(assembly), str(il)], check=True)
-            subprocess.run(['/usr/bin/cc', str(assembly), str(checker), '-lm', '-o', str(program)], check=True)
+            target_options = ['-t', QBE_TARGETS[args.target]] if args.core else []
+            subprocess.run([str(qbe), *target_options, '-o', str(assembly), str(il)], check=True)
+            linker_options = ['-fuse-ld=lld'] if args.target and args.target.startswith('linux-') else []
+            subprocess.run(['/usr/bin/cc', *linker_options, str(assembly), str(checker), '-lm', '-o', str(program)], check=True)
             environment['TYPE_RB_NATIVE_RUNTIME_STATS'] = '1'
             environment['TRBN_NETWORK_TEST_ALLOCATIONS'] = '1'
             print('forced managed GC hooks:', hooks)
