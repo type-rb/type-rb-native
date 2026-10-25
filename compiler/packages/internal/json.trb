@@ -25,7 +25,7 @@ class JsonParser
 	# mutable ownership and store only their pool indexes in raw node variants.
 	@arrays: Array<Array<Integer>> := []
 	@objects: Array<Hash<String, Integer>> := []
-	@failure: Array<PublicJSON::Error> := []
+	@failure: PublicJSON::Error? := nil
 	def initialize(bytes: Bytes)
 		@bytes = bytes
 	end
@@ -105,11 +105,11 @@ def _byte_width(bytes: Bytes, position: Integer, finish: Integer): Integer
 end
 
 def _syntax(mut parser: JsonParser, message: String, location: Integer)
-	if !parser.failure.empty?()
+	if parser.failure != nil
 		return
 	end
 	if location < 0
-		parser.failure.push(_error(PublicJSON::ErrorKind::Syntax, message, ""))
+		parser.failure = _error(PublicJSON::ErrorKind::Syntax, message, "")
 		return
 	end
 	# The reference counts runes before the error's final byte, consuming each
@@ -126,7 +126,7 @@ def _syntax(mut parser: JsonParser, message: String, location: Integer)
 		end
 		index += _byte_width(parser.bytes, index, location)
 	end
-	parser.failure.push(PublicJSON::Error.new(kind: PublicJSON::ErrorKind::Syntax, message: message, path: "", line: line, column: column))
+	parser.failure = PublicJSON::Error.new(kind: PublicJSON::ErrorKind::Syntax, message: message, path: "", line: line, column: column)
 end
 
 def _diagnostic_hex(value: Integer, width: Integer): String
@@ -310,7 +310,7 @@ def _string(mut parser: JsonParser): String
 	parser.position += 1
 	octets := Octets.table()
 	mut fragments: Array<String> := []
-	while parser.position < parser.bytes.size() && parser.failure.empty?()
+	while parser.position < parser.bytes.size() && parser.failure == nil
 		character := parser.bytes.at(parser.position)
 		if character == 34
 			parser.position += 1
@@ -489,7 +489,7 @@ def _atom(mut parser: JsonParser, depth: Integer): Integer
 		_bad(parser, "looking for beginning of value")
 		return -1
 	end
-	if !parser.failure.empty?()
+	if parser.failure != nil
 		return -1
 	end
 	identity := parser.nodes.size()
@@ -516,7 +516,7 @@ def _node(mut parser: JsonParser): Integer
 	end
 	mut frames := [root]
 	mut phases := [0]
-	while !frames.empty?() && parser.failure.empty?()
+	while !frames.empty?() && parser.failure == nil
 		top := frames.size() - 1
 		node := parser.nodes[frames[top]]
 		closing := _closing_byte(node)
@@ -771,14 +771,16 @@ def parse(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 		return Result<PublicJSON::Value, PublicJSON::Error>::Err(_error(PublicJSON::ErrorKind::Syntax, "EOF", ""))
 	end
 	root := _node(parser)
-	if !parser.failure.empty?()
-		return Result<PublicJSON::Value, PublicJSON::Error>::Err(parser.failure[0])
+	failure := parser.failure
+	if failure != nil
+		return Result<PublicJSON::Value, PublicJSON::Error>::Err(failure)
 	end
 	_space(parser)
 	if _byte(parser) >= 0
 		trailing := _node(parser)
-		if !parser.failure.empty?()
-			return Result<PublicJSON::Value, PublicJSON::Error>::Err(parser.failure[0])
+		trailing_failure := parser.failure
+		if trailing_failure != nil
+			return Result<PublicJSON::Value, PublicJSON::Error>::Err(trailing_failure)
 		end
 		mut message := "JSON source contains multiple values"
 		mut name := ""
