@@ -12,12 +12,15 @@ import subprocess
 import tarfile
 import tempfile
 import urllib.request
+import time
+
+from network_artifacts import embed_identity, target_name
 
 PINS = Path(__file__).with_name("network-dependencies.json")
 
 
 def run(*args):
-    subprocess.run([str(a) for a in args], check=True)
+    subprocess.run([str(a) for a in args], check=True, env={**os.environ, "ZERO_AR_DATE": "1"})
 
 
 def linked_libraries(path):
@@ -33,6 +36,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--archives", type=Path, required=True,
                         help="Shared, reusable source archive directory")
+    parser.add_argument("--linkage", choices=("static", "dynamic"), default="static",
+                        help="Static archives for applications; dynamic is a comparison/development profile")
     options = parser.parse_args()
     pins = json.loads(PINS.read_text())
     if platform.system() not in ("Darwin", "Linux"):
@@ -41,6 +46,7 @@ def main():
     options.archives.mkdir(parents=True, exist_ok=True)
     output = options.output.resolve()
     cc = os.environ.get("CC", "cc")
+    started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="trbn-network-") as temporary:
         temporary = Path(temporary)
         roots = {}
@@ -107,32 +113,56 @@ int main(void) { return 0; }
             "-c", probe, "-o", temporary / "abi.o")
         build = temporary / "uv-build"
         run("cmake", "-S", uv, "-B", build, "-DCMAKE_BUILD_TYPE=Release",
+            f"-DCMAKE_C_FLAGS=-fPIC -ffile-prefix-map={temporary}=.",
             "-DLIBUV_BUILD_TESTS=OFF", "-DLIBUV_BUILD_BENCH=OFF", "-DBUILD_TESTING=OFF")
-        run("cmake", "--build", build, "--target", "uv", "--parallel", "2")
+        run("cmake", "--build", build, "--target", "uv_a" if options.linkage == "static" else "uv", "--parallel", "2")
         suffix = "dylib" if platform.system() == "Darwin" else "so"
         publication = temporary / "publication"
         publication.mkdir()
-        shutil.copy2(build / f"libuv.{suffix}", publication / f"libuv.{suffix}", follow_symlinks=True)
         link_flags = ["-dynamiclib", "-Wl,-install_name,@rpath/libllhttp.dylib"] if suffix == "dylib" else ["-shared", "-Wl,-soname,libllhttp.so"]
-        run(cc, "-O2", "-fPIC", *link_flags, "-I" + str(http / "include"),
-            http / "src/api.c", http / "src/http.c", http / "src/llhttp.c",
-            "-o", publication / f"libllhttp.{suffix}")
+        if options.linkage == "static":
+            suffix = "a"
+            link_flags = []
+            objects = []
+            for source in ("api", "http", "llhttp"):
+                obj = temporary / f"{source}.o"
+                run(cc, "-O2", "-fPIC", f"-ffile-prefix-map={temporary}=.", "-I" + str(http / "include"),
+                    "-c", http / f"src/{source}.c", "-o", obj)
+                objects.append(obj)
+            run(os.environ.get("AR", "ar"), "rcs", publication / "libllhttp.a", *objects)
+        else:
+            run(cc, "-O2", "-fPIC", *link_flags, "-I" + str(http / "include"),
+                http / "src/api.c", http / "src/http.c", http / "src/llhttp.c",
+                "-o", publication / f"libllhttp.{suffix}")
+        shutil.copy2(build / f"libuv.{suffix}", publication / f"libuv.{suffix}", follow_symlinks=True)
         for name, root in roots.items():
             shutil.copy2(root / "LICENSE", publication / f"{name}-LICENSE")
-        receipt = {"pins": pins, "system": platform.system(), "machine": platform.machine(),
+        receipt = {"schema": 2, "linkage": options.linkage, "target": target_name(),
+                   "pins": pins, "system": platform.system(), "machine": platform.machine(),
                    "cc": subprocess.check_output([cc, "--version"], text=True).splitlines()[0],
                    "cmake": subprocess.check_output(["cmake", "--version"], text=True).splitlines()[0],
                    "builder_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                   "configuration": {"libuv": "Release; target uv; tests and benchmarks disabled",
+                   "artifact_tool_sha256": hashlib.sha256(Path(__file__).with_name("network_artifacts.py").read_bytes()).hexdigest(),
+                   "configuration": {"archive_timestamps": "ZERO_AR_DATE=1; deterministic ar default where available",
+                                     "source_prefix": "temporary source/build root mapped to . for static archives",
+                                     "libuv": f"Release; target {'uv_a' if options.linkage == 'static' else 'uv'}; tests and benchmarks disabled",
                                      "llhttp": ["-O2", "-fPIC", *link_flags],
                                      "environment": {name: os.environ[name] for name in
                                                      ("CFLAGS", "CPPFLAGS", "LDFLAGS", "MACOSX_DEPLOYMENT_TARGET")
                                                      if name in os.environ}},
-                   "linked_libraries": {name: linked_libraries(publication / f"{name}.{suffix}")
+                   "linked_libraries": {} if options.linkage == "static" else
+                                       {name: linked_libraries(publication / f"{name}.{suffix}")
                                         for name in ("libuv", "libllhttp")},
                    "libraries": {name: hashlib.sha256(path.read_bytes()).hexdigest()
                                  for name in ("libuv", "libllhttp")
                                  for path in [publication / f"{name}.{suffix}"]}}
+        if options.linkage == "static":
+            embed_identity(receipt, temporary / "identity.s")
+            run(cc, "-c", temporary / "identity.s", "-o", publication / "network-identity.o")
+        receipt["files"] = {path.name: {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                                      "bytes": path.stat().st_size}
+                            for path in sorted(publication.iterdir())}
+        receipt["build_seconds"] = time.monotonic() - started
         # Replace complete files, never overwrite a library mapped by a running
         # application. Build failure leaves the previous installation intact.
         for path in publication.iterdir():

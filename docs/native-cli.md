@@ -10,7 +10,8 @@ defaults are unchanged.
 
 Compiled Web projects can call `Web.serve` using the pinned
 [HTTP network libraries](native-network.md). Install those libraries once and
-set `TRBN_NETWORK_LIB_DIR` when running a server application.
+keep them in `network/` beside QBE, or set `TRBN_NETWORK_LIB_DIR` when building.
+The compiled server contains the HTTP libraries and needs no runtime override.
 
 ## Build and run from a checkout
 

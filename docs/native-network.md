@@ -13,48 +13,80 @@ evaluation reports the reference's explicit unavailable-runtime diagnostic;
 it does not start a listener. See [Native CLI](native-cli.md) for building the
 compiler and applications.
 
-## Dependency build
+## Build and distribution
 
-`tools/network-dependencies.json` pins the source archives by version and SHA-256:
-libuv 1.53.0 and llhttp 9.4.3. Both use the MIT license. The generated llhttp release
-archive contains C sources, so Node.js is not a build or runtime requirement.
-The repository's runtime implementation is TypeRB; a C compiler builds only the
-external libraries and a compile-only ABI assertion probe.
+`tools/network-dependencies.json` pins libuv 1.53.0 and llhttp 9.4.3 by version,
+upstream commit and source archive SHA-256. Both use the MIT license. The generated
+llhttp release archive contains C sources; Node.js is not a build or runtime
+requirement. Repository-owned runtime behavior remains TypeRB. A C toolchain
+builds the external libraries and compile-only ABI assertions; the artifact
+identity is assembly data, with no additional C runtime implementation.
+
+The compiler selects static archives from verified network MIR. It links them
+only for an application containing the network provider. Importing `trb/web`
+currently includes that provider, including programs using only its response
+values. The CLI, ordinary compiler and programs using only `trb/http` values
+need no HTTP archives. An HTTP
+application requires only its executable, the platform runtime and the dependency
+notices at deployment; it does not load libuv/llhttp from the environment.
+
+Development packages keep `network/` beside QBE. Alternatively,
+`TRBN_NETWORK_LIB_DIR` selects an explicit **build-time** installation:
 
 ```sh
 python3 tools/build-network-dependencies.py \
   --archives /path/to/shared/source-archives \
-  --output /path/to/network-libraries
-TRBN_NETWORK_LIB_DIR=/path/to/network-libraries ./application
+  --output /path/to/network
+TRBN_NETWORK_LIB_DIR=/path/to/network ./trbn build --compile
+./bin/application
 ```
 
-The build requires Python, CMake and a platform C toolchain. Temporary source and
-object trees are removed on success and failure. The output includes the two
-libraries, their license files and a build receipt with source pins, compiler,
-platform and binary hashes. Reuse the archives and installed libraries across
-applications; do not copy build trees or a new cache into every application.
-A 128 MiB budget is sufficient for this dependency installation and its archives.
+Building the dependency archives requires Python, CMake and a platform C toolchain.
+Installing prebuilt archives and compiling applications does not require CMake.
+The platform assembler/linker and QBE remain application build tools. If QBE is
+overridden, its adjacent `network/` directory becomes the default; set the
+build-time override when using a separate installation. Paths containing spaces
+are passed as individual arguments, without shell evaluation. Missing dependencies
+or failed links preserve an existing output and remove the build's intermediates.
+
+```sh
+python3 tools/network_artifacts.py pack /path/to/network network.tar.gz
+python3 tools/network_artifacts.py install network.tar.gz /path/to/new/network \
+  --sha256 EXPECTED_ARTIFACT_SHA256
+python3 tools/network_artifacts.py inspect ./bin/application
+```
+
+Installation checks the artifact hash, target, exact source pins, file inventory,
+archive hashes and embedded identity before publishing a new directory. Obtain the
+expected hash from a trusted qualification or release receipt; a hash file supplied
+by an untrusted archive is not authentication. Existing installations are not
+overwritten. The executable inventory includes versions, commits, source and static
+archive hashes, configuration and build tools. It identifies the selected build;
+it is not a signature or a runtime integrity attestation.
+
+Temporary source/object trees are removed after success and failure. Reuse source
+archives and one installation across applications. A 128 MiB budget covers the
+installation and source archives. Keep both license notices with deployed apps.
+The optional `--linkage dynamic` builder profile is retained for comparison and
+older development binaries; the current compiler emits static calls.
 
 | Component | Role | Application dependency |
 | --- | --- | --- |
-| Platform C runtime / system library | Allocation, process and dynamic loading primitives | Existing dependency; macOS `libSystem`, Linux libc and platform link dependencies |
-| libuv 1.53.0 | TCP sockets, address resolution, event delivery and signal/timer handles | New dynamically loaded library when the server starts |
-| llhttp 9.4.3 | HTTP request framing and validation | New dynamically loaded library when the server starts |
-| QBE and platform compiler/linker | Build the Native executable | Build tools; not invoked by a running server |
-| Python and CMake | Build and qualify the two external libraries | Dependency build tools only |
+| Platform C runtime / system library | Allocation, process and OS primitives | Existing macOS libSystem / Linux libc and recorded platform imports |
+| libuv 1.53.0 | TCP, address resolution, events, signals and timers | Selectively static for the network provider |
+| llhttp 9.4.3 | HTTP/1 request framing and validation | Selectively static for the network provider |
+| QBE and platform compiler/linker | Build the Native executable | Build tools, not invoked by a running server |
+| Python and CMake | Build and qualify external archives | Dependency build tools; prebuilt installation needs only Python |
 
-The dependency receipt records the actual linked system libraries on each target,
-including platform-specific transitive dependencies. Keep that receipt and both
-license files with the distribution. A pin update requires rebuilding the ABI
-probe and rerunning the socket and lifetime tests on every qualified target.
-
-The current loader requires the explicit directory, resolves the complete private
-ABI before starting, and checks the libuv version. llhttp has no runtime version
-query: use the pinned builder and its receipt, not an arbitrary system llhttp
-library. Distribution must ship the qualified libraries and notices alongside
-applications that need the server. Applications that do not load the network
-provider do not acquire a runtime libuv/llhttp requirement. TLS, HTTPS clients and
-database libraries are separate adoption decisions.
+The CI qualification matrix builds and links archives on Darwin/Linux arm64/amd64,
+including a fresh installation and isolated execution. Application socket/lifetime
+and compiler verification remain separate authorities on the registered Native
+targets; archive ABI success alone does not establish a darwin-amd64 compiler or
+seed. CI bundles retain source archives, notices and build receipts. They are
+qualification artifacts with finite retention, not immutable release assets.
+Before supported release distribution, #1257 still requires immutable publication,
+source mirrors, advisory/update ownership and deadlines, plus the remaining TLS/DB
+profiles. See the [dependency policy](native-dependency-policy.md).
 
 ## Ownership and execution
 
@@ -113,7 +145,10 @@ behavior. Protocol upgrades, streaming and HTTP/2 need separate transport contra
 
 ## Validation and remaining work
 
-`tools/native-web-network-test.py` retains real socket tests for fragmented and chunked input,
+`tools/native-network-distribution-test.py` checks selective linkage, missing/corrupt
+archives, preserved outputs, relocated packages and execution without runtime
+libraries. Its build/startup/size observations are descriptive qualification data,
+not a throughput benchmark. `tools/native-web-network-test.py` retains real socket tests for fragmented and chunked input,
 keep-alive/pipelining, body limits, malformed/conflicting framing, binary bodies,
 routing and middleware, handler failure, disconnects, bind failure, concurrent
 partial requests, signals and restart. Force GC at managed allocation boundaries
