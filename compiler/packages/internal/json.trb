@@ -886,6 +886,11 @@ def _append_quoted_bytes(mut builder: StringBuilder, bytes: Bytes)
 	mut index := 0
 	while index < bytes.size()
 		octet := bytes.at(index)
+		# Ordinary ASCII extends the pending span without escape dispatch.
+		if octet >= 32 && octet < 128 && octet != 34 && octet != 92 && octet != 60 && octet != 62 && octet != 38
+			index += 1
+			next
+		end
 		mut width := 1
 		mut replacement := ""
 		if octet >= 128
@@ -922,13 +927,17 @@ def _append_quoted_bytes(mut builder: StringBuilder, bytes: Bytes)
 			replacement = "\\u00" + "0123456789abcdef"[octet / 16] + "0123456789abcdef"[octet % 16]
 		end
 		if replacement != ""
-			BuilderStorage.append_bytes(builder, bytes, span_start, index)
+			if span_start < index
+				BuilderStorage.append_bytes(builder, bytes, span_start, index)
+			end
 			builder.append(replacement)
 			span_start = index + width
 		end
 		index += width
 	end
-	BuilderStorage.append_bytes(builder, bytes, span_start, bytes.size())
+	if span_start < bytes.size()
+		BuilderStorage.append_bytes(builder, bytes, span_start, bytes.size())
+	end
 	builder.append("\"")
 end
 
