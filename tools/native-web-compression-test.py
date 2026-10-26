@@ -176,6 +176,8 @@ def main():
     args = parser.parse_args()
     if not args.reference and (not args.libraries or not args.compression):
         parser.error('Native requires both static dependency installations')
+    if args.core and (not args.qbe or not args.target):
+        parser.error('--core requires --qbe and --target')
     repository = Path(__file__).resolve().parent.parent
     manifest = json.loads(Path(__file__).with_name('web-compression-cases.json').read_text())
     assert manifest['reference_revision'] == (repository / 'TYPE_RB_REVISION').read_text().strip()
@@ -217,7 +219,8 @@ def main():
 
         def build(input_path, output, *, success=True):
             if args.core:
-                command = [binary, 'build', input_path, '--target', args.target, '--qbe', binary.with_name('qbe'), '--output', output]
+                command = [binary, 'build', input_path, '--output', output, '--qbe', binary.with_name('qbe'),
+                           '--cc', '/usr/bin/cc', '--target', args.target]
             else:
                 command = [binary, 'build', '--compile', *(['--config'] if input_path == config else []), input_path, '--outfile', output]
             return run(command, success=success)
@@ -282,7 +285,8 @@ def main():
             libraries = [package / 'network' / name for name in ('libuv.a', 'libllhttp.a', 'network-identity.o')]
             libraries += [package / 'compression' / name for name in ('libdeflate.a', 'compression-identity.o')]
             flags = ['-pthread', '-ldl', '-lrt'] if target_name().startswith('linux-') else []
-            run(['/usr/bin/cc', assembly, checker, *libraries, *flags, '-lm', '-o', program])
+            linker_options = ['-fuse-ld=lld'] if args.core and args.target.startswith('linux-') else []
+            run(['/usr/bin/cc', *linker_options, assembly, checker, *libraries, *flags, '-lm', '-o', program])
             observed = run([program], env=dict(environment, TYPE_RB_NATIVE_RUNTIME_STATS='1'))
             check_output(manifest, observed.stdout)
             statistics = allocation_statistics(observed)
