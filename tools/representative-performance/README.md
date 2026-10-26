@@ -54,6 +54,16 @@ non-default profile and remains unchanged. All observations remain in the
 result. `--smoke` uses 23 items and two batches for each operation/variant,
 without warmup or repetition. Smoke wall times do not establish speed claims.
 
+`--output-mode summary` is an opt-in throughput diagnostic for long repetitions.
+Both programs still execute every batch, accumulate its checksum modulo
+1,000,000,007, and report the aggregate and final retained-data checksum. Output
+stays bounded instead of emitting one progress line per batch. The independent
+oracle checks both checksums. This mode does not measure batch-arrival latency
+and cannot enter the streaming Pages series. The default `stream` mode,
+registered inputs, output limit and scheduled CI remain unchanged. Freeze any
+calibrated repetitions and qualify timing reproducibility before comparing a
+candidate; the mode itself provides no reproducibility guarantee.
+
 Each binary is built once and reused for the entire matrix. Compilation has a
 120-second timeout per role; each application has a 30-second deadline and the
 runtime matrix has a 15-minute deadline. Darwin uses `wait4` CPU/RSS accounting.

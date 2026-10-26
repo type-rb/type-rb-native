@@ -883,6 +883,11 @@ def _escape(text: String): String
 	if !_needs_escape(bytes)
 		return "\"" + text + "\""
 	end
+	return _escape_fragments(bytes)
+end
+
+# The caller has already classified the input; do not repeat that scan.
+def _escape_fragments(bytes: Bytes): String
 	octets := Octets.table()
 	mut fragments := ["\""]
 	mut index := 0
@@ -938,6 +943,19 @@ def _escape(text: String): String
 	end
 	fragments.push("\"")
 	return fragments.join("")
+end
+
+# Ordinary strings can join the shared output without a temporary quoted copy.
+# Keep escaped text on the established fragment formatter.
+def _append_quoted(mut builder: StringBuilder, text: String)
+	bytes := text.to_bytes()
+	if _needs_escape(bytes)
+		builder.append(_escape_fragments(bytes))
+	else
+		builder.append("\"")
+		builder.append(text)
+		builder.append("\"")
+	end
 end
 
 def _floating(number: Float): String
@@ -1071,21 +1089,17 @@ def _encoding_error(value: PublicJSON::Value): PublicJSON::Error?
 	return nil
 end
 
-# Explicit stacks keep nesting independent of the machine call stack.
-# One shared buffer accumulates compound values before taking a String snapshot.
+# Keep only the active path and its next child positions. Each object owns one
+# sorted key list until it closes; siblings do not need pending value/token pairs.
 def _serialize_compound(value: PublicJSON::Value): String
 	mut values := [value]
-	mut tokens := [""]
+	mut positions := [0]
+	mut object_keys: Array<Array<String>> := []
 	mut builder := StringBuilder.new()
 	while !values.empty?()
-		current := values[values.size() - 1]
-		token := tokens[tokens.size() - 1]
-		values.pop()
-		tokens.pop()
-		if token != ""
-			builder.append(token)
-			next
-		end
+		top := values.size() - 1
+		current := values[top]
+		index := positions[top]
 		case current
 		when PublicJSON::Value::Null
 			builder.append("null")
@@ -1096,39 +1110,44 @@ def _serialize_compound(value: PublicJSON::Value): String
 		when PublicJSON::Value::Float(number)
 			builder.append(_floating(number))
 		when PublicJSON::Value::String(string)
-			builder.append(_escape(string))
+			_append_quoted(builder, string)
 		when PublicJSON::Value::Array(items)
-			builder.append("[")
-			values.push(PublicJSON::Value::Null)
-			tokens.push("]")
-			mut index := items.size()
-			while index > 0
-				index -= 1
+			if index == 0
+				builder.append("[")
+			end
+			if index < items.size()
+				if index > 0
+					builder.append(",")
+				end
+				positions[top] = index + 1
 				values.push(items[index])
-				tokens.push("")
-				if index > 0
-					values.push(PublicJSON::Value::Null)
-					tokens.push(",")
-				end
+				positions.push(0)
+				next
 			end
+			builder.append("]")
 		when PublicJSON::Value::Object(members)
-			builder.append("{")
-			values.push(PublicJSON::Value::Null)
-			tokens.push("}")
-			keys := members.keys().sort()
-			mut index := keys.size()
-			while index > 0
-				index -= 1
-				values.push(members.fetch(keys[index]))
-				tokens.push("")
-				values.push(PublicJSON::Value::Null)
-				tokens.push(_escape(keys[index]) + ":")
-				if index > 0
-					values.push(PublicJSON::Value::Null)
-					tokens.push(",")
-				end
+			if index == 0
+				builder.append("{")
+				object_keys.push(members.keys().sort())
 			end
+			keys := object_keys[object_keys.size() - 1]
+			if index < keys.size()
+				if index > 0
+					builder.append(",")
+				end
+				key := keys[index]
+				_append_quoted(builder, key)
+				builder.append(":")
+				positions[top] = index + 1
+				values.push(members.fetch(key))
+				positions.push(0)
+				next
+			end
+			builder.append("}")
+			object_keys.pop()
 		end
+		values.pop()
+		positions.pop()
 	end
 	return builder.to_s()
 end

@@ -181,6 +181,7 @@ def start(path):
 
 def snapshot(manifest, attempt):
     require(not manifest.get("smoke") and manifest.get("repositoryRevision") == attempt["revision"], "Wrong measurement source or smoke data")
+    require(manifest.get("outputMode", "stream") == "stream", "Summary diagnostics cannot enter the streaming publication series")
     profile = manifest.get("inputProfile", "registered")
     require(manifest.get("plannedCases") == catalog(profile), "Publication needs the complete registered matrix")
     sources = {key: manifest.get(key) for key in SOURCES}

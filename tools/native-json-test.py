@@ -166,6 +166,11 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         literal = '"' + ''.join(f'\\x{octet:02x}' for octet in raw) + '"'
         statements.append(f'display(JSON::Value::String({literal}))')
         outputs.append(quoted(decoded))
+        if len(raw) > 1:
+            # Raw bytes reach both key and value writers without parser repair.
+            statements.append(f'display(JSON::Value::Object({{{literal} => '
+                              f'JSON::Value::Array([JSON::Value::Null, JSON::Value::String({literal})])}}))')
+            outputs.append('{' + quoted(decoded) + ':[null,' + quoted(decoded) + ']}')
     # Exercise accumulated fragments across long ASCII/Unicode/escaped strings.
     for unit, count, tail, decoded in [
             (b'a', 8192, b'\xf0\x90\x80', 'a' * 8192 + '\ufffd' * 3),
@@ -198,6 +203,19 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         {f"key-{index}": "aβ😀\n<>&" for index in range(256)},
         {"left": [[], {}, [False, True]], "right": {"nested": [{}, [], None]}},
     ]
+    # Alternating containers and unrelated sibling keys expose a resumed parent
+    # accidentally using a child's position or sorted-key list.
+    def mixed_tree(depth, seed):
+        if depth == 0:
+            return [None, False, seed, 'β😀\n<>&', [], {}][seed % 6]
+        children = [mixed_tree(depth - 1, seed * 3 + index) for index in range(3)]
+        if seed % 2:
+            return [[], children[0], {}, children[1], children[2]]
+        return {'z\n': children[0], '': children[1], 'aβ😀<': children[2]}
+
+    structures.append(mixed_tree(5, 2))
+    structures.append([{'z': [[], {'nested': index}, {}], 'a': {}, '': [index]}
+                       for index in range(32)])
     # Exercise longer multibyte text beside escapes and in object keys.
     for width in (15, 16, 17, 31, 32, 33):
         structures.extend([

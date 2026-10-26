@@ -254,6 +254,7 @@ def main()
 	count: Integer := arguments[1].to_i()
 	variant: String := arguments[2]
 	batches: Integer := arguments[3].to_i()
+	summary := arguments.size() > 4 && arguments[4] == "summary"
 	mut lines: Array<String> := []
 	if workload == "log-pipeline"
 		lines = log_input(count, variant)
@@ -281,6 +282,7 @@ def main()
 	mut state := WorkerState.new(cache)
 	puts("ready")
 	mut batch := 0
+	mut total_checksum := 0
 	while batch < batches
 		mut checksum := 0
 		if workload == "log-pipeline"
@@ -300,11 +302,18 @@ def main()
 		elsif workload == "allocation"
 			checksum = allocation_batch(retained, count, variant, batch)
 		end
-		puts(batch.to_s() + "," + checksum.to_s())
+		if summary
+			total_checksum = (total_checksum + checksum) % 1000000007
+		else
+			puts(batch.to_s() + "," + checksum.to_s())
+		end
 		batch += 1
 	end
 	# Reading retained values after the last batch makes their lifetime observable.
 	mut retained_size := 0
 	retained.each { |value| retained_size += value.size() }
+	if summary
+		puts("summary," + total_checksum.to_s())
+	end
 	puts("done," + retained_size.to_s())
 end
