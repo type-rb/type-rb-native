@@ -41,7 +41,8 @@ tracks the release outcome; existing coverage and quality gaps remain open.
 
 ## Try the native executable
 
-On Darwin arm64 or Linux arm64, `./trbn` builds the native executable when
+On Darwin arm64 or Linux arm64, first install the pinned [crypto archives](docs/native-crypto.md)
+for REPL support. Then `./trbn` builds the native executable when
 needed and starts a REPL. `./trbn run` runs the example project, and
 `./trbn build --compile` creates an executable. The default mode is `trb`;
 other explicit modes are rejected. Go is not required for this bootstrap.
