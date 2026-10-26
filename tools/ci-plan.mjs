@@ -5,6 +5,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 
 const staticDocumentationTools = new Set([
   'tools/capability-map-check.mjs',
+  'tools/dependency-pages.py',
   'tools/benchmark-pages-data.mjs',
   'tools/benchmark-pages-check.mjs',
   'tools/result_archive.py',
