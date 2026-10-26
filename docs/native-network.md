@@ -6,6 +6,8 @@ request/response values, typed input, middleware and recovery remain TypeRB
 implementations. The public package source remains pinned to `TYPE_RB_REVISION`.
 The public [dependency register](https://type-rb.github.io/type-rb-native/dependencies/)
 tracks runtime, tooling and candidate dependencies separately.
+Whole-buffer [response compression](native-compression.md) uses a separately
+pinned static gzip archive when the compression middleware is imported.
 
 Compile a file-route project that calls `Web.serve()` or passes a
 `Web::ServerConfig`. The server supports IPv4, IPv6 and host-name binding. REPL

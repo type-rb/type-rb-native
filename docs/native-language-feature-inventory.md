@@ -35,7 +35,7 @@ Each count describes registered probes, not language coverage percentages.
 | Project imports and declaration identity | basic | 1 / 83 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
 | Target source interop | toolchain | 0 / 0 | Go/Ruby/TypeScript source emission and platform interop | NativeStatement, NativeBlock, NativeExpression |
 | Portable HTTP values | packages | 0 / 29 | Networking, streaming, transport adapters and Web semantic/type providers |  |
-| Web values and middleware | packages | 0 / 71 | Network serving and server lifecycle; logger, compression, timeout and authentication providers remain incomplete |  |
+| Web values and middleware | packages | 0 / 71 | HTTP serving and whole-buffer gzip have dedicated runtime acceptance; logger, timeout and authentication providers remain incomplete |  |
 | JSX and web bindings | packages | 0 / 0 | Typed JSX and official web-package boundaries | JSXElement |
 | Package capability activation | packages | 0 / 0 | Package-owned activation and resolution | ActivateStatement |
 | Retired authored attempt syntax | retired | 0 / 0 | none registered | AttemptExpression |
