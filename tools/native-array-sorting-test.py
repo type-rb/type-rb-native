@@ -65,11 +65,11 @@ with tempfile.TemporaryDirectory(prefix='native-array-sorting-') as temporary:
     assert statistics['allocated-bytes'] == statistics['reclaimed-bytes'], statistics
     assert statistics['peak-heap-bytes'] < 4 * 1024 * 1024, statistics
 
-    # Ordered, reverse, constant and late-inversion inputs join random odd tails
-    # and power-of-two boundaries in an
-    # independent host oracle. A single authored sort body covers every length.
+    # Strict reverse order can use reversal; repeated keys and a last-element
+    # inversion must preserve stable merging. Cover odd tails and power-of-two
+    # boundaries with an independent host oracle and one authored sort body.
     source.write_text('''def main()
-(0...5).each do |shape|
+(0...7).each do |shape|
 (0...68).each do |size|
 mut values: Array<Integer> := []
 (0...size).each do |index|
@@ -85,6 +85,13 @@ value = index
 if index == size - 1
 value = -100
 end
+elsif shape == 5
+value = -index
+elsif shape == 6
+value = -(index / 3)
+if index == size - 1
+value = 100
+end
 end
 values.push(value)
 end
@@ -97,7 +104,7 @@ end
 ''')
     result = run([binary, 'run', source])
     expected = []
-    for shape in range(5):
+    for shape in range(7):
         for size in range(68):
             def key(index):
                 if shape == 1:
@@ -110,6 +117,10 @@ end
                     return -100
                 if shape == 4:
                     return index
+                if shape == 5:
+                    return -index
+                if shape == 6:
+                    return 100 if index == size - 1 else -(index // 3)
                 return (index * 37 + size * 11) % 23 - 11
             values = [key(index) for index in range(size)]
             expected.extend(map(str, sorted(values)))
