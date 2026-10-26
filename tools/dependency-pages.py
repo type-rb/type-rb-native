@@ -22,7 +22,9 @@ def render():
     for item in data['dependencies']:
         assert item['id'] not in ids and item['status'] in ('current', 'candidate'), item['id']
         ids.add(item['id'])
-        for key in ('name', 'scope', 'role', 'configuration', 'next'):
+        assert item['decision'] in ('retain', 'selected', 'evaluate', 'deferred'), item['id']
+        assert isinstance(item['requiredBy'], list) and item['requiredBy'] and all(isinstance(x, str) and x.strip() for x in item['requiredBy']), item['id']
+        for key in ('name', 'scope', 'role', 'configuration', 'next', 'referenceBehavior'):
             assert isinstance(item[key], str) and item[key].strip(), (item['id'], key)
         links = []
         for source in item['evidence']:
@@ -42,8 +44,8 @@ def render():
         status = 'In source' if item['status'] == 'current' else 'Candidate'
         rows.append(f'''<tr data-status="{item['status']}" id="{escape(item['id'], quote=True)}">
 <th scope="row">{escape(item['name'])}<span class="state {item['status']}">{status}</span></th>
-<td><span class="scope">{escape(item['scope'])}</span><p>{escape(item['role'])}</p></td>
-<td>{version}<p>{escape(item['configuration'])}</p></td>
+<td><span class="scope">{escape(item['scope'])}</span><p>{escape(item['role'])}</p><p><strong>Required by:</strong> {escape(', '.join(item['requiredBy']))}</p></td>
+<td>{version}<p>{escape(item['configuration'])}</p><p><strong>Decision:</strong> {escape(item['decision'])} (separate from source status)</p><details><summary>Reference behavior</summary><p>{escape(item['referenceBehavior'])}</p></details></td>
 <td><div class="evidence">{' · '.join(links)}</div><p>{escape(item['next'])}</p></td></tr>''')
     counts = Counter(item['status'] for item in data['dependencies'])
     return '''<!doctype html>
@@ -54,7 +56,8 @@ def render():
 <a class="brand" href="../"><span class="brand-mark" aria-hidden="true">TR</span><span>TypeRB Native</span><span class="development">Development</span></a>
 <nav class="site-nav" aria-label="Site navigation"><a href="../">Capabilities</a><a href="../benchmarks/">Benchmarks</a><a href="./" aria-current="page">Dependencies</a></nav></div></header>
 <main class="shell dependency-page"><p class="eyebrow">RUNTIME · SYSTEM DATA · TOOLCHAIN</p><h1>What does Native depend on?</h1>
-<p class="lead">The current source uses platform services and a small set of external tools and libraries. Candidates below are not installed dependencies. Build tools, runtime libraries and system data have different distribution costs.</p>
+<p class="lead">The current source uses platform services and a small set of external tools and libraries. Candidates below, including selected implementation directions, are not installed dependencies. Build tools, runtime libraries and system data have different distribution costs.</p>
+<p>Read the <a href="https://github.com/type-rb/type-rb-native/blob/main/docs/native-dependency-policy.md">v0.5 linking, trust and distribution policy</a>. Adoption decisions require separate implementation and artifact qualification.</p>
 <div class="summary"><p><strong>''' + str(counts['current']) + '''</strong> current entries</p><p><strong>''' + str(counts['candidate']) + '''</strong> candidates</p><p class="summary-note">Source status is not a supported-release claim. Artifact receipts identify the actual linked libraries, versions and licenses on each target.</p></div>
 <section aria-labelledby="register-title"><h2 id="register-title">Dependency register</h2>
 <div class="controls"><label>Show <select id="status"><option value="all">All components</option><option value="current">In source</option><option value="candidate">Candidates only</option></select></label><label>Search <input type="search" id="search" placeholder="Name, role, platform…"></label><span id="visible" role="status"></span></div>
