@@ -36,6 +36,14 @@ def manifest():
 
 
 class PublicationTests(unittest.TestCase):
+    def test_summary_diagnostics_cannot_replace_streaming_results(self):
+        data = manifest()
+        data["outputMode"] = "summary"
+        with self.assertRaisesRegex(ValueError, "Summary diagnostics"):
+            publication.snapshot(data, attempt())
+        data["outputMode"] = "stream"
+        publication.snapshot(data, attempt())
+
     def test_profile_identity_separates_series_and_rejects_relabelled_inputs(self):
         original = publication.snapshot(manifest(), attempt())
         data = manifest()

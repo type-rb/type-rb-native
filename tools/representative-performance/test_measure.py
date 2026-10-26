@@ -17,6 +17,22 @@ report_spec.loader.exec_module(report)
 
 
 class MeasurementTests(unittest.TestCase):
+    def test_summary_preserves_every_batch_and_final_retained_checksum(self):
+        _, cases = measure.load_cases(smoke=True)
+        for original in cases:
+            case = dict(original, batches=12)
+            with self.subTest(case=case["id"]):
+                lines = measure.expected(case).decode().splitlines()
+                total = sum(int(line.split(",")[1]) for line in lines[1:-1]) % 1000000007
+                expected = f"ready\nsummary,{total}\n{lines[-1]}\n".encode()
+                self.assertEqual(measure.expected(case, "summary"), expected)
+        with self.assertRaises(ValueError):
+            measure.expected(cases[0], "unknown")
+
+    def test_summary_output_remains_bounded_for_long_repetition(self):
+        case = {"workload": "arrays", "variant": "reverse", "count": 3, "batches": 200000}
+        self.assertEqual(measure.expected(case, "summary"), b"ready\nsummary,2800000\ndone,0\n")
+
     def test_profiles_preserve_registered_cases_and_fix_batches_before_execution(self):
         suite, original = measure.load_cases()
         _, sustained = measure.load_cases(profile="sustained-v1")
