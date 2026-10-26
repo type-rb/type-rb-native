@@ -501,8 +501,11 @@ test('exact CLI inputs run quick and CLI authorities without core measurements',
   assert(cliJobs[1].includes('tools/native-bootstrap-test.py'));
   assert(cliJobs[1].includes('native-cli-cache-${{ matrix.platform }}'));
   assert(cliJobs[1].includes('if: always()') && cliJobs[1].includes('if-no-files-found: error'));
-  assert.equal((workflow.match(/- runner: macos-14/g) || []).length, 2);
-  assert.equal((workflow.match(/- runner: ubuntu-24.04-arm/g) || []).length, 2);
+  assert.equal((workflow.match(/- runner: macos-14/g) || []).length, 3, 'smoke, cache and archive qualification retain Darwin arm64');
+  assert.equal((workflow.match(/- runner: ubuntu-24.04-arm/g) || []).length, 3, 'smoke, cache and archive qualification retain Linux arm64');
+  assert(workflow.includes('- runner: macos-15-intel'));
+  assert(workflow.includes('python3 tools/network_artifact_smoke.py'));
+  assert(workflow.includes('python3 tools/native-network-distribution-test.py'));
   assert.equal((workflow.match(/timeout-minutes: 90/g) || []).length, 2);
   assert.equal(classify(['compiler/conformance/README.md'], false).cli, false);
 });

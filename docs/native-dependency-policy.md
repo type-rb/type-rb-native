@@ -54,9 +54,10 @@ a static libcrypto beside a second OpenSSL loaded by a DB client. MySQL static
 linking would need a separate license/relinking qualification; an owned wire
 client remains a later measured alternative.
 
-Current Web transport still dynamically loads from `TRBN_NETWORK_LIB_DIR`.
-Replace that development distribution boundary only in a qualified implementing
-PR. Publish prebuilt dependency archives as immutable, per-target assets so
+Web transport uses selective static archives with an embedded build inventory.
+Its CI bundles qualify development installations; immutable release publication
+and advisory/update ownership remain tracked in #1257. Publish prebuilt dependency
+archives as immutable, per-target assets so
 application users do not need CMake. Record source revision, hash, flags, license,
 notices and transitive libraries; embed a machine-readable dependency inventory
 in resulting executables. Sidecar size counts toward distribution cost.
