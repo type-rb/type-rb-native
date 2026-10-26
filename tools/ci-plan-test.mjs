@@ -508,6 +508,8 @@ test('exact CLI inputs run quick and CLI authorities without core measurements',
   assert(workflow.includes('python3 tools/native-network-distribution-test.py'));
   assert(workflow.includes('python3 tools/compression_artifact_smoke.py'));
   assert(workflow.includes('python3 tools/native-web-compression-test.py'));
+  assert(workflow.includes('python3 tools/crypto_artifact_smoke.py'));
+  assert(workflow.includes('python3 tools/native-crypto-test.py'));
   assert.equal((workflow.match(/timeout-minutes: 90/g) || []).length, 2);
   assert.equal(classify(['compiler/conformance/README.md'], false).cli, false);
 });

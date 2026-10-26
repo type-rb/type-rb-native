@@ -5,6 +5,8 @@ repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cache="$repository_root/.trb/bootstrap"
 seed_release=bootstrap-seed-2026-09-29-module-cycles
 output="$repository_root/bin"
+crypto=${TRBN_CRYPTO_LIB_DIR:-$output/crypto}
+export TRBN_CRYPTO_LIB_DIR="$crypto"
 fail() { printf 'trbn: %s\n' "$1" >&2; exit 1; }
 sha256_files() {
 	if command -v sha256sum >/dev/null 2>&1; then
@@ -79,6 +81,11 @@ stage=$(mktemp -d "$cache/build.XXXXXX")
 	cat "$stage/core-inputs"
 	cd "$repository_root"
 	sha256_files tools/compiler_sources.py
+	if test -f "$crypto/libcrypto.a" && test -f "$crypto/crypto-identity.o"; then
+		(cd "$crypto" && sha256_files libcrypto.a crypto-identity.o)
+	else
+		printf '%s\n' 'missing crypto archives'
+	fi
 	source_hashes compiler/cli
 ) > "$stage/inputs"
 # One decision serves the build and --plan, so plan checks exercise the same
@@ -95,6 +102,9 @@ if test "$mode" = plan; then
 	printf '%s\n' "$decision"
 	exit 0
 fi
+for archive in libcrypto.a crypto-identity.o; do
+	test -f "$crypto/$archive" || fail 'REPL requires pinned crypto archives: install bin/crypto or set TRBN_CRYPTO_LIB_DIR'
+done
 if test "$decision" = cached; then
 	printf '%s\n' "$output/trbn"
 	exit 0
