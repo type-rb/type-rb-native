@@ -23,8 +23,10 @@ builds the external libraries and compile-only ABI assertions; the artifact
 identity is assembly data, with no additional C runtime implementation.
 
 The compiler selects static archives from verified network MIR. It links them
-only for an application containing the network provider. The CLI, ordinary
-compiler and applications without networking need no HTTP archives. An HTTP
+only for an application containing the network provider. Importing `trb/web`
+currently includes that provider, including programs using only its response
+values. The CLI, ordinary compiler and programs using only `trb/http` values
+need no HTTP archives. An HTTP
 application requires only its executable, the platform runtime and the dependency
 notices at deployment; it does not load libuv/llhttp from the environment.
 

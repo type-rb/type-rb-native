@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise embedded official sources through ordinary file/project/REPL imports."""
 import argparse
+from native_network_link import static_network_flags
 from compiler_sources import stage_sources
 import json
 import os
@@ -152,7 +153,7 @@ end
     il, assembly = web / 'lifetime.ssa', web / 'lifetime.s'
     il.write_text('\n'.join(forced) + '\n')
     run([binary.with_name('qbe'), '-o', assembly, il])
-    run(['/usr/bin/cc', assembly, '-lm', '-o', program])
+    run(['/usr/bin/cc', assembly, *static_network_flags(binary.with_name('qbe')), '-lm', '-o', program])
     collected = subprocess.run([str(program)], cwd=root, text=True, capture_output=True,
         env=dict(environment, TYPE_RB_NATIVE_RUNTIME_STATS='1'), timeout=90)
     assert collected.returncode == 0, collected
