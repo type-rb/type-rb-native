@@ -1,3 +1,5 @@
+import { standard_source_digest, standard_source_hmac, standard_source_internal_hash, standard_source_internal_hmac, standard_source_secure_compare } from state/standard_source_kinds
+import { pinned_hash_source, pinned_hmac_source } from project/official_catalog
 import { standard_source_compression, standard_source_network_host, standard_source_string_builder, standard_source_string_builder_storage, standard_source_web_server } from state/standard_source_kinds
 import { native_network_host_source, native_web_server_source } from project/official_catalog
 import { native_path_source } from frontend/providers/path_source
@@ -27,6 +29,21 @@ import { sparse_integer_at, store_integer } from support/storage
 # Portable declarations use the same parser and nominal catalogs as authored
 # modules. Their owner tag is assigned only by this loader, never by spelling.
 def standard_source_kind(path: String): Integer
+	if path == "trb/std/digest"
+		return standard_source_digest()
+	end
+	if path == "trb/internal/hash"
+		return standard_source_internal_hash()
+	end
+	if path == "trb/std/hmac"
+		return standard_source_hmac()
+	end
+	if path == "trb/internal/hmac"
+		return standard_source_internal_hmac()
+	end
+	if path == "trb/std/secure_compare"
+		return standard_source_secure_compare()
+	end
 	if path == "trb/internal/web/compression"
 		return standard_source_compression()
 	end
@@ -121,6 +138,21 @@ def standard_source_kind(path: String): Integer
 end
 
 def standard_source_name(kind: Integer): String
+	if kind == standard_source_digest()
+		return "trb/std/digest/index"
+	end
+	if kind == standard_source_internal_hash()
+		return "trb/internal/hash/index"
+	end
+	if kind == standard_source_hmac()
+		return "trb/std/hmac/index"
+	end
+	if kind == standard_source_internal_hmac()
+		return "trb/internal/hmac/index"
+	end
+	if kind == standard_source_secure_compare()
+		return "trb/std/secure_compare/index"
+	end
 	if kind == standard_source_string_builder_storage()
 		return "trb/internal/string_builder_storage/index"
 	end
@@ -215,6 +247,21 @@ def standard_source_name(kind: Integer): String
 end
 
 def standard_source_text(kind: Integer): String
+	if kind == standard_source_digest()
+		return pinned_hash_source()
+	end
+	if kind == standard_source_internal_hash()
+		return "module Hash\nend\ndef md5(value: Bytes): Bytes\nend\ndef sha1(value: Bytes): Bytes\nend\ndef sha256(value: Bytes): Bytes\nend\ndef sha512(value: Bytes): Bytes\nend\n"
+	end
+	if kind == standard_source_hmac()
+		return pinned_hmac_source()
+	end
+	if kind == standard_source_internal_hmac()
+		return "module HMAC\nend\ndef sha256(key: Bytes, message: Bytes): Bytes\nend\ndef sha512(key: Bytes, message: Bytes): Bytes\nend\ndef equal(left: Bytes, right: Bytes): Boolean\nend\n"
+	end
+	if kind == standard_source_secure_compare()
+		return "module SecureCompare\nend\ndef equal(left: Bytes, right: Bytes): Boolean\nend\n"
+	end
 	if kind == standard_source_string_builder_storage()
 		return "module StringBuilderStorage\nend\ndef append_bytes(mut builder: StringBuilder, bytes: Bytes, start: Integer, finish: Integer)\nend\n"
 	end
@@ -316,6 +363,10 @@ def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer)
 		return -1
 	end
 	caller_kind := sparse_integer_at(state.standard_modules, state.module_graph.active_module[0])
+	if (kind == standard_source_internal_hash() && caller_kind != standard_source_digest()) || (kind == standard_source_internal_hmac() && caller_kind != standard_source_hmac())
+		diagnostic(state, "TRBN4003", line, "internal cryptography is reserved for verified standard sources")
+		return -1
+	end
 	if kind == standard_source_compression() && caller_kind != official_source_kind("trb/web/middleware/compression")
 		diagnostic(state, "TRBN4003", line, "internal compression is reserved for the owned Web middleware")
 		return -1
@@ -433,6 +484,11 @@ def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer)
 		# The pinned JSONC source has a registry-owned root, not a module wrapper.
 		# Keep its bytes and source locations unchanged.
 		register_namespace(state, "JSONC", owner, 1)
+	end
+	if !has_diagnostic(state) && kind == standard_source_digest()
+		register_namespace(state, "Digest", owner, 1)
+	elsif !has_diagnostic(state) && kind == standard_source_hmac()
+		register_namespace(state, "HMAC", owner, 1)
 	end
 	state.module_graph.active_module[0] = previous
 	return owner
