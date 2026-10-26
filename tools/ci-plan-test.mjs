@@ -506,6 +506,8 @@ test('exact CLI inputs run quick and CLI authorities without core measurements',
   assert(workflow.includes('- runner: macos-15-intel'));
   assert(workflow.includes('python3 tools/network_artifact_smoke.py'));
   assert(workflow.includes('python3 tools/native-network-distribution-test.py'));
+  assert(workflow.includes('python3 tools/compression_artifact_smoke.py'));
+  assert(workflow.includes('python3 tools/native-web-compression-test.py'));
   assert.equal((workflow.match(/timeout-minutes: 90/g) || []).length, 2);
   assert.equal(classify(['compiler/conformance/README.md'], false).cli, false);
 });
