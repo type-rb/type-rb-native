@@ -85,17 +85,29 @@ def mir_sort_item(mut state: CompilerState, mut locals: CheckedLocals, owner: In
 	return mir_checked_array_operation(state, locals, mir_op_array_load(), checked_mir_value(array), checked_mir_value(index), 0, element, origin)
 end
 
-# Stop at the first mismatch. Reverse order must be strict so reversing values
-# cannot reorder equal keys, signed zeros or NaNs. Keys are never reevaluated.
-def mir_sort_is_ordered(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, size: Integer, element: String, descending: Boolean, reverse: Boolean, origin: Integer): CheckedValue
+# The first pair chooses nondecreasing or strictly decreasing order. Check each
+# remaining pair once, recording the direction in the caller's reverse slot.
+# Strict reversal cannot reorder equal keys, signed zeros or NaNs.
+def mir_sort_single_run(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, size: Integer, element: String, descending: Boolean, reverse: Integer, origin: Integer): CheckedValue
 	outer := locals.count[0]
 	line := load_integer(state.source_tokens.token_lines, origin)
 	initial := scalar_mir_literal(state, locals, "Boolean", origin, "true")
 	result := mir_array_query_binding(state, locals, "$sort.ordered", initial, origin)
+	bindings := locals.count[0]
+	one := scalar_mir_literal(state, locals, "Integer", origin, "1")
+	length := mir_binding_read(state, locals, size, origin)
+	has_pair := scalar_mir_binary(state, locals, "<", one, length, "Boolean", origin)
+	join := mir_control_branch(state, locals, has_pair, line)
 	zero := scalar_mir_literal(state, locals, "Integer", origin, "0")
 	previous := mir_array_query_binding(state, locals, "$sort.ordered.previous", zero, origin)
-	one := scalar_mir_literal(state, locals, "Integer", origin, "1")
 	cursor := mir_array_query_binding(state, locals, "$sort.ordered.cursor", one, origin)
+	first := mir_sort_item(state, locals, owner, previous, element, origin)
+	second := mir_sort_item(state, locals, owner, cursor, element, origin)
+	direction := mir_sort_before(state, locals, second, first, descending, origin)
+	mir_sort_assign(locals, reverse, direction)
+	mir_sort_assign(locals, previous, mir_binding_read(state, locals, cursor, origin))
+	two := scalar_mir_literal(state, locals, "Integer", origin, "2")
+	mir_sort_assign(locals, cursor, two)
 	exit := mir_control_loop_begin(state, locals, origin, line)
 	index := mir_binding_read(state, locals, cursor, origin)
 	limit := mir_binding_read(state, locals, size, origin)
@@ -104,17 +116,16 @@ def mir_sort_is_ordered(mut state: CompilerState, mut locals: CheckedLocals, own
 	current := mir_sort_item(state, locals, owner, cursor, element, origin)
 	prior := mir_sort_item(state, locals, owner, previous, element, origin)
 	before := mir_sort_before(state, locals, current, prior, descending, origin)
-	mut expected := "false"
-	if reverse
-		expected = "true"
-	end
-	expected_value := scalar_mir_literal(state, locals, "Boolean", origin, expected)
+	expected_value := mir_binding_read(state, locals, reverse, origin)
 	ordered := scalar_mir_binary(state, locals, "==", before, expected_value, "Boolean", origin)
 	mir_sort_assign(locals, result, ordered)
 	mir_control_loop_branch(state, locals, ordered, exit, line)
-	mir_array_query_advance(state, locals, previous, origin)
+	mir_sort_assign(locals, previous, mir_binding_read(state, locals, cursor, origin))
 	mir_array_query_advance(state, locals, cursor, origin)
 	mir_control_loop_end(state, locals, line)
+	locals.count[0] = bindings
+	mir_control_jump(state, locals, join, bindings)
+	mir_control_enter(state, locals, join, line)
 	value := mir_binding_read(state, locals, result, origin)
 	locals.count[0] = outer
 	return value
@@ -280,14 +291,17 @@ def mir_sort_buffers(mut state: CompilerState, mut locals: CheckedLocals, copy: 
 		ordering_owner = keys
 		ordering_type = key_type
 	end
-	ordered := mir_sort_is_ordered(state, locals, ordering_owner, size, ordering_type, descending, false, origin)
 	absent := scalar_mir_literal(state, locals, "Boolean", origin, "false")
-	needs_sort := scalar_mir_binary(state, locals, "==", ordered, absent, "Boolean", origin)
+	reverse := mir_array_query_binding(state, locals, "$sort.reverse", absent, origin)
+	ordered := mir_sort_single_run(state, locals, ordering_owner, size, ordering_type, descending, reverse, origin)
 	bindings := locals.count[0]
-	join := mir_control_branch(state, locals, needs_sort, line)
-	reversed := mir_sort_is_ordered(state, locals, ordering_owner, size, ordering_type, descending, true, origin)
-	mixed := mir_control_branch(state, locals, reversed, line)
+	join := mir_control_allocate(locals)
+	mixed := mir_control_branch(state, locals, ordered, line)
+	reversed := mir_binding_read(state, locals, reverse, origin)
+	unchanged := mir_control_branch(state, locals, reversed, line)
 	mir_sort_reverse(state, locals, owner, size, array_element_type(copy.type_name), keys, key_type, origin)
+	mir_control_jump(state, locals, unchanged, bindings)
+	mir_control_enter(state, locals, unchanged, line)
 	mir_control_jump(state, locals, join, bindings)
 	mir_control_enter(state, locals, mixed, line)
 	current_copy := mir_binding_read(state, locals, owner, origin)
