@@ -340,6 +340,14 @@ Snapshot
 aggregate recovery retains a separate heap-free layer, keeping record and
 tagged-value semantics independent of allocation strategy.
 
+StringBuilder owns a traced descriptor containing its backing allocation and
+used-byte count. Capacity belongs to private byte storage and is never exposed
+as an immutable String. Appends root the owner and source across geometric
+growth; snapshots copy initialized bytes and compute Unicode length after
+joining fragments. The JSON implementation alone may load the checked byte-span
+adapter. MIR independently verifies its argument and mutation contract, while
+the runtime checks byte bounds before copying.
+
 Managed snapshot recovery uses an exact-root, non-moving tracing collector for dynamic Strings,
 Arrays, closures, and recursively reference-containing aggregates.
 Heap-free snapshot aggregates remain unboxed. Managed roots use compiler-emitted

@@ -4031,6 +4031,23 @@
       ],
       "pending": [],
       "note": "The pinned portable Path, RelativePath and RelativePathError value API is available through ordinary checking, builds, execution and retained REPL loading. POSIX Path#join preserves parent bytes; validated relative composition, error precedence, Unicode, aliases, generics, imported functions, collections and nominal/private-constructor rejection match the reference. Forced collection separately checks retained managed values. Filesystem I/O, additional target platforms and source-backend execution remain separate coverage work."
+    },
+    {
+      "id": "string-builder",
+      "title": "Buffered string construction",
+      "scope": "packages",
+      "syntax": [],
+      "cases": [
+        "string-builder-boundaries",
+        "string-builder-growth",
+        "string-builder-display"
+      ],
+      "pending": [
+        "Aliased new factory code generation in the pinned reference.",
+        "Generic collection display containing builders.",
+        "Explicit puts across compiled execution and REPL: specification proposal #1249; current mode-specific reference behavior is preserved."
+      ],
+      "note": "Canonical factories and primitive methods preserve shared mutation, immutable snapshots, split UTF-8 fragments, Unicode counts and clear/reuse. Ordinary paths have separate expectations; dedicated runtime tests cover growth, forced GC, invalid code points, private span bounds and retained REPL values. The pinned REPL prints the inspected builder form, while compiled puts prints its text; both mode-specific behaviors are preserved."
     }
   ],
   "cases": [
@@ -137235,6 +137252,159 @@
         "repl": {
           "code": 0,
           "stdout": "root/leaf\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-builder-boundaries",
+      "title": "StringBuilder boundaries",
+      "declarations": "import trb/std/string_builder\n\ndef extend(mut writer: StringBuilder)\n\twriter.append(\"!\")\nend\n\ndef probe()\n\tmut writer := StringBuilder.from_string(\"A\")\n\tmut shared := writer\n\twriter.append(\"\\xf0\\x9f\")\n\tputs(writer.size())\n\tearly := writer.to_s()\n\tshared.append(\"\\x98\\x80\")\n\textend(shared)\n\tsnapshot := writer.to_s()\n\tputs(snapshot)\n\tputs(writer.size())\n\tputs(early.to_bytes().size())\n\twriter.clear()\n\tputs(writer.empty?())\n\twriter.append_codepoint(12354)\n\twriter.append_codepoint(0)\n\twriter.append(\"Z\")\n\tputs(writer.size())\n\tputs(writer.to_s().to_bytes().size())\n\tputs(snapshot)\n\tputs(shared.to_s() == writer.to_s())\n\tmut separate := StringBuilder.new()\n\tseparate.append(\"x\")\n\tputs(writer.size())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "3\nA😀!\n3\n3\ntrue\n3\n5\nA😀!\ntrue\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "3\nA😀!\n3\n3\ntrue\n3\n5\nA😀!\ntrue\n3\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "3\nA😀!\n3\n3\ntrue\n3\n5\nA😀!\ntrue\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "3\nA😀!\n3\n3\ntrue\n3\n5\nA😀!\ntrue\n3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-builder-growth",
+      "title": "StringBuilder growth",
+      "declarations": "import trb/std/string_builder\n\nrecord Held\n\twriter: StringBuilder\n\ttext: String\nend\n\ndef update(mut writer: StringBuilder, count: Integer)\n\tmut i := 0\n\twhile i < count\n\t\twriter.append(\"a😀\")\n\t\ti += 1\n\tend\nend\n\ndef probe()\n\tmut writer := StringBuilder.new()\n\tupdate(writer, 1024)\n\tsnapshot := writer.to_s()\n\theld := Held.new(writer: writer, text: snapshot)\n\tmut writers := [writer]\n\tmut shared := writers[0]\n\tupdate(shared, 1024)\n\tputs(held.text.size())\n\tputs(writer.size())\n\tputs(held.writer.to_s().to_bytes().size())\n\twriter.clear()\n\twriter.append(\"after\")\n\tputs(held.text.size())\n\tputs(held.writer.to_s())\n\tmut retained: Array<String> := []\n\tmut i := 0\n\twhile i < 512\n\t\tmut item := StringBuilder.from_string(\"saved-\")\n\t\titem.append(i.to_s())\n\t\tretained.push(item.to_s())\n\t\titem.clear()\n\t\titem.append(\"changed\")\n\t\ti += 1\n\tend\n\tputs(retained[0])\n\tputs(retained[511])\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "2048\n4096\n10240\n2048\nafter\nsaved-0\nsaved-511\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "2048\n4096\n10240\n2048\nafter\nsaved-0\nsaved-511\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "2048\n4096\n10240\n2048\nafter\nsaved-0\nsaved-511\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "2048\n4096\n10240\n2048\nafter\nsaved-0\nsaved-511\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-builder-display",
+      "title": "StringBuilder display",
+      "declarations": "import trb/std/string_builder\ndef show(value: Any)\nputs(value)\nend\ndef probe()\nmut writer := StringBuilder.from_string(\"text\")\nputs(writer)\nshow(writer)\nwriter.append(\"!\")\nshow(writer)\nwriter.clear()\nputs(writer.to_s().to_bytes().size())\nputs(writer)\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "text\ntext\ntext!\n0\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "StringBuilder(\"text\")\nStringBuilder(\"text\")\nStringBuilder(\"text!\")\n0\nStringBuilder(\"\")\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "text\ntext\ntext!\n0\n\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "StringBuilder(\"text\")\nStringBuilder(\"text\")\nStringBuilder(\"text!\")\n0\nStringBuilder(\"\")\n",
           "stderr": ""
         }
       }
