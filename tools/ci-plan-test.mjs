@@ -267,7 +267,7 @@ test('compiler, conformance and execution workflows retain the full authority', 
 });
 test('static documentation and evidence tools do not run compiler matrices', () => {
   for (const tool of ['tools/capability-map-check.mjs',
-    'tools/benchmark-pages-data.mjs', 'tools/benchmark-pages-check.mjs',
+    'tools/benchmark-pages-data.mjs', 'tools/benchmark-pages-check.mjs', 'tools/dependency-pages.py',
     'tools/result_archive.py', 'tools/result_archive_test.py',
     'tools/evidence_bundle.py', 'tools/evidence_bundle_test.py',
     '.github/workflows/documentation.yml']) {

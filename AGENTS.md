@@ -9,7 +9,9 @@ interfaces as current gaps, not permanent exclusions from that objective.
 
 For release scope and feature selection, also follow the accepted
 [v0.5.0 transition contract](https://github.com/type-rb/type-rb/blob/main/docs/native-transition.md). Full Go implementation parity is a release
-gate, including source backends, packages and tooling. The retained Go compiler
+gate, including source backends, packages and tooling, subject only to the
+scoped maintainer-approved v0.5 deferrals in the canonical manifest. Deferrals
+remain visible and never count as passing parity. The retained Go compiler
 has no Native output requirement. Practical application slices remain a
 priority within that full scope. Current exact pins, historical identities,
 quality gates and initiative ownership stay in force until their documented

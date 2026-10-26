@@ -20,7 +20,9 @@ close; do not treat the project's former experimental scope as a feature ceiling
 Feature selection also follows the accepted
 [v0.5.0 transition contract](https://github.com/type-rb/type-rb/blob/main/docs/native-transition.md): complete Go implementation functionality,
 three source backends plus Native output, and practical application previews
-within that release scope. Use the shared contract inventory and existing
+within that release scope. Apply only the explicit approved deferrals in the
+canonical manifest; keep their required companion diagnostics and all other
+obligations. Deferred work is not a passing result. Use the shared contract inventory and existing
 initiatives; do not infer full parity from language-case counts or duplicate
 another owner's tasks. The retained Go implementation has no Native backend
 requirement. Preserve current pins and quality gates until qualified cutover.
