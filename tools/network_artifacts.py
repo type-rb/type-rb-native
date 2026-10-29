@@ -17,6 +17,10 @@ MAX_BYTES = 128 * 1024 * 1024
 
 
 def artifact_spec(family):
+    if family == "crypto":
+        return (Path(__file__).with_name("crypto-dependencies.json"),
+                {"libcrypto.a", "crypto-identity.o", "openssl-LICENSE"},
+                b"TRBN-CRYPTO-V1\0", ("libcrypto",))
     if family == "network":
         return PINS, FILES, MARKER, ("libuv", "libllhttp")
     if family == "compression":

@@ -187,13 +187,14 @@
     },
     {
       "id": "bootstrap-tools",
-      "name": "Shell, make, curl and archive utilities",
+      "name": "Shell, make, Perl, curl and archive utilities",
       "status": "current",
       "scope": "Build tool",
       "role": "Checkout bootstrap, verified downloads and toolchain setup.",
-      "configuration": "Setup commands only. The curl executable is distinct from a future application dependency on libcurl.",
+      "configuration": "Setup commands only. Perl configures the pinned OpenSSL source build; prebuilt crypto archives do not require Perl at runtime. The curl executable is distinct from a future application dependency on libcurl.",
       "evidence": [
         "tools/build-native.sh",
+        "tools/build-crypto-dependencies.py",
         "tools/bootstrap-seed-download.sh",
         "docs/native-dependency-policy.md"
       ],
@@ -269,17 +270,20 @@
     {
       "id": "openssl",
       "name": "OpenSSL: libssl / libcrypto",
-      "status": "candidate",
-      "scope": "Application runtime",
-      "role": "TLS client connections, RS256 verification, digest/HMAC and database TLS.",
-      "configuration": "Selected OpenSSL 3.5 LTS, latest qualified patch, not introduced. Use one OpenSSL build per process. Disable implicit configuration loading before any consumer; explicit trust adapters replace build-machine default CA paths.",
+      "status": "current",
+      "scope": "Application runtime and retained REPL",
+      "role": "Static libcrypto for digest, HMAC and secure comparison; TLS and RSA remain planned.",
+      "configuration": "OpenSSL 3.5.9 LTS, Apache-2.0, pinned commit/archive. Static libcrypto with upstream assembly; no shared libraries, modules, DSO, engines, legacy provider or implicit configuration. Explicit NO_LOAD_CONFIG initialization. Full CLI links it for REPL; core compiler and lockfile hashing do not. TLS/libssl and shared DB profiles are not implemented.",
       "evidence": [
-        "https://docs.openssl.org/3.5/man7/ossl-guide-libraries-introduction/",
+        "tools/crypto-dependencies.json",
+        "tools/build-crypto-dependencies.py",
+        "docs/native-crypto.md",
+        "tools/crypto_artifact_smoke.py",
+        ".github/workflows/native-cli.yml",
         "docs/native-dependency-policy.md",
-        "https://openssl-library.org/policies/releasestrat/",
         "https://docs.openssl.org/3.5/man3/OPENSSL_init_crypto/"
       ],
-      "next": "Qualify static versus bundled shared profiles, initialization/provider behavior and four-host import receipts. Register exact patch and hashes only in the implementing PR; this record is not an installed pin.",
+      "next": "Qualify immutable four-host release artifacts and update ownership under #1257. Add TLS/RSA/trust adapters and the single shared TLS stack for DB applications as separate work; do not mix this static profile with a second dynamically loaded OpenSSL.",
       "requiredBy": [
         "package.web.auth.bearer",
         "package.std.digest",
@@ -287,7 +291,8 @@
         "0086 M6"
       ],
       "referenceBehavior": "TLS, RSA signature verification and hashes use one qualified stack per process; connection-specific CA/verification settings remain explicit.",
-      "decision": "selected"
+      "decision": "retain",
+      "pin": "openssl"
     },
     {
       "id": "sqlite",
@@ -392,22 +397,26 @@
     {
       "id": "digest-hmac",
       "name": "Digest / HMAC provider",
-      "scope": "Application runtime",
+      "scope": "Application runtime and retained REPL",
       "role": "MD5, SHA-1, SHA-256/512, HMAC and constant-time comparison.",
-      "configuration": "Selected libcrypto-first implementation, not introduced. Use the same OpenSSL stack as TLS; only applications using these APIs acquire the dependency. Compiler lockfile SHA-256 stays independent.",
+      "configuration": "Verified standard declarations select pinned OpenSSL 3.5.9 libcrypto statically. Full CLI is a consumer for retained REPL; core and lockfile SHA-256 stay independent. Unrelated applications need no crypto archives. Fixed-length comparison uses CRYPTO_memcmp; unequal lengths return false.",
       "requiredBy": [
         "package.std.digest",
         "package.std.hmac"
       ],
-      "referenceBehavior": "Known-answer and invalid-input cases for all exposed algorithms; constant-time tag comparison and wrapping-integer lowering reviewed if an owned implementation is evaluated.",
-      "next": "Record digest-only size/build/startup deltas and a reviewed budget before adoption; compare HACL* or AWS-LC if it exceeds that budget. Self-implementation requires measured benefit and side-channel review.",
+      "referenceBehavior": "82 frozen digest, RFC 4231 HMAC, binary/padding/empty/long-key and comparison observations across check, build, run and retained REPL at TYPE_RB_REVISION. Constant-time provider code review is separate from known-answer tests.",
+      "next": "Retain the three-pair Darwin arm64 diagnostic: SHA-256 executable increment 3,217,616 bytes, below the prospective 4 MiB guardrail. Build/startup samples are local observations, not universal latency guarantees. Qualify other host artifacts; compare HACL* or AWS-LC if later application budgets miss. Owned primitives require measured benefit and side-channel review.",
       "evidence": [
-        "https://github.com/hacl-star/hacl-star",
-        "https://docs.openssl.org/3.5/man7/EVP_MD-SHA2/",
+        "docs/native-crypto.md",
+        "tools/crypto-cases.json",
+        "tools/native-crypto-test.py",
+        "compiler/src/backend/qbe/runtime/crypto.trb",
+        "compiler/cli/repl/crypto.trb",
         "docs/native-dependency-policy.md"
       ],
-      "status": "candidate",
-      "decision": "selected"
+      "status": "current",
+      "decision": "retain",
+      "pin": "openssl"
     },
     {
       "id": "sqldef",

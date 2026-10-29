@@ -1,4 +1,5 @@
-import { mir_adapter_gzip, mir_adapter_set_compression_link } from mir/model/call_kinds
+import { crypto_adapter_start, crypto_names, crypto_parameters, crypto_result, crypto_signature_name } from mir/model/crypto_contract
+import { mir_adapter_gzip, mir_adapter_set_compression_link, mir_adapter_set_crypto_link } from mir/model/call_kinds
 import { builder_adapter_start, builder_mutates, builder_names, builder_parameters, builder_result, builder_signature_name } from mir/model/string_builder_contract
 import { network_adapter_start, network_names, network_parameters, network_result } from mir/model/network_contract
 import { callable_type } from frontend/types/callable_types
@@ -10,6 +11,9 @@ import { mir_semantic_type_name, mir_semantic_value_type } from mir/model/types
 # The checked declaration owns the adapter. Source aliases and call-site spelling
 # never select a runtime operation, and the backend never resolves them again.
 def mir_runtime_adapter(name: String): Integer
+	if name == "compiler_set_crypto_link"
+		return mir_adapter_set_crypto_link()
+	end
 	if name == "compiler_set_compression_link"
 		return mir_adapter_set_compression_link()
 	end
@@ -34,6 +38,12 @@ def mir_runtime_adapter(name: String): Integer
 end
 
 def mir_call_symbol(signature: MirSignature): String
+	if signature.kind == mir_signature_standard() && signature.adapter >= crypto_adapter_start() && signature.adapter < crypto_adapter_start() + crypto_names().size()
+		return "trbn_crypto_" + crypto_names()[signature.adapter - crypto_adapter_start()]
+	end
+	if signature.kind == mir_signature_compiler_runtime() && signature.adapter == mir_adapter_set_crypto_link()
+		return "trbn_set_crypto_link"
+	end
 	if signature.kind == mir_signature_standard() && signature.adapter == mir_adapter_gzip()
 		return "trbn_gzip"
 	end
@@ -171,6 +181,11 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 			name = "trb/internal/time_host.zone_data"
 			parameters = ["String"]
 			result = "String"
+		elsif signature.adapter >= crypto_adapter_start() && signature.adapter < crypto_adapter_start() + crypto_names().size()
+			crypto := signature.adapter - crypto_adapter_start()
+			name = crypto_signature_name(crypto)
+			parameters = crypto_parameters(crypto)
+			result = crypto_result(crypto)
 		elsif signature.adapter == mir_adapter_gzip()
 			name = "trb/internal/web/compression.gzip"
 			parameters = ["Bytes"]
@@ -224,7 +239,7 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 		end
 		return ""
 	end
-	if signature.kind != mir_signature_compiler_runtime() || adapter < mir_adapter_file_exists() || (adapter > mir_adapter_reset_temporary_storage() && adapter != mir_adapter_literal_byte() && adapter != mir_adapter_collect_package_files() && adapter != mir_adapter_set_network_link() && adapter != mir_adapter_set_compression_link())
+	if signature.kind != mir_signature_compiler_runtime() || adapter < mir_adapter_file_exists() || (adapter > mir_adapter_reset_temporary_storage() && adapter != mir_adapter_literal_byte() && adapter != mir_adapter_collect_package_files() && adapter != mir_adapter_set_network_link() && adapter != mir_adapter_set_compression_link() && adapter != mir_adapter_set_crypto_link())
 		return "MIR external adapter is invalid"
 	end
 	if mir_runtime_adapter(signature.name) != adapter
@@ -249,7 +264,7 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 		end
 	elsif adapter == mir_adapter_eputs()
 		result = "Void"
-	elsif adapter == mir_adapter_set_network_link() || adapter == mir_adapter_set_compression_link()
+	elsif adapter == mir_adapter_set_network_link() || adapter == mir_adapter_set_compression_link() || adapter == mir_adapter_set_crypto_link()
 		parameters = ["Boolean"]
 		result = "Void"
 	elsif adapter == mir_adapter_reset_temporary_storage()

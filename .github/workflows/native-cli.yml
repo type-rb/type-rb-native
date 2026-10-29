@@ -42,6 +42,7 @@ jobs:
         run: |
           python3 tools/network_artifacts_test.py
           python3 tools/compression_artifacts_test.py
+          python3 tools/crypto_artifacts_test.py
       - name: Build and qualify host archives
         env:
           PLATFORM: ${{ matrix.platform }}
@@ -61,6 +62,13 @@ jobs:
           python3 tools/compression_artifacts.py pack "$RUNNER_TEMP/compression" "dist/compression-$PLATFORM.tar.gz"
           cp tools/compression-dependencies.json dist/compression-source-pins.json
           cp "$RUNNER_TEMP/compression-sources/"*.tar.gz dist/
+          python3 tools/build-crypto-dependencies.py --archives "$RUNNER_TEMP/crypto-sources" \
+            --output "$RUNNER_TEMP/crypto"
+          python3 tools/crypto_artifacts.py verify "$RUNNER_TEMP/crypto" --target "$PLATFORM" > dist/crypto-build.json
+          python3 tools/crypto_artifact_smoke.py "$RUNNER_TEMP/crypto" --receipt dist/crypto-static-link.json
+          python3 tools/crypto_artifacts.py pack "$RUNNER_TEMP/crypto" "dist/crypto-$PLATFORM.tar.gz"
+          cp tools/crypto-dependencies.json dist/crypto-source-pins.json
+          cp "$RUNNER_TEMP/crypto-sources/"*.tar.gz dist/
       - uses: actions/upload-artifact@v6
         with:
           name: network-${{ matrix.platform }}
@@ -86,7 +94,9 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y lld time
       - name: Build from the pinned native seed and verify fixed points
-        run: ./trbn --version
+        run: |
+          python3 tools/build-crypto-dependencies.py --archives "$RUNNER_TEMP/crypto-sources" --output bin/crypto
+          ./trbn --version
       - name: Build pinned HTTP transport dependencies and verify their ABI
         run: |
           python3 tools/build-network-dependencies.py \
@@ -104,6 +114,7 @@ jobs:
           python3 tools/native-web-network-repl-test.py bin/trbn
           python3 tools/native-web-compression-test.py bin/trbn --libraries bin/network \
             --compression bin/compression --receipt "$RUNNER_TEMP/web-compression.json"
+          python3 tools/native-crypto-test.py bin/trbn --libraries bin/crypto --receipt "$RUNNER_TEMP/crypto.json"
       - name: Retain application distribution observations
         if: always()
         uses: actions/upload-artifact@v6
@@ -112,6 +123,7 @@ jobs:
           path: |
             ${{ runner.temp }}/network-distribution.json
             ${{ runner.temp }}/web-compression.json
+            ${{ runner.temp }}/crypto.json
           if-no-files-found: error
           retention-days: 30
       - name: Check every reviewed conformance source with the built core compiler
@@ -214,6 +226,8 @@ jobs:
           cp -R bin/network dist/package/network
           cp docs/native-compression.md dist/package/COMPRESSION.md
           cp -R bin/compression dist/package/compression
+          cp docs/native-crypto.md dist/package/CRYPTO.md
+          cp -R bin/crypto dist/package/crypto
           tar -czf "dist/trbn-$PLATFORM.tar.gz" -C dist/package .
           cd dist
           shasum -a 256 "trbn-$PLATFORM.tar.gz" > "trbn-$PLATFORM.tar.gz.sha256"
@@ -245,7 +259,9 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y lld
       - name: Build from the pinned native seed and verify fixed points
-        run: ./trbn --version
+        run: |
+          python3 tools/build-crypto-dependencies.py --archives "$RUNNER_TEMP/crypto-sources" --output bin/crypto
+          ./trbn --version
       - name: Exercise checkout cache invalidation
         run: |
           set -o pipefail

@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
         shutil.copy2(repository / file, root / file)
     shutil.copytree(repository / 'tools/qbe', root / 'tools/qbe')
     env = {key: value for key, value in os.environ.items()
-           if key not in ['TRBN_CC', 'TRBN_QBE', 'TRBN_BOOTSTRAP_SEED']}
+           if key not in ['TRBN_CC', 'TRBN_QBE', 'TRBN_BOOTSTRAP_SEED', 'TRBN_CRYPTO_LIB_DIR']}
 
     def stop_owned(child):
         if child.poll() is not None:
@@ -152,6 +152,15 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
 
     # Each input change selects the rebuild scope that a build would take.
     # Restoring the content returns to the published cache without a rebuild.
+    for file in ('bin/crypto/libcrypto.a', 'bin/crypto/crypto-identity.o'):
+        path = root / file
+        original, before = path.read_bytes(), path.stat()
+        path.write_bytes(original + b'changed dependency')
+        os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+        expect_plan('cli', f'{file} content edit')
+        path.write_bytes(original)
+        os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+        expect_plan('cached', f'{file} restored')
     for file, scope in [('compiler/cli/main.trb', 'cli'), ('compiler/src/compiler.trb', 'core'),
                         ('tools/compiler_sources.py', 'cli'), ('tools/qbe_toolchain.py', 'core'),
                         ('tools/qbe/backend.json', 'core'), ('tools/qbe/sqrt.patch', 'core'),
