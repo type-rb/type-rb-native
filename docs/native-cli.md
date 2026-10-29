@@ -12,6 +12,9 @@ Compiled Web projects can call `Web.serve` using the pinned
 [HTTP network libraries](native-network.md). Install those libraries once and
 keep them in `network/` beside QBE, or set `TRBN_NETWORK_LIB_DIR` when building.
 The compiled server contains the HTTP libraries and needs no runtime override.
+The [gzip middleware](native-compression.md) additionally uses the pinned static
+libdeflate installation in `compression/` beside QBE, or the build-time
+`TRBN_COMPRESSION_LIB_DIR` override. The compiler itself needs no gzip library.
 
 ## Build and run from a checkout
 
