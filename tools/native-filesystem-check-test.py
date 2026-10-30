@@ -9,6 +9,11 @@ import tempfile
 
 
 CASES = {
+    'forged annotated alias': 'def escape(value: Any)\n_handle: File := value\nend',
+    'stored borrow callback': 'def accept(_file: File)\nend\ndef escape()\n_callback := accept\nend',
+    'erased borrow callback': 'def accept(_file: File)\nend\ndef escape()\n_callback: Any := accept\nend',
+    'interface borrow': 'interface Reader\nread(file: File): String\nend',
+    'empty resource array': 'def escape()\n_handles: Array<File> := []\nend',
     'return through Any': 'def escape(file: File): Any\nreturn file\nend',
     'annotated Any alias': 'def escape(file: File)\nvalue: Any := file\nputs(value)\nreturn\nend',
     'mutable local alias': 'def escape(file: File)\nmut value := file\nputs(value)\nreturn\nend',

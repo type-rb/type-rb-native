@@ -4,6 +4,7 @@ import { callable_parts } from frontend/types/callable_types
 import { generic_arguments } from frontend/types/generic_arguments
 import { namespace_parent } from frontend/types/namespace_model
 import { nullable_element } from frontend/types/nullable_types
+import { object_abstract_function, object_abstract_method } from frontend/types/object_types
 import { scoped_resource_declaration_name } from frontend/types/resource_types
 import { union_parts } from frontend/types/union_types
 import { CompilerState, diagnostic, has_diagnostic } from state/state
@@ -135,12 +136,17 @@ def validate_resource_declarations(mut state: CompilerState): Boolean
 		end
 		record_index += 1
 	end
+	mut template := 0
 	state.type_resolution.generic_functions.each do |row|
 		state.global_bindings.declaration_owner[0] = namespace_parent(row.name)
 		reject_stored_resource(state, row.source_id, row.result_type, row.type_parameters, row.line)
 		row.parameters.each do |parameter|
+			if object_abstract_method(state, template)
+				reject_stored_resource(state, row.source_id, parameter.type_name, row.type_parameters, parameter.line)
+			end
 			validate_resource_parameter(state, row.source_id, parameter.type_name, row.type_parameters, parameter.mutable, parameter.default_start >= 0, parameter.line)
 		end
+		template += 1
 	end
 	mut function_index := 0
 	while function_index < state.declarations.function_count[0]
@@ -150,6 +156,9 @@ def validate_resource_declarations(mut state: CompilerState): Boolean
 		mut parameter := load_integer(state.declarations.function_parameter_starts, function_index)
 		finish := parameter + load_integer(state.declarations.function_parameter_counts, function_index)
 		while parameter < finish
+			if object_abstract_function(state, function_index)
+				reject_stored_resource(state, source, load_string(state.declarations.parameter_types, parameter), [], load_integer(state.declarations.parameter_lines, parameter))
+			end
 			validate_resource_parameter(
 				state, source, load_string(state.declarations.parameter_types, parameter), [],
 				load_integer(state.declarations.parameter_mutable, parameter),
