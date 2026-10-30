@@ -6,6 +6,8 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
+import shlex
 import shutil
 import subprocess
 import tarfile
@@ -42,6 +44,36 @@ ABI_CONSTANTS = {
     'CURLU_NON_SUPPORT_SCHEME': 8, 'AF_INET': 2,
     'Z_OK': 0, 'Z_STREAM_END': 1, 'Z_BUF_ERROR': -5, 'Z_NO_FLUSH': 0,
 }
+
+
+def verify_openssl_headers(build, prefix, environment):
+    """Check the actual libcurl translation unit, including transitive headers."""
+    commands = json.loads((build / 'compile_commands.json').read_text())
+    matches = [entry for entry in commands if Path(entry['file']).as_posix().endswith('/vtls/openssl.c')]
+    if len(matches) != 1:
+        raise ValueError('expected one OpenSSL translation unit')
+    entry = matches[0]
+    command = entry.get('arguments') or shlex.split(entry['command'])
+    # CMake's command database contains the real include order. Preprocess that
+    # command instead of an independent probe with a different search path.
+    command[command.index('-c')] = '-E'
+    command[command.index('-o') + 1] = os.devnull
+    result = subprocess.run([*command, '-H'], cwd=entry['directory'], env=environment,
+                            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+    if result.returncode:
+        raise ValueError('OpenSSL header audit failed:\n' + result.stderr)
+    headers = set()
+    for line in result.stderr.splitlines():
+        match = re.match(r'^\.+ (.+)$', line)
+        if match:
+            header = Path(match[1]).resolve()
+            if 'openssl' in header.parts:
+                if not header.is_relative_to((prefix / 'include/openssl').resolve()):
+                    raise ValueError('compiler selected an unqualified OpenSSL header: ' + str(header))
+                headers.add(header)
+    if not headers:
+        raise ValueError('compiler did not report any OpenSSL headers')
+    return len(headers)
 
 
 def extract(pin, directory, archives):
@@ -97,7 +129,9 @@ def main():
         flags = '-O2 -fPIC -ffunction-sections -fdata-sections -ffile-prefix-map=' + str(root) + '=.'
         environment = dict(os.environ, CC=cc, CFLAGS=flags, ZERO_AR_DATE='1',
                            SOURCE_DATE_EPOCH=str(crypto_pins['openssl']['source_date_epoch']))
-        for name in ('OPENSSL_CONF', 'OPENSSL_MODULES', 'OPENSSL_ENGINES'):
+        for name in ('OPENSSL_CONF', 'OPENSSL_MODULES', 'OPENSSL_ENGINES',
+                     'CPATH', 'C_INCLUDE_PATH', 'CPLUS_INCLUDE_PATH', 'OBJC_INCLUDE_PATH',
+                     'LIBRARY_PATH', 'CPPFLAGS', 'LDFLAGS'):
             environment.pop(name, None)
 
         def run(*argv, cwd=root):
@@ -118,6 +152,7 @@ def main():
         run('make', '-j2', cwd=zlib)
         run('make', 'install', cwd=zlib)
         cmake_options = ['-DBUILD_CURL_EXE=OFF', '-DBUILD_SHARED_LIBS=OFF', '-DBUILD_STATIC_LIBS=ON',
+                         '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON', '-DCMAKE_NO_SYSTEM_FROM_IMPORTED=ON',
                          '-DBUILD_TESTING=OFF', '-DBUILD_LIBCURL_DOCS=OFF', '-DBUILD_MISC_DOCS=OFF',
                          '-DCURL_USE_OPENSSL=ON', '-DOPENSSL_USE_STATIC_LIBS=ON',
                          '-DOPENSSL_ROOT_DIR=' + str(prefix), '-DOPENSSL_INCLUDE_DIR=' + str(prefix / 'include'),
@@ -143,6 +178,7 @@ def main():
                                ('OPENSSL_SSL_LIBRARY', ssl_library), ('OPENSSL_CRYPTO_LIBRARY', crypto_library)]:
             if name not in cache or Path(cache[name]).resolve() != expected.resolve():
                 raise ValueError('CMake selected an unqualified OpenSSL input: ' + name)
+        header_count = verify_openssl_headers(root / 'curl-build', prefix, environment)
         run('cmake', '--build', root / 'curl-build', '--target', 'libcurl_static', '--parallel', '2')
         probe = root / 'abi.c'
         probe.write_text('#include <stddef.h>\n#include <string.h>\n#include <dirent.h>\n#include <curl/curl.h>\n'
@@ -189,6 +225,7 @@ def main():
                                      'crypto_configuration': crypto_receipt['configuration'],
                                      'apple_sectrust': target.startswith('darwin-'),
                                      'openssl_inputs_pinned': True,
+                                     'openssl_headers_verified': header_count,
                                      'automatic_ca_paths': False, 'automatic_openssl_configuration': False,
                                      'disabled': list(DISABLED), 'cflags': '-O2 -fPIC -ffunction-sections -fdata-sections -ffile-prefix-map=<build>=.'},
                    'cc': subprocess.check_output([cc, '--version'], text=True).splitlines()[0],

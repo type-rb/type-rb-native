@@ -81,6 +81,12 @@ release archive SHA-256 and upstream revision. OpenSSL comes from the existing
 accepted `libcrypto.a` used by all TLS/crypto consumers. zlib supplies bounded
 streaming decoding; libdeflate remains the separate whole-response gzip encoder.
 
+The builder isolates ambient header/library search variables and pins both the
+OpenSSL archives and include directory. It preprocesses libcurl's actual TLS
+translation unit with its generated compiler command and rejects any OpenSSL
+header outside the qualified source installation. The receipt records this
+header check as well as the static-link ABI probe.
+
 Contributor builds require a C toolchain, Perl, make and CMake:
 
 ```sh
