@@ -1,3 +1,7 @@
+import { standard_source_oidc_http } from state/standard_source_kinds
+import { native_oidc_http_source } from project/official_catalog
+import { standard_source_oidc, standard_source_oidc_host, standard_source_oidc_json } from state/standard_source_kinds
+import { native_oidc_host_source, native_oidc_json_source, native_oidc_source } from project/official_catalog
 import { standard_source_digest, standard_source_hmac, standard_source_internal_hash, standard_source_internal_hmac, standard_source_secure_compare } from state/standard_source_kinds
 import { pinned_hash_source, pinned_hmac_source } from project/official_catalog
 import { standard_source_compression, standard_source_network_host, standard_source_string_builder, standard_source_string_builder_storage, standard_source_web_server } from state/standard_source_kinds
@@ -29,6 +33,18 @@ import { sparse_integer_at, store_integer } from support/storage
 # Portable declarations use the same parser and nominal catalogs as authored
 # modules. Their owner tag is assigned only by this loader, never by spelling.
 def standard_source_kind(path: String): Integer
+	if path == "trb/internal/auth/oidc_http"
+		return standard_source_oidc_http()
+	end
+	if path == "trb/internal/auth/oidc"
+		return standard_source_oidc()
+	end
+	if path == "trb/internal/auth/oidc_json"
+		return standard_source_oidc_json()
+	end
+	if path == "trb/internal/auth/oidc_host"
+		return standard_source_oidc_host()
+	end
 	if path == "trb/std/digest"
 		return standard_source_digest()
 	end
@@ -138,6 +154,18 @@ def standard_source_kind(path: String): Integer
 end
 
 def standard_source_name(kind: Integer): String
+	if kind == standard_source_oidc_http()
+		return "trb/internal/auth/oidc_http/index"
+	end
+	if kind == standard_source_oidc()
+		return "trb/internal/auth/oidc/index"
+	end
+	if kind == standard_source_oidc_json()
+		return "trb/internal/auth/oidc_json/index"
+	end
+	if kind == standard_source_oidc_host()
+		return "trb/internal/auth/oidc_host/index"
+	end
 	if kind == standard_source_digest()
 		return "trb/std/digest/index"
 	end
@@ -247,6 +275,18 @@ def standard_source_name(kind: Integer): String
 end
 
 def standard_source_text(kind: Integer): String
+	if kind == standard_source_oidc_http()
+		return native_oidc_http_source()
+	end
+	if kind == standard_source_oidc()
+		return native_oidc_source()
+	end
+	if kind == standard_source_oidc_json()
+		return native_oidc_json_source()
+	end
+	if kind == standard_source_oidc_host()
+		return native_oidc_host_source()
+	end
 	if kind == standard_source_digest()
 		return pinned_hash_source()
 	end
@@ -363,6 +403,10 @@ def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer)
 		return -1
 	end
 	caller_kind := sparse_integer_at(state.standard_modules, state.module_graph.active_module[0])
+	if (kind == standard_source_oidc() && caller_kind != official_source_kind("trb/web/auth/bearer")) || ((kind == standard_source_oidc_json() || kind == standard_source_oidc_http()) && caller_kind != standard_source_oidc()) || (kind == standard_source_oidc_host() && caller_kind != standard_source_oidc() && caller_kind != standard_source_oidc_http())
+		diagnostic(state, "TRBN4003", line, "internal OIDC sources are reserved for the owned Bearer provider")
+		return -1
+	end
 	if (kind == standard_source_internal_hash() && caller_kind != standard_source_digest()) || (kind == standard_source_internal_hmac() && caller_kind != standard_source_hmac())
 		diagnostic(state, "TRBN4003", line, "internal cryptography is reserved for verified standard sources")
 		return -1
@@ -431,7 +475,7 @@ def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer)
 	end
 	if kind == standard_source_internal_json()
 		caller := sparse_integer_at(state.standard_modules, state.module_graph.active_module[0])
-		if caller != standard_source_json() && caller != standard_source_jsonc()
+		if caller != standard_source_json() && caller != standard_source_jsonc() && caller != standard_source_oidc() && caller != standard_source_oidc_json()
 			diagnostic(state, "TRBN4003", line, "internal package imports are reserved for verified standard sources: trb/internal/json")
 			return -1
 		end
