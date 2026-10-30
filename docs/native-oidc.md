@@ -127,23 +127,3 @@ cover libcurl/OpenSSL/zlib constants, native structs and platform interfaces.
 Artifact smoke tests verify relocation, embedded inventories, HTTPS and absence
 of dynamic TLS dependencies. Local checks, hosted target validation and immutable
 release qualification remain separate evidence.
-
-## Initial dependency cost observation
-
-One Darwin arm64 observation on 2026-10-30 used three alternating builds of a
-Web request fixture and the same fixture with Bearer verification. Both print
-the configuration-error message and exit; this measures neither a TLS handshake
-nor authenticated-request throughput. `native-oidc-distribution-test.py --measure`
-records all observations separately from correctness acceptance.
-
-| Observation | Web fixture | Bearer fixture |
-| --- | ---: | ---: |
-| Executable bytes | 359,080 | 5,124,072 |
-| Build seconds, three observations | 2.809 / 2.841 / 2.761 | 4.941 / 5.071 / 5.097 |
-| Process start-to-exit seconds | 0.478 / 0.132 / 0.047 | 0.129 / 0.123 / 0.126 |
-
-The application grew by 4,764,992 bytes (4.54 MiB); median build time increased
-by 2.262 seconds. Startup observations are too variable to establish an increment.
-The full CLI grew from 6,679,192 to 6,728,760 bytes (+49,568 bytes) against the
-source-matched `985e0da4` compiler baseline. It still does not link the OIDC stack.
-These are local descriptive observations, not cross-platform performance claims.
