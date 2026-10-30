@@ -1,3 +1,4 @@
+import { resource_checked_body, verify_resource_calls } from frontend/checking/body/resource_calls
 import { standard_crypto } from frontend/resolution/crypto_intrinsics
 import { standard_compression } from frontend/resolution/compression_intrinsics
 import { standard_string_builder } from frontend/resolution/string_builder_intrinsics
@@ -90,6 +91,7 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 end
 
 def check_function_body(mut state: CompilerState, function_index: Integer, mut locals: CheckedLocals): Boolean
+	resource_checked_body(state, function_index)
 	if state.type_resolution.generic_template_mode[0] && (web_context_function(state, function_index) > 0 || web_binding_function(state, function_index) > 0 || json_provider_function(state, function_index) > 0)
 		# The trusted provider validates its schema during speculative checking.
 		# Ordinary checking materializes and verifies its complete executable body.
@@ -237,6 +239,9 @@ def analyze_callable_bodies(mut state: CompilerState): Boolean
 end
 
 def finalize_checked_module(mut state: CompilerState): Boolean
+	if !verify_resource_calls(state)
+		return false
+	end
 	if !has_diagnostic(state)
 		mir_refine_call_effects(state.scalar_mir)
 		if !plan_global_initialization(state)

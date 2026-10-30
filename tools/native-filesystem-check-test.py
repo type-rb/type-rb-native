@@ -49,6 +49,32 @@ end
 def escape(_file: File, callback: () -> String): String
 return middle(callback)
 end''',
+    'unused generic unknown callback': '''def middle(callback: () -> String): String
+return callback()
+end
+def escape<T>(_file: File, callback: () -> String): String
+return middle(callback)
+end''',
+    'generic helper unknown callback': '''def middle<T>(callback: () -> String): String
+return callback()
+end
+def escape(_file: File, callback: () -> String): String
+return middle<Integer>(callback)
+end''',
+    'opaque constructor': '''class Reader
+def initialize(callback: () -> String)
+puts(callback())
+end
+end
+def escape(_file: File, callback: () -> String)
+_reader := Reader.new(callback)
+end''',
+    'opaque default': '''def middle(callback: () -> String, value: String = callback()): String
+return value
+end
+def escape(_file: File, callback: () -> String): String
+return middle(callback)
+end''',
     'transitive suspension': '''def work(): Array<Integer>
 return [1].concurrent_map(limit: 1) do |value|
 value

@@ -1,3 +1,4 @@
+import { resource_unchecked_dependency, verify_resource_calls } from frontend/checking/body/resource_calls
 import { web_context_kind } from frontend/providers/web_context
 import { web_binding_kind } from frontend/providers/web_declarations
 import { json_provider_kind } from frontend/providers/json_declarations
@@ -80,6 +81,19 @@ def check_generic_templates(mut state: CompilerState): Boolean
 		objects = prepare_object_dispatch(program, objects)
 		function += 1
 	end
+	mut dependency := resource_unchecked_dependency(program)
+	while dependency >= 0 && !has_diagnostic(program)
+		mut names := resolution_locals_new(program.source_tokens.token_count[0] + 1)
+		resolve_function_body(program, dependency, names)
+		declare_default_functions(program)
+		if !has_diagnostic(program)
+			mut locals := checked_function_locals(program, dependency)
+			check_function_body(program, dependency, locals)
+		end
+		objects = prepare_object_dispatch(program, objects)
+		dependency = resource_unchecked_dependency(program)
+	end
+	verify_resource_calls(program)
 	if !has_diagnostic(program)
 		declare_object_witnesses(program)
 	end
