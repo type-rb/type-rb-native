@@ -267,7 +267,7 @@ test('compiler, conformance and execution workflows retain the full authority', 
 });
 test('static documentation and evidence tools do not run compiler matrices', () => {
   for (const tool of ['tools/capability-map-check.mjs',
-    'tools/benchmark-pages-data.mjs', 'tools/benchmark-pages-check.mjs',
+    'tools/benchmark-pages-data.mjs', 'tools/benchmark-pages-check.mjs', 'tools/dependency-pages.py',
     'tools/result_archive.py', 'tools/result_archive_test.py',
     'tools/evidence_bundle.py', 'tools/evidence_bundle_test.py',
     '.github/workflows/documentation.yml']) {
@@ -501,8 +501,15 @@ test('exact CLI inputs run quick and CLI authorities without core measurements',
   assert(cliJobs[1].includes('tools/native-bootstrap-test.py'));
   assert(cliJobs[1].includes('native-cli-cache-${{ matrix.platform }}'));
   assert(cliJobs[1].includes('if: always()') && cliJobs[1].includes('if-no-files-found: error'));
-  assert.equal((workflow.match(/- runner: macos-14/g) || []).length, 2);
-  assert.equal((workflow.match(/- runner: ubuntu-24.04-arm/g) || []).length, 2);
+  assert.equal((workflow.match(/- runner: macos-14/g) || []).length, 3, 'smoke, cache and archive qualification retain Darwin arm64');
+  assert.equal((workflow.match(/- runner: ubuntu-24.04-arm/g) || []).length, 3, 'smoke, cache and archive qualification retain Linux arm64');
+  assert(workflow.includes('- runner: macos-15-intel'));
+  assert(workflow.includes('python3 tools/network_artifact_smoke.py'));
+  assert(workflow.includes('python3 tools/native-network-distribution-test.py'));
+  assert(workflow.includes('python3 tools/compression_artifact_smoke.py'));
+  assert(workflow.includes('python3 tools/native-web-compression-test.py'));
+  assert(workflow.includes('python3 tools/crypto_artifact_smoke.py'));
+  assert(workflow.includes('python3 tools/native-crypto-test.py'));
   assert.equal((workflow.match(/timeout-minutes: 90/g) || []).length, 2);
   assert.equal(classify(['compiler/conformance/README.md'], false).cli, false);
 });

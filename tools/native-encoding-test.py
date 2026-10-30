@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise byte encodings and request ID propagation across modules and forced GC."""
 import argparse
+from native_network_link import static_network_flags
 import base64
 import json
 import os
@@ -249,7 +250,7 @@ with tempfile.TemporaryDirectory(prefix='native-encoding-') as temporary:
         il, assembly = root / 'input.ssa', root / 'input.s'
         il.write_text('\n'.join(forced) + '\n')
         run([binary.with_name('qbe'), '-o', assembly, il])
-        run(['/usr/bin/cc', assembly, '-lm', '-o', program])
+        run(['/usr/bin/cc', assembly, *static_network_flags(binary.with_name('qbe')), '-lm', '-o', program])
         collected = subprocess.run([str(program)], cwd=root, text=True, capture_output=True,
             env=dict(environment, TYPE_RB_NATIVE_RUNTIME_STATS='1'), timeout=90)
         assert collected.returncode == 0 and collected.stdout == expected * 8, collected

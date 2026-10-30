@@ -234,6 +234,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	summary := len(os.Args) > 5 && os.Args[5] == "summary"
 	var lines []string
 	if workload == "log-pipeline" {
 		lines = logInput(count, variant)
@@ -251,6 +252,7 @@ func main() {
 		retained = make([]string, count)
 	}
 	fmt.Println("ready")
+	var totalChecksum int64
 	for batch := 0; batch < batches; batch++ {
 		var checksum int64
 		switch workload {
@@ -273,11 +275,18 @@ func main() {
 		default:
 			panic("unknown workload")
 		}
-		fmt.Printf("%d,%d\n", batch, checksum)
+		if summary {
+			totalChecksum = (totalChecksum + checksum) % 1000000007
+		} else {
+			fmt.Printf("%d,%d\n", batch, checksum)
+		}
 	}
 	var retainedSize int64
 	for _, value := range retained {
 		retainedSize += size(value)
+	}
+	if summary {
+		fmt.Printf("summary,%d\n", totalChecksum)
 	}
 	fmt.Printf("done,%d\n", retainedSize)
 }

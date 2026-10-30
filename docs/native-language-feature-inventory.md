@@ -35,7 +35,7 @@ Each count describes registered probes, not language coverage percentages.
 | Project imports and declaration identity | basic | 1 / 83 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
 | Target source interop | toolchain | 0 / 0 | Go/Ruby/TypeScript source emission and platform interop | NativeStatement, NativeBlock, NativeExpression |
 | Portable HTTP values | packages | 0 / 29 | Networking, streaming, transport adapters and Web semantic/type providers |  |
-| Web values and middleware | packages | 0 / 71 | Network serving and server lifecycle; logger, compression, timeout and authentication providers remain incomplete |  |
+| Web values and middleware | packages | 0 / 71 | HTTP serving and whole-buffer gzip have dedicated runtime acceptance; logger, timeout and authentication providers remain incomplete |  |
 | JSX and web bindings | packages | 0 / 0 | Typed JSX and official web-package boundaries | JSXElement |
 | Package capability activation | packages | 0 / 0 | Package-owned activation and resolution | ActivateStatement |
 | Retired authored attempt syntax | retired | 0 / 0 | none registered | AttemptExpression |
@@ -49,3 +49,4 @@ Each count describes registered probes, not language coverage percentages.
 | File routes and in-process Web dispatch | packages | 0 / 75 | Network serving, streaming, cancellation and shutdown remain incomplete; Wider generic and helper schema combinations remain unqualified |  |
 | Checked endpoint declarations and Web generators | packages | 3 / 68 | Ordinary unowned class-body calls remain incomplete pending #1208; local namesakes, indirect descendants and namespaced contracts are explicit gaps; Entry-free configured project checking remains incomplete; the pinned OpenAPI command itself requires a main entry; Native source-backend execution and server lifecycle remain incomplete; Pinned browser-client consumer type identity failures remain explicit under #1183 and #1212; generator ownership review is #1211 |  |
 | Path and validated relative path values | packages | 0 / 39 | none registered |  |
+| Buffered string construction | packages | 0 / 3 | Aliased new factory code generation in the pinned reference.; Generic collection display containing builders.; Explicit puts across compiled execution and REPL: specification proposal #1249; current mode-specific reference behavior is preserved. |  |

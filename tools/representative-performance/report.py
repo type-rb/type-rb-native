@@ -9,7 +9,7 @@ def render(result):
     invalid_rss = (result["platform"].startswith("Linux") and
                    result.get("environment", {}).get("peakRssMethod") != "gnu-time-child-v1")
     lines = ["# Representative performance diagnostic", "",
-             f"Status: {result['status']}. Platform: {result['platform']}.",
+             f"Status: {result['status']}. Platform: {result['platform']}. Profile: {result.get('inputProfile', 'registered')}.",
              "", "Local diagnostic only. Ratios below 1 mean shorter Native process wall time.",
              "Missing or failed observations are unknown; no victory count is derived.", "",
              "| Input | Native wall ms | Native/Go | Native/TypeRB Go | Native peak RSS MiB | Batch arrival p95 / p99 ms |",
@@ -33,6 +33,18 @@ def render(result):
         lines.append("| " + case["id"] + " | " + " | ".join(values) + " |")
     lines.extend(["", "Batch arrival intervals include pipe/scheduling overhead; they are not request latency.",
                   "Coalesced markers or insufficient tail observations remain unknown."])
+    lines.extend(["", "## Retained sample ranges", "",
+                  "Observed minimum–maximum, with the original median; not confidence intervals.",
+                  "First-process observations remain separate. Missing historical ranges are not reconstructed.", "",
+                  "| Input | Role | Metric | Count | Minimum | Median | Maximum |",
+                  "| --- | --- | --- | ---: | ---: | ---: | ---: |"])
+    for row in result["cases"]:
+        for role, summary in row.get("summaries", {}).items():
+            for metric, bounds in (summary or {}).get("sampleRanges", {}).items():
+                if metric == "peakRssBytes" and invalid_rss:
+                    continue
+                values = [str(bounds[key]) for key in ("count", "minimum", "p50", "maximum")]
+                lines.append("| " + " | ".join([row["input"]["id"], role, metric, *values]) + " |")
     if invalid_rss:
         lines.extend(["", "Legacy Linux RSS includes observer memory and is unavailable; other metrics and raw observations are retained."])
     if result.get("smoke"):

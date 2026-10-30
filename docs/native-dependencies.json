@@ -10,9 +10,16 @@
       "configuration": "Darwin: libSystem. Linux: libc, libm and target-specific system linkage. Supplied by the target system; no universal library version is claimed.",
       "evidence": [
         "docs/architecture.md",
-        "compiler/src/backend/qbe/runtime/entropy.trb"
+        "compiler/src/backend/qbe/runtime/entropy.trb",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Inspect actual executable imports and deployment baseline for each qualified target."
+      "next": "Inspect actual executable imports and deployment baseline for each qualified target.",
+      "requiredBy": [
+        "native.qualification",
+        "0086 M3"
+      ],
+      "referenceBehavior": "Preserve ownership, errno/error mapping and cleanup at the typed boundary.",
+      "decision": "retain"
     },
     {
       "id": "timezones",
@@ -22,9 +29,15 @@
       "role": "Named time zones use system zone data.",
       "configuration": "System-provided TZif data, read by the owned time adapter; version follows the installed OS data.",
       "evidence": [
-        "compiler/src/backend/qbe/runtime/time_host.trb"
+        "compiler/src/backend/qbe/runtime/time_host.trb",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Record the data source and version when qualifying a distributable image."
+      "next": "Record the data source and version when qualifying a distributable image.",
+      "requiredBy": [
+        "package.std.time"
+      ],
+      "referenceBehavior": "Compare zone names, transitions and error behavior using recorded OS tzdata.",
+      "decision": "retain"
     },
     {
       "id": "unicode",
@@ -35,9 +48,16 @@
       "configuration": "Generated tables are compiled into Native; case mapping follows the pinned reference Unicode 17.0.0 contract. No ICU runtime dependency.",
       "evidence": [
         "tools/unicode-case-data.py",
-        "tools/unicode-identifier-data.py"
+        "tools/unicode-identifier-data.py",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Regenerate only with the reference contract and run Unicode conformance checks."
+      "next": "Move generation to fixed, hashed UCD 17.0 input files; retain Go as exhaustive comparison. Current generators still invoke Go; this decision does not claim that dependency is removed.",
+      "requiredBy": [
+        "language.core",
+        "builtin.string"
+      ],
+      "referenceBehavior": "Reference Unicode 17.0 simple case and identifier behavior; exhaustive comparison remains required.",
+      "decision": "retain"
     },
     {
       "id": "libuv",
@@ -45,13 +65,23 @@
       "status": "current",
       "scope": "Application runtime",
       "role": "TCP, address resolution, timers, signals and event delivery for Web.serve.",
-      "configuration": "Explicit dynamic loading from TRBN_NETWORK_LIB_DIR. LP64 ABI assertions; foreign callbacks own raw buffers only. MIT and bundled notices.",
+      "configuration": "Selectively static for verified network MIR; absent from non-network apps and the compiler. LP64 ABI assertions; foreign callbacks own raw buffers only. Embedded source/archive identity, MIT and bundled notices. No runtime library-directory override.",
       "evidence": [
         "docs/native-network.md",
-        "tools/build-network-dependencies.py"
+        "tools/build-network-dependencies.py",
+        "docs/native-dependency-policy.md",
+        "tools/network_artifacts.py",
+        "tools/native-network-distribution-test.py",
+        ".github/workflows/native-cli.yml"
       ],
-      "next": "Keep pin, ABI probe, licenses and per-target library receipt together; rerun socket and lifetime tests on updates.",
-      "pin": "libuv"
+      "next": "Publish qualified immutable four-host artifacts and assign advisory/update ownership and rebuild deadlines before supported release distribution. Archive qualification does not establish the missing darwin-amd64 compiler profile.",
+      "pin": "libuv",
+      "requiredBy": [
+        "package.web",
+        "0086 M3/M4"
+      ],
+      "referenceBehavior": "Single mutator; callbacks return to the loop; preserve timeouts, shutdown and resource cleanup.",
+      "decision": "retain"
     },
     {
       "id": "llhttp",
@@ -59,13 +89,22 @@
       "status": "current",
       "scope": "Application runtime",
       "role": "HTTP/1 request framing and strict parsing for Web.serve.",
-      "configuration": "Generated C release sources; no Node.js requirement in applications. Explicit dynamic loading and pinned callback/struct ABI. Chunked/Content-Length precedence follows the pinned Go server; other leniency is disabled. MIT.",
+      "configuration": "Generated C sources, selectively static with pinned callback/struct ABI and embedded archive identity; no Node.js or runtime library-directory requirement. Chunked/Content-Length precedence follows the pinned Go server; other leniency is disabled. MIT.",
       "evidence": [
         "docs/native-network.md",
-        "tools/native-web-network-test.py"
+        "tools/native-web-network-test.py",
+        "docs/native-dependency-policy.md",
+        "tools/network_artifacts.py",
+        ".github/workflows/native-cli.yml"
       ],
-      "next": "Retain malformed-input, framing, pipeline and forced-GC acceptance. Streaming and upgrades require separate coverage.",
-      "pin": "llhttp"
+      "next": "Publish the commit/hash-pinned source mirror and immutable per-host archives after release update ownership is assigned; CI bundles are finite-retention qualification evidence. Preserve strict framing and cleanup checks on each target.",
+      "pin": "llhttp",
+      "requiredBy": [
+        "package.web",
+        "0086 M4"
+      ],
+      "referenceBehavior": "HTTP/1 framing and malformed-input boundaries; retain the reviewed framing discrepancy in #1239.",
+      "decision": "retain"
     },
     {
       "id": "qbe",
@@ -76,10 +115,16 @@
       "configuration": "Pinned upstream source plus reviewed repository patches; not used by a running application.",
       "evidence": [
         "tools/qbe/backend.json",
-        "tools/qbe/README.md"
+        "tools/qbe/README.md",
+        "docs/native-dependency-policy.md"
       ],
       "next": "Verify the manifest, source and patch hashes, all target profiles and ordinary fixed points.",
-      "pin": "qbe"
+      "pin": "qbe",
+      "requiredBy": [
+        "native.qualification"
+      ],
+      "referenceBehavior": "Qualify emitted machine behavior and exact backend identity on all release hosts.",
+      "decision": "retain"
     },
     {
       "id": "c-toolchain",
@@ -91,9 +136,16 @@
       "evidence": [
         "docs/architecture.md",
         "tools/build-native.sh",
-        "tools/build-network-dependencies.py"
+        "tools/build-network-dependencies.py",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Record tool versions, target SDK and actual linked dependencies for release artifacts."
+      "next": "Record tool versions, target SDK and actual linked dependencies for release artifacts.",
+      "requiredBy": [
+        "native.qualification",
+        "distribution"
+      ],
+      "referenceBehavior": "Record compiler/linker/SDK baseline, ABI and actual executable imports.",
+      "decision": "retain"
     },
     {
       "id": "native-seed",
@@ -104,9 +156,15 @@
       "configuration": "Immutable pinned seed and checksums; per-target provenance is distinct from subsequent source qualification.",
       "evidence": [
         "docs/bootstrap-seed-updates.md",
-        "tools/bootstrap-seed.sh"
+        "tools/bootstrap-seed.sh",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Verify immutable assets and preserve the ordinary multi-generation fixed-point chain."
+      "next": "Verify immutable assets and preserve the ordinary multi-generation fixed-point chain.",
+      "requiredBy": [
+        "native.qualification"
+      ],
+      "referenceBehavior": "Keep immutable seeds, ordinary fixed points and separate recovery evidence.",
+      "decision": "retain"
     },
     {
       "id": "git",
@@ -117,22 +175,36 @@
       "configuration": "External executable used by package tooling; an application that does not invoke package tooling does not require Git.",
       "evidence": [
         "docs/native-cli.md",
-        "compiler/src/project/package_git.trb"
+        "compiler/src/project/package_git.trb",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Retain source validation, offline/frozen contracts and exact locked revisions."
+      "next": "Retain source validation, offline/frozen contracts and exact locked revisions.",
+      "requiredBy": [
+        "cli.packages"
+      ],
+      "referenceBehavior": "Preserve lock/source identity and offline/frozen behavior; do not replace Git protocol semantics.",
+      "decision": "retain"
     },
     {
       "id": "bootstrap-tools",
-      "name": "Shell, make, curl and archive utilities",
+      "name": "Shell, make, Perl, curl and archive utilities",
       "status": "current",
       "scope": "Build tool",
       "role": "Checkout bootstrap, verified downloads and toolchain setup.",
-      "configuration": "Setup commands only. The curl executable is distinct from a future application dependency on libcurl.",
+      "configuration": "Setup commands only. Perl configures the pinned OpenSSL source build; prebuilt crypto archives do not require Perl at runtime. The curl executable is distinct from a future application dependency on libcurl.",
       "evidence": [
         "tools/build-native.sh",
-        "tools/bootstrap-seed-download.sh"
+        "tools/build-crypto-dependencies.py",
+        "tools/bootstrap-seed-download.sh",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Keep download identities, temporary cleanup and bounded reusable caches."
+      "next": "Keep download identities, temporary cleanup and bounded reusable caches.",
+      "requiredBy": [
+        "native.qualification",
+        "distribution"
+      ],
+      "referenceBehavior": "Keep source hashes, archive extraction and tool provenance reproducible.",
+      "decision": "retain"
     },
     {
       "id": "python-cmake",
@@ -140,12 +212,20 @@
       "status": "current",
       "scope": "Build / validation",
       "role": "Dependency builder, generated data and validation orchestration.",
-      "configuration": "CMake builds libuv; Python verifies archives and ABI inputs. Neither is needed by a compiled HTTP server.",
+      "configuration": "CMake builds libuv; Python verifies source/archive identities, bounded installations and ABI inputs. Prebuilt application builds do not require CMake; neither tool is needed by a compiled server.",
       "evidence": [
         "tools/build-network-dependencies.py",
-        "tools/preflight.sh"
+        "tools/preflight.sh",
+        "docs/native-dependency-policy.md",
+        "tools/network_artifacts.py"
       ],
-      "next": "Retain builder/tool versions and supported runner prerequisites in artifact receipts."
+      "next": "Retain builder/tool versions and supported runner prerequisites in artifact receipts.",
+      "requiredBy": [
+        "native.qualification",
+        "distribution"
+      ],
+      "referenceBehavior": "Producer/validation tools; prebuilt immutable dependency archives should avoid requiring CMake for application users.",
+      "decision": "retain"
     },
     {
       "id": "reference-tools",
@@ -156,34 +236,63 @@
       "configuration": "Separate from the ordinary Native semantic build chain; no Go or Node application runtime fallback.",
       "evidence": [
         "docs/ci-validation.md",
-        "tools/preflight.sh"
+        "tools/preflight.sh",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Keep reference pins and recovery provenance distinct from ordinary Native builds."
+      "next": "Keep reference pins and recovery provenance distinct from ordinary Native builds.",
+      "requiredBy": [
+        "native.qualification"
+      ],
+      "referenceBehavior": "Record exact reference revision and toolchains; source tests do not qualify Native artifacts.",
+      "decision": "retain"
     },
     {
       "id": "libcurl",
       "name": "libcurl",
       "status": "candidate",
       "scope": "Application runtime",
-      "role": "HTTP/HTTPS client connections, proxies, redirects and connection reuse.",
-      "configuration": "Not introduced. Version, TLS/DNS backends, protocols and linkage remain to be qualified.",
+      "role": "HTTP/HTTPS retrieval for OIDC discovery and JWKS.",
+      "configuration": "Selected for bounded synchronous retrieval, with only required HTTP/HTTPS and proxy support. Not introduced; version/configuration, redirects and TLS backend require qualification. No general HTTP client or server TLS obligation is inferred for v0.5.",
       "evidence": [
         "https://curl.se/libcurl/",
-        "https://curl.se/docs/libs.html"
+        "https://curl.se/docs/libs.html",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Evaluate event-loop integration, cancellation, timeouts, redirects and the transitive dependency set."
+      "next": "Implement with the selected OpenSSL stack; qualify 5-second total deadline, redirect/proxy rules, 1 MiB bound, errors and JWKS cache behavior against the exact reference.",
+      "requiredBy": [
+        "package.web.auth.bearer",
+        "package.auth.oidc",
+        "0086 M4"
+      ],
+      "referenceBehavior": "OIDC discovery/JWKS: total 5-second timeout, bounded response, HTTP/HTTPS, redirects, environment proxies and cache behavior from the pinned reference.",
+      "decision": "selected"
     },
     {
       "id": "openssl",
       "name": "OpenSSL: libssl / libcrypto",
-      "status": "candidate",
-      "scope": "Application runtime",
-      "role": "TLS and cryptographic primitives for clients, servers and database connections.",
-      "configuration": "Not introduced. Prefer a consistent verified TLS stack; evaluate alternatives such as rustls-ffi within the needed API scope.",
+      "status": "current",
+      "scope": "Application runtime and retained REPL",
+      "role": "Static libcrypto for digest, HMAC and secure comparison; TLS and RSA remain planned.",
+      "configuration": "OpenSSL 3.5.9 LTS, Apache-2.0, pinned commit/archive. Static libcrypto with upstream assembly; no shared libraries, modules, DSO, engines, legacy provider or implicit configuration. Explicit NO_LOAD_CONFIG initialization. Full CLI links it for REPL; core compiler and lockfile hashing do not. TLS/libssl and shared DB profiles are not implemented.",
       "evidence": [
-        "https://docs.openssl.org/3.5/man7/ossl-guide-libraries-introduction/"
+        "tools/crypto-dependencies.json",
+        "tools/build-crypto-dependencies.py",
+        "docs/native-crypto.md",
+        "tools/crypto_artifact_smoke.py",
+        ".github/workflows/native-cli.yml",
+        "docs/native-dependency-policy.md",
+        "https://docs.openssl.org/3.5/man3/OPENSSL_init_crypto/"
       ],
-      "next": "Qualify certificate/hostname validation, patch updates, distribution and duplication across dependent libraries."
+      "next": "Qualify immutable four-host release artifacts and update ownership under #1257. Add TLS/RSA/trust adapters and the single shared TLS stack for DB applications as separate work; do not mix this static profile with a second dynamically loaded OpenSSL.",
+      "requiredBy": [
+        "package.web.auth.bearer",
+        "package.std.digest",
+        "package.std.hmac",
+        "0086 M6"
+      ],
+      "referenceBehavior": "TLS, RSA signature verification and hashes use one qualified stack per process; connection-specific CA/verification settings remain explicit.",
+      "decision": "retain",
+      "pin": "openssl"
     },
     {
       "id": "sqlite",
@@ -191,12 +300,19 @@
       "status": "candidate",
       "scope": "Application runtime",
       "role": "SQLite storage engine behind typed ORM values and transactions.",
-      "configuration": "Not introduced. SQLite is the first database path in the accepted Web application architecture.",
+      "configuration": "Selected amalgamation with selective static linking, not introduced. Initial comparison target SQLite 3.53.2 from reference modernc.org/sqlite v1.53.0; verify exact version and observable compile options before pinning.",
       "evidence": [
         "docs/decisions/0086-production-web-application-path.md",
-        "https://www.sqlite.org/cintro.html"
+        "https://www.sqlite.org/cintro.html",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Select version, extensions, threading configuration and isolation of blocking calls; test connection and transaction lifetimes."
+      "next": "Qualify the version/options with the current reference, threading, transaction lifetimes and four-host binaries; do not silently use the system SQLite.",
+      "requiredBy": [
+        "package.orm",
+        "0086 M5"
+      ],
+      "referenceBehavior": "Match SQLite version and observable options, values, transactions and errors against the reference modernc driver.",
+      "decision": "selected"
     },
     {
       "id": "libpq",
@@ -204,11 +320,17 @@
       "status": "candidate",
       "scope": "Application runtime",
       "role": "PostgreSQL connection, authentication and protocol implementation.",
-      "configuration": "Not introduced. Configuration determines TLS/authentication dependencies.",
+      "configuration": "First evaluation candidate for required PostgreSQL parity, not introduced. Use the same qualified OpenSSL build as other in-process TLS consumers.",
       "evidence": [
-        "https://www.postgresql.org/docs/current/libpq.html"
+        "https://www.postgresql.org/docs/current/libpq.html",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Evaluate asynchronous operations, cancellation, pooling, supported servers and distribution."
+      "next": "Resolve and qualify driver scope under the complete release contract; compare libpq before considering an owned wire client (SCRAM includes HMAC/PBKDF2, normalization and channel binding).",
+      "requiredBy": [
+        "package.orm"
+      ],
+      "referenceBehavior": "Retain reference PostgreSQL behavior; compare authentication, transactions, cancellation and TLS. No PostgreSQL release deferral is approved.",
+      "decision": "evaluate"
     },
     {
       "id": "mariadb",
@@ -216,23 +338,42 @@
       "status": "candidate",
       "scope": "Application runtime",
       "role": "Evaluate a maintained C client for MySQL and MariaDB.",
-      "configuration": "Not introduced. Upstream identifies LGPLv2.1; target server/authentication and distribution requirements need review.",
+      "configuration": "Provisional selected client, not introduced. Prefer LGPLv2.1 dynamic library delivery with the same bundled shared OpenSSL used by all TLS/crypto consumers in MySQL applications.",
       "evidence": [
-        "https://mariadb.com/docs/connectors/mariadb-connector-c"
+        "https://mariadb.com/docs/connectors/mariadb-connector-c",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Select server versions, authentication plugins, TLS and asynchronous strategy before adoption."
+      "next": "At M6 qualify normalized DSN/auth/TLS against Go, license/redistribution and loader behavior, then compare an owned wire client only with complete socket/TLS foundations and measured cost evidence.",
+      "requiredBy": [
+        "package.orm",
+        "0086 M6"
+      ],
+      "referenceBehavior": "Compare normalized DSN, authentication, TLS and value/error behavior with go-sql-driver/mysql. allowPublicKeyRetrieval is not a retained Go driver option.",
+      "decision": "selected"
     },
     {
-      "id": "zlib",
-      "name": "zlib",
-      "status": "candidate",
+      "id": "compression",
+      "name": "libdeflate (gzip)",
+      "status": "current",
       "scope": "Application runtime",
-      "role": "gzip/deflate compression.",
-      "configuration": "Not introduced. Check whether another selected library already supplies the same dependency.",
+      "role": "Whole-buffer gzip for the pinned Web compression middleware.",
+      "configuration": "libdeflate 1.26, MIT, selectively static for verified compression MIR. Default level (-1); gzip only, no decompression/zlib wrappers/tools. Embedded source/archive identity and notice. Importing the compression package selects it; the compiler has no libdeflate dependency. Build-time installation beside QBE or TRBN_COMPRESSION_LIB_DIR; no runtime loader.",
       "evidence": [
-        "https://zlib.net/manual.html"
+        "docs/native-compression.md",
+        "tools/compression-dependencies.json",
+        "tools/build-compression-dependencies.py",
+        "tools/native-web-compression-test.py",
+        ".github/workflows/native-cli.yml",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Qualify bounded input/output, streaming cancellation, compression settings and notices."
+      "next": "Qualify immutable four-host release artifacts and update ownership under #1257. Retain the measured small-body CPU/size costs against zlib; revisit with application evidence or a streaming contract.",
+      "requiredBy": [
+        "package.web.middleware.compression",
+        "0086 M4"
+      ],
+      "referenceBehavior": "Whole-buffer default-level gzip; compare decoded bytes, negotiated response metadata and errors, not identical compressed bytes.",
+      "decision": "retain",
+      "pin": "libdeflate"
     },
     {
       "id": "ca-trust",
@@ -240,11 +381,79 @@
       "status": "candidate",
       "scope": "Runtime data",
       "role": "Trust anchors for authenticated TLS connections.",
-      "configuration": "Not introduced for Native networking. Library selection alone does not provide a trust-store update policy.",
+      "configuration": "Selected OS trust policy, not implemented: macOS platform verification by default; explicit SSL_CERT_FILE/SSL_CERT_DIR disk roots when configured for the pinned Go semantics. Linux probes the reference bundle/directory paths with those overrides. No default bundled Mozilla CA set.",
       "evidence": [
-        "https://curl.se/docs/sslcerts.html"
+        "https://curl.se/docs/sslcerts.html",
+        "docs/native-dependency-policy.md"
       ],
-      "next": "Choose a per-platform source, update owner and custom-CA behavior; keep verification enabled."
+      "next": "Qualify corporate/MDM roots, custom-root overrides, hostname failure and Linux path probing. Pin Go compatibility conditions; never rely on OpenSSL build-time default paths.",
+      "requiredBy": [
+        "package.web.auth.bearer",
+        "0086 M6"
+      ],
+      "referenceBehavior": "Record Go toolchain, generated go.mod go line, GODEBUG and SSL_CERT_FILE/SSL_CERT_DIR when comparing trust behavior.",
+      "decision": "selected"
+    },
+    {
+      "id": "digest-hmac",
+      "name": "Digest / HMAC provider",
+      "scope": "Application runtime and retained REPL",
+      "role": "MD5, SHA-1, SHA-256/512, HMAC and constant-time comparison.",
+      "configuration": "Verified standard declarations select pinned OpenSSL 3.5.9 libcrypto statically. Full CLI is a consumer for retained REPL; core and lockfile SHA-256 stay independent. Unrelated applications need no crypto archives. Fixed-length comparison uses CRYPTO_memcmp; unequal lengths return false.",
+      "requiredBy": [
+        "package.std.digest",
+        "package.std.hmac"
+      ],
+      "referenceBehavior": "82 frozen digest, RFC 4231 HMAC, binary/padding/empty/long-key and comparison observations across check, build, run and retained REPL at TYPE_RB_REVISION. Constant-time provider code review is separate from known-answer tests.",
+      "next": "Retain the three-pair Darwin arm64 diagnostic: SHA-256 executable increment 3,217,616 bytes, below the prospective 4 MiB guardrail. Build/startup samples are local observations, not universal latency guarantees. Qualify other host artifacts; compare HACL* or AWS-LC if later application budgets miss. Owned primitives require measured benefit and side-channel review.",
+      "evidence": [
+        "docs/native-crypto.md",
+        "tools/crypto-cases.json",
+        "tools/native-crypto-test.py",
+        "compiler/src/backend/qbe/runtime/crypto.trb",
+        "compiler/cli/repl/crypto.trb",
+        "docs/native-dependency-policy.md"
+      ],
+      "status": "current",
+      "decision": "retain",
+      "pin": "openssl"
+    },
+    {
+      "id": "sqldef",
+      "name": "sqldef command tools",
+      "scope": "External CLI tools",
+      "role": "sqlite3def / psqldef / mysqldef for database schema workflows.",
+      "configuration": "Required external tool family for Native cli.db parity, not integrated. Qualify and pin tool identity separately from database C clients.",
+      "requiredBy": [
+        "cli.db"
+      ],
+      "referenceBehavior": "Preserve executable selection, argv, schema input/output, exit handling and missing-tool diagnostics.",
+      "next": "Qualify exact CLI versions, availability and license/distribution; these are not implicitly bundled runtime libraries.",
+      "evidence": [
+        "https://github.com/sqldef/sqldef",
+        "docs/native-dependency-policy.md"
+      ],
+      "status": "candidate",
+      "decision": "selected"
+    },
+    {
+      "id": "site-generator",
+      "name": "Pinned Go site generator and highlighter",
+      "scope": "Site CI only",
+      "role": "Keep canonical documentation publishing through the Native repository transition.",
+      "configuration": "Selected documentation-only mode at v0.5 cutover. Build trb-site from a fixed Go implementation source with recorded Go/module identities; feed current canonical docs and pinned Node/Shiki highlighting. No application runtime or hosted WASM requirement.",
+      "requiredBy": [
+        "distribution"
+      ],
+      "referenceBehavior": "Keep updated installation, CLI differences, navigation, versions and browser-unavailable pages. Go local play/tour remains required; Native local execution and hosted Run/Transpile/Format have scoped approved deferrals.",
+      "next": "Rehearse source/tool hashes and canonical docs ownership in #1168; restore local Native play/tour before evaluating Native TS browser output.",
+      "evidence": [
+        "https://github.com/type-rb/type-rb/blob/main/docs/native-transition.md",
+        "https://github.com/type-rb/type-rb-native/issues/1255",
+        "docs/native-dependency-policy.md"
+      ],
+      "status": "candidate",
+      "decision": "selected"
     }
   ]
 }

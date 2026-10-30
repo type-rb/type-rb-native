@@ -17,6 +17,9 @@ ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("daily_state", ROOT / "tools/daily-performance/state.py")
 daily = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(daily)
+spec = importlib.util.spec_from_file_location("representative_measure", Path(__file__).with_name("measure.py"))
+measure = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(measure)
 WORKFLOW = "representative-performance.yml"
 ARTIFACT = "representative-performance-state"
 PUBLIC_STATE = "https://type-rb.github.io/type-rb-native/benchmarks/representative-state.json"
@@ -32,8 +35,8 @@ SOURCES = {"sourceSha256": "benchmarks/representative/src/main.trb",
 METRICS = ("wallSeconds", "cpuSeconds", "peakRssBytes", "unitsPerSecond", "firstProcessWallSeconds")
 
 
-def catalog():
-    return daily.read(ROOT / "tools/representative-performance/suite.json")["cases"]
+def catalog(profile="registered"):
+    return measure.load_cases(profile=profile)[1]
 
 
 def empty():
@@ -62,6 +65,7 @@ def require(condition, message):
 
 def validate_snapshot(snapshot):
     require(isinstance(snapshot, dict), "Invalid snapshot")
+    require(re.fullmatch(r"[a-z0-9-]+", snapshot.get("inputProfile", "registered")), "Invalid input profile")
     require(SHA.fullmatch(snapshot.get("revision", "")) and SHA.fullmatch(snapshot.get("referenceRevision", "")), "Invalid compiler revisions")
     require(RUN.fullmatch(snapshot.get("runUrl", "")), "Invalid public evidence URL")
     require(all(HASH.fullmatch(snapshot.get(key, "")) for key in ("fingerprint", "series")), "Missing series identity")
@@ -97,6 +101,18 @@ def validate_snapshot(snapshot):
             for key, value in metrics.items():
                 require(type(value) in (int, float) and math.isfinite(value) and value >= 0, "Invalid metric")
                 require(key == "cpuSeconds" or value > 0, "Invalid zero observation")
+        if "sampleRanges" in row:
+            require(set(row["sampleRanges"]) == set(ROLES), "Missing sample range role")
+            for role, ranges in row["sampleRanges"].items():
+                require(set(ranges) == set(METRICS) - {"firstProcessWallSeconds"}, "Invalid sample range metrics")
+                for key, bounds in ranges.items():
+                    require(set(bounds) == {"count", "minimum", "p50", "maximum"}, "Invalid sample range fields")
+                    require(type(bounds["count"]) is int and bounds["count"] == snapshot["samples"], "Invalid sample count")
+                    require(all(type(bounds[k]) in (int, float) and math.isfinite(bounds[k]) and bounds[k] >= 0
+                                for k in ("minimum", "p50", "maximum")), "Invalid sample range")
+                    require(bounds["minimum"] <= bounds["p50"] <= bounds["maximum"] and
+                            bounds["p50"] == row["summaries"][role][key], "Sample range disagrees with median")
+                    require(key == "cpuSeconds" or bounds["minimum"] > 0, "Invalid zero sample")
     require(len(rows) <= len(inputs), "Too many results")
     for tool in snapshot.get("tools", {}).values():
         require(set(tool) == {"sha256", "version"} and HASH.fullmatch(tool["sha256"]) and isinstance(tool["version"], str), "Invalid public tool identity")
@@ -165,7 +181,9 @@ def start(path):
 
 def snapshot(manifest, attempt):
     require(not manifest.get("smoke") and manifest.get("repositoryRevision") == attempt["revision"], "Wrong measurement source or smoke data")
-    require(manifest.get("plannedCases") == catalog(), "Publication needs the complete registered matrix")
+    require(manifest.get("outputMode", "stream") == "stream", "Summary diagnostics cannot enter the streaming publication series")
+    profile = manifest.get("inputProfile", "registered")
+    require(manifest.get("plannedCases") == catalog(profile), "Publication needs the complete registered matrix")
     sources = {key: manifest.get(key) for key in SOURCES}
     for key, relative in SOURCES.items():
         require(sources[key] == hashlib.sha256((ROOT / relative).read_bytes()).hexdigest(), "Measurement source changed")
@@ -179,13 +197,17 @@ def snapshot(manifest, attempt):
             require(data["processWallSeconds"]["count"] == manifest["samples"], "Missing retained samples")
             summaries[role] = {"wallSeconds": data["processWallSeconds"]["p50"],
                                **{key: data[key] for key in METRICS if key != "wallSeconds"}}
-        rows.append({"case": case["input"]["id"], "summaries": summaries})
+        row = {"case": case["input"]["id"], "summaries": summaries}
+        if any("sampleRanges" in case["summaries"][role] for role in ROLES):
+            require(all("sampleRanges" in case["summaries"][role] for role in ROLES), "Missing sample ranges")
+            row["sampleRanges"] = {role: case["summaries"][role]["sampleRanges"] for role in ROLES}
+        rows.append(row)
     # Explicit allowlist: raw manifests also contain machine-local tool paths.
     value = {"at": manifest["startedAt"], "revision": attempt["revision"], "referenceRevision": reference_revision,
              "fingerprint": attempt["fingerprint"], "runUrl": attempt["runUrl"], "sources": sources,
              "platform": manifest["platform"], "machine": manifest["machine"],
              "samples": manifest["samples"], "warmups": manifest["warmups"],
-             "inputs": manifest["plannedCases"], "rows": rows,
+             "inputs": manifest["plannedCases"], "rows": rows, "inputProfile": profile,
              "tools": {name: {key: manifest["tools"][name][key] for key in ("sha256", "version")}
                        for name in ("native", "reference", "go")},
              "binaries": {role: {key: manifest["binaries"][role][key] for key in ("sha256", "bytes")} for role in ROLES},
@@ -196,7 +218,8 @@ def snapshot(manifest, attempt):
     if "rssTool" in manifest["environment"]:
         value["environment"]["rssTool"] = {key: manifest["environment"]["rssTool"][key] for key in ("sha256", "version")}
     value["series"] = hashlib.sha256(json.dumps([sources, reference_revision, value["samples"], value["warmups"],
-                                               value["platform"], value["machine"], value["environment"]], sort_keys=True).encode()).hexdigest()
+                                               value["platform"], value["machine"], value["environment"],
+                                               profile, value["inputs"]], sort_keys=True).encode()).hexdigest()
     return validate_snapshot(value)
 
 

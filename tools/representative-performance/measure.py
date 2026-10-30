@@ -157,14 +157,20 @@ def observe(command, directory, timeout, env=None):
     return record
 
 
-def expected(case):
+def expected(case, output_mode="stream"):
     """Independent correctness oracle for every registered input, not timings."""
+    if output_mode not in ("stream", "summary"):
+        raise ValueError("Unknown output mode: " + output_mode)
     count, variant, workload = case["count"], case["variant"], case["workload"]
     cache, retained = [""] * 128, [""] * count if variant == "retained" else []
     completed = 0
     lines = ["ready"]
+    repeat_checksum = None
+    total_checksum = 0
     for batch in range(case["batches"]):
-        if workload == "log-pipeline":
+        if repeat_checksum is not None:
+            checksum = repeat_checksum
+        elif workload == "log-pipeline":
             totals, rejected = {}, 0
             for index in range(count):
                 if variant == "mixed" and index % 17 == 0:
@@ -216,7 +222,14 @@ def expected(case):
                 retained = values
         else:
             raise ValueError("Unknown workload: " + workload)
-        lines.append(f"{batch},{checksum}")
+        if workload not in ("worker", "allocation"):
+            repeat_checksum = checksum
+        if output_mode == "summary":
+            total_checksum = (total_checksum + checksum) % 1000000007
+        else:
+            lines.append(f"{batch},{checksum}")
+    if output_mode == "summary":
+        lines.append(f"summary,{total_checksum}")
     lines.append(f"done,{sum(map(len, retained))}")
     return ("\n".join(lines) + "\n").encode()
 
@@ -246,7 +259,16 @@ def summarize(records, units):
                 coalesced |= arrival["coalesced"]
                 intervals.append(arrival["seconds"] - previous)
                 previous = arrival["seconds"]
+    medians = {"wallSeconds": percentile(walls, 0.5),
+               "cpuSeconds": statistics.median(r["cpuSeconds"] for r in retained),
+               "peakRssBytes": statistics.median(r["peakRssBytes"] for r in retained)}
+    medians["unitsPerSecond"] = units / medians["wallSeconds"]
+    ranges = {}
+    for metric, median in medians.items():
+        values = [units / r["wallSeconds"] if metric == "unitsPerSecond" else r[metric] for r in retained]
+        ranges[metric] = {"count": len(values), "minimum": min(values), "p50": median, "maximum": max(values)}
     return {"processWallSeconds": distribution(walls),
+            "sampleRanges": ranges,
             "cpuSeconds": statistics.median(r["cpuSeconds"] for r in retained),
             "peakRssBytes": statistics.median(r["peakRssBytes"] for r in retained),
             "unitsPerSecond": units / statistics.median(walls),
@@ -255,9 +277,15 @@ def summarize(records, units):
             "firstProcessWallSeconds": records[0]["wallSeconds"]}
 
 
-def load_cases(smoke=False, selected=None):
+def load_cases(smoke=False, selected=None, profile="registered"):
     suite = json.loads(SUITE.read_text())
-    cases = suite["cases"]
+    if profile not in suite["inputProfiles"]:
+        raise ValueError("Unknown input profile: " + profile)
+    if smoke and profile != "registered":
+        raise ValueError("Correctness smoke uses only the registered profile")
+    policy = suite["inputProfiles"][profile]
+    cases = [dict(case, batches=case["batches"] * policy.get("caseMultipliers", {}).get(
+        case["id"], policy["batchMultipliers"][case["size"]])) for case in suite["cases"]]
     if selected:
         known = {c["id"] for c in cases}
         if set(selected) - known:
@@ -303,14 +331,16 @@ def build_programs(args, workspace, evidence, env):
     return binaries
 
 
-def gc_probe(binary, case, evidence, env):
+def gc_probe(binary, case, evidence, env, output_mode="stream"):
     """Untimed Native managed-heap counters; not a Go heap comparison."""
     directory = evidence / case["id"] / "native-gc-probe"
     command = [binary, case["workload"], str(case["count"]), case["variant"], str(case["batches"])]
+    if output_mode == "summary":
+        command.append("summary")
     record = observe(command, directory, 30, dict(env, TYPE_RB_NATIVE_RUNTIME_STATS="1"))
     counters = {}
     if record["status"] == "pass":
-        if (directory / "stdout").read_bytes() != expected(case):
+        if (directory / "stdout").read_bytes() != expected(case, output_mode):
             record["status"] = "output-mismatch"
         else:
             for line in (directory / "stderr").read_text().splitlines():
@@ -335,6 +365,9 @@ def main():
     parser.add_argument("--go", type=Path, help="Go executable for the hand-written control")
     parser.add_argument("--evidence", required=True, type=Path, help="New output directory")
     parser.add_argument("--smoke", action="store_true", help="Small correctness-only inputs")
+    parser.add_argument("--profile", default="registered", help="Fixed input profile from suite.json (default: registered)")
+    parser.add_argument("--output-mode", choices=("stream", "summary"), default="stream",
+                        help="Summary bounds diagnostic output; it has no batch-arrival latency measurements")
     parser.add_argument("--case", action="append", help="Select an exact case ID (repeatable)")
     parser.add_argument("--samples", type=int, help="Fixed retained process count, 1..100")
     parser.add_argument("--gc-probes", action="store_true", help="Separate untimed Native worker/allocation counters")
@@ -348,7 +381,7 @@ def main():
     for name in ("native", "reference", "go"):
         if getattr(args, name):
             setattr(args, name, getattr(args, name).resolve(strict=True))
-    suite, cases = load_cases(args.smoke, args.case)
+    suite, cases = load_cases(args.smoke, args.case, args.profile)
     evidence = args.evidence.resolve()
     evidence.mkdir(parents=True, exist_ok=False)
     env = dict(os.environ, GOMAXPROCS="1", NO_COLOR="1", TERM="dumb")
@@ -359,9 +392,11 @@ def main():
               "platform": platform.platform(), "machine": platform.machine(),
               "sourceSha256": digest(SOURCE), "goSourceSha256": digest(GO_SOURCE),
               "suiteSha256": digest(SUITE), "cases": [], "status": "running",
-              "plannedCases": cases,
+              "plannedCases": cases, "inputProfile": args.profile, "outputMode": args.output_mode,
               "coverageGaps": ["file/network input", "request queueing and service latency", "parallel scaling"],
               "measurementScope": "fresh-process wall/CPU/peak RSS; observer-side batch completion intervals include pipe/scheduler overhead"}
+    if args.output_mode == "summary":
+        result["measurementScope"] = "fresh-process wall/CPU/peak RSS with aggregate output; no batch-arrival latency measurements"
     write(evidence / "manifest.json", result)
     try:
         with tempfile.TemporaryDirectory(prefix="representative-performance-") as temporary:
@@ -393,7 +428,7 @@ def main():
             warmups = 0 if args.smoke else suite["warmups"]
             result.update(samples=samples, warmups=warmups)
             for case in cases:
-                oracle = expected(case)
+                oracle = expected(case, args.output_mode)
                 rows = {role: [] for role in roles}
                 for index in range(samples + warmups):
                     order = roles[index % len(roles):] + roles[:index % len(roles)]
@@ -403,6 +438,8 @@ def main():
                             raise TimeoutError("Suite time budget exhausted; partial evidence retained")
                         directory = evidence / case["id"] / role / str(index)
                         command = [binaries[role], case["workload"], str(case["count"]), case["variant"], str(case["batches"])]
+                        if args.output_mode == "summary":
+                            command.append("summary")
                         record = observe(command, directory, min(remaining, suite["timeoutSeconds"]), env)
                         record.update(phase="warmup" if index < warmups else "retained", role=role)
                         validate(record, directory, oracle)
@@ -423,7 +460,7 @@ def main():
                 result["nativeGcProbes"] = []
                 for case in cases:
                     if case["size"] == "medium" and case["workload"] in ("worker", "allocation"):
-                        result["nativeGcProbes"].append(gc_probe(binaries["native"], case, evidence, env))
+                        result["nativeGcProbes"].append(gc_probe(binaries["native"], case, evidence, env, args.output_mode))
                         write(evidence / "manifest.json", result)
             result["status"] = "pass"
     except Exception as error:

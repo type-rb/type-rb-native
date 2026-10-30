@@ -41,9 +41,28 @@ python3 tools/representative-performance/report.py /tmp/representative-diagnosti
 
 `--evidence` must be new. `--case ID` selects registered cases and is repeatable.
 `--samples N` fixes 1..100 retained fresh processes before a run; the default is
-three, after one first process/warmup per role. All observations remain in the
+three, after one first process/warmup per role. `--profile registered` keeps the
+original batches (the default). `--profile sustained-v1` multiplies small, medium
+and large batch counts by 200, 40 and 8 respectively; the already sustained
+100-batch medium worker stays unchanged. Counts are fixed before execution,
+without calibration, adaptive repetition or retries. Working-set dimensions
+and algorithms stay the same; retained worker state evolves across the extra
+batches. This profile reduces the fraction of startup costs but does not prove
+stable timings. It has its own exact input and series identities. Existing
+deadlines still apply; a slow run retains partial evidence. Smoke rejects a
+non-default profile and remains unchanged. All observations remain in the
 result. `--smoke` uses 23 items and two batches for each operation/variant,
 without warmup or repetition. Smoke wall times do not establish speed claims.
+
+`--output-mode summary` is an opt-in throughput diagnostic for long repetitions.
+Both programs still execute every batch, accumulate its checksum modulo
+1,000,000,007, and report the aggregate and final retained-data checksum. Output
+stays bounded instead of emitting one progress line per batch. The independent
+oracle checks both checksums. This mode does not measure batch-arrival latency
+and cannot enter the streaming Pages series. The default `stream` mode,
+registered inputs, output limit and scheduled CI remain unchanged. Freeze any
+calibrated repetitions and qualify timing reproducibility before comparing a
+candidate; the mode itself provides no reproducibility guarantee.
 
 Each binary is built once and reused for the entire matrix. Compilation has a
 120-second timeout per role; each application has a 30-second deadline and the
@@ -68,7 +87,13 @@ or outlier removal happens automatically. Temporary binaries are not evidence.
 
 Process p95 needs at least 20 observations and p99 at least 100; otherwise the
 field is null. These are empirical nearest-rank summaries, not significance or
-confidence claims. Peak RSS is per process, not a sampled live-heap curve.
+confidence claims. Wall, CPU, RSS and throughput also retain minimum, median, maximum and sample
+count. Ranges use all retained processes, with no trimming. The first process
+remains separate in the raw evidence and its wall summary. Overlapping ranges
+warn that a median difference is uncertain; non-overlap is not a significance
+test. Historical medians without ranges stay labelled as such. Median screening
+thresholds and adoption criteria are unchanged. Peak RSS is per process, not a
+sampled live-heap curve.
 Throughput is input items across all batches divided by full process wall time.
 It includes preparation and output and is not a maximum service throughput.
 
@@ -102,7 +127,7 @@ this does not waive full validation for this change itself.
 
 The Pages application view always lists all registered cases, with independent
 dates, source revisions and environments. `representative-performance.yml` is a
-manual, main-only workflow for the initial public matrix and later relevant-change
+manual, main-only workflow with an explicit fixed-profile choice for the initial public matrix and later relevant-change
 or milestone measurements. It builds the current CLI through the ordinary pinned
 seed/fixed-point path and the exact reference compiler, then measures Native,
 TypeRB Go and Pure Go together on one Linux arm64 logical CPU. It retains the

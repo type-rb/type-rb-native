@@ -174,8 +174,8 @@ def run_server(program, port, environment):
     raise AssertionError(('server did not listen', process.communicate()))
 
 
-def exercise(program, port, environment, reference=False):
-    if not reference:
+def exercise(program, port, environment, reference=False, dynamic=False):
+    if dynamic:
         missing = dict(environment, TRBN_NETWORK_LIB_DIR=str(program.parent / 'missing-libraries'))
         result = subprocess.run([str(program)], env=missing, capture_output=True, timeout=5)
         assert result.returncode != 0 and b'TRBN_NETWORK_LIB_DIR' in result.stderr, result
@@ -434,6 +434,7 @@ def main():
     parser.add_argument('binary', type=Path)
     parser.add_argument('--libraries', type=Path)
     parser.add_argument('--reference', action='store_true')
+    parser.add_argument('--dynamic', action='store_true', help='Exercise the retained dynamic baseline')
     parser.add_argument('--core', action='store_true')
     parser.add_argument('--target', choices=QBE_TARGETS)
     parser.add_argument('--qbe', type=Path)
@@ -496,11 +497,28 @@ def main():
             target_options = ['-t', QBE_TARGETS[args.target]] if args.core else []
             subprocess.run([str(qbe), *target_options, '-o', str(assembly), str(il)], check=True)
             linker_options = ['-fuse-ld=lld'] if args.target and args.target.startswith('linux-') else []
-            subprocess.run(['/usr/bin/cc', *linker_options, str(assembly), str(checker), '-lm', '-o', str(program)], check=True)
+            network_flags = []
+            if not args.dynamic:
+                network_flags = [str(args.libraries.resolve() / name) for name in ('libuv.a', 'libllhttp.a', 'network-identity.o')]
+                if os.uname().sysname == 'Linux':
+                    network_flags += ['-pthread', '-ldl', '-lrt']
+            subprocess.run(['/usr/bin/cc', *linker_options, str(assembly), str(checker), *network_flags, '-lm', '-o', str(program)], check=True)
             environment['TYPE_RB_NATIVE_RUNTIME_STATS'] = '1'
             environment['TRBN_NETWORK_TEST_ALLOCATIONS'] = '1'
             print('forced managed GC hooks:', hooks)
-        exercise(program, port, environment, args.reference)
+        if not args.reference and not args.dynamic:
+            from network_artifacts import inspect
+            assert inspect(program)['linkage'] == 'static'
+            # An application runs independently of its build-time installation.
+            environment.pop('TRBN_NETWORK_LIB_DIR', None)
+            environment.pop('LD_LIBRARY_PATH', None)
+            environment.pop('DYLD_LIBRARY_PATH', None)
+            environment['PATH'] = ''
+            relocated = root / 'isolated runtime' / 'server'
+            relocated.parent.mkdir()
+            program.rename(relocated)
+            program = relocated
+        exercise(program, port, environment, args.reference, args.dynamic)
 
 
 if __name__ == '__main__':

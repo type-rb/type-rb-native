@@ -18,7 +18,7 @@ CATALOG = Path("compiler/src/project/official_catalog.trb")
 URL_SOURCE = "internal/stdlib/url.go"
 URL_ADAPTER = Path("compiler/packages/internal/url.trb")
 JSON_ADAPTER = Path("compiler/packages/internal/json.trb")
-STDLIB_SOURCES = {"url": URL_SOURCE, "json": "internal/stdlib/json.go", "jsonc": "internal/stdlib/jsonc.go", "time": "internal/stdlib/time.go", "hex": "internal/stdlib/hex.go", "base64": "internal/stdlib/base64.go", "path": "internal/stdlib/path.go", "file": "internal/stdlib/file.go", "dir": "internal/stdlib/dir.go", "errors": "internal/stdlib/errors.go"}
+STDLIB_SOURCES = {"url": URL_SOURCE, "json": "internal/stdlib/json.go", "jsonc": "internal/stdlib/jsonc.go", "time": "internal/stdlib/time.go", "hex": "internal/stdlib/hex.go", "base64": "internal/stdlib/base64.go", "path": "internal/stdlib/path.go", "hash": "internal/stdlib/hash.go", "hmac": "internal/stdlib/hmac.go", "file": "internal/stdlib/file.go", "dir": "internal/stdlib/dir.go", "errors": "internal/stdlib/errors.go"}
 NATIVE_ADAPTERS = ["time", "time_calendar", "time_parse", "time_zones", "time_host", "web_context", "hex", "base64", "encoding_bytes", "secure_random", "entropy", "web_dispatch", "network_host", "web_server"]
 REPOSITORY = "https://github.com/type-rb/type-rb"
 

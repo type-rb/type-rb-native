@@ -1,8 +1,11 @@
-import { standard_source_network_host, standard_source_web_server } from state/standard_source_kinds
+import { pinned_dir_source, pinned_errors_source, pinned_file_source } from project/official_catalog
+import { standard_source_dir, standard_source_file } from state/standard_source_kinds
+import { standard_source_digest, standard_source_hmac, standard_source_internal_hash, standard_source_internal_hmac, standard_source_secure_compare } from state/standard_source_kinds
+import { pinned_hash_source, pinned_hmac_source } from project/official_catalog
+import { standard_source_compression, standard_source_network_host, standard_source_string_builder, standard_source_string_builder_storage, standard_source_web_server } from state/standard_source_kinds
 import { native_network_host_source, native_web_server_source } from project/official_catalog
 import { native_path_source } from frontend/providers/path_source
-import { pinned_dir_source, pinned_errors_source, pinned_file_source } from project/official_catalog
-import { standard_source_dir, standard_source_file, standard_source_path } from state/standard_source_kinds
+import { standard_source_path } from state/standard_source_kinds
 import { append_web_route_imports, web_dispatch_source } from project/web_dispatch_source
 import { standard_source_web_dispatch } from state/standard_source_kinds
 import { native_web_dispatch_source } from project/official_catalog
@@ -33,6 +36,30 @@ def standard_source_kind(path: String): Integer
 	end
 	if path == "trb/std/dir"
 		return standard_source_dir()
+	end
+	if path == "trb/std/digest"
+		return standard_source_digest()
+	end
+	if path == "trb/internal/hash"
+		return standard_source_internal_hash()
+	end
+	if path == "trb/std/hmac"
+		return standard_source_hmac()
+	end
+	if path == "trb/internal/hmac"
+		return standard_source_internal_hmac()
+	end
+	if path == "trb/std/secure_compare"
+		return standard_source_secure_compare()
+	end
+	if path == "trb/internal/web/compression"
+		return standard_source_compression()
+	end
+	if path == "trb/internal/string_builder_storage"
+		return standard_source_string_builder_storage()
+	end
+	if path == "trb/std/string_builder"
+		return standard_source_string_builder()
 	end
 	if path == "trb/internal/network_host"
 		return standard_source_network_host()
@@ -125,6 +152,30 @@ def standard_source_name(kind: Integer): String
 	if kind == standard_source_dir()
 		return "trb/std/dir/index"
 	end
+	if kind == standard_source_digest()
+		return "trb/std/digest/index"
+	end
+	if kind == standard_source_internal_hash()
+		return "trb/internal/hash/index"
+	end
+	if kind == standard_source_hmac()
+		return "trb/std/hmac/index"
+	end
+	if kind == standard_source_internal_hmac()
+		return "trb/internal/hmac/index"
+	end
+	if kind == standard_source_secure_compare()
+		return "trb/std/secure_compare/index"
+	end
+	if kind == standard_source_string_builder_storage()
+		return "trb/internal/string_builder_storage/index"
+	end
+	if kind == standard_source_string_builder()
+		return "trb/std/string_builder/index"
+	end
+	if kind == standard_source_compression()
+		return "trb/internal/web/compression/index"
+	end
 	if kind == standard_source_network_host()
 		return "trb/internal/network_host/index"
 	end
@@ -216,6 +267,30 @@ def standard_source_text(kind: Integer): String
 	if kind == standard_source_dir()
 		return pinned_dir_source()
 	end
+	if kind == standard_source_digest()
+		return pinned_hash_source()
+	end
+	if kind == standard_source_internal_hash()
+		return "module Hash\nend\ndef md5(value: Bytes): Bytes\nend\ndef sha1(value: Bytes): Bytes\nend\ndef sha256(value: Bytes): Bytes\nend\ndef sha512(value: Bytes): Bytes\nend\n"
+	end
+	if kind == standard_source_hmac()
+		return pinned_hmac_source()
+	end
+	if kind == standard_source_internal_hmac()
+		return "module HMAC\nend\ndef sha256(key: Bytes, message: Bytes): Bytes\nend\ndef sha512(key: Bytes, message: Bytes): Bytes\nend\ndef equal(left: Bytes, right: Bytes): Boolean\nend\n"
+	end
+	if kind == standard_source_secure_compare()
+		return "module SecureCompare\nend\ndef equal(left: Bytes, right: Bytes): Boolean\nend\n"
+	end
+	if kind == standard_source_string_builder_storage()
+		return "module StringBuilderStorage\nend\ndef append_bytes(mut builder: StringBuilder, bytes: Bytes, start: Integer, finish: Integer)\nend\n"
+	end
+	if kind == standard_source_string_builder()
+		return "module StringBuilder\nend\ndef new(): StringBuilder\nend\ndef from_string(value: String): StringBuilder\nend\n"
+	end
+	if kind == standard_source_compression()
+		return "module Compression\nend\ndef gzip(value: Bytes): Bytes\nend\n"
+	end
 	if kind == standard_source_network_host()
 		return native_network_host_source()
 	end
@@ -303,7 +378,19 @@ def standard_source_text(kind: Integer): String
 end
 
 def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer): Integer
+	if kind == standard_source_string_builder_storage() && sparse_integer_at(state.standard_modules, state.module_graph.active_module[0]) != standard_source_internal_json()
+		diagnostic(state, "TRBN4003", line, "internal builder storage is reserved for the owned JSON implementation")
+		return -1
+	end
 	caller_kind := sparse_integer_at(state.standard_modules, state.module_graph.active_module[0])
+	if (kind == standard_source_internal_hash() && caller_kind != standard_source_digest()) || (kind == standard_source_internal_hmac() && caller_kind != standard_source_hmac())
+		diagnostic(state, "TRBN4003", line, "internal cryptography is reserved for verified standard sources")
+		return -1
+	end
+	if kind == standard_source_compression() && caller_kind != official_source_kind("trb/web/middleware/compression")
+		diagnostic(state, "TRBN4003", line, "internal compression is reserved for the owned Web middleware")
+		return -1
+	end
 	if (kind == standard_source_network_host() && caller_kind != standard_source_web_server()) || (kind == standard_source_web_server() && caller_kind != official_source_kind("trb/web"))
 		diagnostic(state, "TRBN4003", line, "internal network sources are reserved for the owned Web server")
 		return -1
@@ -353,7 +440,7 @@ def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer)
 	end
 	if kind == standard_source_internal_runtime()
 		caller := sparse_integer_at(state.standard_modules, state.module_graph.active_module[0])
-		if caller != official_source_kind("trb/web") && caller != official_source_kind("trb/web/middleware") && caller != standard_source_internal_time() && caller != standard_source_secure_random() && caller != standard_source_web_dispatch() && caller != standard_source_web_server()
+		if caller != official_source_kind("trb/web") && caller != official_source_kind("trb/web/middleware") && caller != official_source_kind("trb/web/middleware/compression") && caller != standard_source_internal_time() && caller != standard_source_secure_random() && caller != standard_source_web_dispatch() && caller != standard_source_web_server()
 			diagnostic(state, "TRBN4003", line, "internal package imports are reserved for verified standard sources: trb/internal/runtime")
 			return -1
 		end
@@ -417,6 +504,11 @@ def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer)
 		# The pinned JSONC source has a registry-owned root, not a module wrapper.
 		# Keep its bytes and source locations unchanged.
 		register_namespace(state, "JSONC", owner, 1)
+	end
+	if !has_diagnostic(state) && kind == standard_source_digest()
+		register_namespace(state, "Digest", owner, 1)
+	elsif !has_diagnostic(state) && kind == standard_source_hmac()
+		register_namespace(state, "HMAC", owner, 1)
 	end
 	state.module_graph.active_module[0] = previous
 	return owner

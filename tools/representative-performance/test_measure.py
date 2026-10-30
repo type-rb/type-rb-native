@@ -1,5 +1,6 @@
 """Controller guarantees: wrong output, child failures and sparse tails stay visible."""
 import importlib.util
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -16,6 +17,50 @@ report_spec.loader.exec_module(report)
 
 
 class MeasurementTests(unittest.TestCase):
+    def test_summary_preserves_every_batch_and_final_retained_checksum(self):
+        _, cases = measure.load_cases(smoke=True)
+        for original in cases:
+            case = dict(original, batches=12)
+            with self.subTest(case=case["id"]):
+                lines = measure.expected(case).decode().splitlines()
+                total = sum(int(line.split(",")[1]) for line in lines[1:-1]) % 1000000007
+                expected = f"ready\nsummary,{total}\n{lines[-1]}\n".encode()
+                self.assertEqual(measure.expected(case, "summary"), expected)
+        with self.assertRaises(ValueError):
+            measure.expected(cases[0], "unknown")
+
+    def test_summary_output_remains_bounded_for_long_repetition(self):
+        case = {"workload": "arrays", "variant": "reverse", "count": 3, "batches": 200000}
+        self.assertEqual(measure.expected(case, "summary"), b"ready\nsummary,2800000\ndone,0\n")
+
+    def test_profiles_preserve_registered_cases_and_fix_batches_before_execution(self):
+        suite, original = measure.load_cases()
+        _, sustained = measure.load_cases(profile="sustained-v1")
+        self.assertEqual(original, suite["cases"])
+        for before, after in zip(original, sustained):
+            self.assertEqual({k: v for k, v in before.items() if k != "batches"},
+                             {k: v for k, v in after.items() if k != "batches"})
+            multiplier = 1 if before["id"] == "worker-medium-mixed" else {"small": 200, "medium": 40, "large": 8}[before["size"]]
+            self.assertEqual(after["batches"], before["batches"] * multiplier)
+        self.assertEqual({"schemaVersion": 1, "cases": suite["cases"], "inputProfiles": suite["inputProfiles"]},
+                         json.loads((measure.ROOT / "docs/capabilities/benchmarks/representative-suite.json").read_text()))
+        for kwargs in ({"profile": "typo"}, {"profile": "sustained-v1", "smoke": True}):
+            with self.assertRaises(ValueError):
+                measure.load_cases(**kwargs)
+
+    def test_sample_ranges_preserve_every_retained_value_and_exclude_first(self):
+        def record(phase, wall, cpu, rss):
+            return {"phase": phase, "status": "pass", "wallSeconds": wall, "cpuSeconds": cpu,
+                    "peakRssBytes": rss, "arrivals": [{"line": "ready", "seconds": 0, "coalesced": False}]}
+        records = [record("warmup", 100, 99, 10000), record("retained", 2, 0, 10), record("retained", 4, 3, 40)]
+        summary = measure.summarize(records, 16)
+        self.assertEqual(summary["firstProcessWallSeconds"], 100)
+        self.assertEqual(summary["sampleRanges"]["wallSeconds"], {"count": 2, "minimum": 2, "p50": 2, "maximum": 4})
+        self.assertEqual(summary["sampleRanges"]["cpuSeconds"], {"count": 2, "minimum": 0, "p50": 1.5, "maximum": 3})
+        self.assertEqual(summary["sampleRanges"]["unitsPerSecond"], {"count": 2, "minimum": 4, "p50": 8, "maximum": 8})
+        records[-1]["status"] = "nonzero-exit"
+        self.assertIsNone(measure.summarize(records, 16))
+
     def test_tail_resolution(self):
         self.assertIsNone(measure.percentile(list(range(19)), 0.95))
         self.assertIsNone(measure.percentile(list(range(99)), 0.99))

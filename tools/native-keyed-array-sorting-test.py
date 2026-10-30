@@ -28,48 +28,51 @@ with tempfile.TemporaryDirectory(prefix='native-keyed-sorting-') as temporary:
     source = root / 'main.trb'
     source.write_text(body + '\ndef main()\n(0...30).each { |_index| exercise() }\nend\n')
     expected = fixture.with_suffix('.out').read_text() * 30
-    emitted = run([binary, '--internal-driver', 'emit-qbe', source])
-    assert emitted.stderr == '', emitted
-    forced, ordinary, hooks = [], False, 0
-    for line in emitted.stdout.splitlines():
-        if line.startswith('function '):
-            ordinary = '$trbnf' in line
-        if line == '}':
-            ordinary = False
-        if ordinary and any(marker in line for marker in (
-                'call $trbn_array_new(', 'call $trbn_array_new_reserved(',
-                'call $trbn_array_push_', 'call $trbn_array_grow_paced(', 'call $trbn_array_copy(',
-                'call $trbn_gc_alloc(', 'call $trbn_string_concat(')):
-            forced.append('\tcall $trbn_gc_collect(w 0)')
-            hooks += 1
-        forced.append(line)
-    assert hooks >= 16, hooks
-    il, assembly, program = [root / name for name in ('program.ssa', 'program.s', 'program')]
-    il.write_text('\n'.join(forced) + '\n')
-    run([binary.with_name('qbe'), '-o', assembly, il])
-    run(['/usr/bin/cc', assembly, '-lm', '-o', program])
-    result = run([program], stats=True)
-    assert result.stdout == expected, (result.stdout, expected, result.stderr)
-    statistics = {}
-    for line in result.stderr.splitlines():
-        prefix, key, value = line.split(',')
-        assert prefix == 'type-rb-native-gc-stat-v1' and key not in statistics, line
-        statistics[key] = int(value)
-    assert statistics['collections'] >= 480, statistics
-    assert statistics['live-bytes'] == 0, statistics
-    assert statistics['allocated-bytes'] == statistics['reclaimed-bytes'], statistics
-    assert statistics['peak-heap-bytes'] < 4 * 1024 * 1024, statistics
+    def check_forced_collection(expected, minimum_hooks, minimum_collections):
+        emitted = run([binary, '--internal-driver', 'emit-qbe', source])
+        assert emitted.stderr == '', emitted
+        forced, ordinary, hooks = [], False, 0
+        for line in emitted.stdout.splitlines():
+            if line.startswith('function '):
+                ordinary = '$trbnf' in line
+            if line == '}':
+                ordinary = False
+            if ordinary and any(marker in line for marker in (
+                    'call $trbn_array_new(', 'call $trbn_array_new_reserved(',
+                    'call $trbn_array_push_', 'call $trbn_array_grow_paced(', 'call $trbn_array_copy(',
+                    'call $trbn_gc_alloc(', 'call $trbn_string_concat(')):
+                forced.append('\tcall $trbn_gc_collect(w 0)')
+                hooks += 1
+            forced.append(line)
+        assert hooks >= minimum_hooks, hooks
+        il, assembly, program = [root / name for name in ('program.ssa', 'program.s', 'program')]
+        il.write_text('\n'.join(forced) + '\n')
+        run([binary.with_name('qbe'), '-o', assembly, il])
+        run(['/usr/bin/cc', assembly, '-lm', '-o', program])
+        result = run([program], stats=True)
+        assert result.stdout == expected, (result.stdout, expected, result.stderr)
+        statistics = {}
+        for line in result.stderr.splitlines():
+            prefix, key, value = line.split(',')
+            assert prefix == 'type-rb-native-gc-stat-v1' and key not in statistics, line
+            statistics[key] = int(value)
+        assert statistics['collections'] >= minimum_collections, statistics
+        assert statistics['live-bytes'] == 0, statistics
+        assert statistics['allocated-bytes'] == statistics['reclaimed-bytes'], statistics
+        assert statistics['peak-heap-bytes'] < 4 * 1024 * 1024, statistics
+
+    check_forced_collection(expected, 16, 480)
 
     # Preserve the original identity on equal keys in both directions. The host
-    # oracle covers ordered, reverse, constant and late-inversion inputs, empty
-    # runs, odd tails and every power-of-two boundary to 67.
+    # oracle covers strict reverse order separately from tied reverse runs and
+    # late inversions, empty runs, odd tails and power-of-two boundaries to 67.
     source.write_text('''record Entry
 key: Integer
 identity: Integer
 end
 
 def main()
-(0...5).each do |shape|
+(0...7).each do |shape|
 (0...68).each do |size|
 mut values: Array<Entry> := []
 (0...size).each do |index|
@@ -85,6 +88,13 @@ key = index / 3
 if index == size - 1
 key = -100
 end
+elsif shape == 5
+key = -index
+elsif shape == 6
+key = -(index / 3)
+if index == size - 1
+key = 100
+end
 end
 values.push(Entry.new(key: key, identity: index))
 end
@@ -99,7 +109,7 @@ end
 ''')
     result = run([binary, 'run', source])
     expected = []
-    for shape in range(5):
+    for shape in range(7):
         for size in range(68):
             def key(index):
                 if shape == 1:
@@ -112,6 +122,10 @@ end
                     return -100
                 if shape == 4:
                     return index // 3
+                if shape == 5:
+                    return -index
+                if shape == 6:
+                    return 100 if index == size - 1 else -(index // 3)
                 return (index * 37 + size * 11) % 7 - 3
             values = [(key(index), index) for index in range(size)]
             expected.extend(str(identity) for _, identity in sorted(values, key=lambda value: value[0]))
@@ -119,6 +133,9 @@ end
             expected.append(str(2 * size))
             expected.extend(map(str, range(size)))
     assert result.stdout == '\n'.join(expected) + '\n' and result.stderr == '', result
+    # Force collection across the insertion/merge boundary, including managed
+    # records and cached keys in the keyed oracle.
+    check_forced_collection('\n'.join(expected) + '\n', 3, 476)
 
     retained = run([binary, 'repl'], data='''mut values := [3, 1, 2]
 mut calls := 0

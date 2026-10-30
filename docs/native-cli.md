@@ -10,14 +10,24 @@ defaults are unchanged.
 
 Compiled Web projects can call `Web.serve` using the pinned
 [HTTP network libraries](native-network.md). Install those libraries once and
-set `TRBN_NETWORK_LIB_DIR` when running a server application.
+keep them in `network/` beside QBE, or set `TRBN_NETWORK_LIB_DIR` when building.
+The compiled server contains the HTTP libraries and needs no runtime override.
+The [gzip middleware](native-compression.md) additionally uses the pinned static
+libdeflate installation in `compression/` beside QBE, or the build-time
+`TRBN_COMPRESSION_LIB_DIR` override. The compiler itself needs no gzip library.
+The [digest/HMAC provider](native-crypto.md) uses static OpenSSL `libcrypto`.
+The CLI includes it for REPL parity; the core compiler and lockfile checksum
+implementation remain independent. Applications acquire it only when they import
+Digest, HMAC or SecureCompare.
 
 ## Build and run from a checkout
 
 On Darwin arm64, install the Xcode command-line tools. On Linux arm64, install
-a C toolchain, `make`, `curl`, `xz`, and `lld`. Then run:
+a C toolchain, `make`, `curl`, `xz`, and `lld`. The contributor crypto source
+build also needs Perl; development CI archives can provide it prebuilt. Then run:
 
 ```sh
+python3 tools/build-crypto-dependencies.py --archives /path/to/shared-source-cache --output bin/crypto
 ./trbn --version
 ./trbn run
 ./trbn
@@ -40,7 +50,9 @@ tools/build-native.sh
 ```
 
 The outputs are `bin/trbn`, its `bin/qbe` sidecar, and `bin/build-info.txt`.
-Keep the executables together when copying them elsewhere. The system C
+Keep the executables and `crypto/` archives together when copying a development
+compiler installation elsewhere. The CLI itself runs without the archives, but
+compiling a crypto application needs them. The system C
 driver/linker and system libraries remain runtime build dependencies.
 The terminal editor is implemented in TypeRB and uses POSIX terminal I/O on
 both systems; it has no libedit or Wasm dependency.

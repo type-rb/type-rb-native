@@ -166,6 +166,11 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         literal = '"' + ''.join(f'\\x{octet:02x}' for octet in raw) + '"'
         statements.append(f'display(JSON::Value::String({literal}))')
         outputs.append(quoted(decoded))
+        if len(raw) > 1:
+            # Raw bytes reach both key and value writers without parser repair.
+            statements.append(f'display(JSON::Value::Object({{{literal} => '
+                              f'JSON::Value::Array([JSON::Value::Null, JSON::Value::String({literal})])}}))')
+            outputs.append('{' + quoted(decoded) + ':[null,' + quoted(decoded) + ']}')
     # Exercise accumulated fragments across long ASCII/Unicode/escaped strings.
     for unit, count, tail, decoded in [
             (b'a', 8192, b'\xf0\x90\x80', 'a' * 8192 + '\ufffd' * 3),
@@ -183,6 +188,13 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         outputs.append(quoted(value))
         statements.append(f'parse_and_display({json.dumps(quoted(value), ensure_ascii=False)})')
         outputs.append(quoted(value))
+    # Force collection while a failed Unicode escape reconstructs its raw
+    # diagnostic. Earlier object members must remain rooted across that join.
+    for digits in ("x000", "0x00", "00x0", "000x", "12xz"):
+        sequence = "\\u" + digits
+        document = '{"held":"aβ😀","bad":"' + sequence + '"}'
+        statements.append(f'parse_and_display({json.dumps(document, ensure_ascii=False)})')
+        outputs.append("invalid escape sequence `" + sequence + "` in string")
     # Sibling containers and scalar variants must remain independent while the
     # parser stores their raw nodes and the conversion stack revisits parents.
     structures = [
@@ -191,6 +203,19 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         {f"key-{index}": "aβ😀\n<>&" for index in range(256)},
         {"left": [[], {}, [False, True]], "right": {"nested": [{}, [], None]}},
     ]
+    # Alternating containers and unrelated sibling keys expose a resumed parent
+    # accidentally using a child's position or sorted-key list.
+    def mixed_tree(depth, seed):
+        if depth == 0:
+            return [None, False, seed, 'β😀\n<>&', [], {}][seed % 6]
+        children = [mixed_tree(depth - 1, seed * 3 + index) for index in range(3)]
+        if seed % 2:
+            return [[], children[0], {}, children[1], children[2]]
+        return {'z\n': children[0], '': children[1], 'aβ😀<': children[2]}
+
+    structures.append(mixed_tree(5, 2))
+    structures.append([{'z': [[], {'nested': index}, {}], 'a': {}, '': [index]}
+                       for index in range(32)])
     # Exercise longer multibyte text beside escapes and in object keys.
     for width in (15, 16, 17, 31, 32, 33):
         structures.extend([
@@ -265,17 +290,71 @@ def main()
     assert join
     assert join[0].count('@start\n') == 1
     forced = emitted.replace(join[0], join[0].replace('@start\n', '@start\n call $trbn_gc_collect(w 0)\n'))
-    # Object construction happens while ancestor key Arrays are retained on
-    # the conversion stack. Collect there as well as at string joins.
-    hash_new = re.search(r'^function l \$trbn_hash_new\([^\n]*\) \{.*?^\}', forced, re.M | re.S)
-    assert hash_new and hash_new[0].count('@start\n') == 1
-    forced = forced.replace(hash_new[0], hash_new[0].replace('@start\n', '@start\n call $trbn_gc_collect(w 0)\n'))
+    # Collect during parser-owned pool and object-member creation as well as
+    # joins. Partially initialized state and retained ancestors must stay live.
+    for allocator in ('trbn_array_new', 'trbn_hash_new'):
+        allocation = re.search(r'^function l \$' + allocator + r'\([^\n]*\) \{.*?^\}', forced, re.M | re.S)
+        assert allocation and allocation[0].count('@start\n') == 1
+        forced = forced.replace(allocation[0], allocation[0].replace('@start\n', '@start\n call $trbn_gc_collect(w 0)\n'))
+    # Collection after the span helper installs both roots exercises buffer
+    # growth with a live input Bytes value and a retained builder owner.
+    span = re.search(r'^function \$trbn_builder_append_span\([^\n]*\) \{.*?^\}', forced, re.M | re.S)
+    assert span
+    root_hook = ' call $trbn_gc_temp_push(l %value)\n'
+    assert span[0].count(root_hook) == 1
+    forced = forced.replace(span[0], span[0].replace(
+        root_hook, root_hook + ' call $trbn_gc_collect(w 0)\n'))
     ssa.write_text(forced)
     run([binary.with_name('qbe'), '-o', assembly, ssa])
     run(['/usr/bin/cc', assembly, '-lm', '-o', forced_program])
     assert run([forced_program]).stdout == '\n'.join(outputs) + '\n'
     if args.reference:
         assert run([args.reference.resolve(), 'run', main]).stdout == '\n'.join(outputs) + '\n'
+
+    # Cursor synchronization must preserve metadata as well as the error text.
+    # Long ordinary spans precede every kind of decoder exit, and number runs
+    # end at both grammar delimiters and malformed fraction/exponent tokens.
+    if args.reference:
+        cursor_documents = []
+        for width in (0, 1, 31, 32, 33, 4096):
+            prefix = '"' + 'a' * width
+            cursor_documents.extend(prefix + tail for tail in (
+                '"', '', '\\', '\\q"', '\\u12', '\\u12xz"', '\\ud83d\\ude00"',
+                '\\ud83dX"', '\\nβ😀"', '\x01"', 'β😀\\q"'))
+        for number in ('0', '-0', '123456789', '-123456789', '1.25', '-1.25e+2',
+                       '1E-2', '-', '01', '1.', '1.e2', '1e', '1e+', '1e-',
+                       '1eX', '1.2.3', '9007199254740992', '1e309'):
+            cursor_documents.extend((number, '[0,' + number + ']',
+                                     '{"held":"β😀","n":' + number + '}'))
+        cursor_source = declarations.replace('import trb/std/jsonc\n', '') + '''
+def report_cursor(text: String)
+case JSON.parse(text)
+when Result::Ok(value)
+display(value)
+when Result::Err(error)
+puts(error.message)
+puts(error.path)
+line := error.line
+column := error.column
+if line != nil
+puts(line.to_s())
+else
+puts("nil")
+end
+if column != nil
+puts(column.to_s())
+else
+puts("nil")
+end
+end
+end
+def main()
+''' + '\n'.join(f'report_cursor({json.dumps(text, ensure_ascii=False)})'
+                      for text in cursor_documents) + '\nend\n'
+        main.write_text(cursor_source)
+        expected_cursor = run([args.reference.resolve(), 'run', main]).stdout
+        run([binary, 'build', '--compile', main, '--outfile', program])
+        assert run([program]).stdout == expected_cursor
 
     # Decode failures still report escaped JSON Pointer paths after successful
     # traversal, including overwritten keys and nested array/object boundaries.
