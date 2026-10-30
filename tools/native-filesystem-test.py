@@ -88,6 +88,41 @@ try file.write(bytes)
 end
 end
 
+def nested_transform(source: Path, target: Path): Result<Unit, FileSystemError>
+return File.open(source) do |reader|
+created := File.open(target, mode: FileMode::CreateNew) do |writer|
+text := try borrowed(reader, 1, 64)
+try writer.write_text(text.upcase())
+end
+try created
+end
+end
+
+def recover_body_error(path: Path): Result<String, FileSystemError>
+result := File.open(path) do |file|
+try file.read_text(max_bytes: 0)
+end
+case result
+when Result::Ok(_value)
+return Result<String, FileSystemError>::Ok("unexpected")
+when Result::Err(error)
+return Result<String, FileSystemError>::Ok("handled|" + error_kind(error.kind))
+end
+end
+
+def cursor_after_overflow(path: Path): Result<String, FileSystemError>
+return File.open(path) do |file|
+first := file.read(max_bytes: 1)
+case first
+when Result::Ok(_value)
+puts("unexpected bounded success")
+when Result::Err(_error)
+puts("overflow observed")
+end
+try file.read_text(max_bytes: 64)
+end
+end
+
 def show_unit(result: Result<Unit, FileSystemError>)
 case result
 when Result::Ok(_value)
@@ -115,6 +150,22 @@ when "create"
 show_unit(write_text(path, FileMode::CreateNew, args[2]))
 when "copy"
 show_unit(copy_bytes(path, Path.new(args[2])))
+when "nested-transform"
+show_unit(nested_transform(path, Path.new(args[2])))
+when "body-error"
+case recover_body_error(path)
+when Result::Ok(value)
+puts(value)
+when Result::Err(error)
+show_error(error)
+end
+when "cursor"
+case cursor_after_overflow(path)
+when Result::Ok(value)
+puts("remaining|" + value)
+when Result::Err(error)
+show_error(error)
+end
 when "mkdir"
 show_unit(Dir.create_all(path))
 when "children"
@@ -196,6 +247,13 @@ def main():
         text = data / 'text'
         text.write_bytes(b'hello')
         expect('bounded read with recursive borrowed aliases', 'read', text, 5, output='ok|hello\n')
+        transformed = data / 'transformed'
+        expect('nested acquisition borrows the outer resource synchronously', 'nested-transform', text, transformed, output='ok\n')
+        assert transformed.read_bytes() == b'HELLO'
+        expect('prefix try exits only the inner structured Result boundary', 'body-error', text,
+               output='handled|TooLarge\n')
+        expect('overflow consumes exactly one byte beyond the bound', 'cursor', text,
+               output='overflow observed\nremaining|llo\n')
         expect('one byte beyond limit', 'read', text, 4, output=error('read_text', 'TooLarge', text))
         expect('negative read limit', 'read', text, -1, output=error('read_text', 'InvalidLimit', text))
         expect('zero read limit observes overflow', 'read', text, 0, output=error('read_text', 'TooLarge', text))

@@ -1,6 +1,6 @@
+import { compiler_reserve_source } from state/source_capacity
 import { pinned_dir_source, pinned_errors_source, pinned_file_source } from project/official_catalog
-import { standard_source_dir, standard_source_file } from state/standard_source_kinds
-import { standard_source_digest, standard_source_hmac, standard_source_internal_hash, standard_source_internal_hmac, standard_source_secure_compare } from state/standard_source_kinds
+import { standard_source_digest, standard_source_dir, standard_source_file, standard_source_hmac, standard_source_internal_hash, standard_source_internal_hmac, standard_source_secure_compare } from state/standard_source_kinds
 import { pinned_hash_source, pinned_hmac_source } from project/official_catalog
 import { standard_source_compression, standard_source_network_host, standard_source_string_builder, standard_source_string_builder_storage, standard_source_web_server } from state/standard_source_kinds
 import { native_network_host_source, native_web_server_source } from project/official_catalog
@@ -467,13 +467,14 @@ def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer)
 		end
 		index += 1
 	end
+	mut source := standard_source_text(kind)
+	compiler_reserve_source(state, source.size())
 	previous := state.module_graph.active_module[0]
 	name := standard_source_name(kind)
 	owner := add_module(state, name, "<" + name + ">")
 	store_integer(state.standard_modules, owner, kind)
 	state.module_graph.active_module[0] = owner
 	start := state.source_tokens.token_count[0]
-	mut source := standard_source_text(kind)
 	if kind == official_source_kind("trb/web/testing")
 		source += web_dispatch_source(state, false)
 	end
@@ -483,6 +484,7 @@ def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer)
 	if kind == official_source_kind("trb/web")
 		source += "\nimport { serve as serve_network } from trb/internal/web_server\nmodule Web\ndef self.serve(config: ServerConfig = ServerConfig.new())\nserve_network(config)\nreturn\nend\nend\n"
 	end
+	compiler_reserve_source(state, source.size())
 	lex_module(state, source, owner)
 	if !has_diagnostic(state)
 		parse_module(state, start, owner)
