@@ -4,12 +4,16 @@ import { generic_arguments } from frontend/types/generic_arguments
 import { nullable_element } from frontend/types/nullable_types
 import { union_parts } from frontend/types/union_types
 import { standard_source_dir, standard_source_file } from state/standard_source_kinds
-import { CompilerState } from state/state
+import { CompilerState, diagnostic } from state/state
+import { string_starts_with } from support/path
 import { sparse_integer_at } from support/storage
 
 # Source ownership, declaration identity and nominal instance identity are
 # independent of authored names, aliases and apparent module paths.
 def scoped_resource_name(state: CompilerState, type_name: String): String
+	if !string_starts_with(type_name, "Class#")
+		return ""
+	end
 	owner := find_object_type(state, type_name)
 	if owner < 0
 		return ""
@@ -43,6 +47,20 @@ def contained_scoped_resource(state: CompilerState, type_name: String): String
 		index += 1
 	end
 	return ""
+end
+
+# Reject before a nominal instance hides its type arguments behind Record#/Class#.
+# Empty containers and phantom type parameters still cannot carry a resource.
+def resource_type_arguments_valid(mut state: CompilerState, arguments: Array<String>, source: Integer, line: Integer): Boolean
+	arguments.each do |argument|
+		resource := contained_scoped_resource(state, argument)
+		if resource != ""
+			state.module_graph.active_module[0] = source
+			diagnostic(state, "TRBN4003", line, "scoped resource " + resource + " cannot appear in a generic type argument")
+			return false
+		end
+	end
+	return true
 end
 
 def scoped_resource_declaration_name(state: CompilerState, owner: Integer): String
