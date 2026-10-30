@@ -73,6 +73,11 @@ def main():
     parser.add_argument('--crypto', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
+    # Subprocesses run inside temporary source directories. Resolve caller
+    # paths before changing cwd so relative CLI inputs keep their meaning.
+    args.archives = args.archives.resolve()
+    args.crypto_archives = args.crypto_archives.resolve()
+    args.crypto = args.crypto.resolve()
     output = args.output.resolve()
     if output.exists():
         raise ValueError('use a new installation; accepted artifacts are not replaced')
@@ -106,6 +111,7 @@ def main():
         run('make', 'install_dev', 'DESTDIR=' + str(root / 'stage'), cwd=openssl)
         prefix = root / 'stage/trbn/openssl'
         crypto_library = next(prefix.glob('lib*/libcrypto.a'))
+        ssl_library = crypto_library.with_name('libssl.a')
         shutil.copy2(args.crypto / 'libcrypto.a', crypto_library)
         zprefix = root / 'zlib-install'
         run('./configure', '--static', '--prefix=' + str(zprefix), cwd=zlib)
@@ -114,7 +120,9 @@ def main():
         cmake_options = ['-DBUILD_CURL_EXE=OFF', '-DBUILD_SHARED_LIBS=OFF', '-DBUILD_STATIC_LIBS=ON',
                          '-DBUILD_TESTING=OFF', '-DBUILD_LIBCURL_DOCS=OFF', '-DBUILD_MISC_DOCS=OFF',
                          '-DCURL_USE_OPENSSL=ON', '-DOPENSSL_USE_STATIC_LIBS=ON',
-                         '-DOPENSSL_ROOT_DIR=' + str(prefix), '-DOPENSSL_CRYPTO_LIBRARY=' + str(crypto_library), '-DCURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG=ON',
+                         '-DOPENSSL_ROOT_DIR=' + str(prefix), '-DOPENSSL_INCLUDE_DIR=' + str(prefix / 'include'),
+                         '-DOPENSSL_SSL_LIBRARY=' + str(ssl_library), '-DOPENSSL_CRYPTO_LIBRARY=' + str(crypto_library),
+                         '-DCURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG=ON',
                          '-DCURL_ZLIB=ON', '-DZLIB_INCLUDE_DIR=' + str(zprefix / 'include'),
                          '-DZLIB_LIBRARY=' + str(zprefix / 'lib/libz.a'),
                          '-DCURL_BROTLI=OFF', '-DCURL_ZSTD=OFF', '-DCURL_USE_LIBPSL=OFF',
@@ -126,6 +134,15 @@ def main():
         if target.startswith('darwin-'):
             cmake_options.append('-DUSE_APPLE_SECTRUST=ON')
         run('cmake', '-S', curl, '-B', root / 'curl-build', *cmake_options)
+        # A host package manager may otherwise supply headers from an OpenSSL
+        # build with a different configuration, even with a pinned crypto path.
+        cache = {line.split(':', 1)[0]: line.split('=', 1)[1]
+                 for line in (root / 'curl-build/CMakeCache.txt').read_text().splitlines()
+                 if not line.startswith(('#', '//')) and ':' in line and '=' in line}
+        for name, expected in [('OPENSSL_INCLUDE_DIR', prefix / 'include'),
+                               ('OPENSSL_SSL_LIBRARY', ssl_library), ('OPENSSL_CRYPTO_LIBRARY', crypto_library)]:
+            if name not in cache or Path(cache[name]).resolve() != expected.resolve():
+                raise ValueError('CMake selected an unqualified OpenSSL input: ' + name)
         run('cmake', '--build', root / 'curl-build', '--target', 'libcurl_static', '--parallel', '2')
         probe = root / 'abi.c'
         probe.write_text('#include <stddef.h>\n#include <string.h>\n#include <dirent.h>\n#include <curl/curl.h>\n'
@@ -171,6 +188,7 @@ def main():
                                      'openssl': crypto_pins, 'crypto_libraries': crypto_receipt['libraries'],
                                      'crypto_configuration': crypto_receipt['configuration'],
                                      'apple_sectrust': target.startswith('darwin-'),
+                                     'openssl_inputs_pinned': True,
                                      'automatic_ca_paths': False, 'automatic_openssl_configuration': False,
                                      'disabled': list(DISABLED), 'cflags': '-O2 -fPIC -ffunction-sections -fdata-sections -ffile-prefix-map=<build>=.'},
                    'cc': subprocess.check_output([cc, '--version'], text=True).splitlines()[0],
