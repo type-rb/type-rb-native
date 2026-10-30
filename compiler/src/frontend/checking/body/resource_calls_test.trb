@@ -1,3 +1,5 @@
+import { standard_source_oidc } from state/standard_source_kinds
+import { store_integer } from support/storage
 import { check } from compiler
 import { lex } from frontend/syntax/lexer
 import { parse_module } from frontend/syntax/parser
@@ -8,6 +10,21 @@ import { expect_compiler_phase } from testing/pipeline
 import { describe, expect, test } from trb/std/test
 
 describe("Scoped resource synchronous calls") do
+	test("rejects owned OIDC edges before MIR including unused generic borrows") do
+		["", "<T>"].each do |generic|
+			mut state := compiler_new(1048576)
+			source := "import trb/std/file\nimport trb/internal/auth/oidc_host as Host\ndef borrow" + generic + "(_file: File): String\nreturn Host.environment(\"RESOURCE_TEST_UNUSED\")\nend\ndef main()\nreturn\nend\n"
+			expect_compiler_phase(state, "lex", lex(state, source))
+			expect_compiler_phase(state, "parse", parse_module(state, 0, 0))
+			# A synthetic trusted provider tests the foreign edge. Authored
+			# imports cannot acquire this owner in the ordinary module loader.
+			store_integer(state.standard_modules, 0, standard_source_oidc())
+			expect_compiler_phase(state, "resolve", resolve(state))
+			expect(check(state)).to_be_false()
+			expect(load_string(state.diagnostics.messages, 0).include?("scoped resource borrow")).to_be_true()
+		end
+	end
+
 	test("rejects indirect calls reached from an ordinary or unused generic borrow") do
 		[
 			"def borrow(_file: File, callback: () -> String): String\nreturn callback()\nend\n",

@@ -18,6 +18,7 @@ def abi_profile(target):
     return {
         'sizeof(struct stat)': 144 if darwin or not arm else 128,
         'sizeof(mode_t)': 2 if darwin else 4,
+        'offsetof(struct utsname, machine)': 1024 if darwin else 260,
         'sizeof(off_t)': 8, 'sizeof(ssize_t)': 8, 'sizeof(void *)': 8,
         'offsetof(struct stat, st_mode)': 4 if darwin else (16 if arm else 24),
         'offsetof(struct stat, st_size)': 96 if darwin else 48,
@@ -29,7 +30,7 @@ def abi_profile(target):
         'O_CLOEXEC': 16777216 if darwin else 524288,
         'AT_SYMLINK_NOFOLLOW': 32 if darwin else 256,
         'S_IFMT': 61440, 'S_IFREG': 32768, 'S_IFDIR': 16384, 'S_IFLNK': 40960,
-        'EINTR': 4, 'ENOENT': 2, 'EACCES': 13, 'EEXIST': 17,
+        'EIO': 5, 'ENXIO': 6, 'EINTR': 4, 'ENOENT': 2, 'EACCES': 13, 'EEXIST': 17,
         'ENOTDIR': 20, 'EISDIR': 21, 'EINVAL': 22,
     }
 
@@ -44,7 +45,7 @@ def main():
     profile = abi_profile(target)
     source = ('#define _GNU_SOURCE\n#define _DARWIN_C_SOURCE\n'
               '#include <stddef.h>\n#include <sys/stat.h>\n#include <fcntl.h>\n'
-              '#include <unistd.h>\n#include <dirent.h>\n#include <errno.h>\n')
+              '#include <unistd.h>\n#include <dirent.h>\n#include <errno.h>\n#include <sys/utsname.h>\n#include <dlfcn.h>\n')
     source += ''.join('_Static_assert(' + name + ' == ' + str(value) + ', "' + name + '");\n'
                       for name, value in profile.items())
     # Compiler-owned test declarations keep prototypes and actual link symbols
@@ -61,6 +62,8 @@ int (*volatile close_directory)(DIR *) = &closedir;
 int (*volatile directory_handle)(DIR *) = &dirfd;
 int (*volatile entry_info)(int, const char *, struct stat *, int) = &fstatat;
 int (*volatile create_directory)(const char *, mode_t) = &mkdir;
+int (*volatile host_identity)(struct utsname *) = &uname;
+void *(*volatile dynamic_symbol)(void *, const char *) = &dlsym;
 int main(void) { return 0; }
 '''
     compiler = os.environ.get('CC', 'cc')

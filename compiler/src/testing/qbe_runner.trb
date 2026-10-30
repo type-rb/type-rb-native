@@ -17,6 +17,30 @@ def logical_run_qbe_arguments(qbe_path: String, source: String, arguments: Array
 		return Result<String, String>::Err(allocated.stderr)
 	end
 	workspace := allocated.stdout.strip()
+	result := logical_run_qbe_workspace(qbe_path, source, arguments, workspace)
+	mut cleanup_error := ""
+	case Process.run("/bin/rm", ["-r", workspace])
+	when Result::Ok(cleanup)
+		if !cleanup.success
+			cleanup_error = "QBE cleanup failed for " + workspace + ": " + cleanup.stderr
+		end
+	when Result::Err(error)
+		cleanup_error = "QBE cleanup failed for " + workspace + ": " + error.message
+	end
+	if cleanup_error != ""
+		case result
+		when Result::Err(original)
+			return Result<String, String>::Err(original + "\n" + cleanup_error)
+		when Result::Ok(_value)
+			return Result<String, String>::Err(cleanup_error)
+		end
+	end
+	return result
+end
+
+# The caller always removes generated files. Failed phase/output remains in the
+# returned diagnostic; the owning test keeps the source fixture reproducible.
+def logical_run_qbe_workspace(qbe_path: String, source: String, arguments: Array<String>, workspace: String): Result<String, String>
 	case native_write_text(workspace + "/module.ssa", source)
 	when Result::Ok(_unit)
 	when Result::Err(error)
@@ -29,7 +53,7 @@ def logical_run_qbe_arguments(qbe_path: String, source: String, arguments: Array
 		return Result<String, String>::Err(error.message)
 	end
 	if !assembled.success
-		return Result<String, String>::Err(assembled.stderr)
+		return Result<String, String>::Err("QBE assembly failed: " + assembled.stderr)
 	end
 	case native_write_text(workspace + "/module.s", assembled.stdout)
 	when Result::Ok(_unit)
@@ -43,20 +67,12 @@ def logical_run_qbe_arguments(qbe_path: String, source: String, arguments: Array
 		return Result<String, String>::Err(error.message)
 	end
 	if !linked.success
-		return Result<String, String>::Err(linked.stderr)
+		return Result<String, String>::Err("QBE link failed: " + linked.stderr)
 	end
 	case Process.run(workspace + "/program", arguments)
 	when Result::Ok(result)
 		if !result.success || !result.stderr.empty?()
-			return Result<String, String>::Err(result.stderr)
-		end
-		case Process.run("/bin/rm", ["-r", workspace])
-		when Result::Ok(cleanup)
-			if !cleanup.success
-				return Result<String, String>::Err(cleanup.stderr)
-			end
-		when Result::Err(error)
-			return Result<String, String>::Err(error.message)
+			return Result<String, String>::Err("QBE execution failed: " + result.stdout + result.stderr)
 		end
 		return Result<String, String>::Ok(result.stdout)
 	when Result::Err(error)
