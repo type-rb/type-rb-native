@@ -17,6 +17,10 @@ MAX_BYTES = 128 * 1024 * 1024
 
 
 def artifact_spec(family):
+    if family == "oidc":
+        return (Path(__file__).with_name("oidc-dependencies.json"),
+                {"libcurl.a", "libssl.a", "libz.a", "oidc-identity.o", "curl-LICENSE", "zlib-LICENSE", "openssl-LICENSE"},
+                b"TRBN-OIDC-V1\0", ("libcurl", "libssl", "libz"))
     if family == "crypto":
         return (Path(__file__).with_name("crypto-dependencies.json"),
                 {"libcrypto.a", "crypto-identity.o", "openssl-LICENSE"},
@@ -54,8 +58,8 @@ def embed_identity(receipt, assembly, family="network"):
              '.globl ' + symbol, symbol + ':']
     for offset in range(0, len(payload), 64):
         lines.append('.byte ' + ','.join(str(byte) for byte in payload[offset:offset + 64]))
-    if family == 'network':
-        platform_symbol = ('_' if darwin else '') + 'trbn_network_darwin'
+    if family in ('network', 'oidc'):
+        platform_symbol = ('_' if darwin else '') + 'trbn_' + family + '_darwin'
         lines.extend(['.p2align 3', '.globl ' + platform_symbol, platform_symbol + ':', '.quad ' + ('1' if darwin else '0')])
     if not darwin:
         lines.append('.section .note.GNU-stack,"",@progbits')

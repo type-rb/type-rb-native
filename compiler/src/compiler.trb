@@ -1,3 +1,4 @@
+import { emit_oidc_fetch, emit_oidc_rsa, oidc_runtime_needed } from backend/qbe/runtime/oidc
 import { crypto_runtime_needed, emit_crypto_runtime } from backend/qbe/runtime/crypto
 import { compression_runtime_needed, emit_compression_runtime } from backend/qbe/runtime/compression
 import { emit_string_builder_runtime } from backend/qbe/runtime/string_builder
@@ -57,6 +58,9 @@ record CompilerProjectSources
 	paths: Array<String>
 	sources: Array<String>
 	error: String
+end
+
+def compiler_set_oidc_link(_needed: Boolean)
 end
 
 def compiler_set_crypto_link(_needed: Boolean)
@@ -284,7 +288,16 @@ def emit_qbe(mut state: CompilerState): QbeOutput
 	emit_time_host_runtime(state.scalar_mir, output)
 	emit_entropy_runtime(state.scalar_mir, output)
 	emit_string_builder_runtime(state.scalar_mir, output)
-	compiler_set_crypto_link(crypto_runtime_needed(state.scalar_mir))
+	compiler_set_oidc_link(oidc_runtime_needed(state.scalar_mir))
+	if oidc_runtime_needed(state.scalar_mir)
+		emit_oidc_rsa(output)
+		emit_oidc_fetch(output)
+	end
+	mut crypto_needed := crypto_runtime_needed(state.scalar_mir)
+	if oidc_runtime_needed(state.scalar_mir)
+		crypto_needed = true
+	end
+	compiler_set_crypto_link(crypto_needed)
 	emit_crypto_runtime(state.scalar_mir, output)
 	compiler_set_compression_link(compression_runtime_needed(state.scalar_mir))
 	emit_compression_runtime(state.scalar_mir, output)
