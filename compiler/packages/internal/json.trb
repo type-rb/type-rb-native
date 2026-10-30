@@ -306,40 +306,49 @@ end
 def _string(mut parser: JsonParser): String
 	parser.position += 1
 	mut builder := StringBuilder.new()
-	mut span_start := parser.position
-	while parser.position < parser.bytes.size() && parser.failure == nil
-		character := parser.bytes.at(parser.position)
+	# The input is immutable. Publish the cursor only at parser boundaries;
+	# errors and Unicode escape decoding still use the shared parser position.
+	bytes := parser.bytes
+	finish := bytes.size()
+	mut position := parser.position
+	mut span_start := position
+	if parser.failure != nil
+		return ""
+	end
+	while position < finish
+		character := bytes.at(position)
 		if character == 34
-			BuilderStorage.append_bytes(builder, parser.bytes, span_start, parser.position)
-			parser.position += 1
+			BuilderStorage.append_bytes(builder, bytes, span_start, position)
+			parser.position = position + 1
 			return builder.to_s()
 		end
 		if character < 32
+			parser.position = position
 			_bad(parser, "in string")
 			return ""
 		end
 		if character >= 128
-			width := _byte_width(parser.bytes, parser.position, parser.bytes.size())
+			width := _byte_width(bytes, position, finish)
 			if width == 1
-				BuilderStorage.append_bytes(builder, parser.bytes, span_start, parser.position)
+				BuilderStorage.append_bytes(builder, bytes, span_start, position)
 				builder.append_codepoint(65533)
-				parser.position += 1
-				span_start = parser.position
+				position += 1
+				span_start = position
 			else
-				parser.position += width
+				position += width
 			end
 			next
 		end
-		parser.position += 1
+		position += 1
 		if character != 92
 			next
 		end
-		BuilderStorage.append_bytes(builder, parser.bytes, span_start, parser.position - 1)
-		escape := _byte(parser)
-		if escape < 0
+		BuilderStorage.append_bytes(builder, bytes, span_start, position - 1)
+		if position == finish
 			break
 		end
-		parser.position += 1
+		escape := bytes.at(position)
+		position += 1
 		if escape == 34 || escape == 92 || escape == 47
 			builder.append_codepoint(escape)
 		elsif escape == 98
@@ -353,22 +362,24 @@ def _string(mut parser: JsonParser): String
 		elsif escape == 116
 			builder.append("\t")
 		elsif escape == 117
+			parser.position = position
 			mut point := _unicode(parser)
+			position = parser.position
 			if point < 0
 				return ""
 			end
 			if point >= 55296 && point <= 56319
-				start := parser.position
-				if start + 6 <= parser.bytes.size() && parser.bytes.at(start) == 92 && parser.bytes.at(start + 1) == 117
+				start := position
+				if start + 6 <= finish && bytes.at(start) == 92 && bytes.at(start + 1) == 117
 					mut low := 0
 					mut offset := 2
-					while offset < 6 && _hex_byte(parser.bytes.at(start + offset)) >= 0
-						low = low * 16 + _hex_byte(parser.bytes.at(start + offset))
+					while offset < 6 && _hex_byte(bytes.at(start + offset)) >= 0
+						low = low * 16 + _hex_byte(bytes.at(start + offset))
 						offset += 1
 					end
 					if offset == 6 && low >= 56320 && low <= 57343
 						point = 65536 + (point - 55296) * 1024 + low - 56320
-						parser.position += 6
+						position += 6
 					end
 				end
 			end
@@ -377,17 +388,34 @@ def _string(mut parser: JsonParser): String
 			end
 			builder.append_codepoint(point)
 		else
-			_syntax(parser, "invalid escape sequence " + _escape_diagnostic("\\" + Octets.octet(escape)) + " in string", parser.position - 1)
+			parser.position = position
+			_syntax(parser, "invalid escape sequence " + _escape_diagnostic("\\" + Octets.octet(escape)) + " in string", position - 1)
 			return ""
 		end
-		span_start = parser.position
+		span_start = position
 	end
+	parser.position = position
 	_syntax(parser, "unexpected EOF", -1)
 	return ""
 end
 
 def _digit(character: Integer): Boolean
 	return character >= 48 && character <= 57
+end
+
+# Scan one digit run without a call or parser-field store for each byte.
+def _digits(mut parser: JsonParser)
+	bytes := parser.bytes
+	finish := bytes.size()
+	mut position := parser.position
+	while position < finish
+		character := bytes.at(position)
+		if character < 48 || character > 57
+			break
+		end
+		position += 1
+	end
+	parser.position = position
 end
 
 def _number(mut parser: JsonParser): String
@@ -402,9 +430,7 @@ def _number(mut parser: JsonParser): String
 	if _byte(parser) == 48
 		parser.position += 1
 	else
-		while _digit(_byte(parser))
-			parser.position += 1
-		end
+		_digits(parser)
 	end
 	if _byte(parser) == 46
 		parser.position += 1
@@ -412,9 +438,7 @@ def _number(mut parser: JsonParser): String
 			_bad(parser, "in numeric literal")
 			return ""
 		end
-		while _digit(_byte(parser))
-			parser.position += 1
-		end
+		_digits(parser)
 	end
 	if _byte(parser) == 101 || _byte(parser) == 69
 		parser.position += 1
@@ -425,9 +449,7 @@ def _number(mut parser: JsonParser): String
 			_bad(parser, "in numeric literal")
 			return ""
 		end
-		while _digit(_byte(parser))
-			parser.position += 1
-		end
+		_digits(parser)
 	end
 	return _source_slice(parser, start, parser.position)
 end

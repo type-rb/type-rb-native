@@ -311,6 +311,51 @@ def main()
     if args.reference:
         assert run([args.reference.resolve(), 'run', main]).stdout == '\n'.join(outputs) + '\n'
 
+    # Cursor synchronization must preserve metadata as well as the error text.
+    # Long ordinary spans precede every kind of decoder exit, and number runs
+    # end at both grammar delimiters and malformed fraction/exponent tokens.
+    if args.reference:
+        cursor_documents = []
+        for width in (0, 1, 31, 32, 33, 4096):
+            prefix = '"' + 'a' * width
+            cursor_documents.extend(prefix + tail for tail in (
+                '"', '', '\\', '\\q"', '\\u12', '\\u12xz"', '\\ud83d\\ude00"',
+                '\\ud83dX"', '\\nβ😀"', '\x01"', 'β😀\\q"'))
+        for number in ('0', '-0', '123456789', '-123456789', '1.25', '-1.25e+2',
+                       '1E-2', '-', '01', '1.', '1.e2', '1e', '1e+', '1e-',
+                       '1eX', '1.2.3', '9007199254740992', '1e309'):
+            cursor_documents.extend((number, '[0,' + number + ']',
+                                     '{"held":"β😀","n":' + number + '}'))
+        cursor_source = declarations.replace('import trb/std/jsonc\n', '') + '''
+def report_cursor(text: String)
+case JSON.parse(text)
+when Result::Ok(value)
+display(value)
+when Result::Err(error)
+puts(error.message)
+puts(error.path)
+line := error.line
+column := error.column
+if line != nil
+puts(line.to_s())
+else
+puts("nil")
+end
+if column != nil
+puts(column.to_s())
+else
+puts("nil")
+end
+end
+end
+def main()
+''' + '\n'.join(f'report_cursor({json.dumps(text, ensure_ascii=False)})'
+                      for text in cursor_documents) + '\nend\n'
+        main.write_text(cursor_source)
+        expected_cursor = run([args.reference.resolve(), 'run', main]).stdout
+        run([binary, 'build', '--compile', main, '--outfile', program])
+        assert run([program]).stdout == expected_cursor
+
     # Decode failures still report escaped JSON Pointer paths after successful
     # traversal, including overwritten keys and nested array/object boundaries.
     pointer_cases = [
