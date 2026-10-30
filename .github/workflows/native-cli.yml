@@ -35,7 +35,7 @@ jobs:
           - runner: ubuntu-24.04
             platform: linux-amd64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
       - name: Test artifact integrity and bounded extraction
@@ -43,6 +43,8 @@ jobs:
           python3 tools/network_artifacts_test.py
           python3 tools/compression_artifacts_test.py
           python3 tools/crypto_artifacts_test.py
+          python3 tools/oidc_artifacts_test.py
+          python3 tools/oidc_builder_test.py
       - name: Build and qualify host archives
         env:
           PLATFORM: ${{ matrix.platform }}
@@ -69,6 +71,13 @@ jobs:
           python3 tools/crypto_artifacts.py pack "$RUNNER_TEMP/crypto" "dist/crypto-$PLATFORM.tar.gz"
           cp tools/crypto-dependencies.json dist/crypto-source-pins.json
           cp "$RUNNER_TEMP/crypto-sources/"*.tar.gz dist/
+          python3 tools/build-oidc-dependencies.py --archives "$RUNNER_TEMP/oidc-sources" \
+            --crypto-archives "$RUNNER_TEMP/crypto-sources" --crypto "$RUNNER_TEMP/crypto" --output "$RUNNER_TEMP/oidc"
+          python3 tools/oidc_artifacts.py verify "$RUNNER_TEMP/oidc" --target "$PLATFORM" > dist/oidc-build.json
+          python3 tools/oidc_artifact_smoke.py "$RUNNER_TEMP/oidc" --crypto "$RUNNER_TEMP/crypto" --receipt dist/oidc-static-link.json
+          python3 tools/oidc_artifacts.py pack "$RUNNER_TEMP/oidc" "dist/oidc-$PLATFORM.tar.gz"
+          cp tools/oidc-dependencies.json dist/oidc-source-pins.json
+          cp "$RUNNER_TEMP/oidc-sources/"*.tar.* dist/
       - uses: actions/upload-artifact@v6
         with:
           name: network-${{ matrix.platform }}
@@ -103,6 +112,8 @@ jobs:
             --archives "$RUNNER_TEMP/network-archives" --output bin/network
           python3 tools/build-compression-dependencies.py \
             --archives "$RUNNER_TEMP/compression-archives" --output bin/compression
+          python3 tools/build-oidc-dependencies.py --archives "$RUNNER_TEMP/oidc-sources" \
+            --crypto-archives "$RUNNER_TEMP/crypto-sources" --crypto bin/crypto --output bin/oidc
       - name: Exercise real HTTP transport and forced collection
         run: |
           python3 tools/native-network-distribution-test.py bin/trbn --libraries bin/network \
@@ -115,6 +126,14 @@ jobs:
           python3 tools/native-web-compression-test.py bin/trbn --libraries bin/network \
             --compression bin/compression --receipt "$RUNNER_TEMP/web-compression.json"
           python3 tools/native-crypto-test.py bin/trbn --libraries bin/crypto --receipt "$RUNNER_TEMP/crypto.json"
+      - name: Exercise OIDC HTTPS, proxy, trust and foreign cleanup
+        run: |
+          python3 tools/native-oidc-distribution-test.py bin/trbn --libraries bin/oidc --receipt "$RUNNER_TEMP/oidc-distribution.json"
+          python3 tools/native-oidc-test.py bin/trbn --transport --cli-paths --receipt "$RUNNER_TEMP/oidc-http.json"
+          python3 tools/native-oidc-test.py bin/trbn --tls --transport --receipt "$RUNNER_TEMP/oidc-https.json"
+          python3 tools/native-oidc-test.py bin/trbn --tls --trust directory --receipt "$RUNNER_TEMP/oidc-directory.json"
+          python3 tools/native-oidc-test.py bin/trbn --tls --trust untrusted --receipt "$RUNNER_TEMP/oidc-untrusted.json"
+          python3 tools/native-oidc-test.py bin/trbn --tls --transport --stress --receipt "$RUNNER_TEMP/oidc-stress.json"
       - name: Retain application distribution observations
         if: always()
         uses: actions/upload-artifact@v6
@@ -124,6 +143,7 @@ jobs:
             ${{ runner.temp }}/network-distribution.json
             ${{ runner.temp }}/web-compression.json
             ${{ runner.temp }}/crypto.json
+            ${{ runner.temp }}/oidc-*.json
           if-no-files-found: error
           retention-days: 30
       - name: Check every reviewed conformance source with the built core compiler
@@ -228,6 +248,8 @@ jobs:
           cp -R bin/compression dist/package/compression
           cp docs/native-crypto.md dist/package/CRYPTO.md
           cp -R bin/crypto dist/package/crypto
+          cp docs/native-oidc.md dist/package/OIDC.md
+          cp -R bin/oidc dist/package/oidc
           tar -czf "dist/trbn-$PLATFORM.tar.gz" -C dist/package .
           cd dist
           shasum -a 256 "trbn-$PLATFORM.tar.gz" > "trbn-$PLATFORM.tar.gz.sha256"

@@ -249,31 +249,37 @@
     {
       "id": "libcurl",
       "name": "libcurl",
-      "status": "candidate",
+      "status": "current",
       "scope": "Application runtime",
       "role": "HTTP/HTTPS retrieval for OIDC discovery and JWKS.",
-      "configuration": "Selected for bounded synchronous retrieval, with only required HTTP/HTTPS and proxy support. Not introduced; version/configuration, redirects and TLS backend require qualification. No general HTTP client or server TLS obligation is inferred for v0.5.",
+      "configuration": "curl 8.23.0, curl license, fixed commit/archive; selectively static HTTP/HTTPS with the threaded DNS resolver, one pinned OpenSSL stack and zlib. TypeRB owns proxy/redirect/deadline policy. HTTP/2, IDN libraries and other optional protocols are disabled. Build-time installation beside QBE or TRBN_OIDC_LIB_DIR; no runtime loader.",
       "evidence": [
         "https://curl.se/libcurl/",
         "https://curl.se/docs/libs.html",
-        "docs/native-dependency-policy.md"
+        "docs/native-dependency-policy.md",
+        "tools/oidc-dependencies.json",
+        "tools/build-oidc-dependencies.py",
+        "tools/native-oidc-test.py",
+        "tools/oidc_artifact_smoke.py",
+        "docs/native-oidc.md"
       ],
-      "next": "Implement with the selected OpenSSL stack; qualify 5-second total deadline, redirect/proxy rules, 1 MiB bound, errors and JWKS cache behavior against the exact reference.",
+      "next": "Complete transport edge qualification and immutable four-host artifacts under the owning tasks. Keep general HTTP clients and server TLS separate; qualify any added protocol/backend before changing the inventory.",
       "requiredBy": [
         "package.web.auth.bearer",
         "package.auth.oidc",
         "0086 M4"
       ],
       "referenceBehavior": "OIDC discovery/JWKS: total 5-second timeout, bounded response, HTTP/HTTPS, redirects, environment proxies and cache behavior from the pinned reference.",
-      "decision": "selected"
+      "decision": "selected",
+      "pin": "curl"
     },
     {
       "id": "openssl",
       "name": "OpenSSL: libssl / libcrypto",
       "status": "current",
       "scope": "Application runtime and retained REPL",
-      "role": "Static libcrypto for digest, HMAC and secure comparison; TLS and RSA remain planned.",
-      "configuration": "OpenSSL 3.5.9 LTS, Apache-2.0, pinned commit/archive. Static libcrypto with upstream assembly; no shared libraries, modules, DSO, engines, legacy provider or implicit configuration. Explicit NO_LOAD_CONFIG initialization. Full CLI links it for REPL; core compiler and lockfile hashing do not. TLS/libssl and shared DB profiles are not implemented.",
+      "role": "Static libcrypto for digest/HMAC/comparison and RS256; compatible static libssl for OIDC HTTPS.",
+      "configuration": "OpenSSL 3.5.9 LTS, Apache-2.0, pinned commit/archive. Static crypto/TLS with upstream assembly; no shared libraries, modules, DSO, engines, legacy provider or implicit configuration. Explicit NO_LOAD_CONFIG initialization. Full CLI links libcrypto for REPL; OIDC consumers link matching libssl/libcurl to that same archive. Core compiler and lockfile hashing remain independent. Shared DB profiles remain unimplemented. Builder isolates ambient search flags and audits the actual libcurl translation unit for exclusively qualified OpenSSL headers.",
       "evidence": [
         "tools/crypto-dependencies.json",
         "tools/build-crypto-dependencies.py",
@@ -281,9 +287,13 @@
         "tools/crypto_artifact_smoke.py",
         ".github/workflows/native-cli.yml",
         "docs/native-dependency-policy.md",
-        "https://docs.openssl.org/3.5/man3/OPENSSL_init_crypto/"
+        "https://docs.openssl.org/3.5/man3/OPENSSL_init_crypto/",
+        "docs/native-oidc.md",
+        "tools/build-oidc-dependencies.py",
+        "tools/oidc_artifact_smoke.py",
+        "tools/oidc_builder_test.py"
       ],
-      "next": "Qualify immutable four-host release artifacts and update ownership under #1257. Add TLS/RSA/trust adapters and the single shared TLS stack for DB applications as separate work; do not mix this static profile with a second dynamically loaded OpenSSL.",
+      "next": "Qualify immutable four-host release artifacts and update ownership under #1257. Implement the single shared TLS stack for dynamic DB clients separately; never combine this static profile with a second dynamically loaded OpenSSL.",
       "requiredBy": [
         "package.web.auth.bearer",
         "package.std.digest",
@@ -376,17 +386,44 @@
       "pin": "libdeflate"
     },
     {
+      "id": "zlib",
+      "name": "zlib (OIDC gzip decoding)",
+      "status": "current",
+      "scope": "Application runtime",
+      "role": "Incremental bounded gzip decoding for OIDC discovery/JWKS responses.",
+      "configuration": "zlib 1.3.2, Zlib license, pinned commit/archive; selectively static with the OIDC profile. TypeRB bounds decompressed bytes, checks completion and owns each inflate state. Existing libdeflate response encoding is unchanged.",
+      "evidence": [
+        "tools/oidc-dependencies.json",
+        "tools/build-oidc-dependencies.py",
+        "compiler/src/backend/qbe/runtime/oidc_gzip.trb",
+        "tools/native-oidc-test.py",
+        "docs/native-oidc.md"
+      ],
+      "next": "Qualify immutable artifacts with the OIDC stack; preserve decompressed bounds and malformed-stream cleanup on updates.",
+      "requiredBy": [
+        "package.web.auth.bearer",
+        "package.auth.oidc",
+        "0086 M4"
+      ],
+      "referenceBehavior": "Go HTTP transport advertises gzip and decodes only gzip; deflate/unknown encodings stay opaque. Enforce the 1 MiB bound on decoded bytes.",
+      "decision": "retain",
+      "pin": "zlib"
+    },
+    {
       "id": "ca-trust",
       "name": "OS CA store or CA bundle",
-      "status": "candidate",
+      "status": "current",
       "scope": "Runtime data",
       "role": "Trust anchors for authenticated TLS connections.",
-      "configuration": "Selected OS trust policy, not implemented: macOS platform verification by default; explicit SSL_CERT_FILE/SSL_CERT_DIR disk roots when configured for the pinned Go semantics. Linux probes the reference bundle/directory paths with those overrides. No default bundled Mozilla CA set.",
+      "configuration": "OIDC trust adapter: macOS platform verification by default through Security.framework; nonempty SSL_CERT_FILE/SSL_CERT_DIR selects disk roots. Linux probes the reference bundle/directory paths with those overrides. No default Mozilla bundle or OpenSSL compiled CA paths.",
       "evidence": [
         "https://curl.se/docs/sslcerts.html",
-        "docs/native-dependency-policy.md"
+        "docs/native-dependency-policy.md",
+        "docs/native-oidc.md",
+        "compiler/src/backend/qbe/runtime/oidc_trust.trb",
+        "tools/native-oidc-test.py"
       ],
-      "next": "Qualify corporate/MDM roots, custom-root overrides, hostname failure and Linux path probing. Pin Go compatibility conditions; never rely on OpenSSL build-time default paths.",
+      "next": "Retain explicit-CA file/directory and hostname-negative coverage on each supported host. Corporate/MDM trust and reference toolchain/GODEBUG variations require environment-specific qualification; shared DB trust remains separate.",
       "requiredBy": [
         "package.web.auth.bearer",
         "0086 M6"

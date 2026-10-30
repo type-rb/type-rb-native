@@ -8,8 +8,9 @@ invalid UTF-8. Public declarations and names follow `TYPE_RB_REVISION`.
 The provider is OpenSSL 3.5.9 `libcrypto`, built from the exact commit and archive
 hash in [crypto-dependencies.json](../tools/crypto-dependencies.json). The
 [dependency register](native-dependencies.json) records its scope and remaining
-release qualification. This implements digest consumers; TLS, certificate trust,
-RSA verification and database clients remain separate work.
+release qualification. Digest consumers share this crypto archive with the
+[OIDC TLS/RS256 provider](native-oidc.md). Database client profiles remain separate
+work.
 
 ## Dependency scope
 
@@ -18,7 +19,7 @@ RSA verification and database clients remain separate work.
 | Core compiler and lockfile checksum implementation | None |
 | Native CLI, including the retained REPL | Statically linked libcrypto |
 | Application using Digest, HMAC or SecureCompare | Statically linked libcrypto |
-| Application without these APIs | None |
+| Application without these APIs or OIDC | None |
 
 REPL evaluation calls the ordinary standard APIs, so it has the same results and
 provider as compiled programs. It does not run the Go implementation. This means

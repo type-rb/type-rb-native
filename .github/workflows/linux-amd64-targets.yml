@@ -267,6 +267,23 @@ jobs:
             --target linux-amd64-v0 --libraries "$RUNNER_TEMP/crypto-libraries" \
             --receipt "$RUNNER_TEMP/crypto.json"
 
+      - name: Qualify OIDC HTTPS and foreign cleanup on Linux amd64
+        env:
+          TRBN_QBE: ${{ steps.qbe.outputs.path }}
+          TRBN_NETWORK_LIB_DIR: ${{ runner.temp }}/network-libraries
+          TRBN_CRYPTO_LIB_DIR: ${{ runner.temp }}/crypto-libraries
+          TRBN_OIDC_LIB_DIR: ${{ runner.temp }}/oidc-libraries
+        run: |
+          python3 .native-target-candidate/tools/build-oidc-dependencies.py \
+            --archives "$RUNNER_TEMP/oidc-archives" --crypto-archives "$RUNNER_TEMP/crypto-archives" \
+            --crypto "$TRBN_CRYPTO_LIB_DIR" --output "$TRBN_OIDC_LIB_DIR"
+          python3 .native-target-candidate/tools/native-oidc-test.py \
+            "$RUNNER_TEMP/linux-amd64-targets-compiler" --core --tls --transport \
+            --receipt "$RUNNER_TEMP/oidc-https.json"
+          python3 .native-target-candidate/tools/native-oidc-test.py \
+            "$RUNNER_TEMP/linux-amd64-targets-compiler" --core --tls --transport --stress \
+            --receipt "$RUNNER_TEMP/oidc-stress.json"
+
       - name: Export amd64 target-neutral identities
         id: target_neutral
         run: |
@@ -315,6 +332,14 @@ jobs:
             if test -f "$RUNNER_TEMP/crypto.json"; then
               cp "$RUNNER_TEMP/crypto.json" "$evidence/crypto/"
             fi
+          fi
+          if test -f "$RUNNER_TEMP/oidc-libraries/oidc-build.json"; then
+            mkdir -p "$evidence/oidc"
+            cp "$RUNNER_TEMP/oidc-libraries/oidc-build.json" \
+              "$RUNNER_TEMP/oidc-libraries/"*-LICENSE "$evidence/oidc/"
+            for receipt in "$RUNNER_TEMP/oidc-https.json" "$RUNNER_TEMP/oidc-stress.json"; do
+              if test -f "$receipt"; then cp "$receipt" "$evidence/oidc/"; fi
+            done
           fi
           if test -d "$RUNNER_TEMP/linux-amd64-targets-controller"; then
             mkdir -p "$evidence/controller"

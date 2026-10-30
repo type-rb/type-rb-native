@@ -90,6 +90,7 @@ step "HTTP server reference contracts" python3 tools/native-web-network-test.py 
 step "HTTP REPL reference contract" python3 tools/native-web-network-repl-test.py "$reference" --reference
 step "gzip response reference contracts" python3 tools/native-web-compression-test.py "$reference" --reference --receipt "$log.json"
 step "digest and HMAC reference contracts" python3 tools/native-crypto-test.py "$reference" --reference --receipt "$log.json"
+step "OIDC reference contracts" python3 tools/native-oidc-test.py "$reference" --reference --tls --transport --cli-paths --receipt "$log.json"
 rm -f "$log.json"
 if [ -f tools/project-scenarios.py ]; then
 	# Scenarios run with an isolated HOME; share the Go build cache as CI does.
