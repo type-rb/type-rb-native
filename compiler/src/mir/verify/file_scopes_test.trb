@@ -1,0 +1,194 @@
+import { mir_file_scope_plans } from backend/qbe/emit/file_scopes
+import { mir_rewrite_fork, mir_rewrite_instruction } from mir/passes/rewrite
+import { check, emit_qbe } from compiler
+import { mir_op_enum_new, mir_op_file_scope } from mir/model/instructions
+import { MirFileScope, MirInstruction, MirRootPlan, mir_function_index } from mir/model/module
+import { mir_refine_call_effects } from mir/analysis/call_effects
+import { optimize_verified_mir } from mir/passes/optimize
+import { verify_mir } from mir/verify/module
+import { intrinsic_mir_erase } from testing/mir/intrinsics
+import { expect_compiler_phase, logical_checked_source } from testing/pipeline
+import { output_source } from testing/compiler
+import { logical_run_qbe } from testing/qbe_runner
+import { CompilerState } from state/state
+import { describe, expect, test } from trb/std/test
+import trb/std/process
+import trb/std/result
+
+# The frontend has not exposed File.open yet. Insert its structured operation
+# into an ordinary typed caller, then erase source and independently verify it.
+def file_scope_mir_fixture(file_path: String): CompilerState
+	source := "import trb/std/file\nimport trb/std/result\ndef body(prefix: String, number: Float, _file: File): Result<String, Integer>\nreturn Result<String, Integer>::Ok(prefix + number.to_s())\nend\ndef error(_path: String, _operation: Integer, status: Integer): Result<String, Integer>\nreturn Result<String, Integer>::Err(status)\nend\ndef scoped(_path: String, _mode: Integer, prefix: String, _number: Float): Result<String, Integer>\nreturn Result<String, Integer>::Ok(prefix)\nend\ndef main()\ncase scoped(\"" + file_path + "\".strip(), 0, \"kept\".upcase(), 2.5)\nwhen Result::Ok(value)\nputs(value)\nwhen Result::Err(error)\nputs(error)\nend\nend\n"
+	mut state := logical_checked_source(source)
+	expect_compiler_phase(state, "check", check(state))
+	mut body := -1
+	mut error := -1
+	mut caller := -1
+	state.scalar_mir.signatures.each do |signature|
+		if signature.name == "body"
+			body = signature.id
+		elsif signature.name == "error"
+			error = signature.id
+		elsif signature.name == "scoped"
+			caller = signature.id
+		end
+	end
+	expect(body >= 0 && error >= 0 && caller >= 0).to_be_true()
+	mut error_variant := -1
+	state.scalar_mir.enum_variants.each.with_index do |variant, index|
+		if variant.name == "Err"
+			error_variant = index
+		end
+	end
+	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, caller)]
+	path := state.scalar_mir.arguments[function.parameter_start]
+	mode := state.scalar_mir.arguments[function.parameter_start + 1]
+	start := state.scalar_mir.arguments.size()
+	state.scalar_mir.arguments.push(state.scalar_mir.arguments[function.parameter_start + 2])
+	state.scalar_mir.arguments.push(state.scalar_mir.arguments[function.parameter_start + 3])
+	state.scalar_mir.file_scopes.push(MirFileScope.new(body: body, error: error, error_variant: error_variant, argument_start: start, argument_count: 2))
+	mut changed := 0
+	mut block := function.block_start
+	while block < function.block_start + function.block_count
+		row := state.scalar_mir.blocks[block]
+		mut index := row.instruction_start
+		while index < row.instruction_start + row.instruction_count
+			instruction := state.scalar_mir.instructions[index]
+			if instruction.kind == mir_op_enum_new()
+				state.scalar_mir.instructions[index] = MirInstruction.new(kind: mir_op_file_scope(), result: instruction.result, first: path, second: mode, payload: 0, failure: -1, source_id: instruction.source_id, line: instruction.line)
+				changed += 1
+			end
+			index += 1
+		end
+		block += 1
+	end
+	expect(changed).to_equal(1)
+	mir_refine_call_effects(state.scalar_mir)
+	optimize_verified_mir(state.scalar_mir)
+	intrinsic_mir_erase(state)
+	return state
+end
+
+describe("Scoped File MIR operation") do
+	test("independently verifies captures roots and ordinary body return ABI") do
+		state := file_scope_mir_fixture("/dev/null")
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		scope := state.scalar_mir.file_scopes[mir_file_scope_plans(state.scalar_mir)[0]]
+		expect(state.scalar_mir.enum_stack_functions[scope.body]).to_equal(0)
+		expect(state.scalar_mir.enum_stack_functions[scope.error]).to_equal(0)
+	end
+
+	test("rejects malformed targets and capture contracts after source erasure") do
+		mut state := file_scope_mir_fixture("/dev/null")
+		original := state.scalar_mir.file_scopes[mir_file_scope_plans(state.scalar_mir)[0]]
+		[
+			MirFileScope.new(body: -1, error: original.error, error_variant: original.error_variant, argument_start: original.argument_start, argument_count: 2),
+			MirFileScope.new(body: original.error, error: original.error, error_variant: original.error_variant, argument_start: original.argument_start, argument_count: 2),
+			MirFileScope.new(body: original.body, error: original.body, error_variant: original.error_variant, argument_start: original.argument_start, argument_count: 2),
+			MirFileScope.new(body: original.body, error: original.error, error_variant: -1, argument_start: original.argument_start, argument_count: 2),
+			MirFileScope.new(body: original.body, error: original.error, error_variant: original.error_variant, argument_start: original.argument_start, argument_count: 1),
+			MirFileScope.new(body: original.body, error: original.error, error_variant: original.error_variant, argument_start: state.scalar_mir.arguments.size(), argument_count: 2),
+		].each do |forged|
+			state.scalar_mir.file_scopes[mir_file_scope_plans(state.scalar_mir)[0]] = forged
+			expect(verify_mir(state.scalar_mir, true).include?("MIR File scope")).to_be_true()
+		end
+	end
+
+	test("executes the checked operation without source metadata or a user callback") do
+		mut state := file_scope_mir_fixture("/dev/null")
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, output_source(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("-2\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+	test("rewrites capture operands in an independent plan and ignores unowned instruction rows") do
+		mut state := file_scope_mir_fixture("/dev/null")
+		plan := mir_file_scope_plans(state.scalar_mir)[0]
+		original := state.scalar_mir.file_scopes[plan]
+		mut fork := mir_rewrite_fork(state.scalar_mir)
+		count := state.scalar_mir.file_scopes.size()
+		operation := MirInstruction.new(kind: mir_op_file_scope(), result: 30, first: 10, second: 11, payload: plan, failure: -1, source_id: 0, line: 1)
+		mut values: Hash<String, Integer> := { "10" => 40, "11" => 41, "30" => 60 }
+		values[state.scalar_mir.arguments[original.argument_start].to_s()] = 70
+		values[state.scalar_mir.arguments[original.argument_start + 1].to_s()] = 71
+		rewritten := mir_rewrite_instruction(fork, operation, values, {})
+		expect(state.scalar_mir.file_scopes.size()).to_equal(count)
+		expect(rewritten.payload).to_equal(count)
+		new_plan := fork.file_scopes[rewritten.payload]
+		expect(fork.arguments[new_plan.argument_start]).to_equal(70)
+		expect(fork.arguments[new_plan.argument_start + 1]).to_equal(71)
+		expect(new_plan.body).to_equal(original.body)
+		state.scalar_mir.instructions.push(MirInstruction.new(kind: mir_op_file_scope(), result: -1, first: -1, second: -1, payload: 9007199254740991, failure: -1, source_id: 0, line: 1))
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(output_source(emit_qbe(state)).include?("trbn_file_body9007199254740991")).to_be_false()
+	end
+
+	test("rejects removing managed scope operands from the independently verified root plan") do
+		mut state := file_scope_mir_fixture("/dev/null")
+		mut found := false
+		state.scalar_mir.root_plans.each.with_index do |plan, index|
+			mut roots: Array<Array<Integer>> := []
+			plan.roots.each do |row|
+				roots.push(row)
+			end
+			plan.instructions.each.with_index do |instruction, slot|
+				if state.scalar_mir.instructions[instruction].kind == mir_op_file_scope()
+					expect(roots[slot].size() >= 2).to_be_true()
+					roots[slot] = []
+					found = true
+				end
+			end
+			state.scalar_mir.root_plans[index] = MirRootPlan.new(function_id: plan.function_id, instructions: plan.instructions, roots: roots, capacity: plan.capacity)
+		end
+		expect(found).to_be_true()
+		expect(verify_mir(state.scalar_mir, true).include?("root")).to_be_true()
+	end
+
+	test("runs typed captures and a managed result while collecting before every allocation") do
+		file_scope_mir_execution_test()
+	end
+
+end
+
+def file_scope_mir_execution_test()
+	qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+	if qbe == nil
+		return
+	end
+	allocated := case Process.run("/usr/bin/mktemp", ["/tmp/type-rb-native-scope-mir.XXXXXX"])
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		puts(error.message)
+		expect(false).to_be_true()
+		return
+	end
+	expect(allocated.success).to_be_true()
+	path := allocated.stdout.strip()
+	mut state := file_scope_mir_fixture(path)
+	expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	allocation := "function l $trbn_gc_alloc(l %descriptor, l %payload_size, l %reserved_size) {\n@start"
+	source := output_source(emit_qbe(state)).split(allocation).join(allocation + "\n call $trbn_gc_collect(w 0)")
+	actual := logical_run_qbe(qbe, source)
+	case Process.run("/bin/rm", [path])
+	when Result::Ok(value)
+		expect(value.success).to_be_true()
+	when Result::Err(error)
+		puts(error.message)
+		expect(false).to_be_true()
+	end
+	case actual
+	when Result::Ok(value)
+		expect(value).to_equal("KEPT2.5\n")
+	when Result::Err(error)
+		puts(error)
+		expect(false).to_be_true()
+	end
+end

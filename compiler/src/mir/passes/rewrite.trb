@@ -1,3 +1,5 @@
+import { mir_op_file_scope } from mir/model/instructions
+import { MirFileScope } from mir/model/module
 import { mir_function_control, mir_terminator_trap } from mir/model/control
 import { mir_op_array_position, mir_op_array_store, mir_op_callable_new, mir_op_direct_call, mir_op_enum_new, mir_op_hash_new, mir_op_hash_set, mir_op_indirect_call, mir_op_record_new, mir_op_scalar_binary, mir_op_scalar_literal, mir_op_singleton_literal, mir_op_string_compare, mir_op_string_concat, mir_op_string_index, mir_op_string_literal, mir_op_string_replace } from mir/model/instructions
 import { integer_string } from support/literals
@@ -83,7 +85,14 @@ def mir_rewrite_instruction(mut native_module: MirModule, instruction: MirInstru
 	mut first := instruction.first
 	mut second := instruction.second
 	mut payload := instruction.payload
-	if kind == mir_op_direct_call()
+	if kind == mir_op_file_scope()
+		scope := native_module.file_scopes[payload]
+		start := mir_rewrite_arguments(native_module, scope.argument_start, scope.argument_count, values)
+		payload = native_module.file_scopes.size()
+		native_module.file_scopes.push(MirFileScope.new(body: scope.body, error: scope.error, error_variant: scope.error_variant, argument_start: start, argument_count: scope.argument_count))
+		first = mir_rewrite_value(values, first)
+		second = mir_rewrite_value(values, second)
+	elsif kind == mir_op_direct_call()
 		call := native_module.calls[payload]
 		start := mir_rewrite_arguments(native_module, call.argument_start, call.argument_count, values)
 		payload = native_module.calls.size()
@@ -185,7 +194,7 @@ def mir_rewrite_fork(native_module: MirModule): MirModule
 		values: [],
 		instructions: [],
 		arguments: [],
-		calls: [],
+		calls: [], file_scopes: [],
 		literal_texts: [],
 	)
 	native_module.functions.each do |row|
@@ -203,6 +212,9 @@ def mir_rewrite_fork(native_module: MirModule): MirModule
 	native_module.arguments.each do |row|
 		result.arguments.push(row)
 	end
+	native_module.file_scopes.each do |row|
+		result.file_scopes.push(row)
+	end
 	native_module.calls.each do |row|
 		result.calls.push(row)
 	end
@@ -213,6 +225,15 @@ def mir_rewrite_fork(native_module: MirModule): MirModule
 end
 
 def mir_rewrite_commit(mut native_module: MirModule, rewritten: MirModule)
+	mut scopes_index := 0
+	while scopes_index < rewritten.file_scopes.size()
+		if scopes_index < native_module.file_scopes.size()
+			native_module.file_scopes[scopes_index] = rewritten.file_scopes[scopes_index]
+		else
+			native_module.file_scopes.push(rewritten.file_scopes[scopes_index])
+		end
+		scopes_index += 1
+	end
 	mut functions_index := 0
 	while functions_index < rewritten.functions.size()
 		if functions_index < native_module.functions.size()
