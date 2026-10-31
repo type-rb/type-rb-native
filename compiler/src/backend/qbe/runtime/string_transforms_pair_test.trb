@@ -13,7 +13,7 @@ describe("ASCII split count reuse") do
 		mut state := logical_checked_source("def split(text: String, separator: String): Array<String>\nreturn text.split(separator)\nend\ndef main()\nputs(0)\nend\n")
 		expect(check(state)).to_be_true()
 		mut output := output_source(emit_qbe(state)).split("export function w $main(").join("function w $unused_main(")
-		mut data := "\ndata $split_format = { b \"%ld,%ld,%d,%d\\n\", b 0 }\ndata $split_size_format = { b \"%ld,%ld\\n\", b 0 }\n"
+		mut data := "\ndata $split_format = { b \"%ld,%ld,%d,%d\\n\", b 0 }\ndata $split_size_format = { b \"%ld,%ld,%ld\\n\", b 0 }\n"
 		output += "\nexport function w $main() {\n@start\n call $trbn_gc_trace_initialize()\n"
 		mut expected := ""
 		mut sample := 0
@@ -41,10 +41,12 @@ describe("ASCII split count reuse") do
 					output += " %source" + name + " =l call $trbn_string_from_bytes(l " + symbol + ", l " + bytes.size().to_s() + ")\n"
 					output += " %separator" + name + " =l call $trbn_string_from_bytes(l $split_separator_" + name + ", l 1)\n"
 					output += " %roots" + name + " =l loadl $trbn_gc_temp_count\n"
+					output += " storel 0, $split_find_calls\n"
 					output += " %result" + name + " =l call $trbn_string_split(l %source" + name + ", l %separator" + name + ")\n"
 					output += " %after" + name + " =l loadl $trbn_gc_temp_count\n %retained" + name + " =l sub %after" + name + ", %roots" + name + "\n"
 					output += " %size_slot" + name + " =l add %result" + name + ", 8\n %size" + name + " =l loadl %size_slot" + name + "\n"
-					output += " call $printf(l $split_size_format, ..., l %size" + name + ", l %retained" + name + ")\n"
+					output += " %finds" + name + " =l loadl $split_find_calls\n"
+					output += " call $printf(l $split_size_format, ..., l %size" + name + ", l %retained" + name + ", l %finds" + name + ")\n"
 					output += " %items_slot" + name + " =l add %result" + name + ", 24\n %items" + name + " =l loadl %items_slot" + name + "\n"
 					mut parts := 1
 					bytes.each do |byte|
@@ -52,7 +54,7 @@ describe("ASCII split count reuse") do
 							parts += 1
 						end
 					end
-					expected += parts.to_s() + ",1\n"
+					expected += parts.to_s() + ",1," + parts.to_s() + "\n"
 					mut start := 0
 					mut finish := 0
 					mut part := 0
@@ -83,6 +85,10 @@ describe("ASCII split count reuse") do
 		allocation := "function l $trbn_gc_alloc(l %descriptor, l %payload_size, l %reserved_size) {\n@start"
 		expect(output.split(allocation).size()).to_equal(2)
 		output = output.split(allocation).join(allocation + "\n call $trbn_gc_collect(w 0)")
+		search := "function l $trbn_string_find_bytes(l %source, l %pattern, l %start) {\n@start"
+		expect(output.split(search).size()).to_equal(2)
+		output = output.split(search).join(search + "\n %observed_searches =l loadl $split_find_calls\n %next_searches =l add %observed_searches, 1\n storel %next_searches, $split_find_calls")
+		output += "\ndata $split_find_calls = align 8 { l 0 }\n"
 		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
 		if qbe != nil
 			case logical_run_qbe(qbe, output)
