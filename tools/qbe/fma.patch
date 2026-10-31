@@ -39,7 +39,7 @@
  	{ Odiv,    Ki, "sdiv %=, %0, %1" },
  	{ Odiv,    Ka, "fdiv %=, %0, %1" },
  	{ Oudiv,   Ki, "udiv %=, %0, %1" },
-@@ -564,6 +565,88 @@
+@@ -564,6 +565,113 @@
  
  */
  
@@ -58,6 +58,31 @@
 +				filllive(fn);
 +				return;
 +			}
++}
++
++/* A local divide or square root can delay the product after a carried addend
++ * is ready. Keep short load/multiply reductions separate; this profitability
++ * choice does not relax the product-observation proof below.
++ */
++static int
++contractlateproduct(Ins *mul, Blk *b)
++{
++	Ins *i;
++	int pending, arg;
++
++	pending = 3;
++	for (i=mul; i!=b->ins && pending;) {
++		i--;
++		if (i->op == Ocall)
++			break;
++		for (arg=0; arg<2; arg++)
++			if ((pending & (1 << arg)) && req(i->to, mul->arg[arg])) {
++				if ((i->op == Odiv || i->op == Osqrt) && i->cls == mul->cls)
++					return 1;
++				pending &= ~(1 << arg);
++			}
++	}
++	return 0;
 +}
 +
 +/* Contract only an explicitly permitted multiply and its adjacent consumer.
@@ -99,12 +124,12 @@
 +		if (next == end) {
 +			/* A predecessor-fed addend can be a reduction chain:
 +			 * fusion may lengthen its critical path. Extend the
-+			 * overwrite proof only for a locally defined addend.
++			 * overwrite proof for a local addend or a late product.
 +			 */
 +			for (prior=b->ins; prior!=mul; prior++)
 +				if (req(prior->to, other))
 +					break;
-+			if (prior == mul)
++			if (prior == mul && !contractlateproduct(mul, b))
 +				return 0;
 +			if (bshas(b->out, mul->to.val) || req(b->jmp.arg, mul->to))
 +				return 0;
@@ -128,7 +153,7 @@
  void
  arm64_emitfn(Fn *fn, FILE *out)
  {
-@@ -629,11 +712,15 @@
+@@ -629,11 +737,15 @@
  			emitins(i, e);
  		}
  
