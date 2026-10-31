@@ -94,9 +94,12 @@ by the consumer, overwritten before any further read in that block, or dead
 at its exit. Functions containing `mulc` reuse QBE's liveness analysis after
 allocation, including inserted copies and stack-slot writes, to check successor
 uses. ABI return registers remain implicit uses, and calls stop the local proof.
-The exit-liveness extension also requires an addend defined in the same block:
-leaving predecessor-fed accumulators separate avoids extending a reduction's
-dependency chain merely to save an instruction.
+For a predecessor-fed addend, the exit-liveness extension permits contraction
+only when a multiplication input is directly produced by a local division or
+square root. This lets the update combine a late product with an available
+addend while keeping short load/multiply reduction chains separate. The search
+uses the most recent register definition and stops at calls; it changes only
+profitability, not the product-observation proof.
 Other targets and unproved pairs emit
 ordinary multiplication. The patch does not add a third operand to generic QBE
 instructions, alter register allocation, reassociate expressions, or assume
