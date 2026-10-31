@@ -182,7 +182,7 @@ test('complete compiler units run independently for code and CLI and fail closed
   const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
   const units = workflow.match(/^  compiler_units:\n([\s\S]*?)(?=^  documentation:)/m)?.[1];
   assert(units?.includes("if: needs.plan.outputs.compiler_units == 'true'"));
-  assert(units.includes('runs-on: macos-14'), 'QBE execution tests assemble arm64_apple code');
+  assert(units.includes('runs-on: macos-15'), 'QBE execution tests assemble arm64_apple code');
   assert(units.includes('ref: e3cdd5e26a57f2389d8b40dd4eafd32c608d6728'));
   assert(units.includes('test "$(cat TYPE_RB_REVISION)" = "$(git -C .type-rb rev-parse HEAD)"'));
   assert(units.includes('python3 tools/qbe_toolchain.py "$RUNNER_TEMP/qbe-1.3"'));
@@ -501,7 +501,7 @@ test('exact CLI inputs run quick and CLI authorities without core measurements',
   assert(cliJobs[1].includes('tools/native-bootstrap-test.py'));
   assert(cliJobs[1].includes('native-cli-cache-${{ matrix.platform }}'));
   assert(cliJobs[1].includes('if: always()') && cliJobs[1].includes('if-no-files-found: error'));
-  assert.equal((workflow.match(/- runner: macos-14/g) || []).length, 3, 'smoke, cache and archive qualification retain Darwin arm64');
+  assert.equal((workflow.match(/- runner: macos-15\r?$/gm) || []).length, 3, 'smoke, cache and archive qualification retain Darwin arm64');
   assert.equal((workflow.match(/- runner: ubuntu-24.04-arm/g) || []).length, 3, 'smoke, cache and archive qualification retain Linux arm64');
   assert(workflow.includes('- runner: macos-15-intel'));
   assert(workflow.includes('python3 tools/network_artifact_smoke.py'));
