@@ -23,14 +23,9 @@ end
 # Restrict promotion to one straight-line body with one exclusive normal exit.
 # The moving index starts at checked i + 1 and advances by one, while i is an
 # unchanged nonnegative header parameter. Thus accesses at j cannot observe i.
-# Both invariant reads and written accumulators use this proof. The later
-# region/alias checks decide whether those values can actually be retained.
 # This structural candidate does not yet authorize any memory optimization.
 def mir_array_cache_shapes(native_module: MirModule, function: MirFunction, flow: MirFlow, origins: MirFlowAliases, nonnegative: MirNonnegative, header_index: Integer): Array<MirArrayCachedValue>
 	mut caches: Array<MirArrayCachedValue> := []
-	# Bound register pressure separately for accumulators and invariant reads.
-	mut writes := 0
-	mut reads := 0
 	header := native_module.blocks[function.block_start + header_index]
 	if header.terminator != mir_terminator_branch() || header.first_target == header.second_target
 		return caches
@@ -85,15 +80,11 @@ def mir_array_cache_shapes(native_module: MirModule, function: MirFunction, flow
 	end
 	mut position := body.instruction_start
 	while position < body.instruction_start + body.instruction_count
-		candidate := native_module.instructions[position]
-		mut type_id := mir_flow_type(flow, candidate.result)
-		if candidate.kind == mir_op_array_store()
-			type_id = mir_flow_type(flow, candidate.payload)
-		end
-		if (candidate.kind == mir_op_array_store() || candidate.kind == mir_op_array_load()) && mir_array_primitive_value(type_id)
-			index := mir_array_cache_index(native_module, flow, aliases, candidate.second)
+		store := native_module.instructions[position]
+		if store.kind == mir_op_array_store() && mir_array_primitive_value(mir_flow_type(flow, store.payload))
+			index := mir_array_cache_index(native_module, flow, aliases, store.second)
 			slot := mir_flow_parameter_slot(native_module, header, index)
-			owner := mir_flow_alias(origins, candidate.first)
+			owner := mir_flow_alias(origins, store.first)
 			if slot >= 0 && slot != moving_slot && owner >= 0 && mir_nonnegative_value(nonnegative, index)
 				from := native_module.arguments[preheader.first_argument_start + slot]
 				again := mir_flow_alias(aliases, native_module.arguments[body.first_argument_start + slot])
@@ -103,7 +94,7 @@ def mir_array_cache_shapes(native_module: MirModule, function: MirFunction, flow
 						repeated = true
 					end
 				end
-				if from == initial_index && again == index && !repeated
+				if from == initial_index && again == index && !repeated && caches.size() < 4
 					mut loads: Array<Integer> := []
 					mut stores: Array<Integer> := []
 					mut valid := true
@@ -124,18 +115,8 @@ def mir_array_cache_shapes(native_module: MirModule, function: MirFunction, flow
 						end
 						scan += 1
 					end
-					if valid && loads.size() > 0
-						mut retain := false
-						if stores.size() == 0 && reads < 4
-							reads += 1
-							retain = true
-						elsif stores.size() > 0 && writes < 4
-							writes += 1
-							retain = true
-						end
-						if retain
-							caches.push(MirArrayCachedValue.new(owner: owner, index: index, type_id: type_id, body: body.id, exit: header.second_target, loads: loads, stores: stores))
-						end
+					if valid && loads.size() > 0 && stores.size() > 0
+						caches.push(MirArrayCachedValue.new(owner: owner, index: index, type_id: mir_flow_type(flow, store.payload), body: body.id, exit: header.second_target, loads: loads, stores: stores))
 					end
 				end
 			end
@@ -165,7 +146,7 @@ def mir_array_promotion_separations(native_module: MirModule, function: MirFunct
 			mut position := body.instruction_start
 			while position < body.instruction_start + body.instruction_count
 				access := native_module.instructions[position]
-				if access.kind == mir_op_array_store() || (cache.stores.size() > 0 && access.kind == mir_op_array_load())
+				if access.kind == mir_op_array_load() || access.kind == mir_op_array_store()
 					owner := mir_flow_alias(origins, access.first)
 					if owner < 0
 						return existing
@@ -256,7 +237,7 @@ def mir_array_promoted_loops(native_module: MirModule, function: MirFunction, fl
 			mut position := body.instruction_start
 			while position < body.instruction_start + body.instruction_count && valid
 				access := native_module.instructions[position]
-				if access.kind == mir_op_array_store() || (cache.stores.size() > 0 && access.kind == mir_op_array_load())
+				if access.kind == mir_op_array_load() || access.kind == mir_op_array_store()
 					owner := mir_flow_alias(origins, access.first)
 					if owner != cache.owner && !mir_array_values_disjoint(native_module, function, flow, origins, body_index, cache.owner, access.first)
 						valid = false

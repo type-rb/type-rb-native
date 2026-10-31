@@ -40,31 +40,10 @@ def array_promotion_run(output: String, expected: String)
 end
 
 describe("MIR Array loop value promotion") do
-	test("retains read-only elements without writing them back or assuming distinct inputs") do
-		source := "def step(x: Array<Float>, y: Array<Float>, mut output: Array<Float>)\nmut index := 0\nwhile index < x.size()\nmut other := index + 1\nwhile other < x.size()\noutput[index] += x[index] + y[index] + x[other]\nother += 1\nend\nindex += 1\nend\nend\ndef main()\nmut output := [0.0, 0.0, 0.0]\nstep([1.0, 2.0, 3.0], [4.0, 5.0, 6.0], output)\nputs(output[0].to_i())\nputs(output[1].to_i())\nmut shared := [1.0, 2.0, 3.0]\nstep(shared, shared, shared)\nputs(shared[0].to_i())\nputs(shared[1].to_i())\nstep([], [], [])\nstep([1.0], [], [])\nend\n"
-		mut state := array_loop_mir_check(source)
-		expect(array_promotion_count(state)).to_equal(3)
-		mut readonly := 0
-		state.scalar_mir.array_loops[0].each do |plan|
-			plan.cached_values.each do |cache|
-				if cache.stores.size() == 0
-					readonly += 1
-				end
-			end
-		end
-		expect(readonly).to_equal(2)
-		before := control_test_output(emit_qbe(state))
-		intrinsic_mir_erase(state)
-		optimize_verified_mir(state.scalar_mir)
-		expect(verify_mir(state.scalar_mir, true)).to_equal("")
-		expect(control_test_output(emit_qbe(state))).to_equal(before)
-		array_promotion_run(before, "15\n10\n18\n9\n")
-	end
-
 	test("caches distinct primitive elements and keeps every alias on its original path") do
 		source := array_promotion_source("index + 1", "", "mut left := [10.0, 20.0, 30.0]\nmut right := [1.0, 2.0, 3.0]\nstep([2.0, 3.0, 5.0], left, right)\nputs(left[0].to_i())\nputs(left[1].to_i())\nputs(left[2].to_i())\nputs(right[0].to_i())\nputs(right[1].to_i())\nputs(right[2].to_i())\nmut shared := [10.0, 20.0, 30.0]\nstep([2.0, 3.0, 5.0], shared, shared)\nputs(shared[0].to_i())\nputs(shared[1].to_i())\nputs(shared[2].to_i())\nmut read := [2.0, 3.0, 5.0]\nmut other := [1.0, 2.0, 3.0]\nstep(read, read, other)\nputs(read[0].to_i())\nputs(read[1].to_i())\nputs(read[2].to_i())\nstep([], [], [])\nstep([1.0], [], [])")
 		mut state := array_loop_mir_check(source)
-		expect(array_promotion_count(state)).to_equal(3)
+		expect(array_promotion_count(state)).to_equal(2)
 		before := control_test_output(emit_qbe(state))
 		expect(before.include?("@mir_array_initialize_")).to_be_true()
 		expect(before.include?("%mir_array_ready_")).to_be_false()
@@ -106,7 +85,7 @@ describe("MIR Array loop value promotion") do
 
 	test("rederives cache proofs after source erasure and physical block reordering") do
 		mut state := array_loop_mir_check(array_promotion_source("index + 1", "", "mut left := [1.0, 2.0]\nstep([3.0, 4.0], left, [0.0, 0.0])\nputs(left[0].to_i())"))
-		expect(array_promotion_count(state)).to_equal(3)
+		expect(array_promotion_count(state)).to_equal(2)
 		intrinsic_mir_erase(state)
 		state.scalar_mir.functions.each do |function|
 			mut left := function.block_start
@@ -121,13 +100,13 @@ describe("MIR Array loop value promotion") do
 		end
 		optimize_verified_mir(state.scalar_mir)
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
-		expect(array_promotion_count(state)).to_equal(3)
+		expect(array_promotion_count(state)).to_equal(2)
 		array_promotion_run(control_test_output(emit_qbe(state)), "5\n")
 	end
 
 	test("rejects cached facts when a successful conjunction becomes a disjunction") do
 		mut state := array_loop_mir_check(array_promotion_source("index + 1", "", ""))
-		expect(array_promotion_count(state)).to_equal(3)
+		expect(array_promotion_count(state)).to_equal(2)
 		mut index := 0
 		while index < state.scalar_mir.instructions.size()
 			instruction := state.scalar_mir.instructions[index]
@@ -147,7 +126,7 @@ describe("MIR Array loop value promotion") do
 		base := array_promotion_source("index + 1", "right[index] += saved", "mut left := [1.0, 2.0, 3.0]\nmut right := [0.0, 0.0, 0.0]\nstep([3.0, 4.0, 5.0], left, right)\nputs(left[0].to_i())\nputs(left[1].to_i())\nputs(left[2].to_i())\nputs(right[0].to_i())\nputs(right[1].to_i())\nputs(right[2].to_i())\nmut rounded := [10000000000000000.0, 0.0, 0.0]\nstep([0.0, 1.0, -10000000000000000.0], rounded, [0.0, 0.0, 0.0])\nputs(rounded[0])")
 		source := base.split("left[index] += read[other]").join("saved := left[index]\nleft[index] += read[other]")
 		state := array_loop_mir_check(source)
-		expect(array_promotion_count(state)).to_equal(3)
+		expect(array_promotion_count(state)).to_equal(2)
 		array_promotion_run(control_test_output(emit_qbe(state)), "10\n4\n-4\n15\n1\n-7\n0.0\n")
 	end
 
@@ -184,8 +163,7 @@ describe("MIR Array loop value promotion") do
 					else
 						exit_block = cache.body
 					end
-					mut caches := plan.cached_values.dup()
-					caches[0] = MirArrayCachedValue.new(owner: owner, index: index, type_id: cache.type_id, body: cache.body, exit: exit_block, loads: loads, stores: stores)
+					caches := [MirArrayCachedValue.new(owner: owner, index: index, type_id: cache.type_id, body: cache.body, exit: exit_block, loads: loads, stores: stores), plan.cached_values[1]]
 					state.scalar_mir.array_loops[0][slot] = MirArrayLoop.new(header: plan.header, preheader: plan.preheader, owner: plan.owner, length: plan.length, accesses: plan.accesses, headers: plan.headers, reserved_pushes: plan.reserved_pushes, cached_values: caches, peel_body: plan.peel_body, peel_nonempty: plan.peel_nonempty)
 					changed = true
 				end
@@ -195,36 +173,14 @@ describe("MIR Array loop value promotion") do
 			expect(verify_mir(state.scalar_mir, true)).to_equal("MIR Array-loop plan differs")
 			optimize_verified_mir(state.scalar_mir)
 			expect(verify_mir(state.scalar_mir, true)).to_equal("")
-			expect(array_promotion_count(state)).to_equal(3)
+			expect(array_promotion_count(state)).to_equal(2)
 			mode += 1
 		end
 	end
 
-	test("rejects a forged writeback for an invariant read") do
-		mut state := array_loop_mir_check(array_promotion_source("index + 1", "", ""))
-		mut changed := false
-		state.scalar_mir.array_loops[0].each do |plan|
-			mut slot := 0
-			while slot < plan.cached_values.size()
-				cache := plan.cached_values[slot]
-				if cache.stores.size() == 0 && !changed
-					plan.cached_values[slot] = MirArrayCachedValue.new(owner: cache.owner, index: cache.index, type_id: cache.type_id, body: cache.body, exit: cache.exit, loads: cache.loads, stores: [cache.loads[0]])
-					changed = true
-				end
-				slot += 1
-			end
-		end
-		expect(changed).to_be_true()
-		intrinsic_mir_erase(state)
-		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR Array-loop plan differs")
-		optimize_verified_mir(state.scalar_mir)
-		expect(verify_mir(state.scalar_mir, true)).to_equal("")
-		expect(array_promotion_count(state)).to_equal(3)
-	end
-
 	test("writes back before collection and retains the original short-array failure") do
 		state := array_loop_mir_check(array_promotion_source("index + 1", "", "mut left := [1.0, 2.0]\nstep([3.0, 4.0], left, [0.0, 0.0])\ntext := left[0].to_i().to_s()\nputs(text + left[1].to_i().to_s())"))
-		expect(array_promotion_count(state)).to_equal(3)
+		expect(array_promotion_count(state)).to_equal(2)
 		output := control_test_output(emit_qbe(state))
 		allocation := "function l $trbn_string_alloc(l %size) {\n@start\n"
 		expect(output.split(allocation).size()).to_equal(2)

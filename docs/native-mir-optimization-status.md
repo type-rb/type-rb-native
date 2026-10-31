@@ -18,6 +18,7 @@ measurements provide intermediate feedback.
 | Namespaces and constants | Source-owned lexical declarations resolve before lowering. Exact global types, initializer functions, order, guarded reads and persistent managed roots live in MIR; the adapter consumes the verified catalog. Nullable global facts retain declaration identity across lexical scopes. See [decision 0067](decisions/0067-namespaces-and-constant-mir.md). |
 | Managed Strings and roots | String literals, concatenation, equality, size, indexing, Integer/String/Float conversions and String/Boolean output use typed operations. Integer output explicitly converts first. Managed parameters, rebinding, returns and control joins use the same value/block path. MIR derives live-before roots at allocating operations and ordinary calls; verification recomputes the complete plan. |
 | Literal String splits | Verified per-function literal identities propagate through SSA block arguments, including seeded loops. Bounded constant splitting retains the canonical allocating operation and fresh mutable Array; only immutable fragment bytes are shared. Dynamic, conflicting, empty-delimiter and over-budget cases keep the runtime path. |
+| Dynamic String splitting | The runtime specializes exactly one ASCII delimiter without inferring source-language facts in the adapter. ASCII boundaries preserve code-point count additivity even with malformed surrounding bytes; the smaller fragment is decoded and the larger count is derived from the source. Other shapes retain the general splitter and ordinary allocation/root behavior. |
 | String concatenation chains | Same-block, single-use concatenations separated only by literal materialization have verified ordered fragment and intermediate-elision plans. Root liveness retains every original fragment through the final allocation. The adapter copies each byte once without changing observable String values or crossing calls, allocation, mutation, I/O, failure or CFG edges. |
 | Managed Arrays | Supported scalar and managed element Arrays, including nominal records and their nesting, retain semantic element identity. Literals, live size, checked indexing, assignment, compound assignment and push use typed operations with allocation/mutation/failure effects. Admitted parameters, returns, rebinding and loop/branch values share managed liveness. Assignment captures its checked logical position before RHS evaluation, then reloads storage for the final store. A verified within-block plan reuses that position for the same Array until an effect can change collection state. |
 | Single-use String Array joins | Independently verified same-block plans elide a bounded intermediate container, preserve canonical operations and directly root its String fragments. The adapter reuses one prologue pointer table and the shared byte-joining runtime. Unsupported uses and effects retain ordinary materialization. |
@@ -107,11 +108,9 @@ not a performance improvement.
 - `compiler/src/mir/analysis/array_promotions.trb`: lazy primitive-element
   promotion across a two-block loop with an exclusive exit. A moving index starts
   at checked `i + 1` and cannot alias the unchanged nonnegative index `i`;
-  foreign writers require disjointness guards. Written accumulators also exclude
-  foreign readers which could observe deferred stores. The region excludes
-  observers, allocation, resize and possible failures. Up to four accumulators
-  and four read-only elements load only after first body entry; only written
-  elements flush before exit work, preserving zero iterations and Float order.
+  foreign owners require disjointness guards. The region excludes observers,
+  allocation, resize and possible failures. Values load only after first body
+  entry and flush before exit work, preserving zero iterations and Float order.
 - `compiler/src/mir/analysis/array_peeling.trb`: a small reflected-index loop may
   duplicate its first checked header/body visit. The verified schedule retains
   every condition and failure edge; the QBE adapter only routes labels and
