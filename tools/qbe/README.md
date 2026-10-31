@@ -1,6 +1,6 @@
 # Native QBE variant
 
-`backend.json` pins the QBE 1.3 release archive and all six patch digests.
+`backend.json` pins the QBE 1.3 release archive and all five patch digests.
 `python3 tools/qbe_toolchain.py /path/to/qbe-1.3` verifies them, applies the
 patches without fuzz, builds QBE and checks supported-target instruction emission.
 QBE itself is compiled with explicit `-O2`, without fast-math or host-specific
@@ -109,20 +109,7 @@ subnormals, nonfinite values, random bit patterns, product reuse, calls and
 branches, successor observations and loop-carried products.
 `--baseline /path/to/previous/qbe` verifies rejection of the new IL.
 
-`phi-affinity.patch` seeds a phi destination's first register preference from
-already allocated incoming values when the hottest predecessors agree. One phi
-class can contain distinct values that are simultaneously live; its shared hint
-alone can otherwise introduce avoidable register exchanges. Conflicting or
-unavailable incoming preferences retain ordinary allocation, and occupied
-registers remain unavailable. Seeding happens before block allocation, preserving
-the allocator's explicit relocation path and existing liveness/spill decisions.
-No instruction, arithmetic operation or memory effect changes. The patch adds
-one temporary-indexed phi table and bounded scans of incoming edges.
-Run `python3 tools/qbe_affinity_test.py --qbe /path/to/qbe` for six-target emission,
-nested interfering values across calls, bit-exact Float rotations and the
-address-rematerialization case that exercises mandatory register relocation.
-
-Maintenance is six pinned patches, one acquisition helper and target/edge tests.
+Maintenance is five pinned patches, one acquisition helper and target/edge tests.
 A QBE upgrade must rebase the patches, run upstream tests, run these controls on
 each supported host, and repeat ordinary compiler validation. Historical seed
 manifests and their replay workflows retain their original stock QBE identity;

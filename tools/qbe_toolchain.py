@@ -126,11 +126,11 @@ def backend_identity(root=ROOT):
     backend = json.loads((root / "tools/qbe/backend.json").read_text())
     if set(backend) != {"name", "version", "sourceURL", "sourceSHA256", "variant", "patches"}:
         raise ValueError("invalid QBE identity shape")
-    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-phi-affinity-v1":
+    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-ordered-effects-v1":
         raise ValueError("unsupported QBE identity")
     if not backend["sourceURL"].startswith("https://") or not re.fullmatch(r"[0-9a-f]{64}", backend["sourceSHA256"]):
         raise ValueError("invalid QBE source identity")
-    paths = ["tools/qbe/sqrt.patch", "tools/qbe/arm64-immediates.patch", "tools/qbe/arm64-memory.patch", "tools/qbe/gcm.patch", "tools/qbe/fma.patch", "tools/qbe/phi-affinity.patch"]
+    paths = ["tools/qbe/sqrt.patch", "tools/qbe/arm64-immediates.patch", "tools/qbe/arm64-memory.patch", "tools/qbe/gcm.patch", "tools/qbe/fma.patch"]
     if len(backend["patches"]) != len(paths):
         raise ValueError("invalid QBE patch set")
     for patch, path in zip(backend["patches"], paths):
