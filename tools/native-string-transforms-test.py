@@ -38,17 +38,22 @@ with tempfile.TemporaryDirectory(prefix='native-string-transforms-') as temporar
 
     def compile_source(source):
         il = emit(source)
-        for symbol, markers in (
-            (b'trbn_string_split', (b' %text =l call $trbn_string_from_bytes(', b' call $trbn_array_push_paced(')),
-            (b'trbn_string_replace', (b' %result =l call $trbn_string_alloc(',)),
-            (b'trbn_string_case', (b' %result =l call $trbn_string_alloc(',)),
+        for symbol, callees in (
+            (b'trbn_string_split', (b'trbn_string_from_bytes', b'trbn_array_push_paced')),
+            (b'trbn_split_pair', (b'trbn_split_fragment', b'trbn_array_push_paced')),
+            (b'trbn_split_fragment', (b'trbn_string_alloc',)),
+            (b'trbn_string_replace', (b'trbn_string_alloc',)),
+            (b'trbn_string_case', (b'trbn_string_alloc',)),
         ):
             start = il.index(b'function l $' + symbol + b'(')
             end = il.index(b'\n}', start) + 2
             body = il[start:end]
-            for marker in markers:
-                assert body.count(marker) == 1, (symbol, marker)
-                body = body.replace(marker, b' call $trbn_gc_collect(w 0)\n' + marker)
+            for callee in callees:
+                # Instrument every allocation/append branch, including prefix
+                # fallback and the paired-fragment path, independent of names.
+                pattern = rb'(?m)^.* call \$' + re.escape(callee) + rb'\(.*$'
+                body, count = re.subn(pattern, lambda match: b' call $trbn_gc_collect(w 0)\n' + match[0], body)
+                assert count > 0, (symbol, callee)
             il = il[:start] + body + il[end:]
         return assemble(il)
 

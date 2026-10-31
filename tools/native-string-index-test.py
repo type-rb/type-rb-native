@@ -10,16 +10,27 @@ import tempfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--qbe', type=Path, required=True)
-parser.add_argument('--source', type=Path)
+parser.add_argument('--compiler', type=Path, required=True)
 parser.add_argument('--output', type=Path)
 args = parser.parse_args()
-repo = Path(__file__).resolve().parent.parent
-source = args.source or repo / 'compiler/src/backend/qbe/runtime/system.trb'
-decoded = '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', source.read_text()))
-helpers = source.parent.parent / 'emit/strings.trb'
-decoded += '\n' + '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', helpers.read_text()))
-queries = source.with_name('string_queries.trb')
-decoded += '\n' + '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', queries.read_text()))
+# Inspect actual candidate emission, including shared emitter functions. Joining
+# source literals omits calls and substitutions and can silently test stale IL.
+with tempfile.TemporaryDirectory(prefix='native-string-index-emission-') as temporary:
+    source = Path(temporary) / 'main.trb'
+    source.write_text('import trb/std/process\ndef main()\n'
+                      'values := Process.argv()\ntext := values[0]\n'
+                      'puts(text[0])\nputs(text.include?(values[1]))\nend\n')
+    emitted = subprocess.run([str(args.compiler.resolve()), 'emit-qbe', str(source)],
+                             check=True, capture_output=True, timeout=30)
+    assert not emitted.stderr, emitted
+    decoded = emitted.stdout.decode()
+# The compiler-only source slicer is deliberately omitted from ordinary apps.
+# Retain its existing direct-source coverage, with the emitted UTF-8 callees.
+runtime_source = Path(__file__).resolve().parent.parent / 'compiler/src/backend/qbe/runtime/system.trb'
+runtime_literals = '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', runtime_source.read_text()))
+source_slice = re.findall(r'^function l \$trbn_source_slice\([^\n]*\) \{.*?^\}', runtime_literals, re.M | re.S)
+assert len(source_slice) == 1
+decoded += '\n' + source_slice[0]
 names = ['trbn_string_index', 'trbn_utf8_width', 'trbn_utf8_count', 'trbn_utf8_span',
          'trbn_string_offset', 'trbn_string_from_codepoint', 'trbn_utf8_scalar', 'trbn_source_slice',
          'trbn_string_is_utf8', 'trbn_string_query', 'trbn_string_codepoint_query',
@@ -33,7 +44,7 @@ data = re.findall(r'^data \$(?:string_byte_values|trbn_bounds_error) = [^\n]+', 
 assert any(line.startswith('data $trbn_bounds_error ') for line in data)
 il = '\n'.join(data + bodies) + '\n'
 # The observer supplies inputs and counts allocations; String indexing itself
-# is extracted from the repository-owned TypeRB runtime, including its checks.
+# is extracted from the candidate compiler's emitted runtime, including checks.
 observer = r'''
 #include <assert.h>
 #include <stdint.h>
@@ -308,7 +319,9 @@ with tempfile.TemporaryDirectory(prefix='native String index ') as directory:
         assert result.returncode == 70 and result.stdout == b'', result
         assert result.stderr == b'panic: index is out of bounds\n', result
         observations.append({'case': 'required-bounds-failure', 'length': length, 'index': index})
-report = {'sourceSha256': hashlib.sha256(source.read_bytes()).hexdigest(), 'helpersSha256': hashlib.sha256(helpers.read_bytes()).hexdigest(), 'queriesSha256': hashlib.sha256(queries.read_bytes()).hexdigest(), 'runtimeSha256': hashlib.sha256(il.encode()).hexdigest(), 'observations': observations}
+report = {'compilerSha256': hashlib.sha256(args.compiler.read_bytes()).hexdigest(),
+          'sourceSliceSha256': hashlib.sha256(source_slice[0].encode()).hexdigest(),
+          'runtimeSha256': hashlib.sha256(il.encode()).hexdigest(), 'observations': observations}
 if args.output:
     args.output.write_text(json.dumps(report, indent=2) + '\n')
 print('String indexing and queries: ASCII cache, UTF-8, zero-allocation queries, guarded spans and 6 bounds failures passed')
