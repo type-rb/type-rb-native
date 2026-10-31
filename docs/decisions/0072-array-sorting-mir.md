@@ -16,7 +16,10 @@ Take from the left run on ties. Clamp run boundaries and width growth by testing
 the remaining distance before addition, preserving the portable Integer range.
 This takes O(n log n) comparisons and O(n) auxiliary storage.
 
-The checker shares a typed MIR helper for each value/key type and direction.
+The checker keeps sorting inline while its caller has fewer than 32 completed
+MIR blocks, before guarded-loop expansion. This is a code-placement budget,
+not a safety rule. Once a caller is
+already large, it shares a typed MIR helper for each value/key type and direction.
 Natural-sort input copies remain in the caller, and key sorting still collects
 its values and keys before the call. Helpers use the same control-flow builder,
 call-effect analysis, verifier and root plans as authored functions. This bounds

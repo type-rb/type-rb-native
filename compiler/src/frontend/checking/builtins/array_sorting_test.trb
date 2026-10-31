@@ -64,7 +64,7 @@ describe("Array sorting MIR") do
 		mut state := logical_checked_source("def main()\nputs([\"b\", \"a\"].sort()[0])\nend\n")
 		expect(check(state)).to_be_true()
 		plan := state.scalar_mir.root_plans[0]
-		# The shared helper receives the retained copy and owns its scratch allocation.
+		# Both inline and shared bodies retain the copied input at scratch allocation.
 		mut point := 0
 		while point < plan.instructions.size()
 			if state.scalar_mir.instructions[plan.instructions[point]].kind == mir_op_array_copy() && plan.roots[point].size() > 0
@@ -82,8 +82,17 @@ describe("Array sorting MIR") do
 end
 
 describe("Shared typed Array sorting functions") do
+	test("keeps a single sorting site in a small caller inline") do
+		mut state := logical_checked_source("def main()\nputs([3, 1, 2].sort()[0])\nend\n")
+		expect(check(state)).to_be_true()
+		state.scalar_mir.signatures.each do |signature|
+			expect(signature.name.include?("$sort:")).to_be_false()
+		end
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+
 	test("reuses exact type and direction bodies across natural and key call sites") do
-		source := "def first(values: Array<Integer>): Array<Integer>\nreturn values.sort().sort()\nend\ndef second(values: Array<Integer>): Array<Integer>\nreturn values.sort_descending()\nend\ndef main()\nputs(first([2, 1])[0])\nputs(second([2, 1])[0])\nputs([1.5, 0.5].sort()[0])\nputs([2, 1].sort_by { |value| value }[0])\nend\n"
+		source := "def main()\nvalues := [2, 1]\nputs(values.sort()[0])\nputs(values.sort()[1])\nputs(values.sort()[0])\nputs(values.sort_descending()[0])\nputs([1.5, 0.5].sort()[0])\nputs(values.sort_by { |value| value }[0])\nend\n"
 		mut state := logical_checked_source(source)
 		expect(check(state)).to_be_true()
 		mut names: Array<String> := []
@@ -119,7 +128,7 @@ describe("Shared typed Array sorting functions") do
 			end
 			point += 1
 		end
-		expect(copies).to_equal(2)
-		expect(calls).to_equal(2)
+		expect(copies).to_equal(3)
+		expect(calls).to_equal(1)
 	end
 end

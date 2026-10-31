@@ -413,6 +413,14 @@ end
 # Its exact signature owns types, effects, origin, and GC verification like any
 # authored function. There is no runtime type switch or unchecked sorting path.
 def mir_sort_call(mut state: CompilerState, mut locals: CheckedLocals, values: CheckedValue, keys: CheckedValue, descending: Boolean, origin: Integer): CheckedValue
+	# Code-placement budget, not a semantic proof: a small caller keeps its
+	# existing inline body. Further sorting in a large caller uses shared MIR
+	# instead of multiplying the control-flow analysis cost. This counts the
+	# checked blocks before optimization expands their guarded loop versions.
+	inline_block_limit := 32
+	if locals.mir_blocks.size() < inline_block_limit
+		return mir_sort_buffers(state, locals, values, keys, descending, origin)
+	end
 	mut name := "$sort:" + values.type_name + ":" + keys.type_name
 	if descending
 		name += ":descending"
