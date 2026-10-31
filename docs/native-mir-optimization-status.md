@@ -107,9 +107,11 @@ not a performance improvement.
 - `compiler/src/mir/analysis/array_promotions.trb`: lazy primitive-element
   promotion across a two-block loop with an exclusive exit. A moving index starts
   at checked `i + 1` and cannot alias the unchanged nonnegative index `i`;
-  foreign owners require disjointness guards. The region excludes observers,
-  allocation, resize and possible failures. Values load only after first body
-  entry and flush before exit work, preserving zero iterations and Float order.
+  foreign writers require disjointness guards. Written accumulators also exclude
+  foreign readers which could observe deferred stores. The region excludes
+  observers, allocation, resize and possible failures. Up to four accumulators
+  and four read-only elements load only after first body entry; only written
+  elements flush before exit work, preserving zero iterations and Float order.
 - `compiler/src/mir/analysis/array_peeling.trb`: a small reflected-index loop may
   duplicate its first checked header/body visit. The verified schedule retains
   every condition and failure edge; the QBE adapter only routes labels and

@@ -336,6 +336,9 @@ tracked in the [ordinary language plan](native-language-coverage.md). Ordinary
 Strings store byte length and code-point count separately, with UTF-8 data after
 the managed header. I/O and Hash equality use bytes; language size/index use code
 points. Non-ASCII indexing can allocate, with its lifetime effects owned by MIR.
+The runtime shares one bounded UTF-8 decoder between scalar access and code-point
+counting. Counting embeds that decoder in its loop to avoid a call per non-ASCII
+character while preserving invalid-byte, truncation and ASCII word-load rules.
 Snapshot
 aggregate recovery retains a separate heap-free layer, keeping record and
 tagged-value semantics independent of allocation strategy.
