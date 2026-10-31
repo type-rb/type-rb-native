@@ -1,0 +1,27 @@
+import { MirArrayTransfer } from mir/model/module
+import { QbeEmitContext, emit_temporary } from backend/qbe/context
+import { QbeOutput, qbe_output_line } from backend/qbe/output
+
+# All proof obligations belong to MIR. Array slots occupy eight bytes for
+# every accepted primitive representation. memmove neither allocates nor
+# collects, and also preserves the identical-owner case.
+def emit_mir_array_transfer(plan: MirArrayTransfer, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
+	count := emit_temporary(context)
+	bytes := emit_temporary(context)
+	offset := emit_temporary(context)
+	qbe_output_line(output, "\t" + count + " =l sub " + operands[plan.limit] + ", " + operands[plan.index])
+	qbe_output_line(output, "\t" + bytes + " =l shl " + count + ", 3")
+	qbe_output_line(output, "\t" + offset + " =l shl " + operands[plan.index] + ", 3")
+	mut addresses: Array<String> := []
+	[plan.destination, plan.source].each do |owner|
+		slot := emit_temporary(context)
+		data := emit_temporary(context)
+		address := emit_temporary(context)
+		qbe_output_line(output, "\t" + slot + " =l add " + operands[owner] + ", 24")
+		qbe_output_line(output, "\t" + data + " =l loadl " + slot)
+		qbe_output_line(output, "\t" + address + " =l add " + data + ", " + offset)
+		addresses.push(address)
+	end
+	qbe_output_line(output, "\tcall $memmove(l " + addresses[0] + ", l " + addresses[1] + ", l " + bytes + ")")
+	qbe_output_line(output, "\t" + operands[plan.next_value] + " =l copy " + operands[plan.limit])
+end

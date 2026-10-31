@@ -1,0 +1,113 @@
+import { describe, expect, test } from trb/std/test
+import { emit_qbe } from compiler
+import { MirArrayTransfer, mir_function_index } from mir/model/module
+import { array_loop_mir_check } from testing/mir/array_loops
+import { control_test_output } from testing/mir/control
+import { intrinsic_mir_erase } from testing/mir/intrinsics
+import { logical_run_qbe } from testing/qbe_runner
+import { optimize_verified_mir } from mir/passes/optimize
+import { verify_mir } from mir/verify/module
+import trb/std/process
+import trb/std/result
+
+def transfer_source(element: String, initial: String, body: String, invocation: String): String
+	return "def transfer(source: Array<" + element + ">, mut target: Array<" + element + ">, limit: Integer): Integer\nmut index := " + initial + "\nwhile index < limit\n" + body + "\nindex += 1\nend\nreturn index\nend\ndef main()\n" + invocation + "\nend\n"
+end
+
+def transfer_expect_run(source: String, expected: String)
+	qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+	if qbe != nil
+		case logical_run_qbe(qbe, source)
+		when Result::Ok(actual)
+			expect(actual).to_equal(expected)
+		when Result::Err(error)
+			puts(error)
+			expect(false).to_be_true()
+		end
+	end
+end
+
+describe("Verified primitive Array transfers") do
+	test("copies Integer Float and Boolean slots with the final induction value") do
+		["Integer", "Float", "Boolean"].each do |element|
+			mut data := "[3, 5, 7]"
+			mut zeros := "[0, 0, 0]"
+			mut expected := "3\n3\n5\n7\n"
+			if element == "Float"
+				data = "[1.5, 2.5, 3.5]"
+				zeros = "[0.0, 0.0, 0.0]"
+				expected = "3\n1.5\n2.5\n3.5\n"
+			elsif element == "Boolean"
+				data = "[true, false, true]"
+				zeros = "[false, false, false]"
+				expected = "3\ntrue\nfalse\ntrue\n"
+			end
+			source := transfer_source(element, "0", "target[index] = source[index]", "mut target := " + zeros + "\nputs(transfer(" + data + ", target, 3))\ntarget.each do |value|\nputs(value)\nend")
+			state := array_loop_mir_check(source)
+			plans := state.scalar_mir.array_transfers[mir_function_index(state.scalar_mir, 0)]
+			expect(plans.size()).to_equal(1)
+			qbe := control_test_output(emit_qbe(state))
+			expect(qbe.include?("call $memmove(")).to_be_true()
+			transfer_expect_run(qbe, expected)
+		end
+	end
+
+	test("preserves zero negative and short ranges and identical-owner writes") do
+		source := transfer_source("Integer", "0", "target[index] = source[index]", "mut target := [9, 9, 9]\nputs(transfer([], target, 0))\nputs(transfer([], target, -1))\nputs(transfer([1, 2], target, 2))\nputs(transfer(target, target, 3))\ntarget.each do |value|\nputs(value)\nend")
+		state := array_loop_mir_check(source)
+		expect(state.scalar_mir.array_transfers[mir_function_index(state.scalar_mir, 0)].size()).to_equal(1)
+		transfer_expect_run(control_test_output(emit_qbe(state)), "0\n0\n2\n3\n1\n2\n9\n")
+	end
+
+	test("rejects negative starts shifted indexes extra effects and carried values") do
+		["target[index] = source[index + 1]", "target[index + 1] = source[index]", "target[index] = source[index]\nputs(index)", "target[index] = source[index]\ntarget.push(0)", "target[index] = source[index] + 1"].each do |body|
+			state := array_loop_mir_check(transfer_source("Integer", "0", body, ""))
+			expect(state.scalar_mir.array_transfers[mir_function_index(state.scalar_mir, 0)].size()).to_equal(0)
+		end
+		negative := array_loop_mir_check(transfer_source("Integer", "-1", "target[index] = source[index]", ""))
+		expect(negative.scalar_mir.array_transfers[mir_function_index(negative.scalar_mir, 0)].size()).to_equal(0)
+		managed := array_loop_mir_check(transfer_source("String", "0", "target[index] = source[index]", ""))
+		expect(managed.scalar_mir.array_transfers[mir_function_index(managed.scalar_mir, 0)].size()).to_equal(0)
+		carried := array_loop_mir_check("def transfer(source: Array<Integer>, mut target: Array<Integer>, limit: Integer): Integer\nmut index := 0\nmut retained := 0\nwhile index < limit\nretained = source[index]\ntarget[index] = retained\nindex += 1\nend\nreturn retained\nend\ndef main()\nend\n")
+		expect(carried.scalar_mir.array_transfers[mir_function_index(carried.scalar_mir, 0)].size()).to_equal(0)
+	end
+
+	test("copies only the nonnegative subrange and preserves an empty final index") do
+		source := transfer_source("Integer", "1", "target[index] = source[index]", "mut target := [9, 9, 9]\nputs(transfer([], target, 0))\nputs(transfer([3, 5, 7], target, 2))\ntarget.each do |value|\nputs(value)\nend")
+		state := array_loop_mir_check(source)
+		expect(state.scalar_mir.array_transfers[mir_function_index(state.scalar_mir, 0)].size()).to_equal(1)
+		transfer_expect_run(control_test_output(emit_qbe(state)), "1\n2\n9\n5\n9\n")
+	end
+
+	test("rederives the plan after source erasure and physical reordering") do
+		mut state := array_loop_mir_check(transfer_source("Integer", "0", "target[index] = source[index]", "mut target := [0, 0]\nputs(transfer([4, 8], target, 2))\nputs(target[1])"))
+		before := control_test_output(emit_qbe(state))
+		intrinsic_mir_erase(state)
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		state.scalar_mir.functions.each do |function|
+			mut left := function.block_start
+			mut right := left + function.block_count - 1
+			while left < right
+				saved := state.scalar_mir.blocks[left]
+				state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
+				state.scalar_mir.blocks[right] = saved
+				left += 1
+				right -= 1
+			end
+		end
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		optimize_verified_mir(state.scalar_mir)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		transfer_expect_run(control_test_output(emit_qbe(state)), "2\n8\n")
+	end
+
+	test("rejects forged transfer destinations and omitted plans") do
+		mut state := array_loop_mir_check(transfer_source("Integer", "0", "target[index] = source[index]", ""))
+		row := mir_function_index(state.scalar_mir, 0)
+		plan := state.scalar_mir.array_transfers[row][0]
+		state.scalar_mir.array_transfers[row][0] = MirArrayTransfer.new(header: plan.header, body: plan.body, index: plan.index, limit: plan.limit, next_value: plan.next_value, source: plan.source, destination: plan.source)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR Array transfer plan differs")
+		state.scalar_mir.array_transfers[row] = []
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR Array transfer plan differs")
+	end
+end

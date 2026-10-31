@@ -27,11 +27,16 @@ def emit_mir_array_cache_boundaries(native_module: MirModule, plans: Array<MirAr
 			while slot < plan.cached_values.size()
 				cache := plan.cached_values[slot]
 				name := qbe_array_cache_name(plan.header, slot)
-				storage_slot := emit_temporary(context)
-				storage := emit_temporary(context)
+				mut storage := "%mir_array_data" + integer_string(cache.storage_header)
+				if cache.storage_header < 0
+					storage_slot := emit_temporary(context)
+					storage = emit_temporary(context)
+					qbe_output_line(output, "\t" + storage_slot + " =l add " + operands[cache.owner] + ", 24")
+					qbe_output_line(output, "\t" + storage + " =l loadl " + storage_slot)
+				elsif cache.storage_identity >= 0
+					storage += "_" + integer_string(cache.storage_identity)
+				end
 				offset := emit_temporary(context)
-				qbe_output_line(output, "\t" + storage_slot + " =l add " + operands[cache.owner] + ", 24")
-				qbe_output_line(output, "\t" + storage + " =l loadl " + storage_slot)
 				qbe_output_line(output, "\t" + offset + " =l shl " + operands[cache.index] + ", 3")
 				qbe_output_line(output, "\t" + name + "_address =l add " + storage + ", " + offset)
 				emit_typed_load(output, name, mir_storage_type_name(native_module, cache.type_id), name + "_address")

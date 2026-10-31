@@ -18,6 +18,7 @@ import { mir_global_initialization_error, mir_globals_error } from mir/lowering/
 import { mir_hash_lookup_equal, mir_hash_lookup_plans } from mir/analysis/hash_lookup
 import { mir_numeric_plans, mir_numeric_plans_equal } from mir/analysis/numeric
 import { mir_array_loops_equal, mir_function_array_loops } from mir/analysis/array_loops
+import { mir_array_transfers_equal, mir_function_array_transfers } from mir/analysis/array_transfers
 import { mir_array_read_guards_equal, mir_function_array_checks } from mir/analysis/array_read_guards
 import { integer_string } from support/literals
 import { mir_definition_index } from mir/analysis/identities
@@ -447,6 +448,9 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 		if native_module.numeric_plans[0].size() != 0
 			return "MIR numeric plan differs"
 		end
+		if native_module.array_transfers.size() != 0
+			return "MIR input cannot supply Array transfer plans"
+		end
 		if native_module.array_loops.size() != 0
 			return "MIR Array-loop plan count differs"
 		end
@@ -552,6 +556,12 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 	if optimized && native_module.loop_calls.size() != native_module.functions.size()
 		return "MIR loop-call plan count differs"
 	end
+	if !optimized && native_module.array_transfers.size() != 0
+		return "MIR input cannot supply Array transfer plans"
+	end
+	if optimized && native_module.array_transfers.size() != native_module.functions.size()
+		return "MIR Array transfer plan count differs"
+	end
 	if !optimized && native_module.array_loops.size() != 0
 		return "MIR input cannot supply Array-loop plans"
 	end
@@ -593,8 +603,12 @@ def verify_mir_structure(native_module: MirModule, optimized: Boolean): String
 			if loop_error != ""
 				return loop_error
 			end
-			if !mir_array_loops_equal(native_module.array_loops[index], mir_function_array_loops(native_module, native_module.functions[index], function_values[index]))
+			loops := mir_function_array_loops(native_module, native_module.functions[index], function_values[index])
+			if !mir_array_loops_equal(native_module.array_loops[index], loops)
 				return "MIR Array-loop plan differs"
+			end
+			if !mir_array_transfers_equal(native_module.array_transfers[index], mir_function_array_transfers(native_module, native_module.functions[index], function_values[index], loops))
+				return "MIR Array transfer plan differs"
 			end
 			checks := mir_function_array_checks(native_module, native_module.functions[index], function_values[index])
 			if !mir_live_equal(native_module.array_check_reuse[index], checks.reuse)

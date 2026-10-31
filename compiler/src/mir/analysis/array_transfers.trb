@@ -1,0 +1,185 @@
+import { binary_less } from frontend/types/operators
+import { mir_type_integer } from mir/model/type_ids
+import { mir_function_control, mir_terminator_jump } from mir/model/control
+import { mir_op_array_load, mir_op_array_position, mir_op_array_size, mir_op_array_store, mir_op_scalar_literal } from mir/model/instructions
+import { MirArrayLoop, MirArrayTransfer, MirFunction, MirModule, MirValue } from mir/model/module
+import { mir_element_type } from mir/model/types
+import { mir_array_primitive_value } from mir/analysis/array_values
+import { MirFlow, mir_build_flow_with_values, mir_flow_alias, mir_flow_aliases, mir_flow_block_index, mir_flow_blocks, mir_flow_parameter_slot, mir_flow_position, mir_flow_type } from mir/analysis/flow
+import { MirNonnegative, mir_exact_integer_literal, mir_increment_operand, mir_nonnegative_value, mir_nonnegative_values } from mir/analysis/ranges
+import { mir_array_cache_index } from mir/analysis/array_promotions
+import { mir_array_loop_candidate } from mir/analysis/array_loops
+import { mir_natural_loop } from mir/analysis/loops
+import { mir_live_add, mir_managed_contains } from mir/analysis/liveness
+
+# The scalar CFG remains the semantic authority. Only a two-block copy loop
+# whose existing bounds proofs cover every access may transfer a byte range.
+# Identical indexes preserve self-aliasing; shifted overlapping copies do not.
+def mir_array_transfer_at_header(native_module: MirModule, function: MirFunction, flow: MirFlow, nonnegative: MirNonnegative, bounded: Array<Integer>, header_index: Integer): Array<MirArrayTransfer>
+	mut plans: Array<MirArrayTransfer> := []
+	header := native_module.blocks[function.block_start + header_index]
+	if !mir_array_loop_candidate(native_module, header) || header.first_target == header.second_target
+		return plans
+	end
+	loop := mir_natural_loop(native_module, function, flow, header_index)
+	if loop.preheader < 0 || loop.members.size() != 2
+		return plans
+	end
+	body_index := mir_flow_block_index(flow, header.first_target)
+	if !mir_managed_contains(loop.members, body_index) || mir_managed_contains(loop.members, mir_flow_block_index(flow, header.second_target))
+		return plans
+	end
+	body := native_module.blocks[function.block_start + body_index]
+	if body.terminator != mir_terminator_jump() || body.first_target != header.id || body.instruction_count > 8
+		return plans
+	end
+	if flow.predecessors[body_index].size() != 1 || flow.predecessors[body_index][0] != header_index
+		return plans
+	end
+	condition_position := mir_flow_position(flow, header.condition)
+	condition := native_module.instructions[condition_position]
+	if condition.payload != binary_less() || !mir_nonnegative_value(nonnegative, condition.first)
+		return plans
+	end
+	# A portable Integer upper bound also proves that the final +1 cannot
+	# overflow. The loop can run only while its nonnegative index is smaller.
+	if mir_flow_type(flow, condition.second) != mir_type_integer()
+		return plans
+	end
+	mut position := header.instruction_start
+	while position < header.instruction_start + header.instruction_count
+		instruction := native_module.instructions[position]
+		if position != condition_position && instruction.kind != mir_op_array_size() && instruction.kind != mir_op_scalar_literal()
+			return plans
+		end
+		position += 1
+	end
+	aliases := mir_flow_aliases(native_module, function, flow, header)
+	index_slot := mir_flow_parameter_slot(native_module, header, condition.first)
+	next_value := mir_flow_alias(aliases, native_module.arguments[body.first_argument_start + index_slot])
+	next_position := mir_flow_position(flow, next_value)
+	if next_position < body.instruction_start || next_position >= body.instruction_start + body.instruction_count
+		return plans
+	end
+	if mir_flow_alias(aliases, mir_increment_operand(native_module, flow, native_module.instructions[next_position])) != condition.first
+		return plans
+	end
+	# No carried value other than the index may change. Together with SSA
+	# dominance and the exclusive body, this keeps skipped results from escaping.
+	mut slot := 0
+	while slot < header.parameter_count
+		if slot != index_slot && mir_flow_alias(aliases, native_module.arguments[body.first_argument_start + slot]) != native_module.arguments[header.parameter_start + slot]
+			return plans
+		end
+		slot += 1
+	end
+	mut reads: Array<Integer> := []
+	mut write := -1
+	position = body.instruction_start
+	while position < body.instruction_start + body.instruction_count
+		instruction := native_module.instructions[position]
+		if instruction.kind == mir_op_array_load() || instruction.kind == mir_op_array_store() || instruction.kind == mir_op_array_position()
+			if !mir_managed_contains(bounded, position) || mir_array_cache_index(native_module, flow, aliases, instruction.second) != condition.first
+				return plans
+			end
+			if !mir_array_primitive_value(mir_element_type(native_module, mir_flow_type(flow, instruction.first)))
+				return plans
+			end
+			if instruction.kind == mir_op_array_load()
+				reads.push(position)
+			elsif instruction.kind == mir_op_array_store()
+				if write >= 0
+					return plans
+				end
+				write = position
+			end
+		elsif position != next_position && !mir_exact_integer_literal(native_module, instruction, "1")
+			return plans
+		end
+		position += 1
+	end
+	if write < 0
+		return plans
+	end
+	store := native_module.instructions[write]
+	# Assignment lowering can retain an unused read of its captured target.
+	# Other accepted body operations cannot consume such a primitive result,
+	# and unchanged backedges keep it from escaping. Its bounds are proven above.
+	mut read := -1
+	reads.each do |candidate|
+		if native_module.instructions[candidate].result == store.payload && candidate < write
+			read = candidate
+		end
+	end
+	if read < 0
+		return plans
+	end
+	load := native_module.instructions[read]
+	element := mir_element_type(native_module, mir_flow_type(flow, load.first))
+	if !mir_array_primitive_value(element) || element != mir_element_type(native_module, mir_flow_type(flow, store.first)) || store.payload != load.result
+		return plans
+	end
+	plans.push(MirArrayTransfer.new(header: header.id, body: body.id, index: condition.first, limit: condition.second, next_value: next_value, source: load.first, destination: store.first))
+	return plans
+end
+
+def mir_function_array_transfers(native_module: MirModule, function: MirFunction, values: Array<MirValue>, loops: Array<MirArrayLoop>): Array<MirArrayTransfer>
+	mut plans: Array<MirArrayTransfer> := []
+	if function.kind != mir_function_control() || native_module.functions.size() > 96 || function.block_count > 128
+		return plans
+	end
+	mut bounded: Array<Integer> := []
+	mut excluded: Array<Integer> := []
+	loops.each do |loop|
+		loop.accesses.each do |access|
+			mir_live_add(bounded, access)
+		end
+		loop.headers.each do |header|
+			header.bounded_accesses.each do |access|
+				mir_live_add(bounded, access)
+			end
+		end
+		if loop.peel_body >= 0 || loop.cached_values.size() > 0
+			mir_live_add(excluded, loop.header)
+		end
+	end
+	if bounded.size() == 0
+		return plans
+	end
+	mut headers: Array<Integer> := []
+	mut index := function.block_start
+	while index < function.block_start + function.block_count
+		block := native_module.blocks[index]
+		if mir_array_loop_candidate(native_module, block) && !mir_managed_contains(excluded, block.id)
+			mir_live_add(headers, block.id)
+		end
+		index += 1
+	end
+	if headers.size() == 0
+		return plans
+	end
+	flow := mir_build_flow_with_values(native_module, function, mir_flow_blocks(native_module, function), values)
+	nonnegative := mir_nonnegative_values(native_module, function, flow)
+	headers.each do |header|
+		mir_array_transfer_at_header(native_module, function, flow, nonnegative, bounded, mir_flow_block_index(flow, header)).each do |plan|
+			plans.push(plan)
+		end
+	end
+	return plans
+end
+
+def mir_array_transfers_equal(left: Array<MirArrayTransfer>, right: Array<MirArrayTransfer>): Boolean
+	if left.size() != right.size()
+		return false
+	end
+	mut index := 0
+	while index < left.size()
+		a := left[index]
+		b := right[index]
+		if a.header != b.header || a.body != b.body || a.index != b.index || a.limit != b.limit || a.next_value != b.next_value || a.source != b.source || a.destination != b.destination
+			return false
+		end
+		index += 1
+	end
+	return true
+end
