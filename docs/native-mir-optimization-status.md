@@ -122,8 +122,11 @@ not a performance improvement.
   the transfer; short bounds retain the original checked path. Identical-owner
   copies remain safe, while shifted overlapping copies are not selected. The
   verifier reconstructs every plan field from canonical instructions and freshly
-  derived loop facts. QBE consumes that plan as a nonallocating `memmove` and the
-  exact final induction value; it does not discover loop semantics.
+  derived loop facts. QBE consumes that plan as bounded 32-byte `blit` chunks,
+  an exact 8-byte tail, and the final induction value; it does not discover loop
+  semantics. Primitive backing spans are disjoint or identical, as required by
+  [QBE's blit contract](https://c9x.me/compile/doc/il.html#Memory). No foreign call
+  or additional root lifetime is introduced.
 - `compiler/src/mir/analysis/array_peeling.trb`: a small reflected-index loop may
   duplicate its first checked header/body visit. The verified schedule retains
   every condition and failure edge; the QBE adapter only routes labels and

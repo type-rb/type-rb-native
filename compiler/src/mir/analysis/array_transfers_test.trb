@@ -47,7 +47,8 @@ describe("Verified primitive Array transfers") do
 			plans := state.scalar_mir.array_transfers[mir_function_index(state.scalar_mir, 0)]
 			expect(plans.size()).to_equal(1)
 			qbe := control_test_output(emit_qbe(state))
-			expect(qbe.include?("call $memmove(")).to_be_true()
+			expect(qbe.include?("\tblit ")).to_be_true()
+			expect(qbe.include?("call $memmove(")).to_be_false()
 			transfer_expect_run(qbe, expected)
 		end
 	end
@@ -77,6 +78,21 @@ describe("Verified primitive Array transfers") do
 		state := array_loop_mir_check(source)
 		expect(state.scalar_mir.array_transfers[mir_function_index(state.scalar_mir, 0)].size()).to_equal(1)
 		transfer_expect_run(control_test_output(emit_qbe(state)), "1\n2\n9\n5\n9\n")
+	end
+
+	test("copies complete chunks and every tail size without crossing either end") do
+		source := transfer_source("Integer", "0", "target[index] = source[index]", "[0, 1, 2, 3, 4, 5, 7, 8, 9, 16, 17, 63, 64, 65].each do |size|\nmut values: Array<Integer> := []\nmut target: Array<Integer> := []\nmut index := 0\nwhile index < size\nvalues.push(index * 7 - 9)\ntarget.push(99)\nindex += 1\nend\nputs(transfer(values, target, size))\ntarget.each { |value| puts(value) }\nputs(transfer(target, target, size))\ntarget.each { |value| puts(value) }\nend")
+		state := array_loop_mir_check(source)
+		expect(state.scalar_mir.array_transfers[mir_function_index(state.scalar_mir, 0)].size()).to_equal(1)
+		mut expected := ""
+		[0, 1, 2, 3, 4, 5, 7, 8, 9, 16, 17, 63, 64, 65].each do |size|
+			mut values := size.to_s() + "\n"
+			(0...size).each do |index|
+				values += (index * 7 - 9).to_s() + "\n"
+			end
+			expected += values + values
+		end
+		transfer_expect_run(control_test_output(emit_qbe(state)), expected)
 	end
 
 	test("rederives the plan after source erasure and physical reordering") do
