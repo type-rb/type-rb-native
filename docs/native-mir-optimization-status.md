@@ -111,22 +111,6 @@ not a performance improvement.
   foreign owners require disjointness guards. The region excludes observers,
   allocation, resize and possible failures. Values load only after first body
   entry and flush before exit work, preserving zero iterations and Float order.
-  Initialization reuses an existing backing pointer only when its observation
-  dominates the cache header, names the same owner, and its stable-storage proof
-  covers the original cached access. These references are independently rederived;
-  absent proofs retain the ordinary header reload.
-- `compiler/src/mir/analysis/array_transfers.trb`: a two-block unit-stride copy
-  can transfer primitive slots in bulk only when every access has an independent
-  bounds proof, source and destination indexes match, all other carried values
-  stay unchanged, and no other effect or failure can occur. Zero trips bypass
-  the transfer; short bounds retain the original checked path. Identical-owner
-  copies remain safe, while shifted overlapping copies are not selected. The
-  verifier reconstructs every plan field from canonical instructions and freshly
-  derived loop facts. QBE consumes that plan as bounded 32-byte `blit` chunks,
-  an exact 8-byte tail, and the final induction value; it does not discover loop
-  semantics. Primitive backing spans are disjoint or identical, as required by
-  [QBE's blit contract](https://c9x.me/compile/doc/il.html#Memory). No foreign call
-  or additional root lifetime is introduced.
 - `compiler/src/mir/analysis/array_peeling.trb`: a small reflected-index loop may
   duplicate its first checked header/body visit. The verified schedule retains
   every condition and failure edge; the QBE adapter only routes labels and
