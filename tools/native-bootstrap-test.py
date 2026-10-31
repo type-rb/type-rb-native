@@ -165,7 +165,7 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
                         ('tools/compiler_sources.py', 'cli'), ('tools/qbe_toolchain.py', 'core'),
                         ('tools/qbe/backend.json', 'core'), ('tools/qbe/sqrt.patch', 'core'),
                         ('tools/qbe/arm64-immediates.patch', 'core'), ('tools/qbe/arm64-memory.patch', 'core'),
-                        ('tools/qbe/gcm.patch', 'core'), ('tools/qbe/fma.patch', 'core')]:
+                        ('tools/qbe/gcm.patch', 'core'), ('tools/qbe/fma.patch', 'core'), ('tools/qbe/phi-affinity.patch', 'core')]:
         original = (root / file).read_text()
         edit(file, '\n# Content-only edit\n')
         expect_plan(scope, f'{file} edit')

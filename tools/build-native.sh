@@ -69,7 +69,7 @@ stage=$(mktemp -d "$cache/build.XXXXXX")
 # part of the manifest; timestamps and Git revision do not determine freshness.
 (
 	cd "$repository_root"
-	set -- tools/build-native.sh tools/qbe_toolchain.py tools/qbe/backend.json tools/qbe/sqrt.patch tools/qbe/arm64-immediates.patch tools/qbe/arm64-memory.patch tools/qbe/gcm.patch tools/qbe/fma.patch "$cc"
+	set -- tools/build-native.sh tools/qbe_toolchain.py tools/qbe/backend.json tools/qbe/sqrt.patch tools/qbe/arm64-immediates.patch tools/qbe/arm64-memory.patch tools/qbe/gcm.patch tools/qbe/fma.patch tools/qbe/phi-affinity.patch "$cc"
 	if test -n "${TRBN_QBE:-}"; then set -- "$@" "$TRBN_QBE"; fi
 	if test -n "${TRBN_BOOTSTRAP_SEED:-}"; then set -- "$@" "$TRBN_BOOTSTRAP_SEED"; fi
 	sha256_files "$@"
