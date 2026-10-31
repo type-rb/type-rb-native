@@ -1,0 +1,130 @@
+import { mir_function_control, mir_terminator_trap } from mir/model/control
+import { MirBlock, MirFunction, MirModule, MirValue } from mir/model/module
+import { MirFlow, MirFlowAliases, mir_build_flow_with_values, mir_flow_alias, mir_flow_alias_store, mir_flow_alias_table, mir_flow_blocks, mir_flow_type, mir_value_available } from mir/analysis/flow
+import { mir_rewrite_arguments, mir_rewrite_instruction, mir_rewrite_value } from mir/passes/rewrite
+import { integer_string } from support/literals
+
+# Only proved forwarding parameters enter this table. Each link points at an
+# available definition, so following links cannot invent a loop's initial value.
+def mir_forwarded_value(aliases: MirFlowAliases, mut value: Integer): Integer
+	mut next_value := mir_flow_alias(aliases, value)
+	while next_value >= 0 && next_value != value
+		value = next_value
+		next_value = mir_flow_alias(aliases, value)
+	end
+	return value
+end
+
+def mir_forward_parameter(native_module: MirModule, flow: MirFlow, aliases: MirFlowAliases, block: MirBlock, block_index: Integer, slot: Integer): Integer
+	parameter := native_module.arguments[block.parameter_start + slot]
+	mut identity := -1
+	mut edge := 0
+	while edge < flow.incoming_starts[block_index].size()
+		argument := native_module.arguments[flow.incoming_starts[block_index][edge] + slot]
+		value := mir_forwarded_value(aliases, argument)
+		if value != parameter
+			if identity >= 0 && identity != value
+				return -1
+			end
+			identity = value
+		end
+		edge += 1
+	end
+	# A self-only cycle, conflicting edge, unavailable definition or different
+	# semantic type cannot establish a replacement. Parallel edges are all read.
+	if identity < 0 || mir_flow_type(flow, parameter) != mir_flow_type(flow, identity)
+		return -1
+	end
+	if !mir_value_available(flow, block, block.instruction_start, identity)
+		return -1
+	end
+	return identity
+end
+
+record MirForwardedValues
+	values: Hash<String, Integer>
+	present: Boolean
+end
+
+def mir_forward_value_mapping(native_module: MirModule, function: MirFunction, flow: MirFlow): MirForwardedValues
+	mut aliases := mir_flow_alias_table(flow)
+	mut changed := true
+	while changed
+		changed = false
+		mut block_index := 0
+		while block_index < function.block_count
+			block := native_module.blocks[function.block_start + block_index]
+			mut slot := 0
+			while slot < block.parameter_count
+				parameter := native_module.arguments[block.parameter_start + slot]
+				if mir_flow_alias(aliases, parameter) < 0
+					identity := mir_forward_parameter(native_module, flow, aliases, block, block_index, slot)
+					if identity >= 0
+						mir_flow_alias_store(aliases, parameter, identity)
+						changed = true
+					end
+				end
+				slot += 1
+			end
+			block_index += 1
+		end
+	end
+	mut mapping: Hash<String, Integer> := {}
+	mut present := false
+	mut block_index := function.block_start
+	while block_index < function.block_start + function.block_count
+		block := native_module.blocks[block_index]
+		mut slot := 0
+		while slot < block.parameter_count
+			parameter := native_module.arguments[block.parameter_start + slot]
+			value := mir_forwarded_value(aliases, parameter)
+			if value != parameter
+				mapping[integer_string(parameter)] = value
+				present = true
+			end
+			slot += 1
+		end
+		block_index += 1
+	end
+	return MirForwardedValues.new(values: mapping, present: present)
+end
+
+# Keep declared block parameters and value rows paired. Their unused backend
+# assignments disappear through ordinary dead-code elimination. Uses and edge
+# arguments receive canonical identities, without changing any failure edge,
+# effect, source origin or shared instruction/argument span in another function.
+def mir_forward_block_values(mut native_module: MirModule, function_values: Array<Array<MirValue>>): Boolean
+	mut changed := false
+	mut function_index := 0
+	while function_index < native_module.functions.size()
+		function := native_module.functions[function_index]
+		if function.kind == mir_function_control()
+			flow := mir_build_flow_with_values(native_module, function, mir_flow_blocks(native_module, function), function_values[function_index])
+			forwarded := mir_forward_value_mapping(native_module, function, flow)
+			if forwarded.present
+				mapping := forwarded.values
+				changed = true
+				mut block_index := function.block_start
+				while block_index < function.block_start + function.block_count
+					block := native_module.blocks[block_index]
+					if block.terminator == mir_terminator_trap()
+						block_index += 1
+						next
+					end
+					start := native_module.instructions.size()
+					mut index := block.instruction_start
+					while index < block.instruction_start + block.instruction_count
+						native_module.instructions.push(mir_rewrite_instruction(native_module, native_module.instructions[index], mapping, {}))
+						index += 1
+					end
+					first := mir_rewrite_arguments(native_module, block.first_argument_start, block.first_argument_count, mapping)
+					second := mir_rewrite_arguments(native_module, block.second_argument_start, block.second_argument_count, mapping)
+					native_module.blocks[block_index] = MirBlock.new(id: block.id, source_id: block.source_id, line: block.line, parameter_start: block.parameter_start, parameter_count: block.parameter_count, instruction_start: start, instruction_count: block.instruction_count, terminator: block.terminator, condition: mir_rewrite_value(mapping, block.condition), first_target: block.first_target, second_target: block.second_target, first_argument_start: first, first_argument_count: block.first_argument_count, second_argument_start: second, second_argument_count: block.second_argument_count, return_value: mir_rewrite_value(mapping, block.return_value))
+					block_index += 1
+				end
+			end
+		end
+		function_index += 1
+	end
+	return changed
+end
