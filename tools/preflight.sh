@@ -66,6 +66,7 @@ if [ "$plan" = documentation ]; then
 fi
 
 step "QBE dependency identity" python3 tools/qbe_toolchain_test.py
+step "authored QBE branch widths" python3 tools/native-runtime-branch-test.py --check-source
 step "compiler source staging" python3 tools/compiler_sources_test.py
 step "bootstrap snapshot input bound" python3 tools/bootstrap_snapshot_size_test.py
 step "compiler ownership and migration" sh -c 'python3 tools/compiler_layout_test.py && python3 tools/migrate_compiler_layout_test.py && python3 tools/compiler_layout.py'

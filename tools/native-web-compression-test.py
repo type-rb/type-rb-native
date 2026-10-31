@@ -220,7 +220,7 @@ def main():
                 # from compiler path resolution without retrying the build.
                 dependencies = {}
                 if not args.reference:
-                    for name in ('qbe', 'network/libuv.a', 'network/libllhttp.a',
+                    for name in ('trbn', 'qbe', 'network/libuv.a', 'network/libllhttp.a',
                                  'network/network-identity.o', 'compression/libdeflate.a',
                                  'compression/compression-identity.o'):
                         path = package / name
@@ -231,6 +231,12 @@ def main():
                                                           sha256=hashlib.sha256(path.read_bytes()).hexdigest())
                         except OSError as error:
                             dependencies[name] = {'inspection_error': str(error)}
+                receipt['failure'] = {'command': list(map(str, arguments)),
+                                      'exit_code': result.returncode,
+                                      'stdout': result.stdout, 'stderr': result.stderr,
+                                      'installed_dependencies': dependencies}
+                args.receipt.parent.mkdir(parents=True, exist_ok=True)
+                args.receipt.write_text(json.dumps(receipt, indent=2) + '\n')
                 raise AssertionError((arguments, result.stdout, result.stderr,
                                       {'installed_dependencies': dependencies}))
             return result

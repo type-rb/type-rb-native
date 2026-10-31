@@ -94,6 +94,14 @@ iteration have separate body owners; `lambdas.trb` owns lambda body checking.
 Their explicit imports may be mutually recursive; there are no forwarding
 copies. Checking constructs independently verified MIR; QBE consumes those facts.
 
+Authored QBE runtime functions use word predicates for conditional branches.
+QBE `jnz` examines only the low 32 bits: compare a pointer or other long value
+with `cnel %value, 0` before branching on whether the complete value is nonzero.
+Use the same explicit spelling for long Boolean flags, so reviewing a condition
+does not require reconstructing its possible range. The source preflight checks
+complete authored functions; runtime boundary tests exercise valid pointers with
+zero low words and exponents across the 32-bit boundary.
+
 ## Semantic names and numeric encodings
 
 Use names at both the producer and consumer of a semantic tag. Equal numbers
