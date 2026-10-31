@@ -12,6 +12,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
+QBE_CFLAGS = "-std=c99 -O2 -g -Wall -Wextra -Wpedantic"
 
 MOTION_PROBE = """export function l $motion(l %a, l %b, l %c, l %n) {
 @start
@@ -125,7 +126,7 @@ def backend_identity(root=ROOT):
     backend = json.loads((root / "tools/qbe/backend.json").read_text())
     if set(backend) != {"name", "version", "sourceURL", "sourceSHA256", "variant", "patches"}:
         raise ValueError("invalid QBE identity shape")
-    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-ordered-effects-v1":
+    if backend["name"] != "QBE" or backend["version"] != "1.3" or backend["variant"] != "typerb-late-product-v1":
         raise ValueError("unsupported QBE identity")
     if not backend["sourceURL"].startswith("https://") or not re.fullmatch(r"[0-9a-f]{64}", backend["sourceSHA256"]):
         raise ValueError("invalid QBE source identity")
@@ -218,7 +219,7 @@ def build(output, archive=None):
     if not cc.is_file():
         raise ValueError("QBE C compiler is not an executable file")
     inputs = {"backend": backend, "builderSHA256": digest(__file__), "ccSHA256": digest(cc),
-              "platform": sys.platform, "machine": os.uname().machine}
+              "platform": sys.platform, "machine": os.uname().machine, "cflags": QBE_CFLAGS}
     receipt = output / "build-info.json"
     binary = output / "qbe"
     if receipt.is_file() and binary.is_file():
@@ -243,7 +244,7 @@ def build(output, archive=None):
         for patch in backend["patches"]:
             subprocess.run(["patch", "--batch", "--fuzz=0", "-p1", "-i", str(ROOT / patch["path"])],
                            cwd=source, check=True, stdout=sys.stderr)
-        subprocess.run(["make", "-j2", f"CC={cc}"], cwd=source, check=True, stdout=sys.stderr)
+        subprocess.run(["make", "-j2", f"CC={cc}", f"CFLAGS={QBE_CFLAGS}"], cwd=source, check=True, stdout=sys.stderr)
         check_capability(source / "qbe")
         output.mkdir(parents=True, exist_ok=True)
         staged_binary = stage / "published-qbe"

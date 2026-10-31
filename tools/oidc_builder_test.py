@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Exercise actual compiler header selection in the OIDC dependency builder."""
+import hashlib
 import importlib.util
+import io
 import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('oidc_builder', Path(__file__).with_name('build-oidc-dependencies.py'))
 builder = importlib.util.module_from_spec(spec)
@@ -13,6 +16,35 @@ spec.loader.exec_module(builder)
 
 
 class OidcBuilderTest(unittest.TestCase):
+    def test_invalid_download_reports_identity_without_caching_it(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            rejected = b'upstream response is not the pinned archive\n'
+            pin = {'url': 'https://example.invalid/source.tar.gz', 'sha256': '0' * 64}
+            with patch.object(builder.urllib.request, 'urlopen', return_value=io.BytesIO(rejected)):
+                with self.assertRaises(ValueError) as error:
+                    builder.extract(pin, root / 'unpacked', root)
+            message = str(error.exception)
+            for expected in (pin['url'], 'download', str(len(rejected)) + ' bytes',
+                             hashlib.sha256(rejected).hexdigest(), pin['sha256']):
+                self.assertIn(expected, message)
+            self.assertEqual(list(root.iterdir()), [])
+
+    def test_invalid_cache_is_preserved_and_identified(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / 'source.tar.gz'
+            rejected = b'invalid cached archive\n'
+            archive.write_bytes(rejected)
+            pin = {'url': 'https://example.invalid/source.tar.gz', 'sha256': '0' * 64}
+            with patch.object(builder.urllib.request, 'urlopen') as download:
+                with self.assertRaises(ValueError) as error:
+                    builder.extract(pin, root / 'unpacked', root)
+            self.assertIn('cache', str(error.exception))
+            self.assertIn(hashlib.sha256(rejected).hexdigest(), str(error.exception))
+            download.assert_not_called()
+            self.assertEqual(archive.read_bytes(), rejected)
+
     def test_host_header_cannot_replace_qualified_headers(self):
         with tempfile.TemporaryDirectory(prefix='oidc header fixture ') as temporary:
             root = Path(temporary)
