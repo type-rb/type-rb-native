@@ -35,6 +35,34 @@ describe("MIR SSA value forwarding") do
 		expect(mapping.values.key?("5")).to_be_false()
 	end
 
+	test("converges across a forwarding cycle only with an external definition") do
+		mut native_module := mir_test_module(false, false)
+		# The body forwards the header value instead of incrementing it. The
+		# header's initial value then anchors both parameters to one definition.
+		native_module.arguments[5] = 5
+		function := native_module.functions[0]
+		flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
+		mapping := mir_forward_value_mapping(native_module, function, flow)
+		expect(mapping.values["2"]).to_equal(1)
+		expect(mapping.values["5"]).to_equal(1)
+		# Without an available external anchor the header cannot be removed.
+		native_module.arguments[1] = 2
+		unanchored := mir_forward_value_mapping(native_module, function, flow)
+		expect(unanchored.values.key?("2")).to_be_false()
+	end
+
+	test("handles sparse identities without allocating by the maximum ID") do
+		mut native_module := mir_test_module(false, false)
+		value := native_module.values[5]
+		native_module.values[5] = MirValue.new(function_id: value.function_id, id: 9007199254740991, type_id: value.type_id, source_id: value.source_id, line: value.line)
+		native_module.arguments[4] = 9007199254740991
+		function := native_module.functions[0]
+		flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
+		mapping := mir_forward_value_mapping(native_module, function, flow)
+		expect(mapping.values["9007199254740991"]).to_equal(2)
+		expect(mapping.values.key?("2")).to_be_false()
+	end
+
 	test("requires matching semantic types and an available definition") do
 		mut native_module := mir_test_module(false, false)
 		value := native_module.values[5]
