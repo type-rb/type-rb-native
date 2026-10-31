@@ -1,5 +1,5 @@
 import { emit_qbe } from compiler
-import { MirValue } from mir/model/module
+import { MirFunction, MirValue } from mir/model/module
 import { mir_build_flow, mir_flow_blocks, mir_function_value_groups } from mir/analysis/flow
 import { mir_forward_block_values, mir_forward_value_mapping } from mir/passes/forward_values
 import { mir_rewrite_function } from mir/passes/rewrite
@@ -96,6 +96,15 @@ describe("MIR SSA value forwarding") do
 		mut native_module := mir_test_module(false, false)
 		function := native_module.functions[0]
 		native_module.functions[0] = mir_rewrite_function(function, function.block_start, function.block_count)
+		# Another function retains independent block rows with the same physical
+		# instruction spans. Only the rewritten function may receive new uses.
+		start := native_module.blocks.size()
+		mut block_index := function.block_start
+		while block_index < function.block_start + function.block_count
+			native_module.blocks.push(native_module.blocks[block_index])
+			block_index += 1
+		end
+		native_module.functions.push(MirFunction.new(kind: function.kind, result_type: function.result_type, integer_guard: function.integer_guard, id: 2, entry_block: function.entry_block, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: start, block_count: function.block_count))
 		old_instruction := native_module.instructions[3]
 		old_argument := native_module.arguments[3]
 		expect(mir_forward_block_values(native_module, mir_function_value_groups(native_module))).to_be_true()

@@ -1,6 +1,8 @@
 import { mir_function_control, mir_terminator_trap } from mir/model/control
+import { mir_type_boolean, mir_type_float, mir_type_integer } from mir/model/type_ids
+import { mir_live_add, mir_live_before } from mir/analysis/liveness
 import { MirBlock, MirFunction, MirModule, MirValue } from mir/model/module
-import { MirFlow, MirFlowAliases, mir_build_flow_with_values, mir_flow_alias, mir_flow_alias_store, mir_flow_alias_table, mir_flow_blocks, mir_flow_type, mir_value_available } from mir/analysis/flow
+import { MirFlow, MirFlowAliases, mir_build_flow_with_values, mir_flow_alias, mir_flow_alias_store, mir_flow_alias_table, mir_flow_blocks, mir_flow_type, mir_instruction_occurrences, mir_value_available } from mir/analysis/flow
 import { mir_rewrite_arguments, mir_rewrite_instruction, mir_rewrite_value } from mir/passes/rewrite
 import { integer_string } from support/literals
 
@@ -17,6 +19,12 @@ end
 
 def mir_forward_parameter(native_module: MirModule, flow: MirFlow, aliases: MirFlowAliases, block: MirBlock, block_index: Integer, slot: Integer): Integer
 	parameter := native_module.arguments[block.parameter_start + slot]
+	type_id := mir_flow_type(flow, parameter)
+	# Preserve managed owner identities used by existing Array and root proofs.
+	# Primitive forwarding has no storage or lifetime identity to replace.
+	if type_id != mir_type_integer() && type_id != mir_type_boolean() && type_id != mir_type_float()
+		return -1
+	end
 	mut identity := -1
 	mut edge := 0
 	while edge < flow.incoming_starts[block_index].size()
@@ -32,7 +40,7 @@ def mir_forward_parameter(native_module: MirModule, flow: MirFlow, aliases: MirF
 	end
 	# A self-only cycle, conflicting edge, unavailable definition or different
 	# semantic type cannot establish a replacement. Parallel edges are all read.
-	if identity < 0 || mir_flow_type(flow, parameter) != mir_flow_type(flow, identity)
+	if identity < 0 || type_id != mir_flow_type(flow, identity)
 		return -1
 	end
 	if !mir_value_available(flow, block, block.instruction_start, identity)
@@ -43,7 +51,7 @@ end
 
 record MirForwardedValues
 	values: Hash<String, Integer>
-	present: Boolean
+	parameters: Array<Integer>
 end
 
 def mir_forward_value_mapping(native_module: MirModule, function: MirFunction, flow: MirFlow): MirForwardedValues
@@ -70,7 +78,7 @@ def mir_forward_value_mapping(native_module: MirModule, function: MirFunction, f
 		end
 	end
 	mut mapping: Hash<String, Integer> := {}
-	mut present := false
+	mut parameters: Array<Integer> := []
 	mut block_index := function.block_start
 	while block_index < function.block_start + function.block_count
 		block := native_module.blocks[block_index]
@@ -80,20 +88,22 @@ def mir_forward_value_mapping(native_module: MirModule, function: MirFunction, f
 			value := mir_forwarded_value(aliases, parameter)
 			if value != parameter
 				mapping[integer_string(parameter)] = value
-				present = true
+				mir_live_add(parameters, parameter)
 			end
 			slot += 1
 		end
 		block_index += 1
 	end
-	return MirForwardedValues.new(values: mapping, present: present)
+	return MirForwardedValues.new(values: mapping, parameters: parameters)
 end
 
 # Keep declared block parameters and value rows paired. Their unused backend
 # assignments disappear through ordinary dead-code elimination. Uses and edge
-# arguments receive canonical identities, without changing any failure edge,
-# effect, source origin or shared instruction/argument span in another function.
+# arguments receive canonical identities. Shared instructions receive private
+# spans; uniquely owned instructions stay in place so existing proofs and raw
+# MIR validation still refer to the active definitions. Effects and origins stay.
 def mir_forward_block_values(mut native_module: MirModule, function_values: Array<Array<MirValue>>): Boolean
+	occurrences := mir_instruction_occurrences(native_module)
 	mut changed := false
 	mut function_index := 0
 	while function_index < native_module.functions.size()
@@ -101,7 +111,7 @@ def mir_forward_block_values(mut native_module: MirModule, function_values: Arra
 		if function.kind == mir_function_control()
 			flow := mir_build_flow_with_values(native_module, function, mir_flow_blocks(native_module, function), function_values[function_index])
 			forwarded := mir_forward_value_mapping(native_module, function, flow)
-			if forwarded.present
+			if forwarded.parameters.size() > 0
 				mapping := forwarded.values
 				changed = true
 				mut block_index := function.block_start
@@ -111,10 +121,29 @@ def mir_forward_block_values(mut native_module: MirModule, function_values: Arra
 						block_index += 1
 						next
 					end
-					start := native_module.instructions.size()
+					mut shared := false
 					mut index := block.instruction_start
 					while index < block.instruction_start + block.instruction_count
-						native_module.instructions.push(mir_rewrite_instruction(native_module, native_module.instructions[index], mapping, {}))
+						if occurrences[index] > 1
+							shared = true
+						end
+						index += 1
+					end
+					mut start := block.instruction_start
+					if shared
+						start = native_module.instructions.size()
+					end
+					index = block.instruction_start
+					while index < block.instruction_start + block.instruction_count
+						mut instruction := native_module.instructions[index]
+						if mir_live_before(native_module, forwarded.parameters, instruction, []).size() > 0
+							instruction = mir_rewrite_instruction(native_module, instruction, mapping, {})
+						end
+						if shared
+							native_module.instructions.push(instruction)
+						else
+							native_module.instructions[index] = instruction
+						end
 						index += 1
 					end
 					first := mir_rewrite_arguments(native_module, block.first_argument_start, block.first_argument_count, mapping)
