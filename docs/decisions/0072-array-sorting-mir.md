@@ -16,6 +16,14 @@ Take from the left run on ties. Clamp run boundaries and width growth by testing
 the remaining distance before addition, preserving the portable Integer range.
 This takes O(n log n) comparisons and O(n) auxiliary storage.
 
+The checker shares a typed MIR helper for each value/key type and direction.
+Natural-sort input copies remain in the caller, and key sorting still collects
+its values and keys before the call. Helpers use the same control-flow builder,
+call-effect analysis, verifier and root plans as authored functions. This bounds
+caller CFG growth and avoids threading unrelated caller bindings through sorting.
+No new sort instruction, runtime type dispatch or source-dependent backend path
+is introduced.
+
 String comparison extends the existing internal String comparison operation
 with one verified strict-order mode. Its adapter compares bounded byte spans
 and uses length for equal prefixes; embedded NUL does not terminate comparison.

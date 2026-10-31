@@ -1,3 +1,6 @@
+import { mir_op_array_copy, mir_op_direct_call } from mir/model/instructions
+import { mir_signature_ordinary } from mir/model/call_kinds
+import { mir_function_index } from mir/model/module
 import { check } from compiler
 import { compiler_test_instruction_with_cell } from testing/compiler
 import { managed_mir_test_fixture } from testing/mir/managed
@@ -61,20 +64,62 @@ describe("Array sorting MIR") do
 		mut state := logical_checked_source("def main()\nputs([\"b\", \"a\"].sort()[0])\nend\n")
 		expect(check(state)).to_be_true()
 		plan := state.scalar_mir.root_plans[0]
-		mut copies := 0
+		# The shared helper receives the retained copy and owns its scratch allocation.
 		mut point := 0
-		while copies < 2
-			if state.scalar_mir.instructions[plan.instructions[point]].kind == 47
-				copies += 1
+		while point < plan.instructions.size()
+			if state.scalar_mir.instructions[plan.instructions[point]].kind == mir_op_array_copy() && plan.roots[point].size() > 0
+				break
 			end
-			if copies < 2
-				point += 1
-			end
+			point += 1
 		end
+		expect(point < plan.instructions.size()).to_be_true()
 		expect(plan.roots[point].size() >= 1).to_be_true()
 		mut roots := plan.roots
 		roots[point] = []
 		state.scalar_mir.root_plans[0] = MirRootPlan.new(function_id: plan.function_id, instructions: plan.instructions, roots: roots, capacity: plan.capacity)
 		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR live root plan differs")
+	end
+end
+
+describe("Shared typed Array sorting functions") do
+	test("reuses exact type and direction bodies across natural and key call sites") do
+		source := "def first(values: Array<Integer>): Array<Integer>\nreturn values.sort().sort()\nend\ndef second(values: Array<Integer>): Array<Integer>\nreturn values.sort_descending()\nend\ndef main()\nputs(first([2, 1])[0])\nputs(second([2, 1])[0])\nputs([1.5, 0.5].sort()[0])\nputs([2, 1].sort_by { |value| value }[0])\nend\n"
+		mut state := logical_checked_source(source)
+		expect(check(state)).to_be_true()
+		mut names: Array<String> := []
+		state.scalar_mir.signatures.each do |signature|
+			if signature.id >= state.declarations.function_count[0] && signature.kind == mir_signature_ordinary()
+				names.push(signature.name)
+				body := mir_function_index(state.scalar_mir, signature.id)
+				expect(body >= 0).to_be_true()
+				expect(state.scalar_mir.functions[body].parameter_count).to_equal(signature.parameter_types.size())
+				expect(state.scalar_mir.functions[body].source_id).to_equal(signature.source_id)
+				expect(state.scalar_mir.functions[body].line).to_equal(signature.line)
+			end
+		end
+		expect(names).to_equal(["$sort:Array<Integer>:Void", "$sort:Array<Integer>:Void:descending", "$sort:Array<Float>:Void", "$sort:Array<Integer>:Array<Integer>"])
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+
+	test("keeps each caller input copy and roots it across the shared call") do
+		mut state := logical_checked_source("def main()\nvalues := [\"b\", \"a\"]\nputs(values.sort()[0])\nputs(values.sort()[1])\nend\n")
+		expect(check(state)).to_be_true()
+		caller := mir_function_index(state.scalar_mir, 0)
+		plan := state.scalar_mir.root_plans[caller]
+		mut copies := 0
+		mut calls := 0
+		mut point := 0
+		while point < plan.instructions.size()
+			instruction := state.scalar_mir.instructions[plan.instructions[point]]
+			if instruction.kind == mir_op_array_copy()
+				copies += 1
+			elsif instruction.kind == mir_op_direct_call()
+				calls += 1
+				expect(plan.roots[point].size() > 0).to_be_true()
+			end
+			point += 1
+		end
+		expect(copies).to_equal(2)
+		expect(calls).to_equal(2)
 	end
 end

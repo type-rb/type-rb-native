@@ -5,7 +5,7 @@ import { mir_op_callable_new, mir_op_direct_call, mir_op_enum_new, mir_op_indire
 import { mir_finalize_hash_types } from mir/lowering/collection_inference
 import { mir_semantic_type_id, mir_semantic_value_type } from mir/model/types
 import { CheckedValue, checked_mir_value, mir_add_value, scalar_mir_disable } from frontend/checking/body/values
-import { MirCall, MirControlLoop, MirFunction, MirInstruction, mir_instruction_with_payload } from mir/model/module
+import { MirCall, MirControlLoop, MirFunction, MirInstruction, MirSignature, mir_instruction_with_payload } from mir/model/module
 import { mir_block } from mir/build/blocks
 import { CompilerState } from state/state
 import { CheckedLocals, local_storage_type } from state/local_state
@@ -31,11 +31,16 @@ def mir_control_prepare(mut state: CompilerState, mut locals: CheckedLocals)
 		end
 		index += 1
 	end
+	mir_control_begin(locals, load_integer(state.declarations.function_lines, locals.mir_state[mir_state_function_slot()]))
+end
+
+# Checked generated helpers carry their origin in MIR rather than source declarations.
+def mir_control_begin(mut locals: CheckedLocals, line: Integer)
 	entry := locals.mir_state[mir_state_function_slot()] * 2
 	locals.mir_control[mir_control_enabled_slot()] = 1
 	locals.mir_control[mir_control_block_slot()] = entry
 	locals.mir_control[mir_control_next_block_slot()] = entry + 2
-	locals.mir_control[mir_control_source_line_slot()] = load_integer(state.declarations.function_lines, locals.mir_state[mir_state_function_slot()])
+	locals.mir_control[mir_control_source_line_slot()] = line
 end
 
 def mir_control_active(locals: CheckedLocals): Boolean
@@ -242,15 +247,24 @@ def mir_control_commit(mut state: CompilerState, function_index: Integer, mut lo
 	if inference_error != ""
 		return inference_error
 	end
+	return mir_control_commit_signature(state, state.scalar_mir.signatures[function_index], locals)
+end
+
+# Commit authored and generated control flow through the same relocation path.
+def mir_control_commit_signature(mut state: CompilerState, signature: MirSignature, mut locals: CheckedLocals): String
+	if locals.mir_control[mir_control_terminated_slot()] != 1
+		return "control-flow MIR function has an unterminated path"
+	end
+	function_index := signature.id
 	mut native_module := state.scalar_mir
 	argument_base := native_module.arguments.size()
-	parameter_count := load_integer(state.declarations.function_parameter_counts, function_index)
+	parameter_count := signature.parameter_types.size()
 	block_base := native_module.blocks.size()
 	instruction_base := native_module.instructions.size()
 	literal_base := native_module.literal_texts.size()
 	call_base := native_module.calls.size()
 	source := state.module_graph.active_module[0]
-	line := load_integer(state.declarations.function_lines, function_index)
+	line := signature.line
 	if native_module.functions.size() == 0
 		mut count := state.module_graph.module_count[0]
 		if count == 0
@@ -259,7 +273,7 @@ def mir_control_commit(mut state: CompilerState, function_index: Integer, mut lo
 		native_module.source_count[0] = count
 		native_module.entry_function[0] = function_index
 	end
-	native_module.functions.push(MirFunction.new(kind: mir_function_control(), result_type: load_string(state.declarations.function_result_types, function_index), integer_guard: 0, id: function_index, entry_block: function_index * 2, source_id: source, line: line, parameter_start: argument_base, parameter_count: parameter_count, block_start: block_base, block_count: locals.mir_blocks.size() + 1))
+	native_module.functions.push(MirFunction.new(kind: mir_function_control(), result_type: signature.result_type, integer_guard: 0, id: function_index, entry_block: function_index * 2, source_id: source, line: line, parameter_start: argument_base, parameter_count: parameter_count, block_start: block_base, block_count: locals.mir_blocks.size() + 1))
 	mut index := 0
 	while index < parameter_count
 		native_module.arguments.push(index)
