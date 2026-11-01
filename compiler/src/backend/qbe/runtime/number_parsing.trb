@@ -7,10 +7,11 @@ import { QbeOutput, qbe_output_line } from backend/qbe/output
 def emit_integer_parse_runtime(mut output: QbeOutput)
 	qbe_output_line(output, "\ndata $trbn_invalid_integer_error = { b \"panic: invalid Integer\", b 10 }\n\nfunction l $trbn_parse_integer(l %string, l %output) {\n@start\n %length_address =l add %string, 8\n %length =l loadl %length_address\n %empty =w ceql %length, 0\n jnz %empty, @invalid, @first")
 	qbe_output_line(output, "\n@first\n %data =l add %string, 24\n %first =w loadub %data\n %plus =w ceqw %first, 43\n %minus =w ceqw %first, 45\n %signed =w or %plus, %minus\n %begin =l extuw %signed\n %sign_only =w ceql %begin, %length\n jnz %sign_only, @invalid, @parse")
-	qbe_output_line(output, "\n@parse\n %index =l phi @first %begin, @accumulate %next_index\n %accumulator =l phi @first 0, @accumulate %next_accumulator\n %done =w ceql %index, %length\n jnz %done, @sign, @digit")
-	qbe_output_line(output, "\n@digit\n %address =l add %data, %index\n %character =w loadub %address\n %digit_word =w sub %character, 48\n %valid =w cultw %digit_word, 10\n jnz %valid, @check_range, @invalid")
-	qbe_output_line(output, "\n@check_range\n %digit =l extuw %digit_word\n %large_prefix =w csgtl %accumulator, 900719925474099\n %limit_prefix =w ceql %accumulator, 900719925474099\n %large_digit =w csgtl %digit, 1\n %limit_overflow =w and %limit_prefix, %large_digit\n %overflow =w or %large_prefix, %limit_overflow\n jnz %overflow, @overflow, @accumulate")
-	qbe_output_line(output, "\n@accumulate\n %scaled =l mul %accumulator, 10\n %next_accumulator =l add %scaled, %digit\n %next_index =l add %index, 1\n jmp @parse")
+	qbe_output_line(output, "\n@parse\n %index =l phi @first %begin, @next %next_index\n %accumulator =l phi @first 0, @next %next_accumulator\n %done =w ceql %index, %length\n jnz %done, @sign, @digit")
+	qbe_output_line(output, "\n@digit\n %address =l add %data, %index\n %character =w loadub %address\n %digit_word =w sub %character, 48\n %valid =w cultw %digit_word, 10\n jnz %valid, @accumulate, @invalid")
+	# The entering magnitude is at most 2^53-1, so multiplying by ten
+	# and adding one digit fits int64. One comparison detects portable overflow.
+	qbe_output_line(output, "\n@accumulate\n %digit =l extuw %digit_word\n %scaled =l mul %accumulator, 10\n %next_accumulator =l add %scaled, %digit\n %overflow =w csgtl %next_accumulator, 9007199254740991\n jnz %overflow, @overflow, @next\n@next\n %next_index =l add %index, 1\n jmp @parse")
 	qbe_output_line(output, "\n@overflow\n %remainder_begin =l add %index, 1\n jmp @validate_remainder")
 	qbe_output_line(output, "\n@validate_remainder\n %remainder_index =l phi @overflow %remainder_begin, @remainder_next %remainder_advance\n %remainder_done =w ceql %remainder_index, %length\n jnz %remainder_done, @range, @remainder_digit")
 	qbe_output_line(output, "\n@remainder_digit\n %remainder_address =l add %data, %remainder_index\n %remainder_character =w loadub %remainder_address\n %remainder_digit =w sub %remainder_character, 48\n %remainder_valid =w cultw %remainder_digit, 10\n jnz %remainder_valid, @remainder_next, @invalid")
