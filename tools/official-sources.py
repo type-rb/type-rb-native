@@ -20,6 +20,7 @@ URL_ADAPTER = Path("compiler/packages/internal/url.trb")
 JSON_ADAPTER = Path("compiler/packages/internal/json.trb")
 STDLIB_SOURCES = {"url": URL_SOURCE, "json": "internal/stdlib/json.go", "jsonc": "internal/stdlib/jsonc.go", "time": "internal/stdlib/time.go", "hex": "internal/stdlib/hex.go", "base64": "internal/stdlib/base64.go", "path": "internal/stdlib/path.go", "hash": "internal/stdlib/hash.go", "hmac": "internal/stdlib/hmac.go", "file": "internal/stdlib/file.go", "dir": "internal/stdlib/dir.go", "errors": "internal/stdlib/errors.go"}
 NATIVE_ADAPTERS = ["time", "time_calendar", "time_parse", "time_zones", "time_host", "web_context", "hex", "base64", "encoding_bytes", "secure_random", "entropy", "web_dispatch", "network_host", "web_server", "oidc", "oidc_json", "oidc_host", "oidc_http"]
+STDLIB_SOURCES["test"] = "internal/stdlib/registry.go"
 REPOSITORY = "https://github.com/type-rb/type-rb"
 
 
@@ -77,7 +78,7 @@ def reference_files(root, checkout):
         "sourceRoot": SOURCE_ROOT,
         "files": [
             {"path": name,
-             "source": ("LICENSE" if name == "LICENSE" else "internal/" + name if name.startswith("stdlib/")
+             "source": ("LICENSE" if name == "LICENSE" else STDLIB_SOURCES[PurePosixPath(name).stem] if name.startswith("stdlib/")
                         else SOURCE_ROOT + "/" + name[len("packages/"):]),
              "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
             for name, data in sorted(files.items())
@@ -114,6 +115,22 @@ def typerb_string(value):
 
 
 def pinned_standard_source(data, name):
+    if name == "test":
+        # The wrapper is a single raw literal inside the registry, rather than
+        # a source-returning function. Anchor both package entries so an added
+        # or moved literal cannot silently select a different provider.
+        start = b'\t"trb/std/test": {\n'
+        finish = b'\t"trb/internal/test": {\n'
+        if (len(re.findall(rb"^package stdlib\n", data, re.M)) != 1 or
+                data.count(start) != 1 or data.count(finish) != 1):
+            raise ValidationError("unrecognized pinned TEST source boundary")
+        entry = data.split(start, 1)[1].split(finish, 1)
+        if len(entry) != 2:
+            raise ValidationError("unrecognized pinned TEST source boundary")
+        matches = re.findall(rb"\t\tSource: `([^`]*)`,\n\t\tKind: Portable,", entry[0])
+        if len(matches) != 1:
+            raise ValidationError("unrecognized pinned TEST source boundary")
+        return matches[0].decode("utf-8")
     boundary = rb"package stdlib\n\nfunc " + re.escape(name.encode()) + rb"Source\(\) string \{\n\treturn `([^`]*)`\n\}\n"
     if name in {"time", "path", "dir", "errors"}:
         # The pinned file also owns the reference intrinsic registry. Extract

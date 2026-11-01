@@ -45,12 +45,27 @@ extern void trbn_fatal(const void *, int64_t);
 struct closure { uintptr_t descriptor; int64_t (*code)(void *); int64_t captured; };
 struct float_closure { uintptr_t descriptor; double (*code)(void *); double captured; };
 struct resource_scope { uintptr_t previous; int descriptor; int kind; };
+typedef void (*failure_notice)(uintptr_t, const void *, int64_t, int64_t, uintptr_t, int64_t, int64_t);
+struct recovery_frame {
+    uintptr_t previous;
+    int64_t roots;
+    uintptr_t context;
+    uintptr_t action;
+    unsigned char environment[1024];
+    uintptr_t resources;
+    failure_notice notice;
+};
 _Static_assert(offsetof(struct closure, code) == 8, "closure code offset");
 _Static_assert(sizeof(struct resource_scope) == 16, "file cleanup frame size");
 _Static_assert(offsetof(struct resource_scope, descriptor) == 8, "cleanup descriptor offset");
 _Static_assert(offsetof(struct resource_scope, kind) == 12, "cleanup kind offset");
+_Static_assert(offsetof(struct recovery_frame, environment) == 32, "jump environment offset");
+_Static_assert(offsetof(struct recovery_frame, resources) == 1056, "recovery cleanup offset");
+_Static_assert(offsetof(struct recovery_frame, notice) == 1064, "optional notice offset");
+_Static_assert(sizeof(struct recovery_frame) == 1072, "recovery frame size");
 static int side_effects;
 static int failed_descriptor;
+static int notices;
 static int push_pipe(struct resource_scope *scope) {
     int descriptors[2];
     assert(pipe(descriptors) == 0);
@@ -101,6 +116,27 @@ static double failed_float(void *value) {
     trbn_fail("float failure\n", 14);
     assert(0); return -1;
 }
+static void notified(uintptr_t context, const void *message, int64_t size,
+                     int64_t raw, uintptr_t path, int64_t line, int64_t column) {
+    assert(context == 77 && raw == 1 && path == 0 && line == 0 && column == 0);
+    assert(size == 18 && !memcmp(message, "synthetic failure\n", 18));
+    /* Notification happens before cleanup and can still inspect the live frame. */
+    assert(trbn_resource_scope != 0 && fcntl(failed_descriptor, F_GETFD) >= 0);
+    ++notices;
+}
+static int64_t notifying(void *value) {
+    struct recovery_frame *frame = (void *)trbn_recovery_scope;
+    assert(frame && frame->notice == NULL);
+    frame->notice = notified;
+    struct closure child = {0, failed, 0};
+    int before = notices;
+    assert(trbn_runtime_recover_l(&child, 41) == 41);
+    assert(notices == before); /* The nearer ordinary frame suppresses notices. */
+    struct float_closure floating = {0, failed_float, 0};
+    assert(trbn_runtime_recover_d(&floating, 9.5) == 9.5);
+    assert(notices == before);
+    return failed(value);
+}
 int main(int argc, char **argv) {
     if (argc > 1) {
         if (!strcmp(argv[1], "outside")) {
@@ -114,6 +150,7 @@ int main(int argc, char **argv) {
     struct closure outer = {0, nested, 1};
     struct float_closure good = {0, success_float, 2.5};
     struct float_closure bad = {0, failed_float, 0};
+    struct closure notice = {0, notifying, 0};
     for (int i = 0; i < 10000; ++i) {
         assert(trbn_runtime_recover_l(&outer, 99) == 42);
         assert(trbn_runtime_recover_d(&good, 9.5) == 2.5);
@@ -121,9 +158,13 @@ int main(int argc, char **argv) {
         expect_closed(failed_descriptor);
         assert(trbn_gc_temp_count == 7 && trbn_recovery_scope == 0);
         assert(trbn_resource_scope == 0);
+        assert(trbn_runtime_recover_l(&notice, 77) == 77);
+        expect_closed(failed_descriptor);
+        assert(notices == i + 1 && trbn_gc_temp_count == 7);
+        assert(trbn_recovery_scope == 0 && trbn_resource_scope == 0);
     }
     assert(side_effects == 10000);
-    printf("recovery ABI: jmp_buf=%zu alignment=%zu; 10000 nested/Float/resource cycles\n",
+    printf("recovery ABI: jmp_buf=%zu alignment=%zu; 10000 nested/Float/resource/notice cycles\n",
         sizeof(jmp_buf), _Alignof(jmp_buf));
 }
 '''

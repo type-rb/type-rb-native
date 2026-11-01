@@ -1,3 +1,4 @@
+import { mir_test_outcome, test_adapter_capture, test_adapter_fail } from mir/model/test_contract
 import { filesystem_adapter_start, filesystem_mutable, filesystem_names, filesystem_parameters, filesystem_result } from mir/model/filesystem_contract
 import { mir_type_composite_start } from mir/model/type_ids
 import { mir_adapter_set_oidc_link } from mir/model/call_kinds
@@ -48,6 +49,13 @@ def mir_runtime_adapter(name: String): Integer
 end
 
 def mir_call_symbol(signature: MirSignature): String
+	if signature.kind == mir_signature_standard()
+		if signature.adapter == test_adapter_capture()
+			return "trbn_test_capture"
+		elsif signature.adapter == test_adapter_fail()
+			return "trbn_test_raise"
+		end
+	end
 	if signature.kind == mir_signature_standard() && signature.adapter >= filesystem_adapter_start() && signature.adapter < filesystem_adapter_start() + filesystem_names().size()
 		return "trbn_filesystem_" + filesystem_names()[signature.adapter - filesystem_adapter_start()]
 	end
@@ -178,10 +186,21 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 			name = "trb/std/math.sqrt"
 			parameters = ["Float"]
 			result = "Float"
-		elsif signature.adapter == mir_adapter_runtime_fail() || signature.adapter == mir_adapter_runtime_recover()
+		elsif signature.adapter == test_adapter_capture()
+			name = "trb/internal/test.capture"
+			parameters = [callable_type([], "Void"), "String", "Integer", "Integer"]
+			result = signature.result_type
+			if !mir_test_outcome(native_module, result)
+				return "MIR test capture requires the exact managed outcome"
+			end
+		elsif signature.adapter == mir_adapter_runtime_fail() || signature.adapter == mir_adapter_runtime_recover() || signature.adapter == test_adapter_fail()
 			name = "trb/internal/runtime.fail"
 			parameters = ["String"]
 			result = signature.result_type
+			if signature.adapter == test_adapter_fail()
+				name = "trb/internal/test.fail"
+				parameters = ["String", "String", "Integer", "Integer"]
+			end
 			if signature.adapter == mir_adapter_runtime_recover()
 				name = "trb/internal/runtime.recover"
 				parameters = [callable_type([], result), result]
