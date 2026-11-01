@@ -32,6 +32,12 @@ def ordered_test_cases(state: CompilerState): Array<TestDeclaration>
 end
 
 def native_test_entry_source(state: CompilerState, cases: Array<TestDeclaration>, reporter: String): String
+	if cases.size() == 0
+		if reporter == "json"
+			return "def main()\nputs(\"{\\\"failed\\\":0,\\\"total\\\":0,\\\"type\\\":\\\"test_summary\\\"}\")\nend\n"
+		end
+		return "def main()\nputs(\"\")\nputs(\"0 test(s), 0 failure(s)\")\nend\n"
+	end
 	mut source := native_test_reporter_source() + "\ndef main()\nmut cases: Array<NativeTestCase> := []\n"
 	mut index := 0
 	cases.each do |item|
@@ -56,10 +62,6 @@ def append_native_test_runner(mut state: CompilerState, reporter: String): Boole
 		return false
 	end
 	cases := ordered_test_cases(state)
-	if cases.size() == 0
-		diagnostic(state, "TRBN4010", 1, "no tests found")
-		return false
-	end
 	mut host := -1
 	mut index := 0
 	while index < state.module_graph.module_count[0]
@@ -72,7 +74,7 @@ def append_native_test_runner(mut state: CompilerState, reporter: String): Boole
 		end
 		index += 1
 	end
-	if host < 0
+	if host < 0 && cases.size() > 0
 		diagnostic(state, "TRBN4003", 1, "test declarations require the standard test provider")
 		return false
 	end
