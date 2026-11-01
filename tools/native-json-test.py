@@ -377,7 +377,7 @@ def main()
     run(['/usr/bin/cc', assembly, '-lm', '-o', forced_program])
     assert run([forced_program]).stdout == '\n'.join(outputs) + '\n'
 
-    float_source = declarations + 'def main()\n' + '\n'.join(float_statements) + '\nend\n'
+    float_source = declarations.replace('import trb/std/jsonc\n', '') + 'def main()\n' + '\n'.join(float_statements) + '\nend\n'
     float_output = ''.join(text + '\n' for _token, text in float_output_pairs)
     main.write_text(float_source)
     if args.reference:
