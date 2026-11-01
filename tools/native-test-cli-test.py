@@ -99,7 +99,7 @@ def main():
             for name, value, index in (("array", "[1]", 2), ("string", '"one"', 4)):
                 (root / "src/main.trb").write_text(
                     f"def main()\n value := {value}\n puts(value[{index}])\nend\n")
-                result = run("terminal-bounds-" + name, ["run"], 1, stdout="")
+                result = run("terminal-bounds-" + name, ["run"], 2, stdout="")
                 assert result.stderr == "panic: index is out of bounds\n", rows[-1]
             if args.reference:
                 # Replay empty-file and suite rejection at the exact reference pin.
