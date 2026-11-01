@@ -7,12 +7,13 @@ import trb/internal/encoding_bytes as Octets
 module JSON
 end
 
-# Preserve raw numbers until the whole document is valid and duplicate object
-# keys have been resolved. Syntax errors precede value conversion errors.
+# Defer numeric conversion failures until syntax and duplicate keys are resolved.
+# Proven portable integer tokens can retain their value without a copied String.
 enum JsonNode
 	Null
 	Boolean(value: Boolean)
 	Number(text: String)
+	PortableInteger(value: Integer)
 	String(text: String)
 	Array(items_index: Integer)
 	Object(members_index: Integer)
@@ -426,40 +427,73 @@ def _digits(mut parser: JsonParser)
 	parser.position = position
 end
 
-def _number(mut parser: JsonParser): String
+def _number(mut parser: JsonParser): JsonNode
 	start := parser.position
-	if _byte(parser) == 45
+	negative := _byte(parser) == 45
+	if negative
 		parser.position += 1
 	end
 	if !_digit(_byte(parser))
 		_bad(parser, "in numeric literal")
-		return ""
+		return JsonNode::Null
 	end
+	mut integer := 0
+	mut portable_integer := true
 	if _byte(parser) == 48
 		parser.position += 1
 	else
-		_digits(parser)
+		bytes := parser.bytes
+		finish := bytes.size()
+		mut position := parser.position
+		# 2^53 - 1 is 9007199254740991. Check its decimal prefix before
+		# multiplying so arbitrary-length numeric tokens cannot overflow.
+		largest_prefix := 900719925474099
+		largest_final_digit := 1
+		while position < finish
+			character := bytes.at(position)
+			if character < 48 || character > 57
+				break
+			end
+			digit := character - 48
+			if portable_integer
+				if integer > largest_prefix || (integer == largest_prefix && digit > largest_final_digit)
+					portable_integer = false
+				else
+					integer = integer * 10 + digit
+				end
+			end
+			position += 1
+		end
+		parser.position = position
 	end
 	if _byte(parser) == 46
+		portable_integer = false
 		parser.position += 1
 		if !_digit(_byte(parser))
 			_bad(parser, "in numeric literal")
-			return ""
+			return JsonNode::Null
 		end
 		_digits(parser)
 	end
 	if _byte(parser) == 101 || _byte(parser) == 69
+		portable_integer = false
 		parser.position += 1
 		if _byte(parser) == 43 || _byte(parser) == 45
 			parser.position += 1
 		end
 		if !_digit(_byte(parser))
 			_bad(parser, "in numeric literal")
-			return ""
+			return JsonNode::Null
 		end
 		_digits(parser)
 	end
-	return _source_slice(parser, start, parser.position)
+	if portable_integer
+		if negative
+			integer = -integer
+		end
+		return JsonNode::PortableInteger(integer)
+	end
+	return JsonNode::Number(_source_slice(parser, start, parser.position))
 end
 
 def _literal(mut parser: JsonParser, literal: String)
@@ -494,7 +528,7 @@ def _atom(mut parser: JsonParser, depth: Integer): Integer
 		_literal(parser, text)
 		node = JsonNode::Boolean(character == 116)
 	elsif character == 45 || _digit(character)
-		node = JsonNode::Number(_number(parser))
+		node = _number(parser)
 	elsif character == 91 || character == 123
 		if depth >= 10000
 			_syntax(parser, "exceeded max depth", parser.position)
@@ -628,6 +662,8 @@ def _atomic_value(node: JsonNode): Result<PublicJSON::Value, PublicJSON::Error>
 		return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::Null)
 	when JsonNode::Boolean(boolean)
 		return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::Boolean(boolean))
+	when JsonNode::PortableInteger(integer)
+		return Result<PublicJSON::Value, PublicJSON::Error>::Ok(PublicJSON::Value::Integer(integer))
 	when JsonNode::Number(text)
 		case text.try_to_f()
 		when Result::Ok(number)
@@ -811,6 +847,8 @@ def parse(source: String): Result<PublicJSON::Value, PublicJSON::Error>
 		when JsonNode::Boolean(_boolean)
 			name = "bool"
 		when JsonNode::Number(_text)
+			name = "number"
+		when JsonNode::PortableInteger(_integer)
 			name = "number"
 		when JsonNode::String(_text)
 			name = "string"
@@ -996,6 +1034,16 @@ def _floating(number: Float): String
 		return "0"
 	end
 	fixed := number.to_s()
+	magnitude := number.abs()
+	# JSON uses fixed notation in [1e-6, 1e21).
+	fixed_minimum := 0.000001
+	fixed_limit := 1000000000000000000000.0
+	if magnitude >= fixed_minimum && magnitude < fixed_limit
+		if fixed.end_with?(".0")
+			return _slice(fixed, 0, fixed.size() - 2)
+		end
+		return fixed
+	end
 	mut sign := ""
 	mut start := 0
 	if number < 0.0
@@ -1005,12 +1053,6 @@ def _floating(number: Float): String
 	mut point := start
 	while point < fixed.size() && fixed[point] != "."
 		point += 1
-	end
-	if number.abs() >= 0.000001 && number.abs() < "1e21".to_f()
-		if point + 2 == fixed.size() && fixed[point + 1] == "0"
-			return _slice(fixed, 0, point)
-		end
-		return fixed
 	end
 	mut digits := ""
 	mut first := -1
