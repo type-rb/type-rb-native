@@ -186,6 +186,9 @@ end
 '''
 
 
+SCALARS = 'import { describe, expect, test } from trb/std/test\ndef helper()\n expect(10).to_equal(11)\nend\ndescribe("Scalars") do\n test("success") do\n  expect(1).to_equal(1)\n  expect(1).to_not_equal(2)\n  expect(true).to_be_true()\n  expect(false).to_be_false()\n  expect(nil).to_be_nil()\n end\n test("equality") do\n  expect(1).to_equal(2)\n end\n test("inequality") do\n  expect(3).to_not_equal(3)\n end\n test("Boolean") do\n  expect(true).to_be_false()\n end\n test("type") do\n  expect(1).to_be_true()\n end\n test("nil") do\n  expect(5).to_be_nil()\n end\n test("helper") do\n  helper()\n end\n test("continued") do\n  expect(false).to_equal(false)\n end\nend\n'
+
+
 def replay(binary, root, source, wanted_failures, total):
     (root / "src/sample_test.trb").write_text(source)
     result = subprocess.run([str(binary), "test", "--reporter", "json"], cwd=root,
@@ -212,6 +215,7 @@ def main():
     parser.add_argument("--reference", type=Path, required=True)
     parser.add_argument("--native", type=Path)
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--group", choices=("values", "origins", "dynamic", "scalars"))
     args = parser.parse_args()
     rows = []
     with tempfile.TemporaryDirectory(prefix="native-test-values-") as directory:
@@ -223,7 +227,10 @@ def main():
         }) + "\n")
         for name, source, failures, total in (("values", VALUES, 0, 9),
                                              ("origins", ORIGINS, 8, 9),
-                                             ("dynamic", DYNAMIC, 0, 5)):
+                                             ("dynamic", DYNAMIC, 0, 5),
+                                             ("scalars", SCALARS, 6, 8)):
+            if args.group and args.group != name:
+                continue
             config = json.loads((root / "trbconfig.jsonc").read_text())
             config["mode"] = "go"
             (root / "trbconfig.jsonc").write_text(json.dumps(config) + "\n")

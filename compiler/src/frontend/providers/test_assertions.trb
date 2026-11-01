@@ -1,0 +1,58 @@
+import { install_test_body } from frontend/providers/test_origins
+import { CompilerState, diagnostic } from state/state
+import { integer_string } from support/literals
+
+# These scalar forms have exact reference diagnostics. Unsupported renderers
+# remain explicit errors until their value-display contract is implemented.
+def test_scalar_assertion_body(kind: Integer, target: String): String
+	if kind < 10 || kind > 14 || (target != "Integer" && target != "Boolean" && target != "Nil")
+		return ""
+	end
+	mut actual := "actual.to_s()"
+	mut expected := "expected.to_s()"
+	if target == "Nil"
+		actual = "\"<nil>\""
+		expected = actual
+	end
+	mut condition := "false"
+	mut message := ""
+	if kind == 10 || kind == 11
+		condition = "deep_equal<" + target + ">(actual, expected)"
+		mut relation := " to equal "
+		if kind == 11
+			condition = "!" + condition
+			relation = " not to equal "
+		end
+		message = "\"expected \" + " + actual + " + \"" + relation + "\" + " + expected
+	elsif kind == 12 || kind == 13
+		mut wanted := "true"
+		if kind == 13
+			wanted = "false"
+		end
+		if target == "Boolean"
+			condition = "actual == " + wanted
+		end
+		message = "\"expected \" + " + actual + " + \" to be " + wanted + "\""
+	else
+		if target == "Nil"
+			condition = "true"
+		end
+		message = "\"expected \" + " + actual + " + \" to be nil\""
+	end
+	return "if " + condition + "\nreturn\nend\nfail<Integer>(" + message + ", path, line, column)\nend\n"
+end
+
+def specialize_test_assertion(mut state: CompilerState, function: Integer, arguments: Array<String>, kind: Integer, line: Integer): Boolean
+	if state.type_resolution.generic_template_mode[0]
+		return true
+	end
+	mut body := ""
+	if arguments.size() == 1
+		body = test_scalar_assertion_body(kind, arguments[0])
+	end
+	if body == ""
+		diagnostic(state, "TRBN4003", line, "test assertion requires an implemented value comparator and inspector")
+		return false
+	end
+	return install_test_body(state, function, "$test_assertion" + integer_string(function), body)
+end
