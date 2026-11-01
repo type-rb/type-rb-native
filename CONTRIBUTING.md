@@ -166,7 +166,7 @@ For any compiler-source edit, also check the recovery snapshot subset before
 publishing. This quick check uses the same canonical source copy and snapshot
 version as CI, and catches syntax that ordinary Native regeneration accepts but
 the recovery compiler cannot yet read. It also checks the exported file size
-against the compiler-only input bound in the recovery decoder:
+and source, type and function counts against the recovery decoder's bounds:
 
 ```sh
 tools/check-bootstrap-snapshot.sh /path/to/pinned/trb

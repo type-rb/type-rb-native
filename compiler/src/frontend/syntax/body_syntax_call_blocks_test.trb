@@ -71,4 +71,31 @@ describe("Statement call block syntax") do
 			expect(parse_module(state, 0, state.module_graph.entry_module[0])).to_be_false()
 		end
 	end
+
+	test("preserves iteration diagnostics instead of attaching a generic body") do
+		headers := ["{a: 1}.each(1)", "[1].each&.with_index", "[1].map&.with_index", "[1].each_slice(2)&.with_index"]
+		headers.each do |header|
+			["{ |value, index| puts(value) }", "do |value, index|\nputs(value)\nend"].each do |block|
+				source := "def main()\n" + header + " " + block + "\nend\n"
+				mut state := compiler_new_with_mode(source.size() + 1, false)
+				expect(lex(state, source)).to_be_true()
+				expect(parse_module(state, 0, state.module_graph.entry_module[0])).to_be_false()
+				expect(state.callables.call_blocks.size()).to_equal(0)
+				mut delimiter := "do"
+				if block[0] == "{"
+					delimiter = "{"
+				end
+				expect(load_string(state.diagnostics.messages, 0)).to_equal("unexpected token " + delimiter + " after statement")
+			end
+		end
+	end
+
+	test("keeps ordinary iteration-named methods without bodies syntactically valid") do
+		["receiver.each(1)", "receiver.each_slice(2)", "receiver.with_index(3)"].each do |call|
+			source := "def main()\n" + call + "\nend\n"
+			mut state := compiler_new_with_mode(source.size() + 1, false)
+			expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
+			expect(state.callables.call_blocks.size()).to_equal(0)
+		end
+	end
 end
