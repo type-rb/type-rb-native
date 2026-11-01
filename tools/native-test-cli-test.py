@@ -86,7 +86,7 @@ def main():
             run("failed-build", ["test", "--compile", "--outfile", "tests-bin"], 1)
             assert (root / "tests-bin").read_bytes() == previous, "failed compile replaced output"
             (root / "src/a_test.trb").unlink()
-            run("no-tests", ["test"], 1, contains="no tests found")
+            run("no-tests", ["test"], 1, contains="no *_test.trb files found")
         finally:
             if args.report:
                 args.report.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n")
