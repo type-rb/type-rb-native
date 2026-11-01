@@ -191,8 +191,8 @@ def replay(binary, root, source, wanted_failures, total):
     result = subprocess.run([str(binary), "test", "--reporter", "json"], cwd=root,
                             env=dict(os.environ, NO_COLOR="1", TERM="dumb"),
                             text=True, capture_output=True, timeout=180)
-    stdout = result.stdout.replace(str(root), "<project>")
-    stderr = result.stderr.replace(str(root), "<project>")
+    stdout = result.stdout.replace(str(root.resolve()), "<project>").replace(str(root), "<project>")
+    stderr = result.stderr.replace(str(root.resolve()), "<project>").replace(str(root), "<project>")
     events = [json.loads(line) for line in stdout.splitlines()]
     assert result.returncode == int(wanted_failures > 0), (result.returncode, stdout, stderr)
     assert len(events) == total * 2 + 1, (stdout, stderr)
@@ -258,47 +258,79 @@ end
 '''
 
 
+GROUPS = (("values", VALUES, 0, 9), ("origins", ORIGINS, 8, 9),
+          ("dynamic", DYNAMIC, 0, 5), ("scalars", SCALARS, 6, 8),
+          ("traps", TRAPS, 2, 3), ("results", RESULTS, 2, 6))
+ROOT = Path(__file__).resolve().parent.parent
+CONTRACT = ROOT / "fixtures/projects/native-test-values.json"
+
+
+def load_contract(path=CONTRACT):
+    contract = json.loads(path.read_text())
+    if contract["schemaVersion"] != 1 or contract["typeRBRevision"] != (ROOT / "TYPE_RB_REVISION").read_text().strip():
+        raise ValueError("test value contract requires an explicit current-pin replay")
+    groups = contract["groups"]
+    if set(groups) != {name for name, _, _, _ in GROUPS}:
+        raise ValueError("test value contract must retain every required group")
+    for name, source, failures, total in GROUPS:
+        row = groups[name]
+        if row["sourceSha256"] != hashlib.sha256(source.encode()).hexdigest():
+            raise ValueError("test source changed without a reference replay: " + name)
+        if row["code"] != int(failures > 0) or len(row["events"]) != total * 2 + 1:
+            raise ValueError("test value contract count or status changed: " + name)
+        if row["events"][-1] != {"type": "test_summary", "total": total, "failed": failures}:
+            raise ValueError("test value contract summary changed: " + name)
+    return groups
+
+
+def compare_observation(name, observed, expected, native=False):
+    for key in ("code", "events", "sourceSha256"):
+        if observed[key] != expected[key]:
+            raise ValueError(f"{name}: {key} differs from the frozen reference observation: {observed}")
+    if native and observed["stderr"] != "":
+        raise ValueError(f"{name}: unexpected Native stderr: {observed['stderr']}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--reference", type=Path, required=True)
+    parser.add_argument("--reference", type=Path)
     parser.add_argument("--native", type=Path)
     parser.add_argument("--report", type=Path)
-    parser.add_argument("--group", choices=("values", "origins", "dynamic", "scalars", "traps", "results"))
+    parser.add_argument("--group", choices=tuple(row[0] for row in GROUPS))
     args = parser.parse_args()
+    if not args.reference and not args.native:
+        parser.error("at least one of --reference or --native is required")
+    contract = load_contract()
     rows = []
-    with tempfile.TemporaryDirectory(prefix="native-test-values-") as directory:
-        root = Path(directory)
-        (root / "src").mkdir()
-        (root / "trbconfig.jsonc").write_text(json.dumps({
-            "name": "test-values", "mode": "go", "sourceDir": "src",
-            "go": {"module": "example.com/test-values"},
-        }) + "\n")
-        for name, source, failures, total in (("values", VALUES, 0, 9),
-                                             ("origins", ORIGINS, 8, 9),
-                                             ("dynamic", DYNAMIC, 0, 5),
-                                             ("scalars", SCALARS, 6, 8),
-                                             ("traps", TRAPS, 2, 3),
-                                             ("results", RESULTS, 2, 6)):
-            if args.group and args.group != name:
-                continue
-            config = json.loads((root / "trbconfig.jsonc").read_text())
-            config["mode"] = "go"
-            (root / "trbconfig.jsonc").write_text(json.dumps(config) + "\n")
-            reference = replay(args.reference.resolve(), root, source, failures, total)
-            row = {"id": name, "reference": reference}
-            if args.native:
-                config["mode"] = "trb"
-                (root / "trbconfig.jsonc").write_text(json.dumps(config) + "\n")
-                native = replay(args.native.resolve(), root, source, failures, total)
-                # Different Go wrapper stderr is not a Native runtime obligation.
-                assert native["events"] == reference["events"], (name, reference, native)
-                row["native"] = native
-            rows.append(row)
-    report = {"scope": "additional equality and origin controls; historical manifest unchanged",
-              "observations": rows}
-    if args.report:
-        args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-    print(f"PASS {len(rows)} test-value groups ({'differential' if args.native else 'reference only'})")
+    try:
+        with tempfile.TemporaryDirectory(prefix="native-test-values-") as directory:
+            root = Path(directory)
+            (root / "src").mkdir()
+            for name, source, failures, total in GROUPS:
+                if args.group and args.group != name:
+                    continue
+                row = {"id": name}
+                rows.append(row)
+                for label, binary, mode in (("reference", args.reference, "go"),
+                                             ("native", args.native, "trb")):
+                    if not binary:
+                        continue
+                    (root / "trbconfig.jsonc").write_text(json.dumps({
+                        "name": "test-values", "mode": mode, "sourceDir": "src",
+                        "go": {"module": "example.com/test-values"},
+                    }) + "\n")
+                    observed = replay(binary.resolve(), root, source, failures, total)
+                    row[label] = observed
+                    compare_observation(name, observed, contract[name], label == "native")
+    finally:
+        if args.report:
+            args.report.write_text(json.dumps({
+                "scope": "additional frozen value/origin controls; historical manifest unchanged",
+                "contractSha256": hashlib.sha256(CONTRACT.read_bytes()).hexdigest(),
+                "observations": rows,
+            }, ensure_ascii=False, indent=2) + "\n")
+    modes = "/".join(label for label, binary in (("reference", args.reference), ("native", args.native)) if binary)
+    print(f"PASS {len(rows)} frozen test-value groups ({modes})")
 
 
 if __name__ == "__main__":

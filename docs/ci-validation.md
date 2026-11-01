@@ -179,6 +179,11 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    name-filter deferral is reported separately and never counts as passing
    parity. Additional CLI and value controls exercise selection, event order,
    continuation, standalone output preservation and managed assertion payloads.
+   `fixtures/projects/native-test-values.json` freezes reference value events
+   with the exact pin and source hashes. Quick feedback replays every group
+   against the reference; CLI jobs can verify supported groups without a
+   reference executable. Source or pin changes require a new reference replay
+   and review of the recorded observations before updating this contract.
 4. **Acceptance.** `Native CI acceptance` checks every planned authority,
    including tooling and CLI. A tiered PR summary states that the deferred
    lanes run on main after merge. Failed, cancelled, missing or skipped required

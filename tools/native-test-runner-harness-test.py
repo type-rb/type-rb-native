@@ -4,6 +4,8 @@
 import copy
 import importlib.util
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +13,9 @@ from pathlib import Path
 spec = importlib.util.spec_from_file_location("native_test_runner", Path(__file__).with_name("native-test-runner-test.py"))
 runner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runner)
+values_spec = importlib.util.spec_from_file_location("native_test_values", Path(__file__).with_name("native-test-values-test.py"))
+values = importlib.util.module_from_spec(values_spec)
+values_spec.loader.exec_module(values)
 
 
 class AcceptanceTest(unittest.TestCase):
@@ -77,6 +82,66 @@ class AcceptanceTest(unittest.TestCase):
                 path.write_text(json.dumps(variant))
                 with self.assertRaises(ValueError):
                     runner.load_manifest(path)
+
+
+class ValueContractTest(unittest.TestCase):
+    def test_frozen_value_groups_retain_exact_sources_and_counts(self):
+        contract = values.load_contract()
+        self.assertEqual(set(contract), {row[0] for row in values.GROUPS})
+
+    def test_missing_group_changed_source_and_status_fail_closed(self):
+        baseline = json.loads(values.CONTRACT.read_text())
+        variants = []
+        missing = copy.deepcopy(baseline)
+        del missing["groups"]["results"]
+        variants.append(missing)
+        changed = copy.deepcopy(baseline)
+        changed["groups"]["scalars"]["sourceSha256"] = "0" * 64
+        variants.append(changed)
+        status = copy.deepcopy(baseline)
+        status["groups"]["scalars"]["code"] = 0
+        variants.append(status)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "contract.json"
+            for variant in variants:
+                path.write_text(json.dumps(variant))
+                with self.assertRaises(ValueError):
+                    values.load_contract(path)
+
+    def test_events_origins_and_native_stderr_are_required(self):
+        expected = values.load_contract()["scalars"]
+        observed = dict(copy.deepcopy(expected), stderr="")
+        values.compare_observation("scalars", observed, expected, native=True)
+        del observed["events"][0]["column"]
+        with self.assertRaises(ValueError):
+            values.compare_observation("scalars", observed, expected, native=True)
+        observed = dict(copy.deepcopy(expected), stderr="exit status 1\n")
+        with self.assertRaises(ValueError):
+            values.compare_observation("scalars", observed, expected, native=True)
+
+    def test_native_only_controller_needs_no_reference_executable(self):
+        # Synthetic orchestration control, not compiler/runtime feature evidence.
+        expected = values.load_contract()["scalars"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake = root / "native"
+            fake.write_text("#!" + sys.executable + "\nimport hashlib,json,sys\nfrom pathlib import Path\n"
+                            "assert sys.argv[1:] == ['test','--reporter','json']\n"
+                            "assert json.loads(Path('trbconfig.jsonc').read_text())['mode'] == 'trb'\n"
+                            "assert hashlib.sha256(Path('src/sample_test.trb').read_bytes()).hexdigest() == "
+                            + repr(expected["sourceSha256"]) + "\n"
+                            "events = " + repr(expected["events"]) + "\n"
+                            "for event in events: print(json.dumps(event))\n"
+                            "raise SystemExit(" + str(expected["code"]) + ")\n")
+            fake.chmod(0o755)
+            report = root / "report.json"
+            result = subprocess.run([sys.executable, str(values.ROOT / "tools/native-test-values-test.py"),
+                                     "--native", str(fake), "--group", "scalars", "--report", str(report)],
+                                    capture_output=True, text=True, timeout=20)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            row = json.loads(report.read_text())["observations"][0]
+            self.assertNotIn("reference", row)
+            self.assertEqual(row["native"]["events"], expected["events"])
 
 
 if __name__ == "__main__":
