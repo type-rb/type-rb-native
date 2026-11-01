@@ -172,6 +172,13 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    wall time on passing PRs but may use more runner time on a failing quick job.
    Development drafts retain source/CLI checks in quick feedback and defer the
    complete jobs.
+   The project-test contract runs against the pinned reference in quick feedback
+   and against the ordinary Native compiler in both CLI artifact jobs. Its
+   reviewed manifest preserves exact failure categories and source locations;
+   unrelated compilation errors cannot pass negative cases. The approved
+   name-filter deferral is reported separately and never counts as passing
+   parity. Additional CLI and value controls exercise selection, event order,
+   continuation, standalone output preservation and managed assertion payloads.
 4. **Acceptance.** `Native CI acceptance` checks every planned authority,
    including tooling and CLI. A tiered PR summary states that the deferred
    lanes run on main after merge. Failed, cancelled, missing or skipped required
