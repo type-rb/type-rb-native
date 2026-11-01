@@ -42,7 +42,9 @@ integer_strings = re.findall(r'^data \$trbn_small_integer_strings = [^\n]+\n.*?^
 assert len(integer_strings) == 1
 decimal_pairs = re.findall(r'^data \$trbn_decimal_pairs = [^\n]+', decoded, re.M)
 assert len(decimal_pairs) == 1
-il = ('export ' + error[0] + '\n' + storage[0] + '\n' + integer_strings[0] +
+ascii_strings = re.findall(r'^data \$string_byte_values = [^\n]+', decoded, re.M)
+assert len(ascii_strings) == 1
+il = (ascii_strings[0] + '\n' + 'export ' + error[0] + '\n' + storage[0] + '\n' + integer_strings[0] +
       '\n' + decimal_pairs[0] + '\n' + '\n'.join(bodies))
 observer = r'''
 #include <assert.h>
@@ -257,7 +259,16 @@ int main(int argc, char **argv) {
         char buffer[32]; int size = snprintf(buffer, sizeof buffer, "%lld", (long long)values[i]);
         expect(trbn_integer_to_string(values[i]), buffer, size, size); clear();
     }
-    expect(trbn_string_from_codepoint(0), "\0", 1, 1);
+    /* Cached ASCII construction must not depend on allocation or prior indexing. */
+    fail_allocation = 1;
+    for (int64_t point = 0; point < 128; ++point) {
+        unsigned char byte = (unsigned char)point;
+        struct string *value = trbn_string_from_codepoint(point);
+        assert(value->descriptor == 0);
+        expect_bytes(value, &byte, 1, 1);
+        assert(trbn_gc_allocated_bytes == 0);
+    }
+    fail_allocation = 0;
     expect(trbn_string_from_codepoint(0x7ff), "\xdf\xbf", 2, 1);
     expect(trbn_string_from_codepoint(0x3042), "\xe3\x81\x82", 3, 1);
     expect(trbn_string_from_codepoint(0x10ffff), "\xf4\x8f\xbf\xbf", 4, 1);
