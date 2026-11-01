@@ -87,6 +87,15 @@ translation unit with its generated compiler command and rejects any OpenSSL
 header outside the qualified source installation. The receipt records this
 header check as well as the static-link ABI probe.
 
+Source downloads use at most three attempts at the same pinned URL, retaining
+the 60-second socket timeout and waiting one, then two seconds between attempts.
+Only DNS, timeout, connection failures and HTTP 408/429/500/502/503/504 are
+retryable; each failed attempt is logged. Certificate failures, other HTTP
+errors, and archive size or SHA-256 mismatches fail immediately. A failed or
+partial download never replaces the cache, and an invalid existing cache is
+preserved and rejected. These retries do not change the dependency pins or
+artifact qualification checks.
+
 Contributor builds require a C toolchain, Perl, make and CMake:
 
 ```sh
