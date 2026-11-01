@@ -3,6 +3,7 @@ import { resolve } from frontend/checking/program/resolution
 import { project_packages_new } from project/packages
 import { append_native_test_runner } from project/test_runner
 import { has_diagnostic } from state/state
+import { load_integer, load_string } from support/storage
 import { expect_compiler_phase } from testing/pipeline
 import { output_source } from testing/compiler
 import { intrinsic_mir_erase } from testing/mir/intrinsics
@@ -12,6 +13,33 @@ import trb/std/process
 import trb/std/result
 
 describe("Standard scalar test assertions") do
+	test("reports the public assertion argument at its original token") do
+		["to_equal", "to_not_equal"].each do |method|
+			source := "import { describe, expect, test } from trb/std/test\n\ndescribe(\"Types\") do\n\ttest(\"mismatch\") do\n\t\texpect(1)." + method + "(\"one\")\n\tend\nend\n"
+			path := "/project/src/sample_test.trb"
+			mut state := load_package_project_sources_with_tests("/project/trbconfig.jsonc", CompilerProjectSources.new(paths: [path], sources: [source], error: ""), ["sample_test"], [-1], project_packages_new(""), false, false, [path])
+			expect_compiler_phase(state, "load", !has_diagnostic(state))
+			expect_compiler_phase(state, "runner", append_native_test_runner(state, "human"))
+			expect_compiler_phase(state, "resolve", resolve(state))
+			expect(check(state)).to_be_false()
+			expect(load_string(state.diagnostics.messages, 0)).to_equal("argument 1 to " + method + "() has type String, expected Integer")
+			expect(load_integer(state.diagnostics.lines, 0)).to_equal(5)
+			expect(load_integer(state.diagnostics.columns, 0)).to_equal(14 + method.size())
+		end
+	end
+
+	test("does not assign standard assertion diagnostics to an authored lookalike") do
+		source := "import { describe, test } from trb/std/test\nclass Expectation<T>\n def to_equal(value: T)\n end\nend\ndescribe(\"Types\") do\n test(\"mismatch\") do\n  Expectation<Integer>.new().to_equal(\"one\")\n end\nend\n"
+		path := "/project/src/sample_test.trb"
+		mut state := load_package_project_sources_with_tests("/project/trbconfig.jsonc", CompilerProjectSources.new(paths: [path], sources: [source], error: ""), ["sample_test"], [-1], project_packages_new(""), false, false, [path])
+		expect_compiler_phase(state, "load", !has_diagnostic(state))
+		expect_compiler_phase(state, "runner", append_native_test_runner(state, "human"))
+		expect_compiler_phase(state, "resolve", resolve(state))
+		expect(check(state)).to_be_false()
+		expect(load_string(state.diagnostics.messages, 0)).to_equal("expected Integer, found String")
+		expect(load_integer(state.diagnostics.lines, 0)).to_equal(8)
+	end
+
 	test("preserves public assertion failures origins and later cases under collection") do
 		source := "import { describe, expect, test } from trb/std/test\ndef helper()\n expect(10).to_equal(11)\nend\ndescribe(\"Scalars\") do\n test(\"success\") do\n  expect(1).to_equal(1)\n  expect(1).to_not_equal(2)\n  expect(true).to_be_true()\n  expect(false).to_be_false()\n  expect(nil).to_be_nil()\n end\n test(\"equality\") do\n  expect(1).to_equal(2)\n end\n test(\"inequality\") do\n  expect(3).to_not_equal(3)\n end\n test(\"Boolean\") do\n  expect(true).to_be_false()\n end\n test(\"type\") do\n  expect(1).to_be_true()\n end\n test(\"nil\") do\n  expect(5).to_be_nil()\n end\n test(\"helper\") do\n  helper()\n end\n test(\"continued\") do\n  expect(false).to_equal(false)\n end\nend\n"
 		path := "/project/src/sample_test.trb"

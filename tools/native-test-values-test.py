@@ -207,12 +207,28 @@ def replay(binary, root, source, wanted_failures, total):
             "sourceSha256": hashlib.sha256(source.encode()).hexdigest()}
 
 
+TRAPS = '''import { describe, test } from trb/std/test
+describe("Bounds") do
+    test("array") do
+        values := [1]
+        puts(values[2])
+    end
+    test("string") do
+        value := "one"
+        puts(value[4])
+    end
+    test("continued") do
+    end
+end
+'''
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reference", type=Path, required=True)
     parser.add_argument("--native", type=Path)
     parser.add_argument("--report", type=Path)
-    parser.add_argument("--group", choices=("values", "origins", "dynamic", "scalars"))
+    parser.add_argument("--group", choices=("values", "origins", "dynamic", "scalars", "traps"))
     args = parser.parse_args()
     rows = []
     with tempfile.TemporaryDirectory(prefix="native-test-values-") as directory:
@@ -225,7 +241,8 @@ def main():
         for name, source, failures, total in (("values", VALUES, 0, 9),
                                              ("origins", ORIGINS, 8, 9),
                                              ("dynamic", DYNAMIC, 0, 5),
-                                             ("scalars", SCALARS, 6, 8)):
+                                             ("scalars", SCALARS, 6, 8),
+                                             ("traps", TRAPS, 2, 3)):
             if args.group and args.group != name:
                 continue
             config = json.loads((root / "trbconfig.jsonc").read_text())

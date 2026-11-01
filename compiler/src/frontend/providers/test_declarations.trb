@@ -1,4 +1,5 @@
 import { GenericFunction, GenericParameter } from frontend/types/generic_model
+import { object_method_owner } from frontend/types/object_types
 import { standard_source_test, standard_source_test_host } from state/standard_source_kinds
 import { CompilerState } from state/state
 import { load_integer, load_string, sparse_integer_at } from support/storage
@@ -136,4 +137,38 @@ def test_provider_function(state: CompilerState, function: Integer): Integer
 		end
 	end
 	return 0
+end
+
+# Preserve the public assertion argument diagnostic without changing unrelated
+# call diagnostics or recognizing an authored method by its spelling alone.
+def test_assertion_argument_context(state: CompilerState, function: Integer, slot: Integer): String
+	if slot != 1 || function < 0 || function >= state.declarations.function_count[0]
+		return ""
+	end
+	if sparse_integer_at(state.standard_modules, load_integer(state.declarations.function_modules, function)) != standard_source_test()
+		return ""
+	end
+	state.type_resolution.generic_function_instances.each do |instance|
+		if instance.function == function
+			definition := instance.definition
+			row := state.type_resolution.generic_functions[definition]
+			if sparse_integer_at(state.standard_modules, row.source_id) != standard_source_test() || row.parameters.size() != 2
+				return ""
+			end
+			owner := object_method_owner(state, definition)
+			if owner < 0
+				return ""
+			end
+			object := state.nominal.objects[owner]
+			if object.name != "Expectation" || object.source_id != row.source_id || object.interface_type
+				return ""
+			end
+			object.methods.each do |method|
+				if method.generic_function == definition && !method.class_member && (method.name == "to_equal" || method.name == "to_not_equal")
+					return "argument 1 to " + method.name + "()"
+				end
+			end
+		end
+	end
+	return ""
 end

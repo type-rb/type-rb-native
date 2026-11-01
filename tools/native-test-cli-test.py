@@ -96,6 +96,11 @@ def main():
             run("no-tests", ["test"], 1, contains="no *_test.trb files found")
             run("no-tests-before-selection", ["test", "src/missing_test.trb"], 1,
                 contains="no *_test.trb files found")
+            for name, value, index in (("array", "[1]", 2), ("string", '"one"', 4)):
+                (root / "src/main.trb").write_text(
+                    f"def main()\n value := {value}\n puts(value[{index}])\nend\n")
+                result = run("terminal-bounds-" + name, ["run"], 1, stdout="")
+                assert result.stderr == "panic: index is out of bounds\n", rows[-1]
             if args.reference:
                 # Replay empty-file and suite rejection at the exact reference pin.
                 # The Native-only invocation still needs no reference compiler.
