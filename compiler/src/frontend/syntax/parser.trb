@@ -16,6 +16,7 @@ import { load_integer, load_string, sparse_string_at, store_integer, store_strin
 import { declaration_start } from frontend/syntax/syntax_forms
 import { parse_expression_syntax } from frontend/syntax/body_syntax
 import { parse_function, parse_global, parse_record } from frontend/syntax/declaration_syntax
+import { parse_test_declaration, test_declaration_name, test_import, test_namespace_import, test_syntax_error } from frontend/syntax/test_syntax
 
 def append_import(
 		mut state: CompilerState,
@@ -340,12 +341,17 @@ def parse_declaration(mut state: CompilerState, mut position: Array<Integer>): B
 end
 
 def parse_module(mut state: CompilerState, start: Integer, module_index: Integer): Boolean
+	return parse_module_with_tests(state, start, module_index, false)
+end
+
+def parse_module_with_tests(mut state: CompilerState, start: Integer, module_index: Integer, tests: Boolean): Boolean
 	state.module_graph.active_module[0] = module_index
 	state.global_bindings.declaration_owner[0] = ""
 	import_start := state.module_graph.import_count[0]
 	store_integer(state.module_graph.module_import_starts, module_index, import_start)
 	store_integer(state.module_graph.module_import_counts, module_index, 0)
 	mut position := [start]
+	test_start := state.parsed.tests.size()
 	skip_newlines(state, position)
 	while !terminal_token(state, position[0])
 		if token_is(state, position[0], "import")
@@ -357,6 +363,10 @@ def parse_module(mut state: CompilerState, start: Integer, module_index: Integer
 			else
 				parse_bare_import(state, position, line)
 			end
+		elsif tests && test_declaration_name(state, position[0]) != ""
+			parse_test_declaration(state, position, -1, "")
+		elsif tests && test_namespace_import(state) && test_import(state, "describe") < 0 && test_import(state, "test") < 0
+			return test_syntax_error(state, start, "test suites require named imports from trb/std/test")
 		else
 			parse_declaration(state, position)
 		end
@@ -375,6 +385,12 @@ def parse_module(mut state: CompilerState, start: Integer, module_index: Integer
 		module_index,
 		state.module_graph.import_count[0] - import_start,
 	)
+	if tests && test_namespace_import(state) && test_import(state, "describe") < 0 && test_import(state, "test") < 0
+		return test_syntax_error(state, start, "test suites require named imports from trb/std/test")
+	end
+	if tests && state.parsed.tests.size() == test_start
+		return test_syntax_error(state, start, "test files must declare at least one top-level describe() suite")
+	end
 	return true
 end
 
