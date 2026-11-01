@@ -344,6 +344,11 @@ retain bounded decoding; exactly one ASCII delimiter lets the runtime count only
 the shorter fragment and derive the larger count from the original String.
 All paths copy fragment bytes and preserve ordinary temporary roots and
 independent mutable result Arrays.
+Portable Integer conversion validates and accumulates digits in one bounded
+pass. After the portable magnitude overflows, a validation-only tail preserves
+invalid-format priority without further arithmetic. Failure leaves the output
+slot untouched.
+
 Snapshot
 aggregate recovery retains a separate heap-free layer, keeping record and
 tagged-value semantics independent of allocation strategy.

@@ -39,6 +39,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-raw-enum-test.py"
 subprocess.run([sys.executable, str(repository / "tools/native-generic-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-result-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-builtin-values-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-integer-parsing-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-alias-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-callable-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-constants-test.py"), str(binary)], check=True)
