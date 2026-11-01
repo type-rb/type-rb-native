@@ -126,6 +126,73 @@ saved-511
 """,
         ),
         (
+            'reuse',
+            """import trb/std/string_builder
+
+def main()
+	mut writer := StringBuilder.new()
+	mut shared := writer
+	mut saved: Array<String> := []
+	mut index := 0
+	while index < 256
+		writer.clear()
+		writer.append("a😀")
+		writer.append(index.to_s())
+		saved.push(shared.to_s())
+		shared.clear()
+		shared.append("Z")
+		index += 1
+	end
+	puts(saved[0])
+	puts(saved[255])
+	puts(writer.to_s())
+	puts(writer.size())
+	writer.clear()
+	puts(shared.empty?())
+	puts(shared.to_s().size())
+end
+""",
+            "a😀0\na😀255\nZ\n1\ntrue\n0\n",
+        ),
+        (
+            'ascii-codepoints',
+            """import trb/std/string_builder
+
+def main()
+	mut writer := StringBuilder.new()
+	mut shared := writer
+	mut saved: Array<String> := []
+	mut point := 0
+	while point < 128
+		writer.clear()
+		writer.append_codepoint(point)
+		saved.push(shared.to_s())
+		shared.clear()
+		shared.append_codepoint(127 - point)
+		point += 1
+	end
+	mut checksum := 0
+	point = 0
+	while point < 128
+		bytes := saved[point].to_bytes()
+		checksum += bytes.at(0)
+		if bytes.size() != 1 || bytes.at(0) != point
+			puts("mismatch")
+		end
+		point += 1
+	end
+	puts(checksum)
+	puts(writer.to_s().to_bytes().at(0))
+	writer.clear()
+	writer.append_codepoint(128)
+	writer.append_codepoint(1114111)
+	puts(writer.size())
+	puts(writer.to_s().to_bytes().size())
+end
+""",
+            "8128\n0\n2\n6\n",
+        ),
+        (
             'display',
             """import trb/std/string_builder
 def show(value: Any)
@@ -179,6 +246,33 @@ text!
         run([env["TRBN_QBE"], "-o", assembly, il])
         run(["cc", assembly, "-lm", "-o", tmp / "forced"])
         assert run([tmp / "forced"]).stdout == expected
+    # Clearing an unusually large buffer must not keep that storage alive.
+    # Inject a collection at the real clear boundary while the ordinary caller
+    # retains the builder; this checks traced ownership rather than host RSS.
+    for length in [0, 1, 64, 65, 4096]:
+        source = tmp / "clear-retention.trb"
+        source.write_text('import trb/std/string_builder\ndef main()\n'
+                          'mut writer := StringBuilder.new()\n'
+                          'writer.append("' + 'x' * length + '")\n'
+                          'writer.clear()\nputs(writer.empty?())\nend\n')
+        emitted = run([native, "--internal-driver", "emit-qbe", source]).stdout
+        function = re.search(r"^function \$trbn_builder_clear\([^\n]*\) \{.*?^\}",
+                             emitted, re.M | re.S)
+        assert function
+        limit = 256 if length <= 64 else 64
+        hook = (" call $trbn_gc_collect(w 0)\n"
+                " %retained_bytes =l loadl $trbn_gc_heap_bytes\n"
+                f" %bounded =w culel %retained_bytes, {limit}\n"
+                " jnz %bounded, @retention_ok, @retention_failed\n"
+                "@retention_failed\n call $abort()\n hlt\n@retention_ok\n")
+        changed = function[0].replace(" ret\n", hook + " ret\n")
+        assert changed != function[0]
+        il = tmp / "clear-retention.ssa"
+        il.write_text(emitted.replace(function[0], changed))
+        run([env["TRBN_QBE"], "-o", tmp / "clear-retention.s", il])
+        run(["cc", tmp / "clear-retention.s", "-lm", "-o", tmp / "clear-retention"])
+        assert run([tmp / "clear-retention"]).stdout == "true\n"
+
     # The private span operation is inaccessible to authored source. Alter only
     # one already checked application's call to exercise its defensive bounds.
     source = tmp / "span.trb"
