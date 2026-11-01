@@ -65,9 +65,26 @@ describe("Compiler-owned test declarations") do
 		expect(load_string(namespaced.diagnostics.messages, 0)).to_equal("test suites require named imports from trb/std/test")
 		empty := parsed_test_source(test_source_header())
 		expect(load_string(empty.diagnostics.messages, 0)).to_equal("test files must declare at least one top-level describe() suite")
-		forged := parsed_test_source("import { describe, test } from local/test\ndescribe(\"A\") do\nend\n")
+		forged := parsed_test_source("import { describe, test } from local/test\ndescribe(\"A\") do\ntest(\"B\") do\nreturn\nend\nend\n")
 		expect(has_diagnostic(forged)).to_be_true()
-		expect(forged.parsed.tests.size()).to_equal(0)
+		expect(load_string(forged.diagnostics.messages, 0)).to_equal("describe() requires a named import from trb/std/test")
+		bare := parsed_test_source("import trb/std/test\n")
+		expect(load_string(bare.diagnostics.messages, 0)).to_equal("test suites require named imports from trb/std/test")
+	end
+
+	test("resolves test imports after all declarations without accepting local names") do
+		body := "describe(\"A\") do\ntest(\"B\") do\nreturn\nend\nend\n"
+		state := parsed_test_source(body + test_source_header())
+		expect(has_diagnostic(state)).to_be_false()
+		expect(state.parsed.tests.size()).to_equal(2)
+		expect(load_integer(state.module_graph.import_used, 0)).to_equal(1)
+		expect(load_integer(state.module_graph.import_used, 1)).to_equal(1)
+		missing := parsed_test_source(body + "import { describe, test } from local/test\n")
+		expect(has_diagnostic(missing)).to_be_true()
+		aliased := parsed_test_source(body + "import { describe as suite, test } from trb/std/test\n")
+		expect(has_diagnostic(aliased)).to_be_true()
+		index_path := parsed_test_source(body + "import { describe, test } from trb/std/test/index\n")
+		expect(has_diagnostic(index_path)).to_be_false()
 	end
 
 	test("rejects duplicate full names within a source") do

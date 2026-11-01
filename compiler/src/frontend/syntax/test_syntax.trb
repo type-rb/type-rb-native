@@ -7,8 +7,8 @@ import { token_kind_string } from state/token_kinds
 import { CompilerState, diagnostic_at, function_index_key, has_diagnostic, terminal_token } from state/state
 import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from support/storage
 
-# Only exact standard imports nominate DSL syntax. Later import resolution
-# still verifies the loader-owned declaration; names alone grant no authority.
+# Imports are validated after parsing the entire test file, so their source
+# order does not affect discovery. Resolution still checks declaration identity.
 def test_import(state: CompilerState, name: String): Integer
 	mut index := state.module_graph.import_count[0] - 1
 	while index >= 0
@@ -40,13 +40,34 @@ def test_namespace_import(state: CompilerState): Boolean
 end
 
 def test_declaration_name(state: CompilerState, origin: Integer): String
-	if token_is(state, origin, "describe") && test_import(state, "describe") >= 0
+	if !token_is(state, origin + 1, "(")
+		return ""
+	end
+	if token_is(state, origin, "describe")
 		return "describe"
 	end
-	if token_is(state, origin, "test") && test_import(state, "test") >= 0
+	if token_is(state, origin, "test")
 		return "test"
 	end
 	return ""
+end
+
+def validate_test_imports(mut state: CompilerState, start: Integer): Boolean
+	mut index := start
+	while index < state.parsed.tests.size()
+		item := state.parsed.tests[index]
+		mut name := "describe"
+		if item.function_id >= 0
+			name = "test"
+		end
+		binding := test_import(state, name)
+		if binding < 0
+			return test_syntax_error(state, item.origin, name + "() requires a named import from trb/std/test")
+		end
+		store_integer(state.module_graph.import_used, binding, 1)
+		index += 1
+	end
+	return true
 end
 
 def test_syntax_error(mut state: CompilerState, origin: Integer, message: String): Boolean
@@ -81,7 +102,6 @@ def parse_test_declaration(mut state: CompilerState, mut position: Array<Integer
 	if kind == "test" && parent < 0
 		return test_syntax_error(state, origin, "test() must be nested inside describe()")
 	end
-	store_integer(state.module_graph.import_used, test_import(state, kind), 1)
 	advance(position)
 	if !expect(state, position, "(")
 		return false
