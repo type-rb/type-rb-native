@@ -82,6 +82,10 @@ build may leave a lock that must be inspected before removing it.
 ./trbn build --compile
 ./trbn build --compile --outfile bin/example
 ./trbn run
+./trbn test
+./trbn test src/domain src/requests_test.trb
+./trbn test --reporter json
+./trbn test --compile --outfile bin/project-tests
 ./trbn /path/to/standalone.trb -- "program argument"
 ./trbn repl
 ./trbn web openapi --output docs/openapi.json
@@ -94,6 +98,41 @@ For standalone files, paths are relative to the entry file's directory and
 its basename supplies the project name. `--outfile` is for executable builds.
 `run` builds in a temporary directory, forwards arguments after `--`, and
 returns the program's exit status. Failed builds preserve an existing output.
+
+`test` discovers `*_test.trb` files recursively under the configured `sourceDir`.
+Positional files and directories select tests relative to the current directory;
+overlapping selections run each file once. Production sources remain available
+for imports, but unselected test bodies are not loaded. Tests execute in file
+order and then declaration order, without invoking the application's `main`.
+Selected test files must declare a top-level `describe` suite, and suites must
+contain a `test` or nested suite. Missing files and empty suites are errors.
+
+The human reporter prints each outcome and a summary. `--reporter json` emits
+one JSON object per event: `test_started`, `test_passed`, `test_failed`, and
+`test_summary`. Test-written output still goes to the same stdout stream.
+Assertion failures retain their call location; supported runtime failures use
+the test declaration's location. Later cases continue after a caught failure,
+and the process exits with status 1 if any case failed. Fatal runtime failures
+remain terminal. Tests share one compiled process and its module state.
+
+`test --compile` writes a standalone test executable to
+`bin/<project-name>.test` by default. `--outfile` chooses another location,
+relative to the current directory. Compile mode cannot be combined with path
+selection or the JSON reporter. Compilation checks the complete selected source
+before replacing an existing output; temporary build files are removed after
+execution or a failed build. Test compilation uses the same QBE, C driver and
+package dependency installations as application compilation.
+
+Name selection with `-t` or `--test-name-pattern` is an
+[approved v0.5 deferral](https://github.com/type-rb/type-rb-native/issues/643).
+Both flags report an error directing the caller to file or directory selection.
+`test --debug` and test execution in source-backend modes remain unavailable.
+Assertion implementation is still incomplete: Integer, Boolean and Nil scalar
+assertions are supported. `expect_ok` and `expect_err` can return managed payloads
+when the opposite variant's payload is an Integer, Boolean or Nil. Other payload
+inspectors remain explicit compilation errors. Full test-command parity is tracked in
+[#624](https://github.com/type-rb/type-rb-native/issues/624), with value-display
+semantics discussed in [#1294](https://github.com/type-rb/type-rb-native/issues/1294).
 
 Configuration discovery searches from the source file/directory, or the
 current directory when no source is given, upwards for `trbconfig.jsonc`.

@@ -207,6 +207,43 @@ def replay(binary, root, source, wanted_failures, total):
             "sourceSha256": hashlib.sha256(source.encode()).hexdigest()}
 
 
+RESULTS = '''import { describe, expect, expect_err, expect_ok, test } from trb/std/test
+import trb/std/result
+
+describe("Results") do
+    test("managed Ok payload") do
+        values := expect_ok(Result<Array<Integer>, Integer>::Ok([7, 8]))
+        expect(values.size()).to_equal(2)
+        expect(values[1]).to_equal(8)
+    end
+    test("managed Err payload") do
+        values := expect_err(Result<Boolean, Array<Integer>>::Err([3, 4]))
+        expect(values.size()).to_equal(2)
+        expect(values[0]).to_equal(3)
+    end
+    test("scalar payloads") do
+        expect(expect_ok(Result<Boolean, Integer>::Ok(true))).to_be_true()
+        expect(expect_err(Result<Integer, Nil>::Err(nil))).to_be_nil()
+    end
+    test("unexpected Err") do
+        _value := expect_ok(Result<Integer, Boolean>::Err(false))
+    end
+    test("unexpected Ok") do
+        _value := expect_err(Result<Integer, Integer>::Ok(9))
+    end
+    test("unexpected Nil Err") do
+        _value := expect_ok(Result<Integer, Nil>::Err(nil))
+    end
+    test("unexpected Nil Ok") do
+        _value := expect_err(Result<Nil, Integer>::Ok(nil))
+    end
+    test("continued") do
+        expect(1).to_equal(1)
+    end
+end
+'''
+
+
 TRAPS = '''import { describe, test } from trb/std/test
 describe("Bounds") do
     test("array") do
@@ -228,7 +265,7 @@ def main():
     parser.add_argument("--reference", type=Path, required=True)
     parser.add_argument("--native", type=Path)
     parser.add_argument("--report", type=Path)
-    parser.add_argument("--group", choices=("values", "origins", "dynamic", "scalars", "traps"))
+    parser.add_argument("--group", choices=("values", "origins", "dynamic", "scalars", "traps", "results"))
     args = parser.parse_args()
     rows = []
     with tempfile.TemporaryDirectory(prefix="native-test-values-") as directory:
@@ -242,7 +279,8 @@ def main():
                                              ("origins", ORIGINS, 8, 9),
                                              ("dynamic", DYNAMIC, 0, 5),
                                              ("scalars", SCALARS, 6, 8),
-                                             ("traps", TRAPS, 2, 3)):
+                                             ("traps", TRAPS, 2, 3),
+                                             ("results", RESULTS, 4, 8)):
             if args.group and args.group != name:
                 continue
             config = json.loads((root / "trbconfig.jsonc").read_text())

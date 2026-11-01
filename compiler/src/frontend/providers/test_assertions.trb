@@ -1,18 +1,25 @@
 import { install_test_body } from frontend/providers/test_origins
+import { TypeAlias } from frontend/types/alias_model
 import { CompilerState, diagnostic } from state/state
 import { integer_string } from support/literals
+import { load_integer } from support/storage
+
+def test_scalar_inspection(target: String, name: String): String
+	if target == "Nil"
+		return "\"<nil>\""
+	elsif target == "Integer" || target == "Boolean"
+		return name + ".to_s()"
+	end
+	return ""
+end
 
 # These scalar forms have exact reference diagnostics. Unsupported renderers
 # remain explicit errors until their value-display contract is implemented.
 def test_scalar_assertion_body(kind: Integer, target: String): String
-	if kind < 10 || kind > 14 || (target != "Integer" && target != "Boolean" && target != "Nil")
+	actual := test_scalar_inspection(target, "actual")
+	expected := test_scalar_inspection(target, "expected")
+	if kind < 10 || kind > 14 || actual == ""
 		return ""
-	end
-	mut actual := "actual.to_s()"
-	mut expected := "expected.to_s()"
-	if target == "Nil"
-		actual = "\"<nil>\""
-		expected = actual
 	end
 	mut condition := "false"
 	mut message := ""
@@ -42,17 +49,45 @@ def test_scalar_assertion_body(kind: Integer, target: String): String
 	return "if " + condition + "\nreturn\nend\nfail<Integer>(" + message + ", path, line, column)\nend\n"
 end
 
+# The successful payload retains its actual type, including managed values.
+# Only the opposite variant needs an inspector for a failure diagnostic.
+def test_result_assertion_body(kind: Integer, arguments: Array<String>): String
+	mut opposite := arguments[1]
+	mut wanted := "Ok"
+	mut unexpected := "Err"
+	mut result_type := "Target"
+	if kind == 16
+		opposite = arguments[0]
+		wanted = "Err"
+		unexpected = "Ok"
+		result_type = "Error"
+	end
+	inspected := test_scalar_inspection(opposite, "value")
+	if inspected == ""
+		return ""
+	end
+	return "case actual\nwhen Result::" + wanted + "(value)\nreturn value\nwhen Result::" + unexpected + "(value)\nreturn fail<" + result_type + ">(\"expected " + wanted + ", got " + unexpected + "(\" + " + inspected + " + \")\", path, line, column)\nend\nend\n"
+end
+
 def specialize_test_assertion(mut state: CompilerState, function: Integer, arguments: Array<String>, kind: Integer, line: Integer): Boolean
 	if state.type_resolution.generic_template_mode[0]
 		return true
 	end
 	mut body := ""
+	namespace := "$test_assertion" + integer_string(function)
 	if arguments.size() == 1
 		body = test_scalar_assertion_body(kind, arguments[0])
+	elsif arguments.size() == 2 && (kind == 15 || kind == 16)
+		body = test_result_assertion_body(kind, arguments)
+		if body != ""
+			owner := load_integer(state.declarations.function_modules, function)
+			state.type_resolution.type_aliases.push(TypeAlias.new(name: namespace + "::Target", source_id: owner, line: line, parameters: [], target: arguments[0]))
+			state.type_resolution.type_aliases.push(TypeAlias.new(name: namespace + "::Error", source_id: owner, line: line, parameters: [], target: arguments[1]))
+		end
 	end
 	if body == ""
 		diagnostic(state, "TRBN4003", line, "test assertion requires an implemented value comparator and inspector")
 		return false
 	end
-	return install_test_body(state, function, "$test_assertion" + integer_string(function), body)
+	return install_test_body(state, function, namespace, body)
 end
