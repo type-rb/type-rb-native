@@ -3,7 +3,7 @@ import { test_adapter_equal } from mir/model/test_contract
 import { MirSignature } from mir/model/module
 import { verify_mir } from mir/verify/module
 import { check, emit_qbe } from compiler
-import { CompilerState, compiler_new } from state/state
+import { CompilerState, compiler_new, has_diagnostic } from state/state
 import { standard_source_test_host } from state/standard_source_kinds
 import { store_integer } from support/storage
 import { lex } from frontend/syntax/lexer
@@ -12,15 +12,17 @@ import { resolve } from frontend/checking/program/resolution
 import { expect_compiler_phase } from testing/pipeline
 import { intrinsic_mir_erase } from testing/mir/intrinsics
 import { output_source } from testing/compiler
-import { logical_run_qbe } from testing/qbe_runner
+import { logical_run_qbe_arguments } from testing/qbe_runner
 import { describe, expect, test } from trb/std/test
 import trb/std/process
 import trb/std/result
 
 # Compare checked values through MIR after frontend erasure. This exercises the
 # runtime operation directly, before public assertion formatting is connected.
+# Unicode arrives at runtime because the reference-hosted compiler byte adapter
+# deliberately cannot emit non-ASCII source constants.
 def test_equal_fixture(): CompilerState
-	source := "record Sample\n value: Float\nend\nclass Link\n @value: Float\n @next: Link?\n def initialize(value: Float)\n  @value = value\n  @next = nil\n end\n def link(following: Link)\n  @next = following\n end\nend\nenum Choice\n Empty\n Value(value: Float)\nend\ndef deep_equal<T>(actual: T, expected: T): Boolean\nend\ndef main()\n puts(deep_equal<Integer>(1, 1))\n puts(!deep_equal<Integer>(1, 2))\n puts(deep_equal<Boolean>(true, true))\n puts(deep_equal<String>(\"値😀\", \"値\" + \"😀\"))\n nan := 0.0 / 0.0\n puts(!deep_equal<Float>(nan, nan))\n puts(deep_equal<Float>(0.0, -0.0))\n values := [nan]\n puts(deep_equal<Array<Float>>(values, values))\n puts(!deep_equal<Array<Float>>(values, [nan]))\n puts(deep_equal<Array<Integer>>([1, 2], [1, 2]))\n table := {\"value\" => nan}\n puts(deep_equal<Hash<String, Float>>(table, table))\n puts(!deep_equal<Hash<String, Float>>(table, {\"value\" => nan}))\n puts(deep_equal<Hash<Integer, Integer>>({1 => 2, 3 => 4}, {3 => 4, 1 => 2}))\n sample := Sample.new(value: nan)\n puts(!deep_equal<Sample>(sample, sample))\n puts(deep_equal<Sample>(Sample.new(value: 4.0), Sample.new(value: 4.0)))\n object := Link.new(nan)\n puts(deep_equal<Link>(object, object))\n puts(!deep_equal<Link>(object, Link.new(nan)))\n puts(deep_equal<Link>(Link.new(4.0), Link.new(4.0)))\n mut left := Link.new(1.0)\n mut right := Link.new(1.0)\n left.link(left)\n right.link(right)\n puts(deep_equal<Link>(left, right))\n mut other := Link.new(2.0)\n other.link(other)\n puts(!deep_equal<Link>(left, other))\n action := fn(): Integer\n  return 1\n end\n puts(!deep_equal<() -> Integer>(action, action))\n absent: Array<Integer>? := nil\n present: Array<Integer>? := [1]\n puts(deep_equal<Array<Integer>?>(absent, nil))\n puts(!deep_equal<Array<Integer>?>(absent, present))\n puts(deep_equal<Bytes>(\"value\".to_bytes(), \"value\".to_bytes()))\n puts(!deep_equal<Bytes>(\"value\".to_bytes(), \"other\".to_bytes()))\n variant := Choice::Value(nan)\n puts(!deep_equal<Choice>(variant, variant))\n puts(deep_equal<Choice>(Choice::Empty, Choice::Empty))\nend\n"
+	source := "import trb/std/process\nrecord Sample\n value: Float\nend\nclass Link\n @value: Float\n @next: Link?\n def initialize(value: Float)\n  @value = value\n  @next = nil\n end\n def link(following: Link)\n  @next = following\n end\nend\nenum Choice\n Empty\n Value(value: Float)\nend\ndef deep_equal<T>(actual: T, expected: T): Boolean\nend\ndef main()\n puts(deep_equal<Integer>(1, 1))\n puts(!deep_equal<Integer>(1, 2))\n puts(deep_equal<Boolean>(true, true))\n puts(deep_equal<String>(Process.argv()[0], Process.argv()[1]))\n nan := 0.0 / 0.0\n puts(!deep_equal<Float>(nan, nan))\n puts(deep_equal<Float>(0.0, -0.0))\n values := [nan]\n puts(deep_equal<Array<Float>>(values, values))\n puts(!deep_equal<Array<Float>>(values, [nan]))\n puts(deep_equal<Array<Integer>>([1, 2], [1, 2]))\n table := {\"value\" => nan}\n puts(deep_equal<Hash<String, Float>>(table, table))\n puts(!deep_equal<Hash<String, Float>>(table, {\"value\" => nan}))\n puts(deep_equal<Hash<Integer, Integer>>({1 => 2, 3 => 4}, {3 => 4, 1 => 2}))\n sample := Sample.new(value: nan)\n puts(!deep_equal<Sample>(sample, sample))\n puts(deep_equal<Sample>(Sample.new(value: 4.0), Sample.new(value: 4.0)))\n object := Link.new(nan)\n puts(deep_equal<Link>(object, object))\n puts(!deep_equal<Link>(object, Link.new(nan)))\n puts(deep_equal<Link>(Link.new(4.0), Link.new(4.0)))\n mut left := Link.new(1.0)\n mut right := Link.new(1.0)\n left.link(left)\n right.link(right)\n puts(deep_equal<Link>(left, right))\n mut other := Link.new(2.0)\n other.link(other)\n puts(!deep_equal<Link>(left, other))\n action := fn(): Integer\n  return 1\n end\n puts(!deep_equal<() -> Integer>(action, action))\n absent: Array<Integer>? := nil\n present: Array<Integer>? := [1]\n puts(deep_equal<Array<Integer>?>(absent, nil))\n puts(!deep_equal<Array<Integer>?>(absent, present))\n puts(deep_equal<Bytes>(\"value\".to_bytes(), \"value\".to_bytes()))\n puts(!deep_equal<Bytes>(\"value\".to_bytes(), \"other\".to_bytes()))\n variant := Choice::Value(nan)\n puts(!deep_equal<Choice>(variant, variant))\n puts(deep_equal<Choice>(Choice::Empty, Choice::Empty))\nend\n"
 	mut state := compiler_new(1048576)
 	expect_compiler_phase(state, "lex", lex(state, source))
 	store_integer(state.standard_modules, state.module_graph.entry_module[0], standard_source_test_host())
@@ -34,6 +36,7 @@ def test_equal_observations(collect: Boolean)
 	mut state := test_equal_fixture()
 	expect(verify_mir(state.scalar_mir, true)).to_equal("")
 	before := output_source(emit_qbe(state))
+	expect_compiler_phase(state, "emit", !has_diagnostic(state))
 	intrinsic_mir_erase(state)
 	expect(output_source(emit_qbe(state))).to_equal(before)
 	mut runtime := before
@@ -44,7 +47,7 @@ def test_equal_observations(collect: Boolean)
 	end
 	qbe := Process.environment("TYPE_RB_NATIVE_QBE")
 	if qbe != nil
-		case logical_run_qbe(qbe, runtime)
+		case logical_run_qbe_arguments(qbe, runtime, ["値😀", "値😀"])
 		when Result::Ok(actual)
 			expect(actual).to_equal("true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n")
 		when Result::Err(error)
