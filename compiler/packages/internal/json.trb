@@ -22,6 +22,8 @@ end
 class JsonParser
 	@bytes: Bytes
 	@position: Integer := 0
+	# Completed strings are independent snapshots; only scratch storage is reused.
+	@string_buffer: StringBuilder := StringBuilder.new()
 	@nodes: Array<JsonNode> := []
 	# Enum patterns are immutable. Keep child containers under the parser's
 	# mutable ownership and store only their pool indexes in raw node variants.
@@ -52,9 +54,12 @@ end
 
 # Preserve byte offsets until the complete span has been copied.
 def _source_slice(mut parser: JsonParser, start: Integer, finish: Integer): String
-	mut builder := StringBuilder.new()
+	mut builder := parser.string_buffer
+	builder.clear()
 	BuilderStorage.append_bytes(builder, parser.bytes, start, finish)
-	return builder.to_s()
+	text := builder.to_s()
+	builder.clear()
+	return text
 end
 
 def _space(mut parser: JsonParser)
@@ -305,7 +310,8 @@ end
 
 def _string(mut parser: JsonParser): String
 	parser.position += 1
-	mut builder := StringBuilder.new()
+	mut builder := parser.string_buffer
+	builder.clear()
 	# The input is immutable. Publish the cursor only at parser boundaries;
 	# errors and Unicode escape decoding still use the shared parser position.
 	bytes := parser.bytes
@@ -320,7 +326,9 @@ def _string(mut parser: JsonParser): String
 		if character == 34
 			BuilderStorage.append_bytes(builder, bytes, span_start, position)
 			parser.position = position + 1
-			return builder.to_s()
+			text := builder.to_s()
+			builder.clear()
+			return text
 		end
 		if character < 32
 			parser.position = position
