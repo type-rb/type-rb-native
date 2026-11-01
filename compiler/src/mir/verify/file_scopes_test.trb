@@ -6,7 +6,8 @@ import { scalar_mir_commit } from mir/build/functions
 import { mir_control_return } from mir/build/control
 import { checked_mir_value } from frontend/checking/body/values
 import { resource_checked_body } from frontend/checking/body/resource_calls
-import { checked_function_locals, finalize_checked_module } from frontend/checking/program/functions
+import { analyze_callable_bodies, checked_function_locals, finalize_checked_module } from frontend/checking/program/functions
+import { check_generic_templates } from frontend/checking/program/generics
 import { load_integer } from support/storage
 import { mir_file_scope_plans } from backend/qbe/emit/file_scopes
 import { mir_rewrite_fork, mir_rewrite_instruction } from mir/passes/rewrite
@@ -23,11 +24,14 @@ import { describe, expect, test } from trb/std/test
 import trb/std/process
 import trb/std/result
 
-# The frontend has not exposed File.open yet. Build its structured operation
-# through the ordinary caller argument-commit path, then erase source and independently verify it.
+# Build the structured operation through the ordinary caller argument-commit
+# path, then erase source and independently verify it. Run the shared source
+# discovery phases before replacing the one caller body with the MIR fixture.
 def file_scope_mir_fixture(file_path: String): CompilerState
 	source := "import trb/std/file\nimport trb/std/result\ndef body(prefix: String, number: Float, _file: File): Result<String, Integer>\nreturn Result<String, Integer>::Ok(prefix + number.to_s())\nend\ndef error(_path: String, _operation: Integer, status: Integer): Result<String, Integer>\nreturn Result<String, Integer>::Err(status)\nend\ndef scoped(_path: String, _mode: Integer, prefix: String, _number: Float): Result<String, Integer>\nreturn Result<String, Integer>::Ok(prefix)\nend\ndef main()\ncase scoped(\"" + file_path + "\".strip(), 0, \"kept\".upcase(), 2.5)\nwhen Result::Ok(value)\nputs(value)\nwhen Result::Err(error)\nputs(error)\nend\nend\n"
 	mut state := logical_checked_source(source)
+	expect_compiler_phase(state, "generic templates", check_generic_templates(state))
+	expect_compiler_phase(state, "callable discovery", analyze_callable_bodies(state))
 	mir_declare_types(state)
 	mir_declare_signatures(state)
 	mut body := -1

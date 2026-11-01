@@ -121,6 +121,7 @@ def main():
     args = parser.parse_args()
     binary = args.binary.resolve()
     observations = []
+    not_exercised = []
     with tempfile.TemporaryDirectory(prefix='resource-check-') as temporary:
         root = Path(temporary)
         (root / 'src').mkdir()
@@ -135,10 +136,19 @@ def main():
                                     capture_output=True, timeout=30)
             diagnostics = result.stdout + result.stderr
             expected = ('File cannot be constructed directly',) if name == 'constructor minting' else ('scoped resource', 'scoped File')
-            assert result.returncode != 0 and any(message in diagnostics for message in expected), (name, result)
+            resource_rejection = any(message in diagnostics for message in expected)
+            # These sources remain fail-closed before the resource-effect check.
+            # Keep that language gap visible; do not count it as suspension proof.
+            unsupported_concurrency = (not args.reference and name in (
+                'transitive suspension', 'suspending default', 'suspending record initialization')
+                and 'error[TRBN4004]: unsupported method concurrent_map' in diagnostics)
+            assert result.returncode != 0 and (resource_rejection or unsupported_concurrency), (name, result)
+            if not resource_rejection:
+                not_exercised.append({'case': name, 'reason': 'concurrent_map is rejected before scoped-resource effect checking.'})
             observations.append({'case': name, 'code': result.returncode,
                                  'diagnostics': diagnostics.replace(str(root), '<fixture>')})
-    report = {'mode': 'reference' if args.reference else 'native', 'rejections': observations}
+    report = {'mode': 'reference' if args.reference else 'native', 'rejections': observations,
+              'not_exercised': not_exercised}
     if args.report:
         args.report.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))

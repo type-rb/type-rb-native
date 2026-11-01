@@ -1,3 +1,5 @@
+import { filesystem_adapter_start, filesystem_mutable, filesystem_names, filesystem_parameters, filesystem_result } from mir/model/filesystem_contract
+import { mir_type_composite_start } from mir/model/type_ids
 import { mir_adapter_set_oidc_link } from mir/model/call_kinds
 import { oidc_adapter_start, oidc_mutable, oidc_names, oidc_parameters, oidc_result } from mir/model/oidc_contract
 import { crypto_adapter_start, crypto_names, crypto_parameters, crypto_result, crypto_signature_name } from mir/model/crypto_contract
@@ -43,6 +45,9 @@ def mir_runtime_adapter(name: String): Integer
 end
 
 def mir_call_symbol(signature: MirSignature): String
+	if signature.kind == mir_signature_standard() && signature.adapter >= filesystem_adapter_start() && signature.adapter < filesystem_adapter_start() + filesystem_names().size()
+		return "trbn_filesystem_" + filesystem_names()[signature.adapter - filesystem_adapter_start()]
+	end
 	if signature.kind == mir_signature_compiler_runtime() && signature.adapter == mir_adapter_set_oidc_link()
 		return "trbn_set_oidc_link"
 	end
@@ -192,6 +197,26 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 			name = "trb/internal/time_host.zone_data"
 			parameters = ["String"]
 			result = "String"
+		elsif signature.adapter >= filesystem_adapter_start() && signature.adapter < filesystem_adapter_start() + filesystem_names().size()
+			filesystem := signature.adapter - filesystem_adapter_start()
+			name = "trb/internal/filesystem_host." + filesystem_names()[filesystem]
+			parameters = filesystem_parameters(filesystem)
+			result = filesystem_result(filesystem)
+			if filesystem < 5
+				if signature.parameter_types.size() == 0
+					return "MIR filesystem resource parameter is missing"
+				end
+				mut owned := false
+				native_module.objects.each do |object|
+					if object.resource_kind == 1 && native_module.types[object.type_id - mir_type_composite_start()].name == signature.parameter_types[0]
+						owned = true
+					end
+				end
+				if !owned
+					return "MIR filesystem parameter requires the owned File resource"
+				end
+				parameters[0] = signature.parameter_types[0]
+			end
 		elsif signature.adapter >= oidc_adapter_start() && signature.adapter < oidc_adapter_start() + oidc_names().size()
 			oidc := signature.adapter - oidc_adapter_start()
 			name = "trb/internal/auth/oidc_host." + oidc_names()[oidc]
@@ -229,6 +254,9 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 		mut index := 0
 		while index < parameters.size()
 			mut mutable := 0
+			if signature.adapter >= filesystem_adapter_start() && signature.adapter < filesystem_adapter_start() + filesystem_names().size()
+				mutable = filesystem_mutable(signature.adapter - filesystem_adapter_start(), index)
+			end
 			if signature.adapter >= oidc_adapter_start() && signature.adapter < oidc_adapter_start() + oidc_names().size()
 				mutable = oidc_mutable(signature.adapter - oidc_adapter_start(), index)
 			end

@@ -43,6 +43,8 @@ def main():
     machine = {'aarch64': 'arm64', 'x86_64': 'amd64'}.get(platform.machine(), platform.machine())
     target = system + '-' + machine
     profile = abi_profile(target)
+    suffix = '$INODE64' if target == 'darwin-amd64' else ''
+    selected_symbols = {name: name + suffix for name in ('fstat', 'stat', 'lstat', 'readdir')}
     source = ('#define _GNU_SOURCE\n#define _DARWIN_C_SOURCE\n'
               '#include <stddef.h>\n#include <sys/stat.h>\n#include <fcntl.h>\n'
               '#include <unistd.h>\n#include <dirent.h>\n#include <errno.h>\n#include <sys/utsname.h>\n#include <dlfcn.h>\n')
@@ -64,20 +66,27 @@ int (*volatile entry_info)(int, const char *, struct stat *, int) = &fstatat;
 int (*volatile create_directory)(const char *, mode_t) = &mkdir;
 int (*volatile host_identity)(struct utsname *) = &uname;
 void *(*volatile dynamic_symbol)(void *, const char *) = &dlsym;
-int main(void) { return 0; }
 '''
+    # The raw backend cannot inherit the C headers' symbol renaming. Verify
+    # that each explicitly selected libc entry is the header-qualified one.
+    source += 'int main(void) {\n'
+    for number, (name, symbol) in enumerate(selected_symbols.items(), 1):
+        source += f'  if (dlsym(RTLD_DEFAULT, "{symbol}") != (void *)&{name}) return {number};\n'
+    source += '  return 0;\n}\n'
     compiler = os.environ.get('CC', 'cc')
     with tempfile.TemporaryDirectory(prefix='native-filesystem-abi-') as temporary:
         root = Path(temporary)
         probe = root / 'probe.c'
         executable = root / 'probe'
         probe.write_text(source)
-        subprocess.run([compiler, '-std=c11', '-Werror', str(probe), '-o', str(executable)],
+        flags = ['-ldl'] if system == 'linux' else []
+        subprocess.run([compiler, '-std=c11', '-Werror', str(probe), '-o', str(executable)] + flags,
                        check=True, timeout=60)
         subprocess.run([str(executable)], check=True, timeout=10)
         symbols = subprocess.check_output(['nm', '-u', str(executable)], text=True, timeout=10).splitlines()
     receipt = {'target': target, 'scope': 'libc ABI only; Native filesystem semantics require separate execution',
                'assertions': profile, 'source_sha256': hashlib.sha256(source.encode()).hexdigest(),
+               'header_verified_symbols': selected_symbols,
                'compiler': subprocess.check_output([compiler, '--version'], text=True).splitlines()[0],
                'undefined_symbols': [line.strip() for line in symbols]}
     if args.receipt:

@@ -180,8 +180,10 @@ JSON Unicode escapes separately.
 composition, parent lookup and private construction follow the portable source.
 `Path#join` preserves its parent text and appends the validated descendant using
 the slash separator of the supported Native targets. These value operations do
-not access the filesystem; file and directory services remain separate work.
-See [path values](native-path-values.md).
+not access the filesystem. Scoped `File.open`, bounded byte/text reads and writes,
+`Dir.children` and `Dir.create_all` use these values in ordinary programs and the
+REPL. See [path values](native-path-values.md) and
+[file and directory operations](native-filesystem.md).
 
 The checkout root contains a small `mode: trb` example project in `examples/`.
 Reference-compiler development checks use the separate

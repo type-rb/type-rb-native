@@ -1,83 +1,34 @@
-import { analyze_file_body, lower_checked_file_body } from frontend/checking/body/file_bodies
-import { resource_checked_body } from frontend/checking/body/resource_calls
-import { checked_mir_value } from frontend/checking/body/values
-import { check_function_body, checked_function_locals, finalize_checked_module } from frontend/checking/program/functions
-import { find_function_in_module } from frontend/resolution/declaration_lookup
-import { resolve_type_name } from frontend/resolution/type_resolution
-import { mir_binding_read } from mir/build/bindings
-import { mir_control_return } from mir/build/control
-import { scalar_mir_commit } from mir/build/functions
-import { mir_declare_signatures } from mir/lowering/calls
-import { mir_declare_types } from mir/model/types
+import { check, emit_qbe } from compiler
+import { CompilerState } from state/state
 import { verify_mir } from mir/verify/module
-import { emit_qbe } from compiler
-import { checked_body_lowering } from state/checked_body
-import { checking_discovery, checking_lowering } from state/checking_phases
-import { CompilerState, has_diagnostic } from state/state
-import { load_integer, sparse_integer_at } from support/storage
 import { intrinsic_mir_erase } from testing/mir/intrinsics
 import { output_source } from testing/compiler
 import { expect_compiler_phase, logical_checked_source } from testing/pipeline
-import { logical_run_qbe } from testing/qbe_runner
+import { logical_run_qbe_arguments } from testing/qbe_runner
 import { describe, expect, test } from trb/std/test
 import trb/std/process
 import trb/std/result
 
-# Only acquisition dispatch is injected. The lexical body and its captures use
-# source analysis, generated function checking and the normal caller commit.
-def file_body_lowered_fixture(path: String): CompilerState
-	source := "import trb/std/file\nimport trb/std/path\nimport trb/std/result\nimport { FileSystemError, FileSystemTarget } from trb/std/errors\ndef accept(_file: File): Integer\nreturn 3\nend\ndef error(path: String, _operation: Integer, status: Integer): Result<Integer, FileSystemError>\nreturn Result<Integer, FileSystemError>::Err(FileSystemError.new(operation: \"open\", target: FileSystemTarget::Host(Path.new(path)), message: status.to_s()))\nend\ndef acquire(): Integer\nreturn 1\nend\ndef execute(path: String, mode: Integer, mut counter: Integer, label: String): Result<Integer, FileSystemError>\n_result := acquire() do |file|\nputs(label)\ncounter += accept(file)\ncounter\nend\nreturn _result\nend\ndef main()\ncase execute(\"" + path + "\".strip(), 0, 7, \"scope\".upcase())\nwhen Result::Ok(value)\nputs(value)\nwhen Result::Err(error)\nputs(error.message)\nend\nend\n"
+# Public acquisition now exercises discovery, lowering and caller commit together.
+# Source erasure keeps the independent MIR proof responsible for execution.
+def file_body_lowered_fixture(): CompilerState
+	source := "import { File, FileMode } from trb/std/file\nimport trb/std/path\nimport trb/std/result\nimport trb/std/process\nimport { FileSystemError } from trb/std/errors\ndef accept(_file: File): Integer\nreturn 3\nend\ndef execute(path: String, mode: FileMode, mut counter: Integer, label: String): Result<Integer, FileSystemError>\nresult := File.open(Path.new(path), mode: mode) do |file|\nputs(label)\ncounter += accept(file)\ncounter\nend\nreturn result\nend\ndef main()\nargs := Process.argv()\ncase execute(args[0].strip(), FileMode::Read, 7, \"scope\".upcase())\nwhen Result::Ok(value)\nputs(value)\nwhen Result::Err(error)\nputs(error.message)\nend\nend\n"
 	mut state := logical_checked_source(source)
-	execute := find_function_in_module(state, state.module_graph.entry_module[0], "execute")
-	error := find_function_in_module(state, state.module_graph.entry_module[0], "error")
-	state.callables.lambda_phase[0] = checking_discovery()
-	mut parent := checked_function_locals(state, execute)
-	file_type := resolve_type_name(state, state.module_graph.entry_module[0], "File", false)
-	syntax := state.callables.call_blocks[0]
-	expect(analyze_file_body(state, parent, syntax, file_type) >= 0).to_be_true()
-	expect_compiler_phase(state, "analyze File body", !has_diagnostic(state))
-	mut function := 0
-	while function < state.declarations.function_count[0]
-		encoded := sparse_integer_at(state.callables.checked_body_indices, function)
-		if encoded > 0
-			previous := state.callables.checked_bodies[encoded - 1]
-			state.callables.checked_bodies[encoded - 1] = checked_body_lowering(previous, function, previous.resolved_names.origin, previous.resolved_names.limit[0])
-		end
-		function += 1
-	end
-	state.callables.lambda_phase[0] = checking_lowering()
-	mir_declare_types(state)
-	mir_declare_signatures(state)
-	function = 0
-	while function < state.declarations.function_count[0]
-		mut locals := checked_function_locals(state, function)
-		if function == execute
-			resource_checked_body(state, function)
-			origin := load_integer(state.declarations.function_body_starts, function)
-			path_value := mir_binding_read(state, locals, 0, origin)
-			mode := mir_binding_read(state, locals, 1, origin)
-			result := lower_checked_file_body(state, locals, syntax.origin, error, path_value, mode)
-			mir_control_return(state, locals, checked_mir_value(result))
-			expect(scalar_mir_commit(state, function, locals)).to_equal("")
-		else
-			expect_compiler_phase(state, "check File program function", check_function_body(state, function, locals))
-		end
-		function += 1
-	end
-	expect_compiler_phase(state, "finalize File program", finalize_checked_module(state))
+	expect_compiler_phase(state, "public File body", check(state))
+	expect(state.scalar_mir.file_scopes.size() > 0).to_be_true()
 	intrinsic_mir_erase(state)
 	return state
 end
 
 describe("Scoped File source body lowering") do
 	test("preserves ordinary caller offsets shared mutable cells and managed roots after source erasure") do
-		state := file_body_lowered_fixture("/dev/null")
+		state := file_body_lowered_fixture()
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
 		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
 		if qbe != nil
-			case logical_run_qbe(qbe, output_source(emit_qbe(state)))
+			case logical_run_qbe_arguments(qbe, output_source(emit_qbe(state)), ["/dev/null"])
 			when Result::Ok(actual)
-				expect(actual).to_equal("-2\n")
+				expect(actual).to_equal("opened handle is not a regular file\n")
 			when Result::Err(error)
 				puts(error)
 				expect(false).to_be_true()
@@ -95,6 +46,10 @@ def file_body_lowering_execution_test()
 	if qbe == nil
 		return
 	end
+	state := file_body_lowered_fixture()
+	expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	allocation := "function l $trbn_gc_alloc(l %descriptor, l %payload_size, l %reserved_size) {\n@start"
+	source := output_source(emit_qbe(state)).split(allocation).join(allocation + "\n call $trbn_gc_collect(w 0)")
 	allocated := case Process.run("/usr/bin/mktemp", ["/tmp/type-rb-native-file-body.XXXXXX"])
 	when Result::Ok(value)
 		value
@@ -105,11 +60,7 @@ def file_body_lowering_execution_test()
 	end
 	expect(allocated.success).to_be_true()
 	path := allocated.stdout.strip()
-	state := file_body_lowered_fixture(path)
-	expect(verify_mir(state.scalar_mir, true)).to_equal("")
-	allocation := "function l $trbn_gc_alloc(l %descriptor, l %payload_size, l %reserved_size) {\n@start"
-	source := output_source(emit_qbe(state)).split(allocation).join(allocation + "\n call $trbn_gc_collect(w 0)")
-	actual := logical_run_qbe(qbe, source)
+	actual := logical_run_qbe_arguments(qbe, source, [path])
 	case Process.run("/bin/rm", [path])
 	when Result::Ok(value)
 		expect(value.success).to_be_true()

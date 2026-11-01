@@ -112,7 +112,7 @@ def check_declaration(
 		diagnostic(state, "TRBN4004", line, "scoped resource cannot appear in a stored local type")
 	end
 	borrowed := mutable == 0
-	value := check_statement_value_use(state, position, locals, declared_type, borrowed)
+	value := check_direct_statement_value(state, position, locals, declared_type, borrowed, 1)
 	if declared_type == ""
 		block_collection_escape(state, locals, value)
 	end
@@ -236,7 +236,7 @@ def check_simple_statement(
 		if pending_hash.kind == hash_action_index_write() && expected == "" && token_is(state, position[0], "[") && token_is(state, position[0] + 1, "]")
 			right_expected = "Array<Any>"
 		end
-		right := check_statement_value(state, position, locals, right_expected)
+		right := check_direct_statement_value(state, position, locals, right_expected, false, 2)
 		# Replacing a pending value with another fresh empty literal supplies
 		# no constraint and does not escape the original lexical binding.
 		mut pending_replacement := false
@@ -557,6 +557,19 @@ end
 
 # The checker resolves branch values and transfer ownership; adapters only see
 # ordinary typed blocks, jump arguments and return/loop terminators.
+# A nested expression cannot inherit permission to acquire a resource from an
+# enclosing initializer. The parsed call body must start at this exact value.
+def check_direct_statement_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String, borrowed: Boolean, kind: Integer): CheckedValue
+	saved_origin := locals.file_value[0]
+	saved_kind := locals.file_value[1]
+	locals.file_value[0] = position[0]
+	locals.file_value[1] = kind
+	value := check_statement_value_use(state, position, locals, expected, borrowed)
+	locals.file_value[0] = saved_origin
+	locals.file_value[1] = saved_kind
+	return value
+end
+
 def check_statement_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String): CheckedValue
 	return check_statement_value_use(state, position, locals, expected, false)
 end

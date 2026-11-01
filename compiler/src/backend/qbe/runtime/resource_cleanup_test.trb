@@ -1,3 +1,4 @@
+import { emit_resource_cleanup_runtime } from backend/qbe/runtime/resource_cleanup
 import { emit_failure_recovery_runtime } from backend/qbe/runtime/failure_recovery
 import { qbe_output_new } from backend/qbe/output
 import { output_source } from testing/compiler
@@ -42,4 +43,21 @@ describe("Scoped resource failure cleanup") do
 			end
 		end
 	end
+	test("unwinds mixed file and directory frames once despite close failures") do
+		mut output := qbe_output_new(16, [])
+		emit_resource_cleanup_runtime(output)
+		runtime := output_source(output).split("call $close(").join("call $test_close(").split("call $closedir(").join("call $test_closedir(")
+		fixture := "data $test_closed = align 8 { l 0 }\ndata $test_format = { b \"%lld\", b 10, b 0 }\nfunction $trbn_fatal(l %message, l %size) {\n@start\n call $abort()\n hlt\n}\nfunction w $test_close(w %descriptor) {\n@start\n %count =l loadl $test_closed\n %shift =l mul %count, 100\n %fd =l extsw %descriptor\n %next =l add %shift, %fd\n storel %next, $test_closed\n ret -1\n}\nfunction w $test_closedir(l %directory) {\n@start\n %status =w call $test_close(w %directory)\n ret %status\n}\nexport function w $main() {\n@start\n %outer =l alloc8 16\n %directory =l alloc8 24\n %inner =l alloc8 16\n call $trbn_resource_push(l %outer, w 10)\n call $trbn_resource_push_directory(l %directory, l 20)\n call $trbn_resource_push(l %inner, w 30)\n call $trbn_resource_unwind(l %outer)\n %head =l loadl $trbn_resource_scope\n %preserved =w ceql %head, %outer\n jnz %preserved, @finish, @bad\n@finish\n %status =w call $trbn_resource_close(l %outer)\n %closed =l loadl $test_closed\n call $printf(l $test_format, ..., l %closed)\n ret 0\n@bad\n ret 1\n}\n"
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, runtime + fixture)
+			when Result::Ok(actual)
+				expect(actual).to_equal("302010\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 end

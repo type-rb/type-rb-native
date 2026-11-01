@@ -1,3 +1,7 @@
+import { filesystem_adapter_start, filesystem_names } from mir/model/filesystem_contract
+import { mir_signature_standard } from mir/model/call_kinds
+import { emit_filesystem_adapter_runtime } from backend/qbe/runtime/filesystem_adapters
+import { emit_directory_runtime } from backend/qbe/runtime/directory_values
 import { mir_op_file_scope } from mir/model/instructions
 import { MirFunction, MirInstruction, MirModule } from mir/model/module
 import { mir_call_symbol } from mir/model/intrinsics
@@ -9,6 +13,14 @@ import { emit_filesystem_values_runtime } from backend/qbe/runtime/filesystem_va
 import { integer_string } from support/literals
 
 def mir_file_scope_needed(native_module: MirModule): Boolean
+	if native_module.program.size() == 1 && native_module.program[0].cli_function >= 0
+		return true
+	end
+	native_module.signatures.each do |signature|
+		if signature.kind == mir_signature_standard() && signature.adapter >= filesystem_adapter_start() && signature.adapter < filesystem_adapter_start() + filesystem_names().size()
+			return true
+		end
+	end
 	return mir_file_scope_plans(native_module).size() > 0
 end
 
@@ -93,6 +105,8 @@ def emit_file_scope_runtime(native_module: MirModule, mut output: QbeOutput)
 	end
 	emit_filesystem_io_runtime(output)
 	emit_filesystem_values_runtime(output)
+	emit_filesystem_adapter_runtime(output)
+	emit_directory_runtime(output)
 	mir_file_scope_plans(native_module).each do |plan|
 		scope := native_module.file_scopes[plan]
 		body := native_module.signatures[scope.body]

@@ -1,5 +1,8 @@
+import { native_file_source, native_filesystem_host_source } from project/filesystem_sources
+import { native_dir_source, native_directory_helpers_source } from project/directory_sources
+import { standard_source_filesystem_host } from state/standard_source_kinds
 import { compiler_reserve_source } from state/source_capacity
-import { pinned_dir_source, pinned_errors_source, pinned_file_source } from project/official_catalog
+import { pinned_errors_source } from project/official_catalog
 import { standard_source_digest, standard_source_dir, standard_source_file, standard_source_hmac, standard_source_internal_hash, standard_source_internal_hmac, standard_source_oidc_http, standard_source_secure_compare } from state/standard_source_kinds
 import { native_oidc_http_source } from project/official_catalog
 import { standard_source_oidc, standard_source_oidc_host, standard_source_oidc_json } from state/standard_source_kinds
@@ -33,6 +36,9 @@ import { sparse_integer_at, store_integer } from support/storage
 # Portable declarations use the same parser and nominal catalogs as authored
 # modules. Their owner tag is assigned only by this loader, never by spelling.
 def standard_source_kind(path: String): Integer
+	if path == "trb/internal/filesystem_host"
+		return standard_source_filesystem_host()
+	end
 	if path == "trb/std/file"
 		return standard_source_file()
 	end
@@ -160,6 +166,9 @@ def standard_source_kind(path: String): Integer
 end
 
 def standard_source_name(kind: Integer): String
+	if kind == standard_source_filesystem_host()
+		return "trb/internal/filesystem_host/index"
+	end
 	if kind == standard_source_file()
 		return "trb/std/file/index"
 	end
@@ -287,11 +296,14 @@ def standard_source_name(kind: Integer): String
 end
 
 def standard_source_text(kind: Integer): String
+	if kind == standard_source_filesystem_host()
+		return native_filesystem_host_source() + native_directory_helpers_source()
+	end
 	if kind == standard_source_file()
-		return pinned_file_source()
+		return native_file_source()
 	end
 	if kind == standard_source_dir()
-		return pinned_dir_source()
+		return native_dir_source()
 	end
 	if kind == standard_source_oidc_http()
 		return native_oidc_http_source()
@@ -421,6 +433,10 @@ def load_standard_source(mut state: CompilerState, kind: Integer, line: Integer)
 		return -1
 	end
 	caller_kind := sparse_integer_at(state.standard_modules, state.module_graph.active_module[0])
+	if kind == standard_source_filesystem_host() && caller_kind != standard_source_file() && caller_kind != standard_source_dir()
+		diagnostic(state, "TRBN4003", line, "internal filesystem operations are reserved for the owned File and Dir implementations")
+		return -1
+	end
 	if (kind == standard_source_oidc() && caller_kind != official_source_kind("trb/web/auth/bearer")) || ((kind == standard_source_oidc_json() || kind == standard_source_oidc_http()) && caller_kind != standard_source_oidc()) || (kind == standard_source_oidc_host() && caller_kind != standard_source_oidc() && caller_kind != standard_source_oidc_http())
 		diagnostic(state, "TRBN4003", line, "internal OIDC sources are reserved for the owned Bearer provider")
 		return -1

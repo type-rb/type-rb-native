@@ -1,4 +1,4 @@
-import { mir_op_file_scope } from mir/model/instructions
+import { mir_file_scope_needed } from backend/qbe/emit/file_scopes
 import { mir_type_kind_bytes } from mir/model/type_kinds
 import { mir_op_bytes_at, mir_op_bytes_concat, mir_op_bytes_size, mir_op_bytes_to_string, mir_op_string_to_bytes } from mir/model/instructions
 import { MirInstruction, MirModule } from mir/model/module
@@ -61,16 +61,11 @@ end
 # A negative span consumes one maximal ill-formed UTF-8 subpart.
 # Bounds and validity belong to these explicit runtime operations.
 def emit_bytes_runtime(native_module: MirModule, mut output: QbeOutput)
-	# Emit binary services only when a verified semantic Bytes identity exists.
-	# Ordinary programs without Bytes keep their existing runtime surface.
-	mut needed := false
+	# The filesystem runtime shares UTF-8 validation even when its caller has no
+	# public Bytes value, including the CLI host boundary.
+	mut needed := mir_file_scope_needed(native_module)
 	native_module.types.each do |row|
 		if row.kind == mir_type_kind_bytes()
-			needed = true
-		end
-	end
-	native_module.instructions.each do |instruction|
-		if instruction.kind == mir_op_file_scope()
 			needed = true
 		end
 	end
