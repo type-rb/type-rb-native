@@ -24,6 +24,7 @@ def abi_profile(target):
         'offsetof(struct stat, st_size)': 96 if darwin else 48,
         'offsetof(struct dirent, d_name)': 21 if darwin else 19,
         'offsetof(struct dirent, d_type)': 20 if darwin else 18,
+        'FTW_F': 0, 'FTW_D': 1, 'FTW_DNR': 2, 'FTW_NS': 4 if darwin else 3, 'FTW_PHYS': 1,
         'O_RDONLY': 0, 'O_WRONLY': 1, 'O_RDWR': 2,
         'O_CREAT': 512 if darwin else 64, 'O_EXCL': 2048 if darwin else 128,
         'O_NONBLOCK': 4 if darwin else 2048, 'O_NOCTTY': 131072 if darwin else 256,
@@ -47,7 +48,7 @@ def main():
     selected_symbols = {name: name + suffix for name in ('fstat', 'stat', 'lstat', 'readdir')}
     source = ('#define _GNU_SOURCE\n#define _DARWIN_C_SOURCE\n'
               '#include <stddef.h>\n#include <sys/stat.h>\n#include <fcntl.h>\n'
-              '#include <unistd.h>\n#include <dirent.h>\n#include <errno.h>\n#include <sys/utsname.h>\n#include <dlfcn.h>\n')
+              '#include <ftw.h>\n#include <unistd.h>\n#include <dirent.h>\n#include <errno.h>\n#include <sys/utsname.h>\n#include <dlfcn.h>\n')
     source += ''.join('_Static_assert(' + name + ' == ' + str(value) + ', "' + name + '");\n'
                       for name, value in profile.items())
     # Compiler-owned test declarations keep prototypes and actual link symbols
