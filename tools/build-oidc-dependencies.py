@@ -9,10 +9,13 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import socket
 import subprocess
+import sys
 import tarfile
 import tempfile
 import time
+import urllib.error
 import urllib.request
 
 from network_artifacts import embed_identity, target_name, verify
@@ -25,6 +28,31 @@ DISABLED = ('ALTSVC', 'COOKIES', 'BEARER_AUTH', 'DIGEST_AUTH', 'KERBEROS_AUTH', 
             'AWS', 'DICT', 'DOH', 'FILE', 'FTP', 'GOPHER', 'HSTS', 'IMAP', 'LDAP', 'LDAPS',
             'MIME', 'FORM_API', 'MQTT', 'NETRC', 'POP3', 'IPFS', 'RTSP', 'SMTP', 'WEBSOCKETS',
             'TELNET', 'TFTP')
+
+SOURCE_MAX_BYTES = 64 * 1024 * 1024
+SOURCE_DOWNLOAD_ATTEMPTS = 3
+
+
+def transient_download_error(error):
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in (408, 429, 500, 502, 503, 504)
+    reason = error.reason if isinstance(error, urllib.error.URLError) else error
+    return isinstance(reason, (socket.gaierror, TimeoutError, ConnectionError))
+
+
+def download_source(url):
+    for attempt in range(1, SOURCE_DOWNLOAD_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response:
+                return response.read(SOURCE_MAX_BYTES + 1)
+        except OSError as error:
+            print(f'source download attempt {attempt}/{SOURCE_DOWNLOAD_ATTEMPTS} failed: '
+                  f'{url}: {error}', file=sys.stderr)
+            if attempt == SOURCE_DOWNLOAD_ATTEMPTS or not transient_download_error(error):
+                raise
+            # Retry the same pinned URL after one, then two seconds. Certificate
+            # failures and archive validation never enter the retry path.
+            time.sleep(attempt)
 
 # Compile-time ABI observations, not a repository-owned C runtime.
 ABI_CONSTANTS = {
@@ -82,10 +110,9 @@ def extract(pin, directory, archives):
     if cached:
         data = archive.read_bytes()
     else:
-        with urllib.request.urlopen(pin['url'], timeout=60) as response:
-            data = response.read(64 * 1024 * 1024 + 1)
+        data = download_source(pin['url'])
     actual = hashlib.sha256(data).hexdigest()
-    if len(data) > 64 * 1024 * 1024 or actual != pin['sha256']:
+    if len(data) > SOURCE_MAX_BYTES or actual != pin['sha256']:
         origin = 'cache' if cached else 'download'
         raise ValueError(f"source archive checksum or size differs: {pin['url']}; "
                          f"{origin}, {len(data)} bytes, SHA-256 {actual}, expected {pin['sha256']}")

@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Exercise actual compiler header selection in the OIDC dependency builder."""
+"""Exercise pinned source acquisition and actual compiler header selection."""
 import hashlib
 import importlib.util
 import io
 import os
 from pathlib import Path
+import socket
+import ssl
 import subprocess
+import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 spec = importlib.util.spec_from_file_location('oidc_builder', Path(__file__).with_name('build-oidc-dependencies.py'))
 builder = importlib.util.module_from_spec(spec)
@@ -16,14 +19,122 @@ spec.loader.exec_module(builder)
 
 
 class OidcBuilderTest(unittest.TestCase):
+    def source_fixture(self):
+        contents = io.BytesIO()
+        with tarfile.open(fileobj=contents, mode='w:gz') as archive:
+            member = tarfile.TarInfo('source/data.txt')
+            member.size = 6
+            archive.addfile(member, io.BytesIO(b'pinned'))
+        data = contents.getvalue()
+        pin = {'url': 'https://example.invalid/source.tar.gz',
+               'sha256': hashlib.sha256(data).hexdigest(), 'root': 'source'}
+        return pin, data
+
+    def test_transient_failure_recovers_and_cache_needs_no_network(self):
+        pin, data = self.source_fixture()
+        failures = [builder.urllib.error.URLError(socket.gaierror(socket.EAI_AGAIN, 'DNS unavailable')),
+                    builder.urllib.error.URLError(socket.gaierror(socket.EAI_NONAME, 'name not known')),
+                    builder.urllib.error.URLError(TimeoutError('connect timed out')),
+                    TimeoutError('read timed out'), ConnectionResetError('connection reset')]
+        failures += [builder.urllib.error.HTTPError(pin['url'], code, 'temporary response', {}, None)
+                     for code in (408, 429, 500, 502, 503, 504)]
+        for failure in failures:
+            with self.subTest(failure=str(failure)), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                errors = io.StringIO()
+                with patch.object(builder.urllib.request, 'urlopen',
+                                  side_effect=[failure, io.BytesIO(data)]) as download, \
+                        patch.object(builder.time, 'sleep') as sleep, patch.object(builder.sys, 'stderr', errors):
+                    source = builder.extract(pin, root / 'unpacked', root)
+                self.assertEqual((source / 'data.txt').read_bytes(), b'pinned')
+                self.assertEqual((root / 'source.tar.gz').read_bytes(), data)
+                self.assertEqual(download.call_args_list, [call(pin['url'], timeout=60)] * 2)
+                sleep.assert_called_once_with(1)
+                self.assertIn('attempt 1/3 failed', errors.getvalue())
+                self.assertIn(pin['url'], errors.getvalue())
+                with patch.object(builder.urllib.request, 'urlopen') as cached_download:
+                    cached = builder.extract(pin, root / 'cached', root)
+                cached_download.assert_not_called()
+                self.assertEqual((cached / 'data.txt').read_bytes(), b'pinned')
+
+    def test_exhausted_dns_failures_remain_failed_without_cache(self):
+        pin, _ = self.source_fixture()
+        failure = builder.urllib.error.URLError(socket.gaierror(socket.EAI_AGAIN, 'DNS unavailable'))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            errors = io.StringIO()
+            with patch.object(builder.urllib.request, 'urlopen', side_effect=failure) as download, \
+                    patch.object(builder.time, 'sleep') as sleep, patch.object(builder.sys, 'stderr', errors):
+                with self.assertRaises(builder.urllib.error.URLError) as raised:
+                    builder.extract(pin, root / 'unpacked', root)
+            self.assertIs(raised.exception, failure)
+            self.assertEqual(download.call_count, 3)
+            self.assertEqual(sleep.call_args_list, [call(1), call(2)])
+            self.assertEqual(errors.getvalue().count('failed:'), 3)
+            self.assertIn('attempt 3/3 failed', errors.getvalue())
+            self.assertEqual(list(root.iterdir()), [])
+
+    def test_permanent_failures_are_not_retried(self):
+        pin, _ = self.source_fixture()
+        certificate = ssl.SSLCertVerificationError(1, 'certificate verify failed')
+        failures = [certificate, builder.urllib.error.URLError(certificate),
+                    builder.urllib.error.URLError('unclassified failure')]
+        failures += [builder.urllib.error.HTTPError(pin['url'], code, 'permanent response', {}, None)
+                     for code in (400, 401, 403, 404, 410, 501)]
+        for failure in failures:
+            with self.subTest(failure=str(failure)), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                with patch.object(builder.urllib.request, 'urlopen', side_effect=failure) as download, \
+                        patch.object(builder.time, 'sleep') as sleep, patch.object(builder.sys, 'stderr', io.StringIO()):
+                    with self.assertRaises(OSError) as raised:
+                        builder.extract(pin, root / 'unpacked', root)
+                self.assertIs(raised.exception, failure)
+                download.assert_called_once_with(pin['url'], timeout=60)
+                sleep.assert_not_called()
+                self.assertEqual(list(root.iterdir()), [])
+
+    def test_partial_read_restarts_without_caching_partial_bytes(self):
+        class InterruptedBody(io.BytesIO):
+            def read(self, size):
+                super().read(min(size, 4))
+                raise ConnectionResetError('body interrupted')
+
+        pin, data = self.source_fixture()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            partial = InterruptedBody(data)
+            with patch.object(builder.urllib.request, 'urlopen',
+                              side_effect=[partial, io.BytesIO(data)]) as download, \
+                    patch.object(builder.time, 'sleep'), patch.object(builder.sys, 'stderr', io.StringIO()):
+                builder.extract(pin, root / 'unpacked', root)
+            self.assertTrue(partial.closed)
+            self.assertEqual(download.call_count, 2)
+            self.assertEqual((root / 'source.tar.gz').read_bytes(), data)
+
+    def test_oversized_download_is_not_retried_or_cached_even_with_matching_hash(self):
+        pin, data = self.source_fixture()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch.object(builder, 'SOURCE_MAX_BYTES', len(data) - 1), \
+                    patch.object(builder.urllib.request, 'urlopen', return_value=io.BytesIO(data)) as download, \
+                    patch.object(builder.time, 'sleep') as sleep:
+                with self.assertRaisesRegex(ValueError, 'checksum or size differs'):
+                    builder.extract(pin, root / 'unpacked', root)
+            download.assert_called_once_with(pin['url'], timeout=60)
+            sleep.assert_not_called()
+            self.assertEqual(list(root.iterdir()), [])
+
     def test_invalid_download_reports_identity_without_caching_it(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             rejected = b'upstream response is not the pinned archive\n'
             pin = {'url': 'https://example.invalid/source.tar.gz', 'sha256': '0' * 64}
-            with patch.object(builder.urllib.request, 'urlopen', return_value=io.BytesIO(rejected)):
+            with patch.object(builder.urllib.request, 'urlopen', return_value=io.BytesIO(rejected)) as download, \
+                    patch.object(builder.time, 'sleep') as sleep:
                 with self.assertRaises(ValueError) as error:
                     builder.extract(pin, root / 'unpacked', root)
+            download.assert_called_once_with(pin['url'], timeout=60)
+            sleep.assert_not_called()
             message = str(error.exception)
             for expected in (pin['url'], 'download', str(len(rejected)) + ' bytes',
                              hashlib.sha256(rejected).hexdigest(), pin['sha256']):
