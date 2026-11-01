@@ -120,7 +120,73 @@ end
 '''
 
 
-def replay(binary, root, source, wanted_failures):
+DYNAMIC = '''import { describe, expect, test } from trb/std/test
+import trb/std/string_builder
+newtype Label = String
+interface Named
+    name(): String
+end
+class Base
+end
+class Item < Base implements Named
+    @text: String
+    def initialize(text: String)
+        @text = text
+    end
+    def name(): String
+        return @text
+    end
+end
+class Other implements Named
+    def name(): String
+        return "same"
+    end
+end
+describe("Dynamic equality") do
+    test("nominal labels and union alternatives") do
+        expect(Label.new("a")).to_equal(Label.new("a"))
+        expect(Label.new("a")).to_not_equal(Label.new("b"))
+        left: Integer | String := 1
+        right: Integer | String := "1"
+        expect(left).to_equal(left)
+        expect(left).to_not_equal(right)
+        text: Integer | String := "held"
+        expect(text).to_equal("he" + "ld")
+    end
+    test("dynamic payloads retain type identity") do
+        mut unrelated := StringBuilder.new()
+        unrelated.append("kept")
+        left: Any := 1
+        right: Any := 1.0
+        expect(left).to_equal(left)
+        expect(left).to_not_equal(right)
+        values: Array<Any> := [1, "a", true]
+        expect(values).to_equal([1, "a", true])
+        expect(values).to_not_equal([1, "b", true])
+    end
+    test("ranges include endpoint exclusivity") do
+        expect(1..3).to_equal(1..3)
+        expect(1..3).to_not_equal(1...3)
+    end
+    test("interfaces and bases retain dynamic class fields") do
+        item: Named := Item.new("same")
+        expect(item).to_equal(Item.new("same"))
+        expect(item).to_not_equal(Item.new("different"))
+        expect(item).to_not_equal(Other.new())
+        base: Base := Item.new("same")
+        expect(base).to_equal(Item.new("same"))
+        expect(base).to_not_equal(Item.new("different"))
+    end
+    test("nullable values compare their present payload") do
+        value: Integer? := 7
+        expect(value).to_equal(7)
+        expect(value).to_not_equal(8)
+    end
+end
+'''
+
+
+def replay(binary, root, source, wanted_failures, total):
     (root / "src/sample_test.trb").write_text(source)
     result = subprocess.run([str(binary), "test", "--reporter", "json"], cwd=root,
                             env=dict(os.environ, NO_COLOR="1", TERM="dumb"),
@@ -129,10 +195,10 @@ def replay(binary, root, source, wanted_failures):
     stderr = result.stderr.replace(str(root), "<project>")
     events = [json.loads(line) for line in stdout.splitlines()]
     assert result.returncode == int(wanted_failures > 0), (result.returncode, stdout, stderr)
-    assert len(events) == 19, (stdout, stderr)
-    assert events[-1] == {"type": "test_summary", "total": 9, "failed": wanted_failures}, events
+    assert len(events) == total * 2 + 1, (stdout, stderr)
+    assert events[-1] == {"type": "test_summary", "total": total, "failed": wanted_failures}, events
     assert sum(event["type"] == "test_failed" for event in events) == wanted_failures, events
-    for index in range(0, 18, 2):
+    for index in range(0, total * 2, 2):
         assert events[index]["type"] == "test_started", events[index]
         assert events[index + 1]["type"] in ("test_passed", "test_failed"), events[index + 1]
         assert events[index]["name"] == events[index + 1]["name"], events[index:index + 2]
@@ -155,11 +221,18 @@ def main():
             "name": "test-values", "mode": "go", "sourceDir": "src",
             "go": {"module": "example.com/test-values"},
         }) + "\n")
-        for name, source, failures in (("values", VALUES, 0), ("origins", ORIGINS, 8)):
-            reference = replay(args.reference.resolve(), root, source, failures)
+        for name, source, failures, total in (("values", VALUES, 0, 9),
+                                             ("origins", ORIGINS, 8, 9),
+                                             ("dynamic", DYNAMIC, 0, 5)):
+            config = json.loads((root / "trbconfig.jsonc").read_text())
+            config["mode"] = "go"
+            (root / "trbconfig.jsonc").write_text(json.dumps(config) + "\n")
+            reference = replay(args.reference.resolve(), root, source, failures, total)
             row = {"id": name, "reference": reference}
             if args.native:
-                native = replay(args.native.resolve(), root, source, failures)
+                config["mode"] = "trb"
+                (root / "trbconfig.jsonc").write_text(json.dumps(config) + "\n")
+                native = replay(args.native.resolve(), root, source, failures, total)
                 # Different Go wrapper stderr is not a Native runtime obligation.
                 assert native["events"] == reference["events"], (name, reference, native)
                 row["native"] = native

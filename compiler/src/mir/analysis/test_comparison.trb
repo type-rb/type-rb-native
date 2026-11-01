@@ -1,4 +1,5 @@
 import { mir_object_id } from mir/model/objects
+import { mir_op_union_inject } from mir/model/instructions
 import { MirModule } from mir/model/module
 import { mir_representation_type } from mir/model/newtypes
 import { mir_type_boolean, mir_type_composite_start, mir_type_float, mir_type_float_array, mir_type_integer, mir_type_integer_array, mir_type_string } from mir/model/type_ids
@@ -153,11 +154,22 @@ def mir_test_comparison_node(native_module: MirModule, type_id: Integer): MirTes
 			children = native_module.unions[row.declaration].alternatives
 		elsif row.kind == mir_type_kind_any()
 			kind = "tagged"
-			children = [mir_type_integer(), mir_type_boolean(), mir_type_float(), mir_type_string(), mir_type_integer_array(), mir_type_float_array()]
-			mut index := 0
-			while index < native_module.types.size()
-				children.push(index + mir_type_composite_start())
-				index += 1
+			# In a closed Native module, verified union injections are the only
+			# constructors of dynamic tags. Unboxed unrelated types need no
+			# comparator. Include every injected tag, conservatively including
+			# explicit unions; never skip an unsupported boxed payload.
+			native_module.instructions.each do |instruction|
+				if instruction.kind == mir_op_union_inject()
+					mut present := false
+					children.each do |child|
+						if child == instruction.payload
+							present = true
+						end
+					end
+					if !present
+						children.push(instruction.payload)
+					end
+				end
 			end
 		end
 	end
