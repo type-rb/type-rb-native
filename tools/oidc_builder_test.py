@@ -39,6 +39,8 @@ class OidcBuilderTest(unittest.TestCase):
         failures += [builder.urllib.error.HTTPError(pin['url'], code, 'temporary response', {}, None)
                      for code in (408, 429, 500, 502, 503, 504)]
         for failure in failures:
+            if isinstance(failure, builder.urllib.error.HTTPError):
+                self.addCleanup(failure.close)
             with self.subTest(failure=str(failure)), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 errors = io.StringIO()
@@ -52,6 +54,8 @@ class OidcBuilderTest(unittest.TestCase):
                 sleep.assert_called_once_with(1)
                 self.assertIn('attempt 1/3 failed', errors.getvalue())
                 self.assertIn(pin['url'], errors.getvalue())
+                if isinstance(failure, builder.urllib.error.HTTPError):
+                    self.assertTrue(failure.closed)
                 with patch.object(builder.urllib.request, 'urlopen') as cached_download:
                     cached = builder.extract(pin, root / 'cached', root)
                 cached_download.assert_not_called()
@@ -82,6 +86,8 @@ class OidcBuilderTest(unittest.TestCase):
         failures += [builder.urllib.error.HTTPError(pin['url'], code, 'permanent response', {}, None)
                      for code in (400, 401, 403, 404, 410, 501)]
         for failure in failures:
+            if isinstance(failure, builder.urllib.error.HTTPError):
+                self.addCleanup(failure.close)
             with self.subTest(failure=str(failure)), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 with patch.object(builder.urllib.request, 'urlopen', side_effect=failure) as download, \

@@ -50,9 +50,12 @@ def download_source(url):
                   f'{url}: {error}', file=sys.stderr)
             if attempt == SOURCE_DOWNLOAD_ATTEMPTS or not transient_download_error(error):
                 raise
+            if isinstance(error, urllib.error.HTTPError):
+                error.close()
             # Retry the same pinned URL after one, then two seconds. Certificate
             # failures and archive validation never enter the retry path.
             time.sleep(attempt)
+
 
 # Compile-time ABI observations, not a repository-owned C runtime.
 ABI_CONSTANTS = {
