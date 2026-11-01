@@ -1,3 +1,4 @@
+import { check_file_body_function, file_body_bind_captures } from frontend/checking/body/file_bodies
 import { resource_checked_body, verify_resource_calls } from frontend/checking/body/resource_calls
 import { standard_oidc_host } from frontend/resolution/oidc_intrinsics
 import { standard_crypto } from frontend/resolution/crypto_intrinsics
@@ -61,7 +62,10 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 	end
 	parameter_start := load_integer(state.declarations.function_parameter_starts, function_index)
 	parameter_finish := parameter_start + load_integer(state.declarations.function_parameter_counts, function_index)
-	captures := lambda_bind_captures(state, locals, function_index)
+	mut captures := lambda_bind_captures(state, locals, function_index)
+	if sparse_integer_at(state.callables.function_file_bodies, function_index) > 0
+		captures = file_body_bind_captures(state, locals, function_index)
+	end
 	mut parameter_index := parameter_start + captures
 	while parameter_index < parameter_finish
 		added := local_add(
@@ -135,7 +139,9 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 		end
 	end
 	mut position := [load_integer(state.declarations.function_body_starts, function_index)]
-	if sparse_integer_at(state.parsed.function_expression_bodies, function_index) > 0
+	if sparse_integer_at(state.callables.function_file_bodies, function_index) > 0
+		check_file_body_function(state, position, locals, state.callables.file_bodies[sparse_integer_at(state.callables.function_file_bodies, function_index) - 1])
+	elsif sparse_integer_at(state.parsed.function_expression_bodies, function_index) > 0
 		value := check_expression(state, position, locals, 1, result_type)
 		returned := checked_mir_value(value)
 		if returned >= 0
@@ -197,7 +203,7 @@ def analyze_callable_bodies(mut state: CompilerState): Boolean
 		end
 		definition_index += 1
 	end
-	if state.callables.lambdas.size() == 0 && state.parsed.transforms.size() == 0 && !state.interactive && !inferred_calls && state.nominal.objects.size() == 0 && !builtin_result_source(state)
+	if state.callables.lambdas.size() == 0 && state.callables.call_blocks.size() == 0 && state.parsed.transforms.size() == 0 && !state.interactive && !inferred_calls && state.nominal.objects.size() == 0 && !builtin_result_source(state)
 		return true
 	end
 	state.callables.lambda_phase[0] = checking_discovery()
@@ -205,7 +211,7 @@ def analyze_callable_bodies(mut state: CompilerState): Boolean
 	mut objects := prepare_object_dispatch(state, 0)
 	mut function := 0
 	while function < state.declarations.function_count[0] && !has_diagnostic(state)
-		if sparse_integer_at(state.callables.function_lambdas, function) == 0 && !object_abstract_function(state, function)
+		if sparse_integer_at(state.callables.function_lambdas, function) == 0 && sparse_integer_at(state.callables.function_file_bodies, function) == 0 && !object_abstract_function(state, function)
 			if function >= resolved
 				mut names := resolution_locals_new(state.source_tokens.token_count[0] + 1)
 				resolve_function_body(state, function, names)

@@ -1,10 +1,18 @@
+import { mir_checked_file_scope } from mir/lowering/file_scopes
+import { mir_declare_signatures } from mir/lowering/calls
+import { mir_declare_types } from mir/model/types
+import { mir_binding_read } from mir/build/bindings
+import { scalar_mir_commit } from mir/build/functions
+import { mir_control_return } from mir/build/control
+import { checked_mir_value } from frontend/checking/body/values
+import { resource_checked_body } from frontend/checking/body/resource_calls
+import { checked_function_locals, finalize_checked_module } from frontend/checking/program/functions
+import { load_integer } from support/storage
 import { mir_file_scope_plans } from backend/qbe/emit/file_scopes
 import { mir_rewrite_fork, mir_rewrite_instruction } from mir/passes/rewrite
-import { check, emit_qbe } from compiler
-import { mir_op_enum_new, mir_op_file_scope } from mir/model/instructions
-import { MirFileScope, MirInstruction, MirRootPlan, mir_function_index } from mir/model/module
-import { mir_refine_call_effects } from mir/analysis/call_effects
-import { optimize_verified_mir } from mir/passes/optimize
+import { check_function, emit_qbe } from compiler
+import { mir_op_file_scope } from mir/model/instructions
+import { MirFileScope, MirInstruction, MirRootPlan } from mir/model/module
 import { verify_mir } from mir/verify/module
 import { intrinsic_mir_erase } from testing/mir/intrinsics
 import { expect_compiler_phase, logical_checked_source } from testing/pipeline
@@ -15,12 +23,13 @@ import { describe, expect, test } from trb/std/test
 import trb/std/process
 import trb/std/result
 
-# The frontend has not exposed File.open yet. Insert its structured operation
-# into an ordinary typed caller, then erase source and independently verify it.
+# The frontend has not exposed File.open yet. Build its structured operation
+# through the ordinary caller argument-commit path, then erase source and independently verify it.
 def file_scope_mir_fixture(file_path: String): CompilerState
 	source := "import trb/std/file\nimport trb/std/result\ndef body(prefix: String, number: Float, _file: File): Result<String, Integer>\nreturn Result<String, Integer>::Ok(prefix + number.to_s())\nend\ndef error(_path: String, _operation: Integer, status: Integer): Result<String, Integer>\nreturn Result<String, Integer>::Err(status)\nend\ndef scoped(_path: String, _mode: Integer, prefix: String, _number: Float): Result<String, Integer>\nreturn Result<String, Integer>::Ok(prefix)\nend\ndef main()\ncase scoped(\"" + file_path + "\".strip(), 0, \"kept\".upcase(), 2.5)\nwhen Result::Ok(value)\nputs(value)\nwhen Result::Err(error)\nputs(error)\nend\nend\n"
 	mut state := logical_checked_source(source)
-	expect_compiler_phase(state, "check", check(state))
+	mir_declare_types(state)
+	mir_declare_signatures(state)
 	mut body := -1
 	mut error := -1
 	mut caller := -1
@@ -34,37 +43,25 @@ def file_scope_mir_fixture(file_path: String): CompilerState
 		end
 	end
 	expect(body >= 0 && error >= 0 && caller >= 0).to_be_true()
-	mut error_variant := -1
-	state.scalar_mir.enum_variants.each.with_index do |variant, index|
-		if variant.name == "Err"
-			error_variant = index
+	mut function := 0
+	while function < state.declarations.function_count[0]
+		if function == caller
+			mut locals := checked_function_locals(state, function)
+			resource_checked_body(state, function)
+			origin := load_integer(state.declarations.function_body_starts, function)
+			path := mir_binding_read(state, locals, 0, origin)
+			mode := mir_binding_read(state, locals, 1, origin)
+			prefix := mir_binding_read(state, locals, 2, origin)
+			number := mir_binding_read(state, locals, 3, origin)
+			result := mir_checked_file_scope(state, locals, body, error, path, mode, [checked_mir_value(prefix), checked_mir_value(number)], origin)
+			mir_control_return(state, locals, checked_mir_value(result))
+			expect(scalar_mir_commit(state, function, locals)).to_equal("")
+		else
+			expect_compiler_phase(state, "ordinary function", check_function(state, function))
 		end
+		function += 1
 	end
-	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, caller)]
-	path := state.scalar_mir.arguments[function.parameter_start]
-	mode := state.scalar_mir.arguments[function.parameter_start + 1]
-	start := state.scalar_mir.arguments.size()
-	state.scalar_mir.arguments.push(state.scalar_mir.arguments[function.parameter_start + 2])
-	state.scalar_mir.arguments.push(state.scalar_mir.arguments[function.parameter_start + 3])
-	state.scalar_mir.file_scopes.push(MirFileScope.new(body: body, error: error, error_variant: error_variant, argument_start: start, argument_count: 2))
-	mut changed := 0
-	mut block := function.block_start
-	while block < function.block_start + function.block_count
-		row := state.scalar_mir.blocks[block]
-		mut index := row.instruction_start
-		while index < row.instruction_start + row.instruction_count
-			instruction := state.scalar_mir.instructions[index]
-			if instruction.kind == mir_op_enum_new()
-				state.scalar_mir.instructions[index] = MirInstruction.new(kind: mir_op_file_scope(), result: instruction.result, first: path, second: mode, payload: 0, failure: -1, source_id: instruction.source_id, line: instruction.line)
-				changed += 1
-			end
-			index += 1
-		end
-		block += 1
-	end
-	expect(changed).to_equal(1)
-	mir_refine_call_effects(state.scalar_mir)
-	optimize_verified_mir(state.scalar_mir)
+	expect_compiler_phase(state, "finalize File MIR", finalize_checked_module(state))
 	intrinsic_mir_erase(state)
 	return state
 end
