@@ -89,7 +89,8 @@ class MeasurementTests(unittest.TestCase):
         for variant, length in (("ascii", 14), ("unicode", 8), ("escaped", 60),
                                 ("wide-array", 13), ("wide-object", 29),
                                 ("integer-array", 9), ("fractional-array", 11),
-                                ("mixed-number-object", 25)):
+                                ("mixed-number-object", 25),
+                                ("precise-fractional-array", 41)):
             with self.subTest(variant=variant):
                 self.assertEqual(measure.expected(dict(base, variant=variant)),
                                  f"ready\n0,{length}\ndone,0\n".encode())

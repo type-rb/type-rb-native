@@ -192,6 +192,10 @@ def expected(case, output_mode="stream"):
                 value = [index % 127 - 63 for index in range(count)]
             elif variant == "fractional-array":
                 value = [0.5 if index % 2 == 0 else 0.125 for index in range(count)]
+            elif variant == "precise-fractional-array":
+                numbers = (0.12345678901234568, -0.8765432109876543,
+                           12345.678901234567, 0.0012345678901234567)
+                value = [numbers[index % len(numbers)] for index in range(count)]
             elif variant == "mixed-number-object":
                 value = {f"key-{index}": (index % 127 - 63 if index % 3 == 0 else
                                          0.5 if index % 3 == 1 else 0.125)

@@ -104,6 +104,17 @@ func jsonDocument(count int, variant string) string {
 			} else {
 				parts = append(parts, "1.25e-1")
 			}
+		case "precise-fractional-array":
+			switch index % 4 {
+			case 0:
+				parts = append(parts, "0.12345678901234568")
+			case 1:
+				parts = append(parts, "-0.8765432109876543")
+			case 2:
+				parts = append(parts, "12345.678901234567")
+			default:
+				parts = append(parts, "0.0012345678901234567")
+			}
 		case "mixed-number-object":
 			number := strconv.Itoa(index%127 - 63)
 			if index%3 == 1 {
@@ -120,7 +131,7 @@ func jsonDocument(count int, variant string) string {
 			parts = append(parts, "aβ😀")
 		}
 	}
-	if variant == "wide-array" || variant == "integer-array" || variant == "fractional-array" {
+	if variant == "wide-array" || variant == "integer-array" || variant == "fractional-array" || variant == "precise-fractional-array" {
 		return "[" + strings.Join(parts, ",") + "]"
 	}
 	if variant == "wide-object" || variant == "mixed-number-object" {

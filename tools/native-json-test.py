@@ -293,6 +293,10 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
         ('5e-324', '5e-324'),
         ('2.2250738585072014e-308', '2.2250738585072014e-308'),
         ('1.7976931348623157e308', '1.7976931348623157e+308'),
+        ('0.12345678901234568', '0.12345678901234568'),
+        ('0.8765432109876543', '0.8765432109876543'),
+        ('12345.678901234567', '12345.678901234567'),
+        ('0.0012345678901234567', '0.0012345678901234567'),
     ]
     float_output_pairs += [('-' + token, '-' + expected_text)
                            for token, expected_text in float_output_pairs[2:]]
@@ -379,9 +383,10 @@ def main()
 
     float_source = declarations.replace('import trb/std/jsonc\n', '') + 'def main()\n' + '\n'.join(float_statements) + '\nend\n'
     float_output = ''.join(text + '\n' for _token, text in float_output_pairs)
-    main.write_text(float_source)
+    float_main = root / 'float-output.trb'
+    float_main.write_text(float_source)
     if args.reference:
-        assert run([args.reference.resolve(), 'run', main]).stdout == float_output
+        assert run([args.reference.resolve(), 'run', float_main]).stdout == float_output
     retained_float_source = float_source.replace('def main()', 'def report_floating()')
     retained = run([binary, 'repl'], data=retained_float_source +
                    'report_floating()\nclass LaterNumbers\nend\nreport_floating()\n:quit\n')

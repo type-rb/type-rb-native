@@ -13,7 +13,9 @@ in process wall/CPU/RSS, while the `ready` marker separates it from batch-arriva
 observations. `json-transform` scales the number of small documents. `json-document` instead
 scales one document: ASCII, Unicode and escaped scalar strings, or wide arrays
 and objects. Numeric variants separately cover integer arrays, fractional and
-exponent arrays, and objects mixing these forms. Their source spellings and
+exponent arrays, and objects mixing these forms. A separate precise-fractional
+array cycles through signed values and different scales with about 17 significant
+digits, alongside the shorter fractional forms. Their source spellings and
 decoded values match across implementations; the Python oracle independently
 checks the canonical output length. Its count is the number of repeated text
 units or container members;
