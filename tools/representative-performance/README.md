@@ -12,7 +12,11 @@ oracle checks every batch and final retained-data checksum. Setup is included
 in process wall/CPU/RSS, while the `ready` marker separates it from batch-arrival
 observations. `json-transform` scales the number of small documents. `json-document` instead
 scales one document: ASCII, Unicode and escaped scalar strings, or wide arrays
-and objects. Its count is the number of repeated text units or container members;
+and objects. Numeric variants separately cover integer arrays, fractional and
+exponent arrays, and objects mixing these forms. Their source spellings and
+decoded values match across implementations; the Python oracle independently
+checks the canonical output length. Its count is the number of repeated text
+units or container members;
 each batch parses and serializes the entire document. Input generation precedes
 `ready` but remains included in process costs. These are new input cases, not
 replacements for the existing small-document history.

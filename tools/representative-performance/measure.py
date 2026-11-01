@@ -188,6 +188,14 @@ def expected(case, output_mode="stream"):
                 value = ["aβ😀"] * count
             elif variant == "wide-object":
                 value = {f"key-{index}": "aβ😀" for index in range(count)}
+            elif variant == "integer-array":
+                value = [index % 127 - 63 for index in range(count)]
+            elif variant == "fractional-array":
+                value = [0.5 if index % 2 == 0 else 0.125 for index in range(count)]
+            elif variant == "mixed-number-object":
+                value = {f"key-{index}": (index % 127 - 63 if index % 3 == 0 else
+                                         0.5 if index % 3 == 1 else 0.125)
+                         for index in range(count)}
             else:
                 value = {"ascii": "abcdef", "unicode": "aβ😀",
                          "escaped": 'a\n"<>&\u2028'}[variant] * count

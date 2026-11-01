@@ -247,8 +247,48 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
                       f' + {json.dumps(suffix, ensure_ascii=False)}')
         statements.append(f'parse_jsonc_and_display({expression})')
         outputs.append(expected_document)
+    # Independent integer output controls include decimal carry boundaries and
+    # the largest portable exact values. The same corpus runs with forced GC.
+    portable_limit = 9007199254740991
+    portable_values = {0, 1, -1, portable_limit, -portable_limit,
+                       portable_limit - 1, 1 - portable_limit}
+    for power in range(16):
+        for offset in (-1, 0, 1):
+            value = 10 ** power + offset
+            portable_values.update((value, -value))
+    numeric_pairs = [(str(value), str(value)) for value in sorted(portable_values)]
+    numeric_pairs += [('-0', '0'), ('-0.0', '0'), ('1.0', '1'), ('1e2', '100'),
+                      ('1.25e-1', '0.125'), ('-0.5', '-0.5'),
+                      ('9007199254740990.5', '9007199254740990'),
+                      ('{"n":1e309,"n":7}', '{"n":7}'),
+                      ('{"n":7,"n":1e309}', 'JSON number is not finite')]
+    for token in ('9007199254740992', '-9007199254740992', '9' * 80):
+        numeric_pairs.append((token, 'JSON integer is outside the portable range'))
+    numeric_pairs.append(('9' * 400, 'JSON number is not finite'))
+    for document, expected_document in numeric_pairs:
+        statements.append(f'parse_and_display({json.dumps(document)})')
+        outputs.append(expected_document)
+    for token, kind in [('0', 'integer'), ('-0', 'integer'), ('1e2', 'integer'),
+                        (str(portable_limit), 'integer'), ('0.5', 'float'), ('1.25e-1', 'float')]:
+        statements.append(f'report_number_kind({json.dumps(token)})')
+        outputs.append(kind)
     declarations = source.split('def probe()')[0].replace('import trb/std/url\n', '')
     main.write_text(declarations + '''
+def report_number_kind(text: String)
+case JSON.parse(text)
+when Result::Ok(value)
+case value
+when JSON::Value::Integer(_integer)
+puts("integer")
+when JSON::Value::Float(_float)
+puts("float")
+else
+puts("unexpected value")
+end
+when Result::Err(error)
+puts(error.message)
+end
+end
 # Construct large runtime inputs without embedding large compiler constants.
 def repeated(text: String, count: Integer): String
 mut parts: Array<String> := []
@@ -326,6 +366,12 @@ def main()
                        '1eX', '1.2.3', '9007199254740992', '1e309'):
             cursor_documents.extend((number, '[0,' + number + ']',
                                      '{"held":"β😀","n":' + number + '}'))
+        for number in (str(portable_limit), str(-portable_limit), str(portable_limit + 1),
+                       str(-portable_limit - 1), '9' * 80, '9' * 400, '-0', '00', '-01',
+                       '1e-400', '9007199254740990.5', '9007199254740991.5'):
+            cursor_documents.extend((number, 'true ' + number, '[' + number + ',]',
+                                     '{"n":' + number + ',"n":3}',
+                                     '{"n":3,"n":' + number + '}'))
         cursor_source = declarations.replace('import trb/std/jsonc\n', '') + '''
 def report_cursor(text: String)
 case JSON.parse(text)
