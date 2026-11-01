@@ -8,7 +8,6 @@ from pathlib import Path
 import re
 import struct
 import subprocess
-import sys
 import tempfile
 
 parser = argparse.ArgumentParser(description=__doc__)
