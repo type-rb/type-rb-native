@@ -158,6 +158,26 @@ def default_mutation(name: str, source: str) -> list[str] | None:
         if literal and int(literal[1]) < 9007199254740991 and source.count(needle) == 1:
             replacement = needle[:literal.start(1)] + str(int(literal[1]) + 1) + needle[literal.end(1):]
             return [name, needle, replacement]
+    # Sparse capacity helpers can contain only assignments and variable bounds.
+    # Select a complete unique binding so the mutation cannot touch a comment,
+    # string, fractional literal or an unrelated occurrence of the same factor.
+    product = r"^\t*[a-z_][a-z0-9_]* := [a-z_][a-z0-9_]* \* ([0-9]+)\n"
+    for match in re.finditer(STRING + r"|#[^\n]*|" + product, body, re.MULTILINE):
+        needle = match.group(0)
+        factor = re.fullmatch(product, needle)
+        if factor and 0 < int(factor[1]) < 9007199254740991 and source.count(needle) == 1:
+            replacement = needle[:factor.start(1)] + str(int(factor[1]) + 1) + "\n"
+            return [name, needle, replacement]
+    # Runtime emitters can consist entirely of IL string literals. As a final
+    # fallback, alter one quoted emitted diagnostic without changing TypeRB
+    # escape syntax or the established priority of ordinary source mutations.
+    for match in re.finditer(STRING + r"|#[^\n]*", body):
+        literal = match.group(0)
+        if literal.startswith('"'):
+            for emitted in re.finditer(r'\\"[A-Za-z0-9 _.,:;!?()-]{3,}\\"', literal):
+                text = emitted.group(0)
+                if source.count(text) == 1:
+                    return [name, text, text[:-2] + '~\\"']
     return None
 
 

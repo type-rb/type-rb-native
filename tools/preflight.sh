@@ -68,7 +68,7 @@ fi
 step "QBE dependency identity" python3 tools/qbe_toolchain_test.py
 step "authored QBE branch widths" python3 tools/native-runtime-branch-test.py --check-source
 step "compiler source staging" python3 tools/compiler_sources_test.py
-step "bootstrap snapshot input bound" python3 tools/bootstrap_snapshot_size_test.py
+step "bootstrap snapshot input and catalog bounds" python3 tools/bootstrap_snapshot_size_test.py
 step "compiler ownership and migration" sh -c 'python3 tools/compiler_layout_test.py && python3 tools/migrate_compiler_layout_test.py && python3 tools/compiler_layout.py'
 step "CI planner" node --test tools/ci-plan-test.mjs tools/ci-run-suites-test.mjs tools/recovery-workspace-test.mjs
 step "recovery import boundaries" sh -c '
@@ -92,6 +92,8 @@ step "HTTP REPL reference contract" python3 tools/native-web-network-repl-test.p
 step "gzip response reference contracts" python3 tools/native-web-compression-test.py "$reference" --reference --receipt "$log.json"
 step "digest and HMAC reference contracts" python3 tools/native-crypto-test.py "$reference" --reference --receipt "$log.json"
 step "OIDC reference contracts" python3 tools/native-oidc-test.py "$reference" --reference --tls --transport --cli-paths --receipt "$log.json"
+step "filesystem reference contracts" python3 tools/native-filesystem-test.py "$reference" --reference --report "$log.json"
+step "filesystem reference rejection" python3 tools/native-filesystem-check-test.py "$reference" --reference --report "$log.json"
 rm -f "$log.json"
 if [ -f tools/project-scenarios.py ]; then
 	# Scenarios run with an isolated HOME; share the Go build cache as CI does.

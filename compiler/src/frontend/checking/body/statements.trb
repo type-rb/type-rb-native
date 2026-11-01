@@ -1,3 +1,4 @@
+import { contained_scoped_resource, scoped_resource_name } from frontend/types/resource_types
 import { checked_category_value } from frontend/types/value_categories
 import { block_collection_escape, fresh_pending_collection_literal, inferred_collection_context, pending_collection_declaration } from frontend/checking/collections/context_analysis
 import { binding_use_catch, binding_use_local, binding_use_result } from state/binding_kinds
@@ -37,7 +38,7 @@ import { array_element_type, find_record_type, resolve_type_name } from frontend
 import { CompilerState, diagnostic, has_diagnostic, local_add, terminal_token } from state/state
 import { CheckedLocals, local_bind, local_find, local_require_use } from state/local_state
 import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from support/storage
-import { check_expression } from frontend/checking/body/expressions
+import { check_expression, check_expression_use } from frontend/checking/body/expressions
 import { check_control_value, check_transfer_value, checked_while } from frontend/checking/body/control
 import { checked_iteration } from frontend/checking/body/iteration
 
@@ -107,7 +108,11 @@ def check_declaration(
 	if mutable == 1 && declared_type == ""
 		declared_type = inferred_collection_context(state, origin)
 	end
-	value := check_statement_value(state, position, locals, declared_type)
+	if contained_scoped_resource(state, declared_type) != "" && scoped_resource_name(state, declared_type) == ""
+		diagnostic(state, "TRBN4004", line, "scoped resource cannot appear in a stored local type")
+	end
+	borrowed := mutable == 0
+	value := check_direct_statement_value(state, position, locals, declared_type, borrowed, 1)
 	if declared_type == ""
 		block_collection_escape(state, locals, value)
 	end
@@ -231,7 +236,7 @@ def check_simple_statement(
 		if pending_hash.kind == hash_action_index_write() && expected == "" && token_is(state, position[0], "[") && token_is(state, position[0] + 1, "]")
 			right_expected = "Array<Any>"
 		end
-		right := check_statement_value(state, position, locals, right_expected)
+		right := check_direct_statement_value(state, position, locals, right_expected, false, 2)
 		# Replacing a pending value with another fresh empty literal supplies
 		# no constraint and does not escape the original lexical binding.
 		mut pending_replacement := false
@@ -552,11 +557,28 @@ end
 
 # The checker resolves branch values and transfer ownership; adapters only see
 # ordinary typed blocks, jump arguments and return/loop terminators.
+# A nested expression cannot inherit permission to acquire a resource from an
+# enclosing initializer. The parsed call body must start at this exact value.
+def check_direct_statement_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String, borrowed: Boolean, kind: Integer): CheckedValue
+	saved_origin := locals.file_value[0]
+	saved_kind := locals.file_value[1]
+	locals.file_value[0] = position[0]
+	locals.file_value[1] = kind
+	value := check_statement_value_use(state, position, locals, expected, borrowed)
+	locals.file_value[0] = saved_origin
+	locals.file_value[1] = saved_kind
+	return value
+end
+
 def check_statement_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String): CheckedValue
+	return check_statement_value_use(state, position, locals, expected, false)
+end
+
+def check_statement_value_use(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String, borrowed: Boolean): CheckedValue
 	origin := position[0]
 	encoded := sparse_integer_at(state.parsed.catch_origins, origin)
 	if encoded == 0
-		return check_expression(state, position, locals, 1, expected)
+		return check_expression_use(state, position, locals, 1, expected, borrowed)
 	end
 	handler := state.parsed.catch_syntax[encoded - 1]
 	value := check_expression(state, position, locals, 1, "")

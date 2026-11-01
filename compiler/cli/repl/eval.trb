@@ -1,3 +1,6 @@
+import { repl_file_acquisition, repl_filesystem_call } from repl/filesystem
+import { standard_filesystem_host } from frontend/resolution/filesystem_intrinsics
+import { scoped_resource_name } from frontend/types/resource_types
 import { oidc_verify_function } from frontend/resolution/oidc_intrinsics
 import { standard_crypto } from frontend/resolution/crypto_intrinsics
 import { repl_crypto_call } from repl/crypto
@@ -89,6 +92,10 @@ import { repl_scalar_string, repl_binding_value, repl_assign_binding, repl_rende
 def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Integer>, mut store: ReplStore): Integer
 	if repl_failed(store)
 		return 0
+	end
+	filesystem := standard_filesystem_host(state, function)
+	if filesystem >= 0
+		return repl_filesystem_call(store, filesystem, arguments)
 	end
 	if oidc_verify_function(state, function)
 		store.error[0] = "intrinsic trb.internal.auth.oidc.verify_bearer has no REPL runtime adapter"
@@ -2047,6 +2054,9 @@ def repl_object_method(mut state: CompilerState, mut position: Array<Integer>, m
 			return 0
 		end
 		position[0] = finish
+	end
+	if receiver < 0 && member == "open" && scoped_resource_name(state, type_name) == "File"
+		return repl_file_acquisition(state, position, store, environment)
 	end
 	encoded := sparse_integer_at(state.callables.checked[0].generic_calls, position[0])
 	if receiver < 0 && member == "new"

@@ -4,7 +4,7 @@ import { binary_add_assign } from frontend/types/operators
 import { token_kind_attribute, token_kind_end_of_input, token_kind_end_of_module, token_kind_identifier, token_kind_newline, token_kind_number, token_kind_string } from state/token_kinds
 import { TransformSyntax, transform_kind } from frontend/types/transform_model
 import { expand_quoted_token } from frontend/syntax/literal_syntax
-import { LambdaSyntax } from frontend/types/callable_types
+import { CallBlockSyntax, LambdaParameter, LambdaSyntax } from frontend/types/callable_types
 import { parse_lambda_parameters } from frontend/syntax/lambda_syntax
 import { CatchSyntax } from frontend/types/result_model
 import { nominal_application_end, nominal_application_name } from frontend/syntax/generic_syntax
@@ -318,6 +318,13 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 					skip_newlines(state, position)
 					if !parse_arguments_syntax(state, position)
 						return false
+					end
+				end
+				# Valid iteration bodies were consumed by their own grammar above.
+				# A malformed iteration suffix must not become a generic call body.
+				if member == "each" || member == "each_slice" || member == "with_index"
+					if token_is(state, position[0], "do") || token_is(state, position[0], "{")
+						return finish_statement(state, position)
 					end
 				end
 			else
@@ -641,6 +648,11 @@ def parse_statement_value_syntax(mut state: CompilerState, mut position: Array<I
 	if !parse_expression_syntax(state, position, 1)
 		return false
 	end
+	if token_is(state, position[0], "do") || token_is(state, position[0], "{")
+		if !parse_call_block_syntax(state, position, origin)
+			return false
+		end
+	end
 	if !token_is(state, position[0], "catch")
 		return true
 	end
@@ -752,5 +764,61 @@ def parse_transform_syntax(mut state: CompilerState, mut position: Array<Integer
 		store_integer(state.parsed.transform_origins, origin, state.parsed.transforms.size())
 		store_integer(state.parsed.transform_origins, body_finish, -state.parsed.transforms.size())
 	end
+	return !has_diagnostic(state)
+end
+
+# A trailing body belongs to a whole statement value. The parser records only
+# syntax; neither the spelling File nor a provider flag grants a resource here.
+def parse_call_block_syntax(mut state: CompilerState, mut position: Array<Integer>, call_start: Integer): Boolean
+	origin := position[0]
+	encoded := sparse_integer_at(state.callables.call_block_origins, origin)
+	if encoded > 0
+		position[0] = state.callables.call_blocks[encoded - 1].finish
+		return true
+	end
+	brace := token_is(state, origin, "{")
+	advance(position)
+	mut parameters: Array<LambdaParameter> := []
+	if token_is(state, position[0], "|")
+		advance(position)
+		while !token_is(state, position[0], "|") && !has_diagnostic(state)
+			binding := position[0]
+			name := expect_identifier(state, position)
+			parameters.each do |parameter|
+				if parameter.name == name
+					diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, binding), "duplicate block parameter " + name)
+				end
+			end
+			parameters.push(LambdaParameter.new(name: name, type_name: "", origin: binding, mutable: 0))
+			if !token_is(state, position[0], ",")
+				break
+			end
+			advance(position)
+		end
+		if !expect(state, position, "|")
+			return false
+		end
+	elsif brace
+		diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, origin), "call block parameters must be written as |name, ...|")
+		return false
+	end
+	if !brace && !finish_statement(state, position)
+		return false
+	end
+	skip_newlines(state, position)
+	body_start := position[0]
+	if !parse_statement_block(state, position)
+		return false
+	end
+	body_finish := position[0]
+	mut terminator := "end"
+	if brace
+		terminator = "}"
+	end
+	if !expect(state, position, terminator)
+		return false
+	end
+	state.callables.call_blocks.push(CallBlockSyntax.new(origin: origin, call_start: call_start, parameters: parameters, body_start: body_start, body_finish: body_finish, finish: position[0]))
+	store_integer(state.callables.call_block_origins, origin, state.callables.call_blocks.size())
 	return !has_diagnostic(state)
 end
