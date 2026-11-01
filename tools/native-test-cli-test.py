@@ -87,30 +87,32 @@ def main():
             run("failed-build", ["test", "--compile", "--outfile", "tests-bin"], 1)
             assert (root / "tests-bin").read_bytes() == previous, "failed compile replaced output"
             (root / "src/a_test.trb").write_text("# An existing test file without declarations.\n")
-            run("empty-file", ["test"], stdout="\n0 test(s), 0 failure(s)\n")
-            result = run("empty-json", ["test", "--reporter", "json"])
-            assert json.loads(result.stdout) == {"failed": 0, "total": 0, "type": "test_summary"}
+            run("empty-file", ["test"], 1, contains="test files must declare at least one top-level describe() suite")
+            run("empty-json", ["test", "--reporter", "json"], 1,
+                contains="test files must declare at least one top-level describe() suite")
             (root / "src/a_test.trb").write_text(header + 'describe("Empty") do\nend\n')
-            run("empty-suite", ["test"], stdout="\n0 test(s), 0 failure(s)\n")
+            run("empty-suite", ["test"], 1, contains="describe() must contain at least one test() or nested describe()")
             (root / "src/a_test.trb").unlink()
             run("no-tests", ["test"], 1, contains="no *_test.trb files found")
             run("no-tests-before-selection", ["test", "src/missing_test.trb"], 1,
                 contains="no *_test.trb files found")
             if args.reference:
-                # Replay the zero-case distinction at the exact reference pin.
+                # Replay empty-file and suite rejection at the exact reference pin.
                 # The Native-only invocation still needs no reference compiler.
                 config = json.loads((root / "trbconfig.jsonc").read_text())
                 config["mode"] = "go"
                 config["go"] = {"module": "example.com/runner"}
                 (root / "trbconfig.jsonc").write_text(json.dumps(config))
                 reference = args.reference.resolve()
-                for name, source, arguments, expected, status in (
-                    ("empty-file", "# Empty.\n", ["test"], "\n0 test(s), 0 failure(s)\n", 0),
+                for name, source, arguments, message in (
+                    ("empty-file", "# Empty.\n", ["test"],
+                     "test files must declare at least one top-level describe() suite"),
                     ("empty-json", "# Empty.\n", ["test", "--reporter", "json"],
-                     '{"failed":0,"total":0,"type":"test_summary"}\n', 0),
+                     "test files must declare at least one top-level describe() suite"),
                     ("empty-suite", header + 'describe("Empty") do\nend\n', ["test"],
-                     "\n0 test(s), 0 failure(s)\n", 0),
-                    ("no-tests-before-selection", None, ["test", "src/missing_test.trb"], "", 1),
+                     "describe() must contain at least one test() or nested describe()"),
+                    ("no-tests-before-selection", None, ["test", "src/missing_test.trb"],
+                     "no *_test.trb files found"),
                 ):
                     path = root / "src/a_test.trb"
                     if source is None:
@@ -122,11 +124,8 @@ def main():
                     rows.append({"name": "reference-" + name, "code": result.returncode,
                                  "stdout": result.stdout.replace(str(root), "<project>"),
                                  "stderr": result.stderr.replace(str(root), "<project>")})
-                    assert result.returncode == status and result.stdout == expected, rows[-1]
-                    if status:
-                        assert "no *_test.trb files found" in result.stderr, rows[-1]
-                    else:
-                        assert result.stderr == "", rows[-1]
+                    assert result.returncode == 1 and result.stdout == "", rows[-1]
+                    assert message in result.stderr, rows[-1]
         finally:
             if args.report:
                 args.report.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n")

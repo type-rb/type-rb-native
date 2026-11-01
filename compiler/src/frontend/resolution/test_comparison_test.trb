@@ -5,7 +5,7 @@ import { verify_mir } from mir/verify/module
 import { check, emit_qbe } from compiler
 import { CompilerState, compiler_new, has_diagnostic } from state/state
 import { standard_source_test_host } from state/standard_source_kinds
-import { store_integer } from support/storage
+import { load_string, store_integer } from support/storage
 import { lex } from frontend/syntax/lexer
 import { parse_module } from frontend/syntax/parser
 import { resolve } from frontend/checking/program/resolution
@@ -37,7 +37,7 @@ def test_equal_checked(source: String): CompilerState
 end
 
 def test_equal_dynamic_fixture(): CompilerState
-	return test_equal_checked("import trb/std/string_builder\nnewtype Label = String\ninterface Named\n name(): String\nend\nclass Base\nend\nclass Item < Base implements Named\n @text: String\n def initialize(text: String)\n  @text = text\n end\n def name(): String\n  return @text\n end\nend\nclass Other implements Named\n def name(): String\n  return \"same\"\n end\nend\ndef deep_equal<T>(actual: T, expected: T): Boolean\nend\ndef main()\n mut unrelated := StringBuilder.new()\nunrelated.append(\"kept\")\n puts(deep_equal<Label>(Label.new(\"a\"), Label.new(\"a\")))\n puts(!deep_equal<Label>(Label.new(\"a\"), Label.new(\"b\")))\n puts(deep_equal<Integer | String>(1, 1))\n puts(!deep_equal<Integer | String>(1, \"1\"))\n puts(deep_equal<Integer | String>(\"held\", \"he\" + \"ld\"))\n puts(deep_equal<Any>(1, 1))\n puts(!deep_equal<Any>(1, 1.0))\n puts(deep_equal<Array<Any>>([1, \"a\", true], [1, \"a\", true]))\n puts(!deep_equal<Array<Any>>([1, \"a\"], [1, \"b\"]))\n puts(deep_equal<Range<Integer>>(1..3, 1..3))\n puts(!deep_equal<Range<Integer>>(1..3, 1...3))\n puts(deep_equal<Named>(Item.new(\"same\"), Item.new(\"same\")))\n puts(!deep_equal<Named>(Item.new(\"same\"), Item.new(\"different\")))\n puts(!deep_equal<Named>(Item.new(\"same\"), Other.new()))\n puts(deep_equal<Base>(Item.new(\"same\"), Item.new(\"same\")))\n puts(!deep_equal<Base>(Item.new(\"same\"), Item.new(\"different\")))\n present: Integer? := 7\n puts(deep_equal<Integer?>(present, 7))\n puts(!deep_equal<Integer?>(present, 8))\nend\n")
+	return test_equal_checked("import trb/std/string_builder\nnewtype Label = String\ninterface Named\n name(): String\nend\nclass Base\nend\nclass Item < Base implements Named\n @text: String\n def initialize(text: String)\n  @text = text\n end\n def name(): String\n  return @text\n end\nend\nclass Other implements Named\n def name(): String\n  return \"same\"\n end\nend\ndef deep_equal<T>(actual: T, expected: T): Boolean\nend\ndef main()\n mut unrelated := StringBuilder.new()\nunrelated.append(\"kept\")\n puts(deep_equal<Label>(Label.new(\"a\"), Label.new(\"a\")))\n puts(!deep_equal<Label>(Label.new(\"a\"), Label.new(\"b\")))\n puts(deep_equal<Integer | String>(1, 1))\n puts(!deep_equal<Integer | String>(1, \"1\"))\n puts(deep_equal<Integer | String>(\"held\", \"he\" + \"ld\"))\n puts(deep_equal<Any>(1, 1))\n puts(!deep_equal<Any>(1, 1.0))\n puts(deep_equal<Array<Any>>([1, \"a\", true], [1, \"a\", true]))\n puts(!deep_equal<Array<Any>>([1, \"a\"], [1, \"b\"]))\n puts(deep_equal<Range<Integer>>(1..3, 1..3))\n puts(!deep_equal<Range<Integer>>(1..3, 1...3))\n puts(deep_equal<Named>(Item.new(\"same\"), Item.new(\"same\")))\n puts(!deep_equal<Named>(Item.new(\"same\"), Item.new(\"different\")))\n puts(!deep_equal<Named>(Item.new(\"same\"), Other.new()))\n present: Integer? := 7\n puts(deep_equal<Integer?>(present, 7))\n puts(!deep_equal<Integer?>(present, 8))\nend\n")
 end
 
 def test_equal_observations(collect: Boolean, dynamic: Boolean = false)
@@ -45,7 +45,7 @@ def test_equal_observations(collect: Boolean, dynamic: Boolean = false)
 	mut count := 26
 	if dynamic
 		state = test_equal_dynamic_fixture()
-		count = 18
+		count = 16
 	end
 	expect(verify_mir(state.scalar_mir, true)).to_equal("")
 	before := output_source(emit_qbe(state))
@@ -87,6 +87,17 @@ describe("Typed test deep equality") do
 
 	test("compares dynamic tags and nominal layouts through forced collection") do
 		test_equal_observations(true, true)
+	end
+
+	test("rejects implicit class-to-base conversion like the reference") do
+		source := "class Base\nend\nclass Item < Base\nend\ndef deep_equal<T>(actual: T, expected: T): Boolean\nend\ndef main()\nputs(deep_equal<Base>(Item.new(), Item.new()))\nend\n"
+		mut state := compiler_new(1048576)
+		expect_compiler_phase(state, "lex", lex(state, source))
+		store_integer(state.standard_modules, state.module_graph.entry_module[0], standard_source_test_host())
+		expect_compiler_phase(state, "parse", parse_module(state, 0, state.module_graph.entry_module[0]))
+		expect_compiler_phase(state, "resolve", resolve(state))
+		expect(check(state)).to_be_false()
+		expect(load_string(state.diagnostics.messages, 0)).to_equal("expected Base, found Item")
 	end
 
 	test("independently rejects mixed value types and incorrect result types") do

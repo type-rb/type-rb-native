@@ -168,14 +168,11 @@ describe("Dynamic equality") do
         expect(1..3).to_equal(1..3)
         expect(1..3).to_not_equal(1...3)
     end
-    test("interfaces and bases retain dynamic class fields") do
+    test("interfaces retain dynamic class fields") do
         item: Named := Item.new("same")
         expect(item).to_equal(Item.new("same"))
         expect(item).to_not_equal(Item.new("different"))
         expect(item).to_not_equal(Other.new())
-        base: Base := Item.new("same")
-        expect(base).to_equal(Item.new("same"))
-        expect(base).to_not_equal(Item.new("different"))
     end
     test("nullable values compare their present payload") do
         value: Integer? := 7
