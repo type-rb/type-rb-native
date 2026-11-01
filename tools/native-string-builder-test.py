@@ -155,6 +155,44 @@ end
             "a😀0\na😀255\nZ\n1\ntrue\n0\n",
         ),
         (
+            'ascii-codepoints',
+            """import trb/std/string_builder
+
+def main()
+	mut writer := StringBuilder.new()
+	mut shared := writer
+	mut saved: Array<String> := []
+	mut point := 0
+	while point < 128
+		writer.clear()
+		writer.append_codepoint(point)
+		saved.push(shared.to_s())
+		shared.clear()
+		shared.append_codepoint(127 - point)
+		point += 1
+	end
+	mut checksum := 0
+	point = 0
+	while point < 128
+		bytes := saved[point].to_bytes()
+		checksum += bytes.at(0)
+		if bytes.size() != 1 || bytes.at(0) != point
+			puts("mismatch")
+		end
+		point += 1
+	end
+	puts(checksum)
+	puts(writer.to_s().to_bytes().at(0))
+	writer.clear()
+	writer.append_codepoint(128)
+	writer.append_codepoint(1114111)
+	puts(writer.size())
+	puts(writer.to_s().to_bytes().size())
+end
+""",
+            "8128\n0\n2\n6\n",
+        ),
+        (
             'display',
             """import trb/std/string_builder
 def show(value: Any)

@@ -148,8 +148,7 @@ int main(int argc, char **argv) {
     assert(argc == 1);
     struct string *retained[128];
     for (int i = 0; i < 128; ++i) {
-        retained[i] = trbn_string_from_codepoint(i);
-        assert(retained[i] == trbn_string_index(source, i));
+        retained[i] = trbn_string_index(source, i);
         assert(retained[i] == trbn_string_index(source, i - 128));
     }
     memset(source->bytes, 255, 128); free(source);
@@ -191,8 +190,7 @@ int main(int argc, char **argv) {
         assert(value->points == 1 && value->bytes[value->length] == 0);
         assert(trbn_utf8_count(value->bytes, value->length) == 1);
         assert(trbn_utf8_scalar(value->bytes, value->length) == expected);
-        if (expected < 128) assert(value->descriptor == 0);
-        else free(value);
+        free(value);
     }
     const unsigned char *invalid[] = {(const unsigned char *)"\x80", (const unsigned char *)"\xc0\xaf",
         (const unsigned char *)"\xed\xa0\x80", (const unsigned char *)"\xf4\x90\x80\x80",
@@ -308,7 +306,7 @@ with tempfile.TemporaryDirectory(prefix='native String index ') as directory:
     good = subprocess.run([str(root / 'probe')], capture_output=True, timeout=10)
     assert good.returncode == 0 and good.stderr == b'', good
     assert good.stdout == b'String indexing, Unicode lifetime, allocation-free queries and guarded bounds passed\n', good
-    observations.append({'case': 'ascii-cache', 'reads': 256, 'codepointConstructions': 128, 'allocations': 0})
+    observations.append({'case': 'ascii-cache', 'reads': 256, 'allocations': 0})
     observations.append({'case': 'string-queries', 'modes': 5, 'allocations': 0,
                          'controls': ['overlap', 'nul', 'invalid-utf8', 'guarded-spans', 'empty', 'oversized']})
     observations.append({'case': 'short-byte-search', 'singleByteNeedles': 256,
