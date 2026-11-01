@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Verify String transform bytes, Unicode lookup, retained roots and allocation."""
+import argparse
 import hashlib
 import json
 import os
@@ -7,10 +8,13 @@ from pathlib import Path
 import re
 import struct
 import subprocess
-import sys
 import tempfile
 
-binary = Path(sys.argv[1]).resolve()
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('binary', type=Path)
+parser.add_argument('--reference', type=Path)
+args = parser.parse_args()
+binary = args.binary.resolve()
 repository = Path(__file__).resolve().parent.parent
 
 with tempfile.TemporaryDirectory(prefix='native-string-transforms-') as temporary:
@@ -36,15 +40,17 @@ with tempfile.TemporaryDirectory(prefix='native-string-transforms-') as temporar
         run(['/usr/bin/cc', root / 'program.s', '-lm', '-o', root / 'program'])
         return root / 'program'
 
-    def compile_source(source):
+    def compile_source(source, *, split_only=False):
         il = emit(source)
-        for symbol, callees in (
-            (b'trbn_string_split', (b'trbn_string_from_bytes', b'trbn_array_push_paced')),
+        checks = [
+            (b'trbn_string_split', (b'trbn_string_from_bytes', b'trbn_split_fragment', b'trbn_array_push_paced')),
             (b'trbn_split_pair', (b'trbn_split_fragment', b'trbn_array_push_paced')),
             (b'trbn_split_fragment', (b'trbn_string_alloc',)),
-            (b'trbn_string_replace', (b'trbn_string_alloc',)),
-            (b'trbn_string_case', (b'trbn_string_alloc',)),
-        ):
+        ]
+        if not split_only:
+            checks += [(b'trbn_string_replace', (b'trbn_string_alloc',)),
+                       (b'trbn_string_case', (b'trbn_string_alloc',))]
+        for symbol, callees in checks:
             start = il.index(b'function l $' + symbol + b'(')
             end = il.index(b'\n}', start) + 2
             body = il[start:end]
@@ -164,6 +170,72 @@ end
     assert measured['collections'] >= 4096 and measured['peak-heap-bytes'] < 2 * 1024 * 1024, measured
     assert measured['allocated-bytes'] < 1024 * 1024, measured
 
+    # All byte values, split boundaries and owned fragment lifetimes use the
+    # dynamic path. Invalid bytes each count as one decoding unit, while valid
+    # multibyte sequences must still be decoded after a separator cuts them.
+    all_bytes = ''.join('\\x%02x' % byte for byte in range(256))
+    split_source = '''import trb/std/process
+def main()
+args := Process.argv()
+mut text := args[0]
+mut separator := args[1]
+if text == "__all_bytes__"
+text = "ALL_BYTES"
+end
+if separator == "__nul__"
+separator = "\\x00"
+end
+mut parts := text.split(separator)
+saved := parts[0]
+puts(parts.size())
+parts.each { |part| puts(part.size()) }
+puts(parts.join("\\x1f"))
+text = "source replaced"
+parts[0] = "first replaced"
+puts(saved)
+end
+'''.replace('ALL_BYTES', all_bytes)
+    program = compile_source(split_source, split_only=True)
+    reference_program = None
+    if args.reference:
+        project = root / 'reference-split'
+        (project / 'src').mkdir(parents=True)
+        (project / 'src/main.trb').write_text(split_source)
+        config = project / 'trbconfig.jsonc'
+        config.write_text(json.dumps({
+            'name': 'string-split-contract', 'version': '0.1.0', 'mode': 'go',
+            'sourceDir': 'src', 'outDir': 'build', 'copyFiles': False,
+            'packageManagement': 'managed',
+            'go': {'module': 'example.org/string-split-contract', 'version': '1.27'},
+        }))
+        reference_program = root / 'reference-split-program'
+        run([args.reference.resolve(), 'build', '--config', config,
+             '--compile', '--outfile', reference_program])
+    cases = [(bytes([byte]) + b':A:' + bytes([byte]) + b':',
+              bytes([byte]) if byte % 2 else b':') for byte in range(1, 256)]
+    cases += [(b'', b':'), (b'::', b':'), (b'plain', b'absent'),
+              (b'aaaaa', b'aa'), (b'\xc2X\xa0', b'X'),
+              (b'\xe0\x80\x80|\xed\xa0\x80|\xf4\x90\x80\x80', b'|'),
+              (b'A|\xf0\x9f\x98', b'|')]
+    unicode_text = 'a¢€😀z'.encode()
+    for start in range(len(unicode_text)):
+        for width in (1, 2, 3):
+            cases.append((unicode_text, unicode_text[start:start + width]))
+    cases += [(b'__all_bytes__', b'__nul__'),
+              (b'__all_bytes__', b'\x80'), (b'__all_bytes__', b'\xff')]
+    for text, separator in cases:
+        raw = bytes(range(256)) if text == b'__all_bytes__' else text
+        pattern = b'\x00' if separator == b'__nul__' else separator
+        fragments = raw.split(pattern)
+        sizes = [len(part.decode('utf-8', errors='surrogateescape')) for part in fragments]
+        expected_output = ('\n'.join(map(str, [len(fragments), *sizes])) + '\n').encode()
+        expected_output += b'\x1f'.join(fragments) + b'\n' + fragments[0] + b'\n'
+        result = run([program, text, separator], stats=True)
+        assert result.stdout == expected_output, (text, separator, result.stdout, expected_output)
+        statistics(result)
+        if reference_program:
+            assert run([reference_program, text, separator]).stdout == expected_output
+
     retained = run([binary, 'repl'], data='''mut source := "a😀b😀"
 parts := source.split("😀")
 saved := source.replace_all("😀", "日本").upcase()
@@ -183,5 +255,24 @@ puts(saved.downcase())
     assert len(retained.stderr.splitlines()) == 2, retained
     assert b'String split separator is empty' in retained.stderr, retained
     assert b'String replacement pattern is empty' in retained.stderr, retained
+
+    byte_session = b'''mut source := "a\\x80:a\\xff:"
+parts := source.split(":")
+saved := parts[1]
+source = "changed"
+record LaterBytes
+value: String
+end
+puts(parts.size())
+puts(saved.size())
+puts(parts.join("/"))
+:quit
+'''
+    byte_retained = run([binary, 'repl'], data=byte_session)
+    expected_bytes = b'3\n2\na\x80/a\xff/\n'
+    assert expected_bytes in byte_retained.stdout and not byte_retained.stderr, byte_retained
+    if args.reference:
+        reference_retained = run([args.reference.resolve(), 'repl'], data=byte_session)
+        assert expected_bytes in reference_retained.stdout and not reference_retained.stderr, reference_retained
 
 print('String transform Unicode, byte, lifetime, allocation and retained REPL checks passed')
