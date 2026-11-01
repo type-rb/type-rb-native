@@ -272,6 +272,34 @@ with tempfile.TemporaryDirectory(prefix='native-json-') as temporary:
                         (str(portable_limit), 'integer'), ('0.5', 'float'), ('1.25e-1', 'float')]:
         statements.append(f'report_number_kind({json.dumps(token)})')
         outputs.append(kind)
+    # Construct Float values directly: JSON decoding has a narrower portable
+    # integer range. Cover both sides of notation thresholds and signed zero.
+    float_output_pairs = [
+        ('0', '0'),
+        ('-0', '-0'),
+        ('0.5', '0.5'),
+        ('0.125', '0.125'),
+        ('1', '1'),
+        ('1.5', '1.5'),
+        ('1e-6', '0.000001'),
+        ('9.999999999999997e-7', '9.999999999999997e-7'),
+        ('1.0000000000000002e-6', '0.0000010000000000000002'),
+        ('1e-10', '1e-10'),
+        ('1e20', '100000000000000000000'),
+        ('9.999999999999999e20', '999999999999999900000'),
+        ('1e21', '1e+21'),
+        ('1.0000000000000001e21', '1.0000000000000001e+21'),
+        ('1e22', '1e+22'),
+        ('5e-324', '5e-324'),
+        ('2.2250738585072014e-308', '2.2250738585072014e-308'),
+        ('1.7976931348623157e308', '1.7976931348623157e+308'),
+    ]
+    float_output_pairs += [('-' + token, '-' + expected_text)
+                           for token, expected_text in float_output_pairs[2:]]
+    float_statements = [f'display(JSON::Value::Float({json.dumps(token)}.to_f()))'
+                        for token, _expected_text in float_output_pairs]
+    statements.extend(float_statements)
+    outputs.extend(expected_text for _token, expected_text in float_output_pairs)
     declarations = source.split('def probe()')[0].replace('import trb/std/url\n', '')
     main.write_text(declarations + '''
 def report_number_kind(text: String)
@@ -348,6 +376,16 @@ def main()
     run([binary.with_name('qbe'), '-o', assembly, ssa])
     run(['/usr/bin/cc', assembly, '-lm', '-o', forced_program])
     assert run([forced_program]).stdout == '\n'.join(outputs) + '\n'
+
+    float_source = declarations + 'def main()\n' + '\n'.join(float_statements) + '\nend\n'
+    float_output = ''.join(text + '\n' for _token, text in float_output_pairs)
+    main.write_text(float_source)
+    if args.reference:
+        assert run([args.reference.resolve(), 'run', main]).stdout == float_output
+    retained_float_source = float_source.replace('def main()', 'def report_floating()')
+    retained = run([binary, 'repl'], data=retained_float_source +
+                   'report_floating()\nclass LaterNumbers\nend\nreport_floating()\n:quit\n')
+    assert not retained.stderr and retained.stdout == float_output * 2, retained
     if args.reference:
         assert run([args.reference.resolve(), 'run', main]).stdout == '\n'.join(outputs) + '\n'
 
@@ -480,7 +518,8 @@ end
         assert run([args.reference.resolve(), 'run', main]).stdout == encoding_output
 
     for regression_source, regression_output in ((pointer_source, pointer_output),
-                                                  (encoding_source, encoding_output)):
+                                                  (encoding_source, encoding_output),
+                                                  (float_source, float_output)):
         main.write_text(regression_source)
         emitted = run([binary, '--internal-driver', 'emit-qbe', main]).stdout
         conversion = re.search(r'^function l \$trbn_integer_to_string\([^\n]*\) \{.*?^\}', emitted, re.M | re.S)
