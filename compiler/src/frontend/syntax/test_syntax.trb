@@ -4,7 +4,7 @@ import { parse_statement_block_with_test_guard } from frontend/syntax/body_synta
 import { advance, expect, finish_statement, skip_newlines, token_is } from frontend/syntax/syntax_tokens
 import { import_kind_module, import_kind_named } from state/import_kinds
 import { token_kind_string } from state/token_kinds
-import { CompilerState, diagnostic_at, function_index_key, has_diagnostic, terminal_token } from state/state
+import { CompilerState, diagnostic_at, has_diagnostic, terminal_token } from state/state
 import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from support/storage
 
 # Imports are validated after parsing the entire test file, so their source
@@ -77,7 +77,9 @@ end
 
 def test_case_function(mut state: CompilerState, origin: Integer, body: Integer, finish: Integer): Integer
 	index := state.declarations.function_count[0]
-	name := "__trb_test_" + integer_string(index)
+	# The runner addresses this function by its compiler-owned identity. Its
+	# unspellable name never enters the authored declaration lookup table.
+	name := "$test:" + integer_string(index)
 	module_index := state.module_graph.active_module[0]
 	store_string(state.nominal.function_receivers, index, "")
 	store_string(state.declarations.function_names, index, name)
@@ -88,7 +90,6 @@ def test_case_function(mut state: CompilerState, origin: Integer, body: Integer,
 	store_integer(state.declarations.function_body_starts, index, body)
 	store_integer(state.declarations.function_body_ends, index, finish)
 	store_integer(state.declarations.function_lines, index, load_integer(state.source_tokens.token_lines, origin))
-	state.declarations.function_lookup[function_index_key(module_index, name)] = index
 	state.declarations.function_count[0] += 1
 	return index
 end

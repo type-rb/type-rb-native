@@ -2,6 +2,7 @@ import { lex_module } from frontend/syntax/lexer
 import { parse_module, parse_module_with_tests } from frontend/syntax/parser
 import { CompilerState, add_module, compiler_new, has_diagnostic } from state/state
 import { compiler_parsed_program_fork } from state/source_state
+import { find_function_in_module } from frontend/resolution/declaration_lookup
 import { load_integer, load_string } from support/storage
 import { describe, expect, test } from trb/std/test
 
@@ -19,6 +20,17 @@ def test_source_header(): String
 end
 
 describe("Compiler-owned test declarations") do
+	test("keeps generated case identities outside authored function lookup") do
+		source := test_source_header() + "describe(\"A\") do\ntest(\"B\") do\nputs(1)\nend\nend\ndef __trb_test_0()\nend\n"
+		state := parsed_test_source(source)
+		expect(has_diagnostic(state)).to_be_false()
+		case_id := state.parsed.tests[1].function_id
+		expect(case_id).to_equal(0)
+		expect(load_string(state.declarations.function_names, case_id)).to_equal("$test:0")
+		expect(find_function_in_module(state, 0, "$test:0")).to_equal(-1)
+		expect(find_function_in_module(state, 0, "__trb_test_0")).to_equal(1)
+	end
+
 	test("retains nested order, parents, labels and authored function bodies") do
 		source := test_source_header() + "describe(\"Numbers\") do\n test(\"first\") do\n expect(1).to_equal(1)\n end\n describe(\"nested\") do\n test(\"second\") do\n puts(\"ok\")\n end\n end\nend\n"
 		state := parsed_test_source(source)
