@@ -1,4 +1,4 @@
-import { standard_source_function, standard_source_result, standard_source_root } from state/standard_source_kinds
+import { standard_source_function, standard_source_result, standard_source_root, standard_source_test_runner } from state/standard_source_kinds
 import { declaration_alias, declaration_enum, declaration_function, declaration_generic_function, declaration_generic_type, declaration_global, declaration_namespace, declaration_newtype, declaration_object, declaration_record } from frontend/types/declaration_kinds
 import { generic_base } from frontend/types/generic_arguments
 import { find_object_in_module } from frontend/types/object_types
@@ -58,6 +58,15 @@ def find_record_in_module(state: CompilerState, module_index: Integer, name: Str
 end
 
 def find_function_in_module(state: CompilerState, module_index: Integer, name: String): Integer
+	# Only the compiler-owned runner can bind an unspellable parsed case.
+	# Authored declarations and imports never gain access through this path.
+	if sparse_integer_at(state.standard_modules, state.module_graph.active_module[0]) == standard_source_test_runner()
+		state.parsed.tests.each do |item|
+			if item.source_id == module_index && item.function_id >= 0 && load_string(state.declarations.function_names, item.function_id) == name
+				return item.function_id
+			end
+		end
+	end
 	return find_name_index(state.declarations.function_lookup, function_index_key(module_index, name))
 end
 
