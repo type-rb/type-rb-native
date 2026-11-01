@@ -179,6 +179,22 @@ exit behavior otherwise. Allocation failure and invalid internal object state
 remain process-fatal. This internal mechanism does not introduce a public catch
 syntax or imply networking cancellation and deadline support.
 
+Scoped File acquisition uses a parser-owned trailing block and checked lexical
+captures. It does not create an authored callback value. The frontend checks
+immutable resource borrows and transitively reached calls; MIR independently
+verifies non-escaping resources, synchronous call edges, typed captures and the
+structured acquisition operation. The backend consumes that operation to acquire,
+invoke its known body and close exactly once before publishing a Result.
+File and directory cleanup frames share the recovery unwind stack.
+
+File/Dir value and error construction stays in checked TypeRB source. Only the
+loader-owned private filesystem adapter can request the narrow libc operations;
+matching authored names or imports cannot obtain that privilege. The REPL uses
+the same checked bodies and a CLI-owned synchronous scope callback, clearing its
+private descriptor payload before returning to the host's close operation.
+See [file and directory operations](native-filesystem.md) for the public API and
+its validation boundary.
+
 The CLI/REPL under `compiler/cli/` is outside the ordinary core closure.
 Snapshot recovery derives a temporary flattened source
 from the canonical modules using

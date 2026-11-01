@@ -1,3 +1,4 @@
+import { mir_op_file_scope } from mir/model/instructions
 import { mir_terminator_branch, mir_terminator_jump, mir_terminator_return } from mir/model/control
 import { mir_op_array_position, mir_op_array_store, mir_op_callable_new, mir_op_direct_call, mir_op_enum_new, mir_op_hash_new, mir_op_hash_set, mir_op_indirect_call, mir_op_record_new, mir_op_scalar_binary, mir_op_scalar_literal, mir_op_singleton_literal, mir_op_string_compare, mir_op_string_concat, mir_op_string_index, mir_op_string_literal, mir_op_string_replace } from mir/model/instructions
 import { integer_string } from support/literals
@@ -79,7 +80,16 @@ def mir_live_before(native_module: MirModule, managed: Array<Integer>, instructi
 		end
 	end
 	kind := instruction.kind
-	if kind == mir_op_indirect_call()
+	if kind == mir_op_file_scope()
+		mir_live_operand(managed, live, instruction.first)
+		mir_live_operand(managed, live, instruction.second)
+		scope := native_module.file_scopes[instruction.payload]
+		mut index := scope.argument_start
+		while index < scope.argument_start + scope.argument_count
+			mir_live_operand(managed, live, native_module.arguments[index])
+			index += 1
+		end
+	elsif kind == mir_op_indirect_call()
 		mir_live_operand(managed, live, instruction.first)
 		mut index := instruction.payload
 		while index < instruction.payload + instruction.second

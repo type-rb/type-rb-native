@@ -1,3 +1,5 @@
+import { check_file_acquisition } from frontend/checking/body/file_acquisition
+import { scoped_resource_name } from frontend/types/resource_types
 import { nominal_application_end } from frontend/syntax/generic_syntax
 import { web_context_kind } from frontend/providers/web_context
 import { check_inferred_web_context } from frontend/checking/builtins/web_context
@@ -479,7 +481,21 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 		return type_diagnostic(state, line, "unknown class field or missing method call")
 	end
 	class_member := receiver.category == checked_category_object()
+	if class_member && member == "open" && scoped_resource_name(state, receiver.type_name) == "File"
+		if method_arguments.size() > 1
+			return type_diagnostic(state, line, "File.open accepts one result type argument")
+		end
+		mut declared := ""
+		if method_arguments.size() == 1
+			declared = method_arguments[0]
+		end
+		return check_file_acquisition(state, position, locals, receiver.type_name, declared)
+	end
 	if class_member && member == "new"
+		resource := scoped_resource_name(state, receiver.type_name)
+		if resource != ""
+			return type_diagnostic(state, line, resource + " cannot be constructed directly; use " + resource + ".open() with a block")
+		end
 		if method_arguments.size() > 0
 			return type_diagnostic(state, line, "constructor type arguments belong to the class")
 		end

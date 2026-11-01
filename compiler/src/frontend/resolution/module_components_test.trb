@@ -1,4 +1,5 @@
 import { official_source_kind } from project/official_catalog
+import { standard_source_file, standard_source_filesystem_host } from state/standard_source_kinds
 import { build_module_components, module_is_cyclic, validate_compilation_units } from frontend/resolution/module_components
 import { CompilerState, compiler_new } from state/state
 import { load_string, store_integer } from support/storage
@@ -45,6 +46,17 @@ def expect_component(state: CompilerState, component: Integer, members: Array<In
 end
 
 describe("Module component ownership") do
+	test("groups only the owned File service and its typed host adapter") do
+		mut state := component_graph([[1], [0]], 0)
+		store_integer(state.standard_modules, 0, standard_source_file())
+		store_integer(state.standard_modules, 1, standard_source_filesystem_host())
+		expect(validate_compilation_units(state, [])).to_be_true()
+		expect(state.module_graph.module_count[0]).to_equal(2)
+		mut mixed := component_graph([[1], [0]], 0)
+		store_integer(mixed.standard_modules, 0, standard_source_file())
+		expect(validate_compilation_units(mixed, [0, 99])).to_be_false()
+	end
+
 	test("binds only the owned generated dispatcher to the application unit") do
 		mut state := component_graph([[1], [0]], 0)
 		store_integer(state.standard_modules, 1, official_source_kind("trb/web/testing"))

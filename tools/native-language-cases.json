@@ -4033,6 +4033,27 @@
       "note": "The pinned portable Path, RelativePath and RelativePathError value API is available through ordinary checking, builds, execution and retained REPL loading. POSIX Path#join preserves parent bytes; validated relative composition, error precedence, Unicode, aliases, generics, imported functions, collections and nominal/private-constructor rejection match the reference. Forced collection separately checks retained managed values. Filesystem I/O, additional target platforms and source-backend execution remain separate coverage work."
     },
     {
+      "id": "scoped-filesystem",
+      "title": "Scoped File and ambient directory operations",
+      "scope": "packages",
+      "syntax": [],
+      "cases": [
+        "filesystem-file-roundtrip",
+        "filesystem-nested-result",
+        "filesystem-directory-values",
+        "filesystem-error-values",
+        "filesystem-resource-escape",
+        "filesystem-terminal-transfer"
+      ],
+      "pending": [
+        "Opened directory capabilities and cooperative lock scopes remain separate coverage work",
+        "Concurrent-map resource effects remain unqualified because Native rejects the concurrent_map syntax before effect checking",
+        "Pinned reference REPL implicit-import replay remains visible in the directory case under #1127; directory multi-error ordering review is #1287",
+        "Complete four-host release qualification and source-backend execution remain outstanding"
+      ],
+      "note": "Loader-owned File.open checks immutable synchronous borrows and a structured Result boundary; bounded byte/text reads and writes, UTF-8/BOM handling, ambient directory enumeration/creation and retained REPL values share canonical path/error identities. The focused filesystem acceptance separately covers exclusive creation, symlinks/nonregular handles, limits, nested scopes, resource escape, forced collection and injected cleanup failures. Header ABI qualification is separate from ordinary target execution. These probes do not establish anchored containment, locks or full release parity."
+    },
+    {
       "id": "string-builder",
       "title": "Buffered string construction",
       "scope": "packages",
@@ -137522,6 +137543,303 @@
           "code": 0,
           "stdout": "",
           "stderr": "(trb):15: error: intrinsic trb.internal.auth.oidc.verify_bearer has no REPL runtime adapter\n"
+        }
+      }
+    },
+    {
+      "id": "filesystem-file-roundtrip",
+      "title": "Scoped File writes and retains UTF-8 and binary values",
+      "declarations": "import { File, FileMode } from trb/std/file\nimport trb/std/path\nimport trb/std/result\nimport { FileSystemError } from trb/std/errors\n\ndef round_trip(): Result<String, FileSystemError>\n_written := try File.open(Path.new(\"output.dat\"), mode: FileMode::Write) do |file|\ntry file.write(\"A\\x00\".to_bytes())\ntry file.write_text(\"猫!\")\nend\nreturn File.open(Path.new(\"output.dat\")) do |file|\nbytes := try file.read(max_bytes: 6)\nputs(bytes.size())\nbytes.to_s()\nend\nend\n",
+      "body": "case round_trip()\nwhen Result::Ok(value)\nputs(value == \"A\\x00猫!\")\nwhen Result::Err(error)\nputs(error.message)\nend",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "6\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "6\ntrue\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "6\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "6\ntrue\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "filesystem-nested-result",
+      "title": "Scoped File preserves a Result-valued yield",
+      "declarations": "import { File } from trb/std/file\nimport trb/std/path\nimport trb/std/result\nimport { FileSystemError } from trb/std/errors\n\ndef nested(): Result<Result<String, String>, FileSystemError>\nreturn File.open(Path.new(\"data.trb\")) do |_file|\nResult<String, String>::Err(\"domain-value\")\nend\nend\n",
+      "body": "case nested()\nwhen Result::Ok(inner)\ncase inner\nwhen Result::Err(value)\nputs(value)\nwhen Result::Ok(value)\nputs(value)\nend\nwhen Result::Err(error)\nputs(error.message)\nend",
+      "files": {
+        "data.trb": "# fixture\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "domain-value\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "domain-value\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "domain-value\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "domain-value\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "filesystem-directory-values",
+      "title": "Ambient Dir retains sorted values and parent spelling",
+      "declarations": "import trb/std/dir\nimport { DirEntryKind } from trb/std/dir\nimport trb/std/path\nimport trb/std/result\n",
+      "body": "case Dir.create_all(Path.new(\"created/nested\"))\nwhen Result::Ok(_unit)\nputs(\"created\")\nwhen Result::Err(error)\nputs(error.message)\nend\ncase Dir.children(Path.new(\"data/./\"), max_entries: 2)\nwhen Result::Ok(entries)\nentries.each do |entry|\nputs(entry.name)\nputs(entry.path.to_s())\nputs(entry.kind == DirEntryKind::File)\nend\nwhen Result::Err(error)\nputs(error.message)\nend",
+      "files": {
+        "data/b.trb": "# b\n",
+        "data/a.trb": "# a\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 3 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "created\na.trb\ndata/./a.trb\ntrue\nb.trb\ndata/./b.trb\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "created\ncreated\na.trb\ndata/./a.trb\ntrue\nb.trb\ndata/./b.trb\ntrue\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "created\na.trb\ndata/./a.trb\ntrue\nb.trb\ndata/./b.trb\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "created\na.trb\ndata/./a.trb\ntrue\nb.trb\ndata/./b.trb\ntrue\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "filesystem-error-values",
+      "title": "Filesystem limits and path errors remain typed values",
+      "declarations": "import { File } from trb/std/file\nimport trb/std/path\nimport trb/std/result\nimport { FileSystemError, FileSystemErrorKind } from trb/std/errors\nimport trb/std/dir\n\ndef limited(): Result<String, FileSystemError>\nreturn File.open(Path.new(\"data.trb\")) do |file|\ntry file.read_text(max_bytes: -1)\nend\nend\n",
+      "body": "case limited()\nwhen Result::Ok(value)\nputs(value)\nwhen Result::Err(error)\nputs(error.operation)\nputs(error.kind == FileSystemErrorKind::InvalidLimit)\nend\ncase Dir.children(Path.new(\"\"), max_entries: -1)\nwhen Result::Ok(_entries)\nputs(\"unexpected\")\nwhen Result::Err(error)\nputs(error.kind == FileSystemErrorKind::InvalidLimit)\nend\ncase Dir.create_all(Path.new(\"\\x00\"))\nwhen Result::Ok(_unit)\nputs(\"unexpected\")\nwhen Result::Err(error)\nputs(error.kind == FileSystemErrorKind::InvalidPath)\nend",
+      "files": {
+        "data.trb": "# fixture\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "read_text\ntrue\ntrue\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "read_text\ntrue\ntrue\ntrue\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "read_text\ntrue\ntrue\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "read_text\ntrue\ntrue\ntrue\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "filesystem-resource-escape",
+      "title": "Reject File erasure through an ordinary return",
+      "declarations": "import trb/std/file\n\ndef escape(file: File): Any\nreturn file\nend\n",
+      "body": "# No resource value is evaluated.",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:8: error[TRB3000]: scoped resource file may only be used as a receiver, local alias, or checked borrow argument; it cannot escape or be captured by a callback\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:8: error[TRB3000]: scoped resource file may only be used as a receiver, local alias, or checked borrow argument; it cannot escape or be captured by a callback\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:8: error[TRB3000]: scoped resource file may only be used as a receiver, local alias, or checked borrow argument; it cannot escape or be captured by a callback\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: scoped resource File may only be used as a receiver, immutable local alias, or checked borrow argument\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: scoped resource File may only be used as a receiver, immutable local alias, or checked borrow argument\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4004]: scoped resource File may only be used as a receiver, immutable local alias, or checked borrow argument\n"
+        }
+      }
+    },
+    {
+      "id": "filesystem-terminal-transfer",
+      "title": "Reject all-return branches inside a File body",
+      "declarations": "import { File } from trb/std/file\nimport trb/std/path\nimport trb/std/result\nimport { FileSystemError } from trb/std/errors\n\ndef attempt(): Result<Integer, FileSystemError>\nreturn File.open(Path.new(\"unused\")) do |_file|\nif true\nreturn 1\nelse\nreturn 2\nend\nend\nend\n",
+      "body": "# No resource value is evaluated.",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:9:1: error[TRB3000]: return is not supported inside Result-boundary structured blocks; use try to abort with Err or return after the block\n<case>/main.trb:9:1: error[TRB3000]: return type is Integer, expected T\n<case>/main.trb:11:1: error[TRB3000]: return is not supported inside Result-boundary structured blocks; use try to abort with Err or return after the block\n<case>/main.trb:11:1: error[TRB3000]: return type is Integer, expected T\n<case>/main.trb:7:1: error[TRB3000]: return type is Result<Never, FileSystemError>, expected Result<Integer, FileSystemError>\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:9:1: error[TRB3000]: return is not supported inside Result-boundary structured blocks; use try to abort with Err or return after the block\n<case>/main.trb:9:1: error[TRB3000]: return type is Integer, expected T\n<case>/main.trb:11:1: error[TRB3000]: return is not supported inside Result-boundary structured blocks; use try to abort with Err or return after the block\n<case>/main.trb:11:1: error[TRB3000]: return type is Integer, expected T\n<case>/main.trb:7:1: error[TRB3000]: return type is Result<Never, FileSystemError>, expected Result<Integer, FileSystemError>\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):8:1: error[TRB3000]: return is not supported inside Result-boundary structured blocks; use try to abort with Err or return after the block\n(trb):8:1: error[TRB3000]: return type is Integer, expected T\n(trb):10:1: error[TRB3000]: return is not supported inside Result-boundary structured blocks; use try to abort with Err or return after the block\n(trb):10:1: error[TRB3000]: return type is Integer, expected T\n(trb):6:1: error[TRB3000]: return type is Result<Never, FileSystemError>, expected Result<Integer, FileSystemError>\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:9: error[TRBN4004]: return is unavailable inside a scoped File block\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:9: error[TRBN4004]: return is unavailable inside a scoped File block\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):8: error[TRBN4004]: return is unavailable inside a scoped File block\n"
         }
       }
     }

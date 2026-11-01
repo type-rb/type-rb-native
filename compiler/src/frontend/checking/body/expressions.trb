@@ -1,3 +1,5 @@
+import { checked_resource_use } from frontend/checking/body/resources
+import { scoped_resource_name } from frontend/types/resource_types
 import { checked_category_enum, checked_category_function, checked_category_newtype, checked_category_object, checked_category_record, checked_category_value } from frontend/types/value_categories
 import { provisional_collection_nil_test } from frontend/checking/collections/context_analysis
 import { json_provider_encode, json_provider_kind } from frontend/providers/json_declarations
@@ -215,6 +217,9 @@ def check_primary(
 		end
 		local_index := local_find(locals, name)
 		if local_index >= 0
+			if !locals.file_body[0] && local_index < locals.capture_parents.size() && scoped_resource_name(state, load_string(locals.types, local_index)) != ""
+				return type_diagnostic(state, line, "scoped resource cannot be captured by a callback")
+			end
 			lambda_use_binding(locals, local_index)
 			store_integer(locals.binding_use_counts, local_index, sparse_integer_at(locals.binding_use_counts, local_index) + 1)
 			value := mir_binding_read(state, locals, local_index, origin)
@@ -418,17 +423,25 @@ def check_expression_value(
 	return value
 end
 
-def check_expression(
+def check_expression(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, minimum_precedence: Integer, expected: String): CheckedValue
+	return check_expression_use(state, position, locals, minimum_precedence, expected, false)
+end
+
+def check_expression_use(
 		mut state: CompilerState,
 		mut position: Array<Integer>,
 		mut locals: CheckedLocals,
 		minimum_precedence: Integer,
 		expected: String,
+		borrowed: Boolean,
 	): CheckedValue
 	# Context guides Array literals without coercing a grouped operand early.
 	expression_origin := position[0]
 	line := load_integer(state.source_tokens.token_lines, expression_origin)
 	mut value := check_expression_value(state, position, locals, minimum_precedence, expected)
+	if !checked_resource_use(state, locals, value, expected, borrowed, line)
+		return checked_value("Invalid", checked_category_value(), expression_origin, 0)
+	end
 	if expected != ""
 		value = checked_collection_context(state, locals, value, expected)
 	end

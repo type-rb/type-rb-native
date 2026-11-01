@@ -26,6 +26,23 @@ class RecoveryInventorySyncTest(unittest.TestCase):
         self.assertIsNone(default_mutation("duplicate", binding + binding))
         self.assertIsNone(default_mutation("comment", "# mut needed := false\n"))
 
+    def test_default_mutation_covers_unique_capacity_factors(self):
+        source = '\tcapacity := required * 2\n'
+        self.assertEqual(default_mutation("capacity", source),
+                         ["capacity", source, '\tcapacity := required * 3\n'])
+        for invalid in (source + source, '# capacity := required * 2\n',
+                        '\tcapacity := required * 2.5\n', '\tcapacity := required * 0\n',
+                        '\tcapacity := required * 9007199254740991\n'):
+            self.assertIsNone(default_mutation("invalid", invalid))
+
+    def test_default_mutation_preserves_escaped_runtime_literals(self):
+        text = r'\"panic: cleanup failed\"'
+        source = 'emit("data $message = { b ' + text + ' }")\n'
+        self.assertEqual(default_mutation("runtime", source),
+                         ["runtime", text, r'\"panic: cleanup failed~\"'])
+        self.assertIsNone(default_mutation("comment", '# ' + source))
+        self.assertIsNone(default_mutation("duplicate", source + source))
+
     def test_default_mutation_covers_unique_integer_equality(self):
         source = 'def eligible(kind: Integer): Boolean\nreturn kind != 2\nend\n'
         self.assertEqual(default_mutation("eligible", source),

@@ -1,3 +1,6 @@
+import { filesystem_adapter_start, filesystem_names } from mir/model/filesystem_contract
+import { standard_filesystem_host } from frontend/resolution/filesystem_intrinsics
+import { resource_source_call, resource_unknown_call } from frontend/checking/body/resource_calls
 import { oidc_adapter_start, oidc_names } from mir/model/oidc_contract
 import { standard_oidc_host } from frontend/resolution/oidc_intrinsics
 import { crypto_adapter_start, crypto_signature_name } from mir/model/crypto_contract
@@ -80,6 +83,12 @@ def mir_declare_signatures(mut state: CompilerState)
 			adapter = mir_adapter_runtime_recover()
 			name = "trb/internal/runtime.recover"
 		end
+		filesystem := standard_filesystem_host(state, index)
+		if filesystem >= 0
+			kind = mir_signature_standard()
+			adapter = filesystem_adapter_start() + filesystem
+			name = "trb/internal/filesystem_host." + filesystem_names()[filesystem]
+		end
 		oidc := standard_oidc_host(state, index)
 		if oidc >= 0
 			kind = mir_signature_standard()
@@ -157,6 +166,9 @@ end
 # The resolver has already bound the package identity, including import aliases.
 # Standard APIs have their own signature kind, separate from compiler privileges.
 def mir_checked_standard_call(mut state: CompilerState, mut locals: CheckedLocals, category: Integer, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
+	if category == checked_category_math()
+		resource_unknown_call(state, locals)
+	end
 	if locals.mir_state[mir_state_enabled_slot()] == 0
 		return checked_value(result_type, checked_category_value(), 9007199254740991, 0)
 	end
@@ -185,6 +197,7 @@ def mir_checked_standard_call(mut state: CompilerState, mut locals: CheckedLocal
 end
 
 def mir_checked_call(mut state: CompilerState, mut locals: CheckedLocals, callee: Integer, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
+	resource_source_call(state, locals, callee)
 	nullable_capture_call(state, locals)
 	if callee < 0 || callee >= state.scalar_mir.signatures.size()
 		scalar_mir_disable(locals)

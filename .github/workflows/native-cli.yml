@@ -38,6 +38,10 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
+      - name: Qualify platform filesystem layouts and header-selected symbols
+        run: |
+          mkdir -p dist
+          python3 tools/native-filesystem-abi-test.py --receipt dist/filesystem-abi.json
       - name: Test artifact integrity and bounded extraction
         run: |
           python3 tools/network_artifacts_test.py
@@ -106,6 +110,18 @@ jobs:
         run: |
           python3 tools/build-crypto-dependencies.py --archives "$RUNNER_TEMP/crypto-sources" --output bin/crypto
           ./trbn --version
+      - name: Exercise scoped File, ambient Dir and retained REPL
+        run: |
+          python3 tools/native-filesystem-test.py bin/trbn --report "$RUNNER_TEMP/filesystem.json"
+          python3 tools/native-filesystem-check-test.py bin/trbn --report "$RUNNER_TEMP/filesystem-check.json"
+      - name: Retain filesystem observations
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: native-filesystem-${{ matrix.platform }}
+          path: ${{ runner.temp }}/filesystem*.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Build pinned HTTP transport dependencies and verify their ABI
         run: |
           python3 tools/build-network-dependencies.py \

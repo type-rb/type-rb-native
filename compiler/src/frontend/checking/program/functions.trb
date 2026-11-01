@@ -1,3 +1,6 @@
+import { standard_filesystem_host } from frontend/resolution/filesystem_intrinsics
+import { check_file_body_function, file_body_bind_captures } from frontend/checking/body/file_bodies
+import { resource_checked_body, verify_resource_calls } from frontend/checking/body/resource_calls
 import { standard_oidc_host } from frontend/resolution/oidc_intrinsics
 import { standard_crypto } from frontend/resolution/crypto_intrinsics
 import { standard_compression } from frontend/resolution/compression_intrinsics
@@ -60,7 +63,10 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 	end
 	parameter_start := load_integer(state.declarations.function_parameter_starts, function_index)
 	parameter_finish := parameter_start + load_integer(state.declarations.function_parameter_counts, function_index)
-	captures := lambda_bind_captures(state, locals, function_index)
+	mut captures := lambda_bind_captures(state, locals, function_index)
+	if sparse_integer_at(state.callables.function_file_bodies, function_index) > 0
+		captures = file_body_bind_captures(state, locals, function_index)
+	end
 	mut parameter_index := parameter_start + captures
 	while parameter_index < parameter_finish
 		added := local_add(
@@ -91,6 +97,7 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 end
 
 def check_function_body(mut state: CompilerState, function_index: Integer, mut locals: CheckedLocals): Boolean
+	resource_checked_body(state, function_index)
 	if state.type_resolution.generic_template_mode[0] && (web_context_function(state, function_index) > 0 || web_binding_function(state, function_index) > 0 || json_provider_function(state, function_index) > 0)
 		# The trusted provider validates its schema during speculative checking.
 		# Ordinary checking materializes and verifies its complete executable body.
@@ -103,7 +110,7 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 		end
 		return !has_diagnostic(state)
 	end
-	if standard_oidc_host(state, function_index) >= 0 || standard_crypto(state, function_index) >= 0 || standard_compression(state, function_index) || standard_string_builder(state, function_index) >= 0 || standard_network_host(state, function_index) >= 0 || standard_entropy(state, function_index) || standard_runtime_fail(state, function_index) || standard_runtime_recover(state, function_index) || standard_time_host(state, function_index) > 0
+	if standard_filesystem_host(state, function_index) >= 0 || standard_oidc_host(state, function_index) >= 0 || standard_crypto(state, function_index) >= 0 || standard_compression(state, function_index) || standard_string_builder(state, function_index) >= 0 || standard_network_host(state, function_index) >= 0 || standard_entropy(state, function_index) || standard_runtime_fail(state, function_index) || standard_runtime_recover(state, function_index) || standard_time_host(state, function_index) > 0
 		# Headers and generic arguments use ordinary checking. The verified
 		# intrinsic signature owns this declaration instead of an empty body.
 		return !has_diagnostic(state)
@@ -133,7 +140,9 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 		end
 	end
 	mut position := [load_integer(state.declarations.function_body_starts, function_index)]
-	if sparse_integer_at(state.parsed.function_expression_bodies, function_index) > 0
+	if sparse_integer_at(state.callables.function_file_bodies, function_index) > 0
+		check_file_body_function(state, position, locals, state.callables.file_bodies[sparse_integer_at(state.callables.function_file_bodies, function_index) - 1])
+	elsif sparse_integer_at(state.parsed.function_expression_bodies, function_index) > 0
 		value := check_expression(state, position, locals, 1, result_type)
 		returned := checked_mir_value(value)
 		if returned >= 0
@@ -195,7 +204,7 @@ def analyze_callable_bodies(mut state: CompilerState): Boolean
 		end
 		definition_index += 1
 	end
-	if state.callables.lambdas.size() == 0 && state.parsed.transforms.size() == 0 && !state.interactive && !inferred_calls && state.nominal.objects.size() == 0 && !builtin_result_source(state)
+	if state.callables.lambdas.size() == 0 && state.callables.call_blocks.size() == 0 && state.parsed.transforms.size() == 0 && !state.interactive && !inferred_calls && state.nominal.objects.size() == 0 && !builtin_result_source(state)
 		return true
 	end
 	state.callables.lambda_phase[0] = checking_discovery()
@@ -203,7 +212,7 @@ def analyze_callable_bodies(mut state: CompilerState): Boolean
 	mut objects := prepare_object_dispatch(state, 0)
 	mut function := 0
 	while function < state.declarations.function_count[0] && !has_diagnostic(state)
-		if sparse_integer_at(state.callables.function_lambdas, function) == 0 && !object_abstract_function(state, function)
+		if sparse_integer_at(state.callables.function_lambdas, function) == 0 && sparse_integer_at(state.callables.function_file_bodies, function) == 0 && !object_abstract_function(state, function)
 			if function >= resolved
 				mut names := resolution_locals_new(state.source_tokens.token_count[0] + 1)
 				resolve_function_body(state, function, names)
@@ -238,6 +247,9 @@ def analyze_callable_bodies(mut state: CompilerState): Boolean
 end
 
 def finalize_checked_module(mut state: CompilerState): Boolean
+	if !verify_resource_calls(state)
+		return false
+	end
 	if !has_diagnostic(state)
 		mir_refine_call_effects(state.scalar_mir)
 		if !plan_global_initialization(state)

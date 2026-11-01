@@ -1,3 +1,4 @@
+import { scoped_resource_declaration_name } from frontend/types/resource_types
 import { mir_type_kind_string_builder } from mir/model/type_kinds
 import { mir_type_composite_start, mir_type_float_array, mir_type_integer_array, mir_type_none, mir_type_string } from mir/model/type_ids
 import { mir_type_kind_any, mir_type_kind_array, mir_type_kind_bytes, mir_type_kind_callable, mir_type_kind_class, mir_type_kind_empty_array, mir_type_kind_empty_hash, mir_type_kind_enum, mir_type_kind_hash, mir_type_kind_interface, mir_type_kind_literal, mir_type_kind_newtype, mir_type_kind_nil, mir_type_kind_none, mir_type_kind_nullable, mir_type_kind_range, mir_type_kind_record, mir_type_kind_union } from mir/model/type_kinds
@@ -244,9 +245,16 @@ def mir_declare_types(mut state: CompilerState)
 		if definition.interface_type
 			kind = mir_type_kind_interface()
 		end
+		mut resource_kind := 0
+		resource := scoped_resource_declaration_name(state, instance.definition)
+		if resource == "File"
+			resource_kind = 1
+		elsif resource == "Dir"
+			resource_kind = 2
+		end
 		name := object_instance_type(state, declaration)
 		native_module.types.push(MirType.new(kind: kind, name: name, element: mir_type_none(), key: mir_type_none(), declaration: declaration))
-		native_module.objects.push(MirObject.new(initializer: object_initializer_function(state, declaration), declaration: declaration, type_id: id, name: type_display(state, name), source_id: definition.source_id, line: definition.line, interface_type: definition.interface_type, superclass: -1, interfaces: [], fields: []))
+		native_module.objects.push(MirObject.new(resource_kind: resource_kind, initializer: object_initializer_function(state, declaration), declaration: declaration, type_id: id, name: type_display(state, name), source_id: definition.source_id, line: definition.line, interface_type: definition.interface_type, superclass: -1, interfaces: [], fields: []))
 		declaration += 1
 	end
 	mir_declare_enums(state)
@@ -265,7 +273,7 @@ def mir_declare_types(mut state: CompilerState)
 		instance.fields.each do |field|
 			fields.push(MirObjectField.new(name: field.name, type_id: mir_semantic_type_id(native_module, field.type_name), line: field.line, readonly: field.readonly))
 		end
-		native_module.objects[declaration] = MirObject.new(initializer: row.initializer, declaration: declaration, type_id: row.type_id, name: row.name, source_id: row.source_id, line: row.line, interface_type: row.interface_type, superclass: parent, interfaces: interfaces, fields: fields)
+		native_module.objects[declaration] = MirObject.new(resource_kind: row.resource_kind, initializer: row.initializer, declaration: declaration, type_id: row.type_id, name: row.name, source_id: row.source_id, line: row.line, interface_type: row.interface_type, superclass: parent, interfaces: interfaces, fields: fields)
 		declaration += 1
 	end
 	declaration = 0
