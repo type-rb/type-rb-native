@@ -45,7 +45,7 @@ import { compiler_source_slice, lex, lex_module } from frontend/syntax/lexer
 import { emit_hash_lookup_runtime, emit_hash_runtime } from backend/qbe/runtime/hash_runtime
 import { integer_string } from support/literals
 import { mir_declare_signatures } from mir/lowering/calls
-import { parse_module } from frontend/syntax/parser
+import { parse_module, parse_module_with_tests } from frontend/syntax/parser
 import { path_basename, path_directory, path_join, path_normalize, string_ends_with, string_starts_with, string_without_suffix } from support/path
 import { ProjectConfig, parse_project_config } from project/config
 import { emit_record_descriptors, emit_static_strings } from backend/qbe/emit/constants
@@ -1010,6 +1010,10 @@ def load_configured_sources(
 end
 
 def load_configured_sources_with_mode(config: ProjectConfig, config_path: String, source_root: String, out_root: String, bundle: CompilerProjectSources, require_entry: Boolean, interactive: Boolean): CompilerState
+	return load_configured_sources_with_tests(config, config_path, source_root, out_root, bundle, require_entry, interactive, [])
+end
+
+def load_configured_sources_with_tests(config: ProjectConfig, config_path: String, source_root: String, out_root: String, bundle: CompilerProjectSources, require_entry: Boolean, interactive: Boolean, tests: Array<String>): CompilerState
 	packages := load_project_packages(config, config_path)
 	if packages.error[0] != ""
 		return project_error_state(config_path, 1, packages.error[0])
@@ -1096,7 +1100,7 @@ def load_configured_sources_with_mode(config: ProjectConfig, config_path: String
 			file += 1
 		end
 	end
-	return load_package_project_sources_with_mode(config_path, CompilerProjectSources.new(paths: paths, sources: sources, error: ""), names, owners, packages, require_entry, interactive)
+	return load_package_project_sources_with_tests(config_path, CompilerProjectSources.new(paths: paths, sources: sources, error: ""), names, owners, packages, require_entry, interactive, tests)
 end
 
 def load_project_sources(config_path: String, source_root: String, bundle: CompilerProjectSources): CompilerState
@@ -1138,6 +1142,10 @@ def load_package_project_sources_with_entry(config_path: String, bundle: Compile
 end
 
 def load_package_project_sources_with_mode(config_path: String, bundle: CompilerProjectSources, names: Array<String>, owners: Array<Integer>, packages: ProjectPackages, require_entry: Boolean, interactive: Boolean): CompilerState
+	return load_package_project_sources_with_tests(config_path, bundle, names, owners, packages, require_entry, interactive, [])
+end
+
+def load_package_project_sources_with_tests(config_path: String, bundle: CompilerProjectSources, names: Array<String>, owners: Array<Integer>, packages: ProjectPackages, require_entry: Boolean, interactive: Boolean, tests: Array<String>): CompilerState
 	if bundle.paths.size() == 0
 		return project_error_state(config_path, 1, "no production .trb files found")
 	end
@@ -1168,8 +1176,16 @@ def load_package_project_sources_with_mode(config_path: String, bundle: Compiler
 		state.module_graph.active_module[0] = module_index
 		start := state.source_tokens.token_count[0]
 		lex_module(state, bundle.sources[order[module_index]], module_index)
+		mut selected_test := false
+		if ordered_owners[module_index] == -1
+			tests.each do |path|
+				if path == bundle.paths[order[module_index]]
+					selected_test = true
+				end
+			end
+		end
 		if !has_diagnostic(state)
-			parse_module(state, start, module_index)
+			parse_module_with_tests(state, start, module_index, selected_test)
 		end
 		if has_diagnostic(state)
 			return state

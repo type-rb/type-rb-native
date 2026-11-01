@@ -1,7 +1,7 @@
 import { GenericFunction, GenericParameter } from frontend/types/generic_model
 import { standard_source_test, standard_source_test_host } from state/standard_source_kinds
 import { CompilerState } from state/state
-import { sparse_integer_at } from support/storage
+import { load_integer, load_string, sparse_integer_at } from support/storage
 
 # These IDs describe checked declarations, not backend operations. The loader
 # grants ownership; spelling an authored function identically grants nothing.
@@ -104,4 +104,27 @@ def test_provider_kind(state: CompilerState, definition: Integer): Integer
 		index += 1
 	end
 	return kind
+end
+
+# Selected test syntax consumes these bindings without emitting an ordinary
+# call. Authored calls and function values must never execute an empty stub.
+def test_dsl_function(state: CompilerState, function: Integer): Boolean
+	if function < 0 || function >= state.declarations.function_count[0]
+		return false
+	end
+	owner := load_integer(state.declarations.function_modules, function)
+	if sparse_integer_at(state.standard_modules, owner) != standard_source_test()
+		return false
+	end
+	name := load_string(state.declarations.function_names, function)
+	return name == "describe" || name == "test"
+end
+
+def test_provider_function(state: CompilerState, function: Integer): Integer
+	state.type_resolution.generic_function_instances.each do |instance|
+		if instance.function == function
+			return test_provider_kind(state, instance.definition)
+		end
+	end
+	return 0
 end

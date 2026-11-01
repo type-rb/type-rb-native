@@ -1,4 +1,4 @@
-import { TestPathSelection, select_test_paths, test_absolute_path, test_path_below, test_source_path } from project/test_selection
+import { TestPathSelection, select_test_paths, test_absolute_path, test_path_below, test_project_paths, test_source_path } from project/test_selection
 import { describe, expect, test } from trb/std/test
 
 def selected_test_path(path: String, directory: Boolean): TestPathSelection
@@ -6,6 +6,15 @@ def selected_test_path(path: String, directory: Boolean): TestPathSelection
 end
 
 describe("Test file selection") do
+	test("retains every production path but excludes unselected test bodies") do
+		inventory := ["/project/src/z_test.trb", "/project/src/helper.trb", "/project/src/nested/b_test.trb", "/project/src/main.trb", "/project/src/a_test.trb"]
+		selected := test_project_paths("/project/src", "src", inventory, [selected_test_path("src/a_test.trb", false)])
+		expect(selected.error).to_equal("")
+		expect(selected.paths).to_equal(["/project/src/a_test.trb", "/project/src/helper.trb", "/project/src/main.trb"])
+		expect(test_project_paths("/project/src", "src", inventory, [selected_test_path("src/nested", true)]).paths).to_equal(["/project/src/helper.trb", "/project/src/main.trb", "/project/src/nested/b_test.trb"])
+		expect(test_project_paths("/project/src", "src", inventory, [selected_test_path("src/missing_test.trb", false)]).paths).to_equal([])
+	end
+
 	test("normalizes lexical roots while preserving directory boundaries") do
 		expect(test_absolute_path("/project", "src/../src/a_test.trb")).to_equal("/project/src/a_test.trb")
 		expect(test_absolute_path("/project", "/other/./a_test.trb")).to_equal("/other/a_test.trb")

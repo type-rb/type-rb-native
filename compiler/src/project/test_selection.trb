@@ -102,3 +102,33 @@ def select_test_paths(root: String, source_dir: String, inventory: Array<String>
 	end
 	return TestSelection.new(paths: ordered, error: "")
 end
+
+# The complete metadata inventory includes production sources. Keep all of
+# them, but select test paths before any source body is opened.
+def test_project_paths(root: String, source_dir: String, inventory: Array<String>, selections: Array<TestPathSelection>): TestSelection
+	mut tests: Array<String> := []
+	inventory.each do |path|
+		if test_source_path(path)
+			tests.push(path)
+		end
+	end
+	selected := select_test_paths(root, source_dir, tests, selections)
+	if selected.error != ""
+		return selected
+	end
+	mut included: Hash<String, Boolean> := {}
+	selected.paths.each do |path|
+		included[path] = true
+	end
+	mut paths: Array<String> := []
+	inventory.each do |path|
+		if !test_source_path(path) || included.key?(path)
+			paths.push(path)
+		end
+	end
+	mut ordered: Array<String> := []
+	package_sorted_indices(paths).each do |index|
+		ordered.push(paths[index])
+	end
+	return TestSelection.new(paths: ordered, error: "")
+end

@@ -1,3 +1,5 @@
+import { test_dsl_function, test_provider_kind } from frontend/providers/test_declarations
+import { check_inferred_test_expectation } from frontend/checking/builtins/test_expectations
 import { checked_resource_use } from frontend/checking/body/resources
 import { scoped_resource_name } from frontend/types/resource_types
 import { checked_category_enum, checked_category_function, checked_category_newtype, checked_category_object, checked_category_record, checked_category_value } from frontend/types/value_categories
@@ -263,6 +265,9 @@ def check_primary(
 		end
 		function := find_visible_function(state, state.module_graph.active_module[0], name)
 		if function >= 0
+			if test_dsl_function(state, function)
+				return type_diagnostic(state, line, "test declarations are only valid in a selected test file")
+			end
 			if !namespace_member_access(state, load_integer(state.declarations.function_modules, function), load_string(state.declarations.function_names, function), origin)
 				return checked_value("", checked_category_value(), origin, 0)
 			end
@@ -276,6 +281,10 @@ def check_primary(
 		end
 		generic_function := find_visible_generic_function(state, state.module_graph.active_module[0], name)
 		if generic_function >= 0
+			test_kind := test_provider_kind(state, generic_function)
+			if token_is(state, position[0], "(") && ((test_kind >= 1 && test_kind <= 3) || (test_kind >= 10 && test_kind <= 16))
+				return check_inferred_test_expectation(state, position, locals, generic_function, origin)
+			end
 			if token_is(state, position[0], "(") && json_provider_kind(state, generic_function) == json_provider_encode()
 				return check_inferred_json_encoding(state, position, locals, generic_function)
 			end
