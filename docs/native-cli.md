@@ -129,10 +129,13 @@ Both flags report an error directing the caller to file or directory selection.
 `test --debug` and test execution in source-backend modes remain unavailable.
 Assertion implementation is still incomplete: Integer, Boolean and Nil scalar
 assertions are supported. `expect_ok` and `expect_err` can return managed payloads
-when the opposite variant's payload is an Integer, Boolean or Nil. Other payload
+when the opposite variant's payload is an Integer or Boolean. Other payload
 inspectors remain explicit compilation errors. Full test-command parity is tracked in
 [#624](https://github.com/type-rb/type-rb-native/issues/624), with value-display
 semantics discussed in [#1294](https://github.com/type-rb/type-rb-native/issues/1294).
+Authored `Nil` type arguments also expose a separate reference-checking
+inconsistency tracked in [#1297](https://github.com/type-rb/type-rb-native/issues/1297);
+they are not included in passing portable Result coverage.
 
 Configuration discovery searches from the source file/directory, or the
 current directory when no source is given, upwards for `trbconfig.jsonc`.

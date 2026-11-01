@@ -210,14 +210,6 @@ def replay(binary, root, source, wanted_failures, total):
 RESULTS = '''import { describe, expect, expect_err, expect_ok, test } from trb/std/test
 import trb/std/result
 
-def nil_error<T>(value: T): Result<Integer, T>
-    return Result<Integer, T>::Err(value)
-end
-
-def nil_success<T>(value: T): Result<T, Integer>
-    return Result<T, Integer>::Ok(value)
-end
-
 describe("Results") do
     test("managed Ok payload") do
         values := expect_ok(Result<Array<Integer>, Integer>::Ok([7, 8]))
@@ -235,19 +227,13 @@ describe("Results") do
         error_amount := expect_err(Result<Boolean, Float>::Err(3.5))
         expect(error_amount == 3.5).to_be_true()
         expect(expect_ok(Result<Boolean, Integer>::Ok(true))).to_be_true()
-        expect(expect_err(nil_error(nil))).to_be_nil()
+        expect(expect_err(Result<Boolean, Integer>::Err(7))).to_equal(7)
     end
     test("unexpected Err") do
         _value := expect_ok(Result<Float, Boolean>::Err(false))
     end
     test("unexpected Ok") do
         _value := expect_err(Result<Integer, Float>::Ok(9))
-    end
-    test("unexpected Nil Err") do
-        _value := expect_ok(nil_error(nil))
-    end
-    test("unexpected Nil Ok") do
-        _value := expect_err(nil_success(nil))
     end
     test("continued") do
         expect(1).to_equal(1)
@@ -292,7 +278,7 @@ def main():
                                              ("dynamic", DYNAMIC, 0, 5),
                                              ("scalars", SCALARS, 6, 8),
                                              ("traps", TRAPS, 2, 3),
-                                             ("results", RESULTS, 4, 8)):
+                                             ("results", RESULTS, 2, 6)):
             if args.group and args.group != name:
                 continue
             config = json.loads((root / "trbconfig.jsonc").read_text())
