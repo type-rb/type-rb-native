@@ -1,4 +1,5 @@
-import { mir_test_outcome, test_adapter_capture, test_adapter_fail } from mir/model/test_contract
+import { mir_test_comparison_plan } from mir/analysis/test_comparison
+import { mir_test_outcome, mir_test_value_id, test_adapter_capture, test_adapter_equal, test_adapter_fail } from mir/model/test_contract
 import { filesystem_adapter_start, filesystem_mutable, filesystem_names, filesystem_parameters, filesystem_result } from mir/model/filesystem_contract
 import { mir_type_composite_start } from mir/model/type_ids
 import { mir_adapter_set_oidc_link } from mir/model/call_kinds
@@ -50,6 +51,9 @@ end
 
 def mir_call_symbol(signature: MirSignature): String
 	if signature.kind == mir_signature_standard()
+		if signature.adapter == test_adapter_equal()
+			return "trbn_test_equal_" + integer_string(signature.id)
+		end
 		if signature.adapter == test_adapter_capture()
 			return "trbn_test_capture"
 		elsif signature.adapter == test_adapter_fail()
@@ -186,6 +190,17 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 			name = "trb/std/math.sqrt"
 			parameters = ["Float"]
 			result = "Float"
+		elsif signature.adapter == test_adapter_equal()
+			name = "trb/internal/test.deep_equal"
+			if signature.parameter_types.size() != 2
+				return "MIR test equality requires two values"
+			end
+			parameters = [signature.parameter_types[0], signature.parameter_types[0]]
+			result = "Boolean"
+			plan := mir_test_comparison_plan(native_module, [mir_test_value_id(native_module, parameters[0])])
+			if plan.error != ""
+				return plan.error
+			end
 		elsif signature.adapter == test_adapter_capture()
 			name = "trb/internal/test.capture"
 			parameters = [callable_type([], "Void"), "String", "Integer", "Integer"]
