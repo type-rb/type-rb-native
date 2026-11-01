@@ -153,6 +153,10 @@ jobs:
           python3 tools/check-conformance-sources.py .trb/bootstrap/core/compiler
           python3 tools/bootstrap-module-cycles.py --compiler .trb/bootstrap/core/compiler \
             --qbe bin/qbe --profile "$PLATFORM-v0" --evidence "$RUNNER_TEMP/module-cycles"
+      - name: Verify static link path failures
+        run: python3 tools/native-link-path-test.py --qbe bin/qbe
+      - name: Verify full-width runtime conditions
+        run: python3 tools/native-runtime-branch-test.py --qbe bin/qbe --compiler bin/trbn
       - name: Verify deterministic key-reader interruption boundaries
         run: python3 tools/native-cli-key-test.py --qbe bin/qbe --output "$RUNNER_TEMP/native-cli-key.json"
       - name: Retain key-reader boundary observations
@@ -260,6 +264,19 @@ jobs:
             dist/*.tar.gz
             dist/*.sha256
           if-no-files-found: error
+
+      - name: Retain the actual compiler after a failed CLI validation
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: failed-compiler-${{ matrix.platform }}
+          path: |
+            bin/trbn
+            bin/qbe
+            bin/build-info.txt
+            bin/qbe-backend.json
+          if-no-files-found: warn
+          retention-days: 14
 
   cache:
     # Tiered PRs leave cache invalidation to Main validation.

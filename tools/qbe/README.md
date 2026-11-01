@@ -3,7 +3,9 @@
 `backend.json` pins the QBE 1.3 release archive and all five patch digests.
 `python3 tools/qbe_toolchain.py /path/to/qbe-1.3` verifies them, applies the
 patches without fuzz, builds QBE and checks supported-target instruction emission.
-The binary's receipt records upstream, patch, builder and C compiler identities.
+QBE itself is compiled with explicit `-O2`, without fast-math or host-specific
+architecture flags. The binary's receipt records upstream, patch, builder,
+C compiler and exact CFLAGS identities.
 Checkout builds include those tracked inputs in their content cache. An explicit
 `TRBN_QBE` override must support the same operations, ARM64 operand selection
 and expression-motion and Float-contraction behavior.
@@ -92,9 +94,12 @@ by the consumer, overwritten before any further read in that block, or dead
 at its exit. Functions containing `mulc` reuse QBE's liveness analysis after
 allocation, including inserted copies and stack-slot writes, to check successor
 uses. ABI return registers remain implicit uses, and calls stop the local proof.
-The exit-liveness extension also requires an addend defined in the same block:
-leaving predecessor-fed accumulators separate avoids extending a reduction's
-dependency chain merely to save an instruction.
+For a predecessor-fed addend, the exit-liveness extension permits contraction
+only when a multiplication input is directly produced by a local division or
+square root. This lets the update combine a late product with an available
+addend while keeping short load/multiply reduction chains separate. The search
+uses the most recent register definition and stops at calls; it changes only
+profitability, not the product-observation proof.
 Other targets and unproved pairs emit
 ordinary multiplication. The patch does not add a third operand to generic QBE
 instructions, alter register allocation, reassociate expressions, or assume

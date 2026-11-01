@@ -214,7 +214,31 @@ def main():
         def run(arguments, *, input=None, success=True, env=environment):
             result = subprocess.run(list(map(str, arguments)), input=input, capture_output=True, text=True,
                                     cwd=root, env=env, timeout=180)
-            assert (result.returncode == 0) == success, (arguments, result.stdout, result.stderr)
+            if (result.returncode == 0) != success:
+                # Retain the installed boundary before the temporary tree is
+                # removed. A late link failure must distinguish vanished files
+                # from compiler path resolution without retrying the build.
+                dependencies = {}
+                if not args.reference:
+                    for name in ('trbn', 'qbe', 'network/libuv.a', 'network/libllhttp.a',
+                                 'network/network-identity.o', 'compression/libdeflate.a',
+                                 'compression/compression-identity.o'):
+                        path = package / name
+                        try:
+                            dependencies[name] = {'exists': path.is_file(), 'readable': os.access(path, os.R_OK)}
+                            if path.is_file():
+                                dependencies[name].update(bytes=path.stat().st_size,
+                                                          sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+                        except OSError as error:
+                            dependencies[name] = {'inspection_error': str(error)}
+                receipt['failure'] = {'command': list(map(str, arguments)),
+                                      'exit_code': result.returncode,
+                                      'stdout': result.stdout, 'stderr': result.stderr,
+                                      'installed_dependencies': dependencies}
+                args.receipt.parent.mkdir(parents=True, exist_ok=True)
+                args.receipt.write_text(json.dumps(receipt, indent=2) + '\n')
+                raise AssertionError((arguments, result.stdout, result.stderr,
+                                      {'installed_dependencies': dependencies}))
             return result
 
         def build(input_path, output, *, success=True):

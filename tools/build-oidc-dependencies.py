@@ -78,14 +78,18 @@ def verify_openssl_headers(build, prefix, environment):
 
 def extract(pin, directory, archives):
     archive = archives / pin['url'].rsplit('/', 1)[-1]
-    if archive.exists():
+    cached = archive.exists()
+    if cached:
         data = archive.read_bytes()
     else:
         with urllib.request.urlopen(pin['url'], timeout=60) as response:
             data = response.read(64 * 1024 * 1024 + 1)
-    if len(data) > 64 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != pin['sha256']:
-        raise ValueError('source archive checksum or size differs')
-    if not archive.exists():
+    actual = hashlib.sha256(data).hexdigest()
+    if len(data) > 64 * 1024 * 1024 or actual != pin['sha256']:
+        origin = 'cache' if cached else 'download'
+        raise ValueError(f"source archive checksum or size differs: {pin['url']}; "
+                         f"{origin}, {len(data)} bytes, SHA-256 {actual}, expected {pin['sha256']}")
+    if not cached:
         archive.write_bytes(data)
     with tarfile.open(archive) as source:
         total = 0
