@@ -43,16 +43,17 @@ def test_origin_quote(value: String): String
 end
 
 def test_expectation_body(kind: Integer, origin: TestCallOrigin): String
-	mut constructor := "Expectation<Target>"
-	mut suffix := ""
+	location := test_origin_quote(origin.path) + ", " + integer_string(origin.line) + ", " + integer_string(origin.column)
 	if kind == 2 || kind == 3
-		constructor = "ResultExpectation<Target,Error>"
-		suffix = ".ok()"
+		# These public functions immediately extract one variant. Forward to the
+		# same owned assertion without requiring the unused opposite method.
+		mut assertion := "assert_result_ok"
 		if kind == 3
-			suffix = ".err()"
+			assertion = "assert_result_err"
 		end
+		return "return " + assertion + "<Target,Error>(actual, " + location + ")\nend\n"
 	end
-	return "return " + constructor + ".new(actual, " + test_origin_quote(origin.path) + ", " + integer_string(origin.line) + ", " + integer_string(origin.column) + ")" + suffix + "\nend\n"
+	return "return Expectation<Target>.new(actual, " + location + ")\nend\n"
 end
 
 def specialize_test_expectation(mut state: CompilerState, function: Integer, arguments: Array<String>, kind: Integer, origin: TestCallOrigin): Boolean
