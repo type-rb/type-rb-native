@@ -1,0 +1,34 @@
+import { check, emit_qbe } from compiler
+import { native_test_inspection_source } from project/test_inspection
+import { has_diagnostic } from state/state
+import { output_source } from testing/compiler
+import { intrinsic_mir_erase } from testing/mir/intrinsics
+import { expect_compiler_phase, logical_checked_source } from testing/pipeline
+import { logical_run_qbe_arguments } from testing/qbe_runner
+import { describe, expect, test } from trb/std/test
+import trb/std/process
+import trb/std/result
+
+describe("Test String inspection") do
+	test("quotes controls and Unicode through erased MIR and forced collection") do
+		mut state := logical_checked_source("import trb/std/process\nimport trb/std/string_builder\n" + native_test_inspection_source() + "\ndef main()\n Process.argv().each do |value|\n  puts(inspect_string(value))\n end\n mut zero := StringBuilder.new()\n zero.append_codepoint(0)\n puts(inspect_string(zero.to_s()))\nend\n")
+		expect_compiler_phase(state, "check", check(state))
+		mut runtime := output_source(emit_qbe(state))
+		expect_compiler_phase(state, "emit", !has_diagnostic(state))
+		intrinsic_mir_erase(state)
+		expect(output_source(emit_qbe(state))).to_equal(runtime)
+		allocation := "function l $trbn_gc_alloc(l %descriptor, l %payload_size, l %reserved_size) {\n@start"
+		expect(runtime.split(allocation).size()).to_equal(2)
+		runtime = runtime.replace_all(allocation, allocation + "\n call $trbn_gc_collect(w 0)")
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe_arguments(qbe, runtime, ["plain", "\"\\\n\r\t", "値😀", "\u00a0\u00ad\u200b\u2028\u2029\ufeff", "\u0378\U0001ffff"])
+			when Result::Ok(actual)
+				expect(actual).to_equal("\"plain\"\n\"\\\"\\\\\\n\\r\\t\"\n\"値😀\"\n\"\\u00a0\\u00ad\\u200b\\u2028\\u2029\\ufeff\"\n\"\\u0378\\U0001ffff\"\n\"\\x00\"\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+end
