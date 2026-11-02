@@ -133,6 +133,22 @@ class ProjectScenarioTest(unittest.TestCase):
         report = json.loads(self.run_tool("--native", self.native, "--require").stdout)
         self.assertEqual(report["manifests"][0]["scenarios"][0]["status"], "triage")
 
+    def test_current_reference_keeps_every_historical_command(self):
+        historical = dict((path.name, manifest) for path, manifest in scenarios.load([]))
+        current = dict((path.name, manifest) for path, manifest in scenarios.load([], True))
+        self.assertIn("m2-manifest.json", historical)
+        self.assertNotIn("m2-manifest.json", current)
+        old = historical["m2-manifest.json"]["scenarios"]
+        new = current["reference-test-manifest.json"]["scenarios"]
+        self.assertEqual([row["id"] for row in old], [row["id"] for row in new])
+        for before, after in zip(old, new):
+            expected = json.loads(json.dumps(before))
+            if expected["id"] == "assert-structural-failure":
+                expected["reference"][0]["stdout"] = expected["reference"][0]["stdout"].replace(
+                    "application.Point{X:1, Y:2}", "Point(x: 1, y: 2)").replace(
+                    "application.Point{X:1, Y:3}", "Point(x: 1, y: 3)")
+            self.assertEqual(after, expected)
+
     def test_repository_manifests_are_valid(self):
         loaded = scenarios.load([])
         self.assertTrue(loaded)

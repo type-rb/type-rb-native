@@ -38,11 +38,19 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def load(selected):
+def load(selected, current_reference=False):
     paths = [Path(p) for p in selected] if selected else sorted(MANIFESTS.glob("m*-manifest.json"))
+    if current_reference:
+        paths = [MANIFESTS / "reference-test-manifest.json"
+                 if path.resolve() == (MANIFESTS / "m2-manifest.json").resolve()
+                 else path for path in paths]
     manifests = []
     for path in paths:
         manifest = json.loads(path.read_text())
+        if path.name == "reference-test-manifest.json":
+            if (manifest["typeRBRevision"] != (ROOT / "TYPE_RB_REVISION").read_text().strip()
+                    or manifest["historicalManifestSha256"] != digest(MANIFESTS / "m2-manifest.json")):
+                raise ValueError("current reference test scenarios require a reviewed pin replay")
         for scenario in manifest["scenarios"]:
             if scenario["expectation"] not in EXPECTATIONS:
                 raise ValueError(f"{scenario['id']}: unknown expectation {scenario['expectation']}")
@@ -154,14 +162,18 @@ def main():
     role.add_argument("--native", type=Path)
     parser.add_argument("--manifest", action="append", default=[])
     parser.add_argument("--scenario")
+    parser.add_argument("--current-reference", action="store_true",
+                        help="use reviewed current-pin reference outcomes without rewriting historical manifests")
     parser.add_argument("--require", action="store_true", help="fail when a Native scenario does not pass")
     parser.add_argument("--jobs", type=int, default=1, choices=range(1, 9))
     args = parser.parse_args()
+    if args.current_reference and not args.reference:
+        parser.error("--current-reference is only for reference qualification")
     binary = (args.reference or args.native).resolve()
     native = args.native is not None
     report = {"schemaVersion": 1, "role": "native" if native else "reference",
               "compilerSha256": digest(binary), "manifests": [], "failures": []}
-    for path, manifest in load(args.manifest):
+    for path, manifest in load(args.manifest, args.current_reference):
         scenarios = [s for s in manifest["scenarios"] if args.scenario in (None, s["id"])]
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
             observed = list(pool.map(lambda s: replay(binary, s, native), scenarios))

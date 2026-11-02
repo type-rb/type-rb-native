@@ -35,7 +35,8 @@ def load_manifest(path=MANIFEST):
     for relative, expected in manifest["fixtureHashes"].items():
         if scenarios.digest(ROOT / relative) != expected:
             raise ValueError("test fixture changed: " + relative)
-    # The reviewed file-only selection is the only change to historical outcomes.
+    # Historical outcomes only change for reviewed file selection and the
+    # accepted portable display contract; origins, statuses and fixtures stay exact.
     originals = {row["id"]: row for row in historical["scenarios"]}
     for row in manifest["scenarios"]:
         original = originals[row["id"]]
@@ -44,6 +45,10 @@ def load_manifest(path=MANIFEST):
         if row["id"] == "test-positional-duplicate-names":
             steps = [["test", "src/first_test.trb"]]
             expected[0]["args"] = steps[0]
+        if row["id"] == "assert-structural-failure":
+            expected[0]["stdout"] = expected[0]["stdout"].replace(
+                "application.Point{X:1, Y:2}", "Point(x: 1, y: 2)").replace(
+                "application.Point{X:1, Y:3}", "Point(x: 1, y: 3)")
         if row["reference"] != expected or row["steps"] != steps or row["fixture"] != original["fixture"] or row["cwd"] != original["cwd"] or row["expectation"] != original["expectation"]:
             raise ValueError("reviewed scenario changed: " + row["id"])
     return manifest
@@ -69,12 +74,6 @@ def compare(row, observed):
                 same = [json.loads(s) for s in got["stdout"].splitlines()] == [json.loads(s) for s in want["stdout"].splitlines()]
             except (ValueError, TypeError):
                 same = False
-        elif row["id"] == "assert-structural-failure":
-            # Record rendering is backend-specific, but the assertion origin,
-            # failed case, comparison kind and summary are still mandatory.
-            same = scenarios.status_lines(got["stdout"]) == scenarios.status_lines(want["stdout"])
-            lines = got["stdout"].splitlines()
-            same = same and len(lines) == 4 and bool(re.fullmatch(r"  <fixture>/app/src/sample_test\.trb:15:3: expected .+ to equal .+", lines[1])) and lines[2] == ""
         else:
             same = got["stdout"] == want["stdout"]
         if not same:

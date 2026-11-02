@@ -190,7 +190,11 @@ end
 SCALARS = 'import { describe, expect, test } from trb/std/test\ndef helper()\n expect(10).to_equal(11)\nend\ndescribe("Scalars") do\n test("success") do\n  expect(1).to_equal(1)\n  expect(1).to_not_equal(2)\n  expect(true).to_be_true()\n  expect(false).to_be_false()\n  expect(nil).to_be_nil()\n end\n test("equality") do\n  expect(1).to_equal(2)\n end\n test("inequality") do\n  expect(3).to_not_equal(3)\n end\n test("Boolean") do\n  expect(true).to_be_false()\n end\n test("type") do\n  expect(1).to_be_true()\n end\n test("nil") do\n  expect(5).to_be_nil()\n end\n test("helper") do\n  helper()\n end\n test("continued") do\n  expect(false).to_equal(false)\n end\nend\n'
 
 
-def replay(binary, root, source, wanted_failures, total):
+def replay(binary, root, source, wanted_failures, total, support=None):
+    for relative, contents in (support or {}).items():
+        path = root / "src" / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents)
     (root / "src/sample_test.trb").write_text(source)
     result = subprocess.run([str(binary), "test", "--reporter", "json"], cwd=root,
                             env=dict(os.environ, NO_COLOR="1", TERM="dumb"),
@@ -208,7 +212,9 @@ def replay(binary, root, source, wanted_failures, total):
         assert events[index]["name"] == events[index + 1]["name"], events[index:index + 2]
     assert stderr in ("", "exit status 1\n"), stderr
     return {"code": result.returncode, "events": events, "stderr": stderr,
-            "sourceSha256": hashlib.sha256(source.encode()).hexdigest()}
+            "sourceSha256": hashlib.sha256(source.encode()).hexdigest(),
+            **({"supportSha256": {name: hashlib.sha256(text.encode()).hexdigest()
+                                   for name, text in support.items()}} if support else {})}
 
 
 RESULTS = '''import { describe, expect, expect_err, expect_ok, test } from trb/std/test
@@ -262,9 +268,20 @@ end
 '''
 
 
+ROOT = Path(__file__).resolve().parent.parent
+PORTABLE_ROOT = ROOT / "fixtures/projects/test-portable-values/app/src"
+PORTABLE = (PORTABLE_ROOT / "sample_test.trb").read_text()
+PREDICATES = (PORTABLE_ROOT.parent.parent / "predicates.trb").read_text()
+BOUNDARIES = (PORTABLE_ROOT.parent.parent / "boundaries.trb").read_text()
+SUPPORT = {"portable": {str(path.relative_to(PORTABLE_ROOT)): path.read_text()
+                        for path in sorted(PORTABLE_ROOT.rglob("*.trb"))
+                        if path.name != "sample_test.trb"}}
+
 GROUPS = (("values", VALUES, 0, 9), ("origins", ORIGINS, 9, 10),
           ("dynamic", DYNAMIC, 0, 5), ("scalars", SCALARS, 6, 8),
-          ("traps", TRAPS, 2, 3), ("results", RESULTS, 2, 6))
+          ("traps", TRAPS, 2, 3), ("results", RESULTS, 2, 6),
+          ("portable", PORTABLE, 36, 37), ("predicates", PREDICATES, 4, 11),
+          ("boundaries", BOUNDARIES, 7, 8))
 ROOT = Path(__file__).resolve().parent.parent
 CONTRACT = ROOT / "fixtures/projects/native-test-values.json"
 
@@ -278,6 +295,9 @@ def load_contract(path=CONTRACT):
         raise ValueError("test value contract must retain every required group")
     for name, source, failures, total in GROUPS:
         row = groups[name]
+        hashes = {path: hashlib.sha256(text.encode()).hexdigest() for path, text in SUPPORT.get(name, {}).items()}
+        if row.get("supportSha256", {}) != hashes:
+            raise ValueError("test support source changed without replay: " + name)
         if row["sourceSha256"] != hashlib.sha256(source.encode()).hexdigest():
             raise ValueError("test source changed without a reference replay: " + name)
         if row["code"] != int(failures > 0) or len(row["events"]) != total * 2 + 1:
@@ -291,6 +311,8 @@ def compare_observation(name, observed, expected, native=False):
     for key in ("code", "events", "sourceSha256"):
         if observed[key] != expected[key]:
             raise ValueError(f"{name}: {key} differs from the frozen reference observation: {observed}")
+    if observed.get("supportSha256", {}) != expected.get("supportSha256", {}):
+        raise ValueError(name + ": supporting source hashes differ")
     if native and observed["stderr"] != "":
         raise ValueError(f"{name}: unexpected Native stderr: {observed['stderr']}")
 
@@ -323,7 +345,7 @@ def main():
                         "name": "test-values", "mode": mode, "sourceDir": "src",
                         "go": {"module": "example.com/test-values"},
                     }) + "\n")
-                    observed = replay(binary.resolve(), root, source, failures, total)
+                    observed = replay(binary.resolve(), root, source, failures, total, SUPPORT.get(name))
                     row[label] = observed
                     compare_observation(name, observed, contract[name], label == "native")
     finally:

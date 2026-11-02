@@ -45,7 +45,8 @@ class AcceptanceTest(unittest.TestCase):
         stdout = row["reference"][0]["stdout"]
         self.assertTrue(self.altered(row["id"], stdout=stdout.replace(":15:3:", ":1:1:")))
         self.assertTrue(self.altered(row["id"], stdout="FAIL Structure / record\n\n1 test(s), 1 failure(s)\n"))
-        self.assertEqual(self.altered(row["id"], stdout=stdout.replace("application.Point{X:1, Y:2}", "Point(x: 1, y: 2)")), [])
+        self.assertTrue(self.altered(row["id"], stdout=stdout.replace("Point(x: 1, y: 2)", "application.Point{X:1, Y:2}")))
+        self.assertTrue(self.altered(row["id"], stdout=stdout.replace("Point(x: 1, y: 2)", "Point(x: 9, y: 2)")))
 
     def test_json_allows_key_order_but_not_lost_origins_or_events(self):
         name = "test-json-reporter"

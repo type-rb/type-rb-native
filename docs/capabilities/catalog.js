@@ -93,7 +93,7 @@ export const catalog = {
         capability('Mail, object storage, and uploads', 'unassessed', ['production', 'ecosystem'], 'Define portable streaming and adapter boundaries for external services.'),
         capability('Configuration and secrets', 'open', ['production', 'ecosystem'], 'Load typed environment configuration without embedding secret-provider policy in the runtime.'),
         capability('Logging, metrics, and tracing', 'open', ['production', 'ecosystem'], 'Provide structured logs, health signals, metrics, and distributed tracing adapters.'),
-        capability('Testing, fixtures, and mocks', 'partial', ['production', 'ecosystem'], 'Native project tests support file/directory selection, human/JSON reporting, original failure locations, case continuation and standalone compilation. Scalar assertions and Result payload extraction with scalar failure values are implemented; additional value inspectors, debug support, fixtures and mocks remain incomplete. Name selection is an approved v0.5 deferral.', ['Project tests', 'docs/native-cli.md']),
+        capability('Testing, fixtures, and mocks', 'partial', ['production', 'ecosystem'], 'Native project tests support file/directory selection, human/JSON reporting, original failure locations, case continuation and standalone compilation. Typed equality, scalar predicates and Result payload extraction include portable, bounded failure rendering for collections and nominal values. Debug support, fixtures and mocks remain incomplete. Name selection is an approved v0.5 deferral.', ['Project tests', 'docs/native-cli.md']),
       ],
     },
     {

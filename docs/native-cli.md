@@ -127,12 +127,15 @@ Name selection with `-t` or `--test-name-pattern` is an
 [approved v0.5 deferral](https://github.com/type-rb/type-rb-native/issues/643).
 Both flags report an error directing the caller to file or directory selection.
 `test --debug` and test execution in source-backend modes remain unavailable.
-Assertion implementation is still incomplete: Integer, Boolean and Nil scalar
-assertions are supported. `expect_ok` and `expect_err` can return managed payloads
-when the opposite variant's payload is an Integer or Boolean. Other payload
-inspectors remain explicit compilation errors. Full test-command parity is tracked in
-[#624](https://github.com/type-rb/type-rb-native/issues/624), with value-display
-semantics discussed in [#1294](https://github.com/type-rb/type-rb-native/issues/1294).
+`expect` provides deep equality, inequality and scalar predicates, and
+`expect_ok`/`expect_err` return typed Result payloads. Failure messages use TypeRB
+names and declaration-order fields, including nested collections, enums and
+classes. Hashes have deterministic key order. Rendering does not call authored
+formatters; cycles, depth, element counts and total visited values are bounded.
+Strings use JSON control escaping and preserve other Unicode. The
+[shared display contract](https://github.com/type-rb/type-rb/blob/main/docs/guides/testing.md)
+also applies to the reference source backends. Full test-command parity is tracked
+in [#624](https://github.com/type-rb/type-rb-native/issues/624).
 Authored `Nil` type arguments also expose a separate reference-checking
 inconsistency tracked in [#1297](https://github.com/type-rb/type-rb-native/issues/1297);
 they are not included in passing portable Result coverage.
