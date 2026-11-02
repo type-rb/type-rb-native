@@ -332,7 +332,7 @@ def scan_string(
 											mut inner_column := 1
 											mut preceding := position[0] + 1 + first
 											while preceding >= 0 && source[preceding] != "\n"
-												inner_column += 1
+												inner_column += source[preceding].to_bytes().size()
 												preceding -= 1
 											end
 											lex_source(state, compiler_source_slice(inner, first, last), token_kind_end_of_input())
@@ -496,12 +496,12 @@ def lex_source(mut state: CompilerState, source: String, terminal_kind: Integer)
 	end
 	mut position := [0]
 	mut line := 1
-	mut line_start := 0
+	mut column := 1
 	mut character := ""
 	while position[0] < source.size()
 		start := position[0]
 		start_line := line
-		state.source_tokens.lexer_column[0] = start - line_start + 1
+		state.source_tokens.lexer_column[0] = column
 		character = source[position[0]]
 		if character == " "
 			position[0] += 1
@@ -543,17 +543,26 @@ def lex_source(mut state: CompilerState, source: String, terminal_kind: Integer)
 				end
 			end
 		end
+		mut remaining := start
 		if line != start_line
 			mut scanned := start
 			while scanned < position[0]
 				if source[scanned] == "\n"
-					line_start = scanned + 1
+					remaining = scanned + 1
+					column = 1
 				end
 				scanned += 1
 			end
 		end
+		# The pinned lexer advances identifiers by scalar, but quoted tokens and
+		# comments by byte. Preserve that mixed origin contract until it changes.
+		if character == "\"" || character == "'" || character == "#"
+			column += compiler_source_slice(source, remaining, position[0]).to_bytes().size()
+		else
+			column += position[0] - remaining
+		end
 	end
-	state.source_tokens.lexer_column[0] = position[0] - line_start + 1
+	state.source_tokens.lexer_column[0] = column
 	push_token(state, terminal_kind, "", line)
 	return !has_diagnostic(state)
 end
