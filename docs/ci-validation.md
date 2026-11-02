@@ -181,7 +181,7 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    continuation, standalone output preservation and managed assertion payloads.
    `fixtures/projects/native-test-values.json` freezes reference value events
    with the exact pin and source hashes. Quick feedback replays every group
-   against the reference; CLI jobs can verify supported groups without a
+   against the reference; CLI jobs verify every reviewed group without a
    reference executable. Source or pin changes require a new reference replay
    and review of the recorded observations before updating this contract.
 4. **Acceptance.** `Native CI acceptance` checks every planned authority,

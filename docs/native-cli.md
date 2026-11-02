@@ -135,7 +135,13 @@ formatters; cycles, depth, element counts and total visited values are bounded.
 Strings use JSON control escaping and preserve other Unicode. The
 [shared display contract](https://github.com/type-rb/type-rb/blob/main/docs/guides/testing.md)
 also applies to the reference source backends. Full test-command parity is tracked
-in [#624](https://github.com/type-rb/type-rb-native/issues/624).
+by the [v0.5 contract qualification](https://github.com/type-rb/type-rb-native/issues/1221);
+[#624](https://github.com/type-rb/type-rb-native/issues/624) owns the initial runner slice.
+Comparisons involving opaque provider values such as `StringBuilder` remain
+unavailable; their Boolean/nil predicates can report the opaque value normally.
+Boolean predicates preserve the current Go behavior for nullable values; the
+cross-mode inconsistency is tracked in
+[#1310](https://github.com/type-rb/type-rb-native/issues/1310).
 Authored `Nil` type arguments also expose a separate reference-checking
 inconsistency tracked in [#1297](https://github.com/type-rb/type-rb-native/issues/1297);
 they are not included in passing portable Result coverage.
