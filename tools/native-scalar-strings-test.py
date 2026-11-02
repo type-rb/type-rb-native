@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Verify binary64 conversion boundaries and retained scalar conversion calls."""
 import decimal
+import json
 import math
 import os
 from pathlib import Path
+import random
+import struct
 import subprocess
 import sys
 import tempfile
@@ -17,7 +20,7 @@ def canonical(value):
     if value == 0:
         return '0.0'
     # Python's shortest-roundtrip oracle is independent of the runtime's
-    # precision search. Decimal expands its digits without rounding the value.
+    # decimal algorithm. Decimal expands its digits without rounding the value.
     text = format(decimal.Decimal(repr(value)), 'f')
     return text if '.' in text else text + '.0'
 
@@ -34,7 +37,7 @@ with tempfile.TemporaryDirectory(prefix='native-scalar-strings-') as temporary:
         return result.stdout
 
     # All binades, including subnormals and asymmetric intervals at powers of
-    # two. Both neighboring directions expose precision-search-only mistakes.
+    # two. Both neighboring directions expose asymmetric-interval mistakes.
     (root / 'main.trb').write_text('''def main()
 mut value := 1.0
 mut index := 0
@@ -64,6 +67,24 @@ end
         assert got == wanted, (index, got, wanted)
     (root / 'main.trb').unlink()
 
+    # Cover the decimal precision transitions and significands beyond powers of
+    # two. A fixed seed keeps failures reproducible across the supported hosts.
+    values = [float('1.' + '2345678901234567'[:digits]) for digits in range(1, 17)]
+    generator = random.Random(0x545242)
+    while len(values) < 272:
+        value = struct.unpack('>d', generator.getrandbits(64).to_bytes(8, 'big'))[0]
+        if math.isfinite(value):
+            values.append(value)
+    literals = ', '.join(json.dumps(repr(value)) for value in values)
+    (root / 'main.trb').write_text('def main()\nvalues := [' + literals +
+                                 ']\nvalues.each do |text|\nputs(text.to_f().to_s())\nend\nend\n')
+    actual = run('run', root / 'main.trb').splitlines()
+    expected = list(map(canonical, values))
+    assert len(actual) == len(expected), (len(actual), len(expected))
+    for index, (got, wanted) in enumerate(zip(actual, expected)):
+        assert got == wanted, (index, repr(values[index]), got, wanted)
+    (root / 'main.trb').unlink()
+
     retained = run('repl', text='''convert := fn(value: Float): String; return value.to_s(); end
 saved := convert(0.1)
 flag := true.to_s()
@@ -85,4 +106,4 @@ puts(convert(-2.5))
     assert retained.endswith('0.1\n-2.5\n'), retained
     assert 'reloaded\n' in retained, retained
 
-print('PASS scalar String conversion: 8,392 binary64 boundaries, retained callbacks and replay')
+print('PASS scalar String conversion: 8,392 binary64 boundaries, 272 significands, retained callbacks and replay')

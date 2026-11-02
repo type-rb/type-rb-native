@@ -13,21 +13,19 @@ Boolean conversion returns immutable static text without allocation. Ordinary
 root liveness retains values across Float formatting. Backend adapters translate
 the verified mode without interpreting source expressions or receiver methods.
 
-The TypeRB-owned runtime uses system `snprintf` and `strtod` to search significant
-precision from one to seventeen digits and verify round trips. At a power of
-two the lower binary rounding interval is narrower than the upper interval.
-If the nearest decimal falls below the value and does not round trip, the
-runtime also checks the next greater decimal coefficient before adding another
-digit. Checking only the nearest decimal produces unnecessarily long output at
-these boundaries. The selected decimal digits and exponent are expanded directly;
-formatting the original binary value with `%f` would expose its binary tail.
+The TypeRB-owned runtime uses [direct binary64 decimal conversion](../native-float-decimal.md)
+to scale the binary rounding interval into decimal coefficients. It preserves
+the asymmetric interval at powers of two and nearest-even ties, without repeated
+`snprintf`/`strtod` probes. The selected digits and decimal power are expanded
+directly; formatting the original binary value with `%f` would expose its binary
+tail. Portable unsigned-word helpers implement the internal arithmetic without
+changing TypeRB Integer semantics or requiring a backend extension.
 
-Binary64 bounds the candidate to 64 bytes and fixed output to 384 bytes, including
-sign and the smallest subnormal. Both are temporary stack buffers. Finite nonzero
+A 32-byte digit buffer and 384-byte fixed-output buffer cover binary64, including
+the sign and smallest subnormal. Both are temporary stack buffers. Finite nonzero
 results allocate one ordinary String; zero and non-finite results share static
-descriptors. The small precision loop favors bounded implementation over final
-conversion throughput; a faster decimal algorithm may replace it under the same
-MIR and output contract after measurement.
+descriptors. The MIR and output contracts are independent of the conversion
+algorithm.
 
 The REPL calls ordinary Float `to_s` from its TypeRB implementation. The existing
 immutable seed builds the core, and that core builds the CLI with the new method;
