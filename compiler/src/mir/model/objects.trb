@@ -34,6 +34,15 @@ def mir_object_types_error(native_module: MirModule): String
 		if row.name == "" || !mir_origin_valid(row.source_id, row.line, native_module.source_count[0])
 			return "MIR object declaration origin is invalid"
 		end
+		row.arguments.each do |argument|
+			mut valid := mir_control_value_type(argument) || argument == mir_type_integer_array() || argument == mir_type_float_array()
+			if argument >= mir_type_composite_start() && argument - mir_type_composite_start() < native_module.types.size()
+				valid = true
+			end
+			if !valid
+				return "MIR object generic argument is invalid"
+			end
+		end
 		if row.resource_kind < 0 || row.resource_kind > 2
 			return "MIR scoped resource kind is invalid"
 		end
@@ -92,7 +101,15 @@ def mir_object_types_error(native_module: MirModule): String
 		while previous < owner
 			other := native_module.objects[previous]
 			if other.source_id == row.source_id && other.name == row.name
-				return "MIR object declaration is duplicated"
+				mut same := other.arguments.size() == row.arguments.size()
+				mut argument := 0
+				while same && argument < row.arguments.size()
+					same = row.arguments[argument] == other.arguments[argument]
+					argument += 1
+				end
+				if same
+					return "MIR object declaration is duplicated"
+				end
 			end
 			previous += 1
 		end
