@@ -41,6 +41,12 @@ previous immutable seed is unchanged by this source adaptation.
   selection when more than one coefficient is possible. Trailing coefficient
   zeros are removed by increasing the decimal power. Fixed expansion needs at
   most 384 stack bytes, including a sign and the smallest subnormal's zeros.
+- Integer and Float inline the same decimal digit writer. It divides an unsigned
+  magnitude by 100 and stores two ASCII digits at a time using the existing
+  200-byte Integer table. Remainders use the quotient already computed; the
+  leading group alone may contain one digit. There is no added runtime call.
+  Integer's small-value cache, Float's decimal rounding and managed allocation
+  remain separate from this shared digit output.
 
 The generated table occupies 9,872 bytes before object-file alignment and linker
 effects. Actual application and compiler costs are measured separately. The
@@ -61,6 +67,9 @@ oracle and unsigned high products against exact integer arithmetic. The four
 release-target CI lanes run this small arithmetic test with the pinned QBE.
 That test supplies only an allocation boundary; ordinary compiler, scalar MIR,
 reference, forced-GC and REPL tests remain separate authorities.
+Passing `--compiler` to the arithmetic test also checks every extracted runtime
+definition against ordinary compiler emission. Scalar conversion tests cover all
+two-digit pairs, power-of-ten boundaries, both signs and portable Integer extrema.
 
 The Native runtime maintainer owns this adaptation and its source/license pin.
 Review relevant upstream conversion fixes when updating it, regenerate and check
