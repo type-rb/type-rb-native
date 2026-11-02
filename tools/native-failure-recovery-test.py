@@ -16,9 +16,11 @@ def decoded(path):
     return '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', path.read_text()))
 # Include the same cleanup dependency as the production recovery emitter.
 il = decoded(runtime / 'resource_cleanup.trb') + '\n' + decoded(runtime / 'failure_recovery.trb')
-fatal = re.findall(r'^function \$trbn_fatal\([^\n]*\) \{.*?^\}', decoded(runtime / 'system.trb'), re.M | re.S)
-assert len(fatal) == 1
-il += '\n' + fatal[0]
+system = decoded(runtime / 'system.trb')
+fatal = re.findall(r'^function \$trbn_fatal\([^\n]*\) \{.*?^\}', system, re.M | re.S)
+bounds = re.findall(r'^data \$trbn_bounds_error = [^\n]+$', system, re.M)
+assert len(fatal) == 1 and len(bounds) == 1
+il += '\n' + fatal[0] + '\n' + bounds[0]
 il = re.sub(r'^(function|data) ', r'export \1 ', il, flags=re.M)
 observer = r'''
 #include <assert.h>
@@ -42,6 +44,8 @@ extern int64_t trbn_runtime_recover_l(void *, int64_t);
 extern double trbn_runtime_recover_d(void *, double);
 extern void trbn_fail(const void *, int64_t);
 extern void trbn_fatal(const void *, int64_t);
+extern void trbn_array_bounds_fail(void);
+extern void trbn_string_bounds_fail(void);
 struct closure { uintptr_t descriptor; int64_t (*code)(void *); int64_t captured; };
 struct float_closure { uintptr_t descriptor; double (*code)(void *); double captured; };
 struct resource_scope { uintptr_t previous; int descriptor; int kind; };
@@ -66,6 +70,8 @@ _Static_assert(sizeof(struct recovery_frame) == 1072, "recovery frame size");
 static int side_effects;
 static int failed_descriptor;
 static int notices;
+static int bounds_notices;
+static const char *expected_bounds;
 static int push_pipe(struct resource_scope *scope) {
     int descriptors[2];
     assert(pipe(descriptors) == 0);
@@ -137,10 +143,36 @@ static int64_t notifying(void *value) {
     assert(notices == before);
     return failed(value);
 }
+static void notified_bounds(uintptr_t context, const void *message, int64_t size,
+                            int64_t raw, uintptr_t path, int64_t line, int64_t column) {
+    assert(context == 77 && raw == 1 && path == 0 && line == 0 && column == 0);
+    assert(size == (int64_t)strlen(expected_bounds));
+    assert(!memcmp(message, expected_bounds, (size_t)size));
+    assert(trbn_resource_scope != 0 && fcntl(failed_descriptor, F_GETFD) >= 0);
+    ++bounds_notices;
+}
+static int64_t bounds_failure(void *value) {
+    struct recovery_frame *frame = (void *)trbn_recovery_scope;
+    struct resource_scope scope;
+    assert(frame && frame->notice == NULL);
+    frame->notice = notified_bounds;
+    failed_descriptor = push_pipe(&scope);
+    trbn_gc_temp_count = 500;
+    if (((struct closure *)value)->captured == 1) {
+        trbn_array_bounds_fail();
+    } else {
+        trbn_string_bounds_fail();
+    }
+    assert(0); return -1;
+}
 int main(int argc, char **argv) {
     if (argc > 1) {
         if (!strcmp(argv[1], "outside")) {
             trbn_fail("outside failure\n", 16);
+        } else if (!strcmp(argv[1], "outside-array")) {
+            trbn_array_bounds_fail();
+        } else if (!strcmp(argv[1], "outside-string")) {
+            trbn_string_bounds_fail();
         } else {
             struct closure fatal = {0, fatal_failure, 0};
             trbn_runtime_recover_l(&fatal, 99);
@@ -164,6 +196,16 @@ int main(int argc, char **argv) {
         assert(trbn_recovery_scope == 0 && trbn_resource_scope == 0);
     }
     assert(side_effects == 10000);
+    for (int kind = 1; kind <= 2; ++kind) {
+        expected_bounds = kind == 1 ? "panic: Array index is out of bounds\n"
+                                   : "panic: String index is out of bounds\n";
+        struct closure bounds = {0, bounds_failure, kind};
+        assert(trbn_runtime_recover_l(&bounds, 77) == 77);
+        assert(bounds_notices == kind);
+        expect_closed(failed_descriptor);
+        assert(trbn_gc_temp_count == 7 && trbn_recovery_scope == 0);
+        assert(trbn_resource_scope == 0);
+    }
     printf("recovery ABI: jmp_buf=%zu alignment=%zu; 10000 nested/Float/resource/notice cycles\n",
         sizeof(jmp_buf), _Alignof(jmp_buf));
 }
@@ -174,11 +216,15 @@ with tempfile.TemporaryDirectory(prefix='native-recovery-abi-') as temporary:
     (work / 'observer.c').write_text(observer)
     subprocess.run([str(args.qbe.resolve()), '-o', str(work / 'runtime.s'), str(work / 'runtime.ssa')], check=True)
     subprocess.run(['cc', '-std=c11', '-O2', str(work / 'observer.c'), str(work / 'runtime.s'), '-o', str(work / 'probe')], check=True)
-    for mode, code, error in [([], 0, ''), (['outside'], 2, 'outside failure\n'), (['fatal'], 2, 'fatal failure\n')]:
+    for mode, code, error in [([], 0, ''), (['outside'], 2, 'outside failure\n'),
+                              (['outside-array'], 2, 'panic: index is out of bounds\n'),
+                              (['outside-string'], 2, 'panic: index is out of bounds\n'),
+                              (['fatal'], 2, 'fatal failure\n')]:
         result = subprocess.run([str(work / 'probe'), *mode], capture_output=True, text=True, timeout=30)
         assert result.returncode == code and result.stderr == error, result
         if not mode:
             print(result.stdout, end='')
         else:
             assert not result.stdout, result
-print('Out-of-scope and process-fatal failures remain terminal')
+print('Array/String caught bounds retain their category and clean resources')
+print('Out-of-scope, collection bounds and process-fatal failures remain terminal')
