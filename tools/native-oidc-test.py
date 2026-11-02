@@ -329,6 +329,13 @@ def cases(provider):
     ok = 'ok:user:Example:user@example.invalid:user,editor'
     yield {'id': 'discovery', 'headers': ['Bearer ' + valid], 'expected': ok, 'discovery': True}
     yield {'id': 'explicit-jwks', 'headers': ['Bearer ' + valid], 'expected': ok}
+    # The shared JSON scanner may retain exact integers without a raw token.
+    # OIDC NumericDate must still accept both integer and fractional claims.
+    now = int(time.time())
+    for label, claims in [('integer', {'exp': now + 3600, 'nbf': now - 3600}),
+                          ('fractional', {'exp': now + 3600.5, 'nbf': now - 3600.5})]:
+        yield {'id': 'numeric-date-' + label, 'headers': ['Bearer ' + provider.token(claims)],
+               'expected': ok}
     yield {'id': 'missing', 'headers': [], 'expected': 'missing:Authorization header is required'}
     yield {'id': 'duplicate', 'headers': ['Bearer ' + valid] * 2,
            'expected': 'invalid:exactly one Authorization header is required'}

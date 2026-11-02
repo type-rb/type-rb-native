@@ -87,10 +87,15 @@ class MeasurementTests(unittest.TestCase):
     def test_document_width_oracles(self):
         base = {"count": 2, "batches": 1, "workload": "json-document"}
         for variant, length in (("ascii", 14), ("unicode", 8), ("escaped", 60),
-                                ("wide-array", 13), ("wide-object", 29)):
+                                ("wide-array", 13), ("wide-object", 29),
+                                ("integer-array", 9), ("fractional-array", 11),
+                                ("mixed-number-object", 25),
+                                ("precise-fractional-array", 41)):
             with self.subTest(variant=variant):
                 self.assertEqual(measure.expected(dict(base, variant=variant)),
                                  f"ready\n0,{length}\ndone,0\n".encode())
+        self.assertEqual(measure.expected(dict(base, count=3, variant="mixed-number-object")),
+                         b"ready\n0,39\ndone,0\n")
 
     def test_output_and_exit_failures(self):
         with tempfile.TemporaryDirectory() as temporary:

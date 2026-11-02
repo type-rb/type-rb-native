@@ -353,10 +353,18 @@ Strings store byte length and code-point count separately, with UTF-8 data after
 the managed header. I/O and Hash equality use bytes; language size/index use code
 points. Non-ASCII indexing can allocate, with its lifetime effects owned by MIR.
 The runtime shares one bounded UTF-8 decoder between scalar decoding and
-counting. A split with exactly one ASCII delimiter derives the larger fragment
-count from the original String and counts only the shorter fragment; other
-separator shapes retain the general splitter. Both paths copy fragment bytes
-and preserve ordinary temporary roots and independent mutable result Arrays.
+counting. When a String's byte length equals its point count, every decoding unit
+has width one, including malformed single-byte units. Splitting such a String
+reuses each contiguous fragment's byte length as its point count. Other Strings
+retain bounded decoding; exactly one ASCII delimiter lets the runtime count only
+the shorter fragment and derive the larger count from the original String.
+All paths copy fragment bytes and preserve ordinary temporary roots and
+independent mutable result Arrays.
+Portable Integer conversion validates and accumulates digits in one bounded
+pass. After the portable magnitude overflows, a validation-only tail preserves
+invalid-format priority without further arithmetic. Failure leaves the output
+slot untouched.
+
 Snapshot
 aggregate recovery retains a separate heap-free layer, keeping record and
 tagged-value semantics independent of allocation strategy.
@@ -365,7 +373,9 @@ StringBuilder owns a traced descriptor containing its backing allocation and
 used-byte count. Capacity belongs to private byte storage and is never exposed
 as an immutable String. Appends root the owner and source across geometric
 growth; snapshots copy initialized bytes and compute Unicode length after
-joining fragments. The JSON implementation alone may load the checked byte-span
+joining fragments. Clearing retains at most the initial small buffer and drops
+larger backing storage. JSON parsing reuses one such scratch builder, clearing it
+after each independent string snapshot. The JSON implementation alone may load the checked byte-span
 adapter. MIR independently verifies its argument and mutation contract, while
 the runtime checks byte bounds before copying.
 

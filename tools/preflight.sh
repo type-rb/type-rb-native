@@ -66,6 +66,7 @@ if [ "$plan" = documentation ]; then
 fi
 
 step "QBE dependency identity" python3 tools/qbe_toolchain_test.py
+step "Float decimal constants" python3 tools/float-decimal-powers.py
 step "authored QBE branch widths" python3 tools/native-runtime-branch-test.py --check-source
 step "compiler source staging" python3 tools/compiler_sources_test.py
 step "bootstrap snapshot input and catalog bounds" python3 tools/bootstrap_snapshot_size_test.py
