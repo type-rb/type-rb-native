@@ -97,8 +97,12 @@ describe("Origins") do
     test("helper assertion origin") do
         helper()
     end
-    test("unicode scalar column") do
+    test("quoted unicode byte column") do
         value := "値😀"; expect(value).to_equal("other")
+    end
+    test("unicode interpolation retains the inner assertion origin") do
+        value := "値😀#{expect_ok(Result<String, String>::Err("bad"))}"
+        puts(value)
     end
     test("non-Boolean is an assertion failure") do
         expect(1).to_be_true()
@@ -258,7 +262,7 @@ end
 '''
 
 
-GROUPS = (("values", VALUES, 0, 9), ("origins", ORIGINS, 8, 9),
+GROUPS = (("values", VALUES, 0, 9), ("origins", ORIGINS, 9, 10),
           ("dynamic", DYNAMIC, 0, 5), ("scalars", SCALARS, 6, 8),
           ("traps", TRAPS, 2, 3), ("results", RESULTS, 2, 6))
 ROOT = Path(__file__).resolve().parent.parent
