@@ -14,8 +14,9 @@ the [BSD license](../third_party/go-float/LICENSE) accompanies adapted source an
 must accompany distributed artifacts. No Go runtime, external conversion
 library, new linker input or QBE extension is required.
 
-Development compiler packages include `GO-FLOAT-LICENSE` and
-`float-decimal-source.json`; Linux amd64 qualification bundles retain the same
+Development compiler packages include `GO-FLOAT-LICENSE`, this guide as
+`FLOAT-DECIMAL.md`, and `float-decimal-source.json`; Linux amd64 qualification
+bundles retain the same
 notice and pin. Applications that distribute this emitted conversion must also
 carry the BSD notice. A future bootstrap seed refresh must include it; the
 previous immutable seed is unchanged by this source adaptation.
@@ -45,6 +46,11 @@ The generated table occupies 9,872 bytes before object-file alignment and linker
 effects. Actual application and compiler costs are measured separately. The
 table and helpers are emitted with the scalar conversion runtime; source presence
 alone does not establish their cost in every executable.
+
+The [initial evaluation](https://github.com/type-rb/type-rb-native/issues/1305#issuecomment-6567672783)
+records the measured benefits, binary and compiler costs, and remaining
+noninferiority and RSS failures. Its local results are specific to Darwin arm64;
+they do not qualify the other hosts or establish public Linux performance.
 
 ## Qualification and maintenance
 
