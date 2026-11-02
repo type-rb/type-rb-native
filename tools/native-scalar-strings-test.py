@@ -67,6 +67,27 @@ end
         assert got == wanted, (index, got, wanted)
     (root / 'main.trb').unlink()
 
+    # The shared decimal writer must preserve interior 00..99 pairs, leading
+    # one- and two-digit groups, signs, and the portable Integer boundaries.
+    integers = {0, 9007199254740991, -9007199254740991}
+    for exponent in range(1, 16):
+        for offset in (-1, 0, 1):
+            value = 10 ** exponent + offset
+            integers.update((value, -value))
+    for pair in range(100):
+        for value in (pair, 10001 + pair * 100, 1000001 + pair * 10000):
+            integers.update((value, -value))
+    integers = sorted(integers)
+    (root / 'main.trb').write_text('def main()\nvalues := [' +
+                                 ', '.join(map(str, integers)) +
+                                 ']\nvalues.each do |value|\nputs(value.to_s())\n'
+                                 'puts(value.to_f().to_s())\nend\nend\n')
+    actual = run('run', root / 'main.trb').splitlines()
+    expected = [text for value in integers for text in (str(value), canonical(float(value)))]
+    assert actual == expected, [(i, got, wanted) for i, (got, wanted)
+                                in enumerate(zip(actual, expected)) if got != wanted][:8]
+    (root / 'main.trb').unlink()
+
     # Cover the decimal precision transitions and significands beyond powers of
     # two. A fixed seed keeps failures reproducible across the supported hosts.
     values = [float('1.' + '2345678901234567'[:digits]) for digits in range(1, 17)]
@@ -106,4 +127,5 @@ puts(convert(-2.5))
     assert retained.endswith('0.1\n-2.5\n'), retained
     assert 'reloaded\n' in retained, retained
 
-print('PASS scalar String conversion: 8,392 binary64 boundaries, 272 significands, retained callbacks and replay')
+print(f'PASS scalar String conversion: 8,392 binary64 boundaries, 272 significands, '
+      f'{len(integers)} paired Integer/Float values, retained callbacks and replay')

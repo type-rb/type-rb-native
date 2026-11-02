@@ -1,5 +1,6 @@
 import { QbeOutput, qbe_output_line } from backend/qbe/output
 import { emit_float_decimal_runtime } from backend/qbe/runtime/float_decimal
+import { emit_decimal_digits } from backend/qbe/runtime/decimal_digits
 
 # Direct shortest binary64 conversion returns integer digits and a decimal power.
 # Expand those digits without converting the binary Float a second time.
@@ -20,12 +21,11 @@ def emit_float_string_runtime(mut output: QbeOutput)
 	qbe_output_line(output, "@negative_infinity\n ret $trbn_float_negative_infinity\n")
 	qbe_output_line(output, "@positive_infinity\n ret $trbn_float_infinity\n")
 	qbe_output_line(output, "@prepare\n %digits =l alloc8 32\n %power_slot =l alloc8 8\n %coefficient =l call $trbn_float_decimal(d %magnitude, l %power_slot)\n %decimal_power =l loadl %power_slot\n %invalid =w ceql %coefficient, 0\n jnz %invalid, @fail, @trim\n")
-	qbe_output_line(output, "@trim\n %remaining =l phi @prepare %coefficient, @trim_more %trimmed\n %power =l phi @prepare %decimal_power, @trim_more %next_power\n %tail =l urem %remaining, 10\n %trailing_zero =w ceql %tail, 0\n jnz %trailing_zero, @trim_more, @digits_start\n")
-	qbe_output_line(output, "@trim_more\n %trimmed =l udiv %remaining, 10\n %next_power =l add %power, 1\n jmp @trim\n")
-	qbe_output_line(output, "@digits_start\n %end =l add %digits, 32\n jmp @write_digit\n")
-	qbe_output_line(output, "@write_digit\n %coefficient_part =l phi @digits_start %remaining, @again %quotient\n %cursor =l phi @digits_start %end, @again %slot\n %slot =l sub %cursor, 1\n %digit =l urem %coefficient_part, 10\n %character =l add %digit, 48\n storeb %character, %slot\n %quotient =l udiv %coefficient_part, 10\n %more =w cnel %quotient, 0\n jnz %more, @again, @digits_done\n")
-	qbe_output_line(output, "@again\n jmp @write_digit\n")
-	qbe_output_line(output, "@digits_done\n %count =l sub %end, %slot\n %point =l add %count, %power\n %sign =l extuw %negative\n %result =l call $trbn_decimal_fixed(l %slot, l %count, l %point, l %sign)\n ret %result\n")
+	qbe_output_line(output, "@trim\n %remaining =l phi @prepare %coefficient, @trim_more %trimmed\n %power =l phi @prepare %decimal_power, @trim_more %next_power\n %trimmed =l udiv %remaining, 10\n %tens =l mul %trimmed, 10\n %tail =l sub %remaining, %tens\n %trailing_zero =w ceql %tail, 0\n jnz %trailing_zero, @trim_more, @digits_start\n")
+	qbe_output_line(output, "@trim_more\n %next_power =l add %power, 1\n jmp @trim\n")
+	qbe_output_line(output, "@digits_start\n %end =l add %digits, 32\n %decimal_value =l copy %remaining\n %decimal_end =l copy %end\n jmp @decimal_begin\n")
+	emit_decimal_digits(output)
+	qbe_output_line(output, " %count =l sub %end, %decimal_start\n %point =l add %count, %power\n %sign =l extuw %negative\n %result =l call $trbn_decimal_fixed(l %decimal_start, l %count, l %point, l %sign)\n ret %result\n")
 	qbe_output_line(output, "@fail\n call $trbn_fail(l $trbn_float_format_error, l 31)\n hlt\n}\nfunction l $trbn_decimal_fixed(l %digits, l %count, l %point, l %negative) {\n")
 	qbe_output_line(output, "@start\n %buffer =l alloc8 384\n storeb 45, %buffer\n %fraction =w cslel %point, 0\n jnz %fraction, @fraction, @integer\n")
 	qbe_output_line(output, "@fraction\n %zero_address =l add %buffer, %negative\n storeb 48, %zero_address\n %dot_address =l add %zero_address, 1\n storeb 46, %dot_address\n %fraction_cursor =l add %negative, 2\n jmp @loop_start\n")

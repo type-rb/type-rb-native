@@ -20,7 +20,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNTIME = ROOT / 'compiler/src/backend/qbe/runtime'
-SOURCES = ['float_powers.trb', 'float_decimal.trb', 'scalar_strings.trb']
+SOURCES = ['float_powers.trb', 'float_decimal.trb', 'decimal_digits.trb', 'scalar_strings.trb']
 QBE_TARGETS = {'darwin-arm64': 'arm64_apple', 'darwin-amd64': 'amd64_apple',
                'linux-arm64': 'arm64', 'linux-amd64': 'amd64_sysv'}
 HARNESS = r'''
@@ -109,13 +109,28 @@ def controls():
     return values, products
 
 
+def constant_emitter(name):
+    content = (RUNTIME / 'decimal_digits.trb').read_text()
+    bodies = re.findall(r'^def ' + re.escape(name) +
+                        r'\(mut output: QbeOutput\)\n(.*?)^end$', content, re.M | re.S)
+    assert len(bodies) == 1, name
+    # Fail closed if the shared emitter gains control flow or interpolation.
+    for line in bodies[0].splitlines():
+        if line.strip() and not line.lstrip().startswith('#'):
+            assert re.fullmatch(r'\s*qbe_output_line\(output, "(?:[^"\\]|\\.)*"\)', line), line
+    return bodies[0]
+
+
 def emitted_runtime():
     parts = []
-    # These three emitters consist solely of constant qbe_output_line calls.
-    # Ordinary compiler tests separately verify the import/call wiring.
     pattern = r'qbe_output_line\(output, ("(?:[^"\\]|\\.)*")\)'
     for name in SOURCES:
-        content = (RUNTIME / name).read_text()
+        content = (constant_emitter('emit_decimal_pair_table') if name == 'decimal_digits.trb'
+                   else (RUNTIME / name).read_text())
+        if name == 'scalar_strings.trb':
+            call = '\temit_decimal_digits(output)\n'
+            assert content.count(call) == 1
+            content = content.replace(call, constant_emitter('emit_decimal_digits'))
         literals = re.findall(pattern, content)
         assert len(literals) == content.count('qbe_output_line(output, '), name
         parts.extend(json.loads(literal) for literal in literals)
@@ -128,10 +143,31 @@ def emitted_runtime():
     return result
 
 
+def runtime_definitions(source):
+    definitions, body, name = {}, [], None
+    for line in source.splitlines(keepends=True):
+        if name is not None:
+            body.append(line)
+            if line.strip() == '}':
+                assert name not in definitions, name
+                definitions[name] = ''.join(body)
+                name, body = None, []
+        elif line.startswith('data $'):
+            symbol = line.split('$', 1)[1].split(' ', 1)[0]
+            assert symbol not in definitions, symbol
+            definitions[symbol] = line
+        elif re.match(r'^(?:export )?function(?: [a-z])? \$', line):
+            name = line.split('$', 1)[1].split('(', 1)[0]
+            body = [line.removeprefix('export ')]
+    assert name is None
+    return definitions
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--qbe', type=Path, default=Path(os.environ.get('TRBN_QBE', ROOT / 'bin/qbe')))
     parser.add_argument('--receipt', type=Path)
+    parser.add_argument('--compiler', type=Path, help='Optional ordinary core compiler: verify extracted definitions match real emission')
     args = parser.parse_args()
     system = platform.system().lower()
     machine = {'aarch64': 'arm64', 'x86_64': 'amd64'}.get(platform.machine(), platform.machine())
@@ -165,6 +201,19 @@ def main():
                 for index, (got, wanted) in enumerate(zip(rows, expected)):
                     assert got == wanted, (mode, index, got, wanted)
                 receipt['productControls' if mode == 'products' else 'outputControls'] = len(rows)
+            if args.compiler:
+                receipt['phase'] = 'ordinary-emission'
+                example = work / 'ordinary.trb'
+                example.write_text('def main()\nputs(1.2345.to_s())\nend\n')
+                actual = subprocess.run([str(args.compiler.resolve()), 'emit-qbe', str(example)],
+                                        capture_output=True, text=True, check=True, timeout=120)
+                assert not actual.stderr, actual.stderr
+                expected = runtime_definitions(source)
+                emitted = runtime_definitions(actual.stdout)
+                for name, definition in expected.items():
+                    assert emitted.get(name) == definition, name
+                receipt['ordinaryDefinitions'] = len(expected)
+                receipt['ordinaryQbeSHA256'] = hashlib.sha256(actual.stdout.encode()).hexdigest()
         receipt['status'] = 'pass'
     except BaseException as error:
         receipt.update(status='failed', error=repr(error))
