@@ -150,7 +150,10 @@ def runtime_definitions(source):
             body.append(line)
             if line.strip() == '}':
                 assert name not in definitions, name
-                definitions[name] = ''.join(body)
+                # Ordinary QbeOutput inserts blank separators after function
+                # headers. Compare every nonempty line, including whitespace,
+                # without changing instructions, labels or data declarations.
+                definitions[name] = ''.join(row for row in body if row.strip())
                 name, body = None, []
         elif line.startswith('data $'):
             symbol = line.split('$', 1)[1].split(' ', 1)[0]
