@@ -130,6 +130,14 @@ end
         helpers = re.findall(r'^function l \$trbn_parse_float\([^\n]*\) \{.*?^\}', emitted, re.M|re.S)
         powers = re.findall(r'^data \$trbn_parse_decimal_powers = \{.*?^\}', emitted, re.M|re.S)
         assert len(helpers) == len(powers) == 1
+        # Validate every committed table entry, including scales outside the
+        # dense boundary corpus. These integer powers are exactly representable.
+        table_words = list(map(int, re.findall(r' l (\d+)', powers[0])))
+        exact_powers = [float(10**exponent) for exponent in range(23)]
+        assert all(power.as_integer_ratio() == (10**exponent, 1)
+                   for exponent, power in enumerate(exact_powers))
+        assert table_words == [struct.unpack('=Q', struct.pack('=d', power))[0]
+                               for power in exact_powers]
         assert helpers[0].count('call $strtod(') == 1
         il = powers[0]+'\nexport '+helpers[0].replace('call $strtod(', 'call $observe_strtod(')+'\n'
         (root/'parser.ssa').write_text(il)

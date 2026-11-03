@@ -31,18 +31,21 @@ all other validated inputs retain system `strtod`. Neither conversion path
 decides authored syntax or the Result failure model. The REPL uses the same
 core parsing operations, removing its duplicate Integer parser.
 
-The short-decimal path accumulates digits during the existing grammar scan.
-It uses the accumulator only when the complete mantissa has at most 16 digits,
-its magnitude is below 2^52, and the authored exponent has at most two digits.
+After validating the complete grammar, the short-decimal path scans only a
+bounded coefficient. Conversion is eligible only when the complete mantissa
+has at most 16 digits, its magnitude is below 2^52, and the authored exponent
+has at most two digits.
 After subtracting the fraction's digit count, a decimal scale from -22 through
 22 selects an exactly representable power of ten. The integer conversion is
 exact; a single binary64 multiplication or division therefore rounds the exact
 decimal value once. The sign bit is set before that operation to preserve
 negative zero. Nonzero results in this range are normal and finite.
 
-Long-input accumulators may wrap as private raw machine words, but the complete
-digit counts exclude them before use. Syntax validation still examines every
-byte before reporting range, and failure leaves the output slot untouched.
+The original validation loops do not accumulate long significands or exponents.
+Only at most 16 digits and one decimal point enter the coefficient loop; its
+integer accumulator cannot overflow. One or two exponent digits are decoded
+only after validation. Syntax validation still examines every byte before
+reporting range, and failure leaves the output slot untouched.
 Long significands, large exponents, subnormals and overflow retain the existing
 fallback. `tools/native-float-parsing-test.py` checks emitted arithmetic against
 an independent rounding oracle, counts fallback calls, and exercises guard-page
