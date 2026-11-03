@@ -93,6 +93,7 @@ step "HTTP REPL reference contract" python3 tools/native-web-network-repl-test.p
 step "gzip response reference contracts" python3 tools/native-web-compression-test.py "$reference" --reference --receipt "$log.json"
 step "digest and HMAC reference contracts" python3 tools/native-crypto-test.py "$reference" --reference --receipt "$log.json"
 step "OIDC reference contracts" python3 tools/native-oidc-test.py "$reference" --reference --tls --transport --cli-paths --receipt "$log.json"
+step "application time service reference contracts" python3 tools/native-time-service-test.py --reference "$reference" --report "$log.json"
 step "filesystem reference contracts" python3 tools/native-filesystem-test.py "$reference" --reference --report "$log.json"
 step "filesystem reference rejection" python3 tools/native-filesystem-check-test.py "$reference" --reference --report "$log.json"
 step "test manifest classification" python3 tools/native-test-runner-harness-test.py

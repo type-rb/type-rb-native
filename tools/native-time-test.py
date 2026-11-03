@@ -181,7 +181,7 @@ with tempfile.TemporaryDirectory(prefix='native-time-zones-') as temporary:
         source = source.replace('trb/internal/time_parse', 'time_parse')
         source = source.replace('trb/internal/time_host', 'time_host')
         (root / (name + '.trb')).write_text(source)
-    (root / 'time_host.trb').write_text('module TimeHost\ndef self.zone_data(_path: String): String\nreturn ""\nend\nend\n')
+    (root / 'time_host.trb').write_text('module TimeHost\ndef self.zone_data(_path: String, _start: Integer, _length: Integer, mut _parts: Array<String>): Integer\nreturn 2\nend\ndef self.zone_environment(mut _parts: Array<String>): Boolean\nreturn false\nend\nend\n')
 
     def header(version=b'\0', *, times=0, types=1, chars=4):
         return b'TZif' + version + bytes(15) + struct.pack('>6I', 0, 0, 0, times, types, chars)
