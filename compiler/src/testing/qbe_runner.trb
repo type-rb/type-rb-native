@@ -2,11 +2,11 @@ import { native_write_text } from project/native_file_system
 import trb/std/process
 import trb/std/result
 
-def logical_run_qbe(qbe_path: String, source: String): Result<String, String>
-	return logical_run_qbe_arguments(qbe_path, source, [])
+def logical_run_qbe(qbe_path: String, source: String, expected_status: Integer = 0): Result<String, String>
+	return logical_run_qbe_arguments(qbe_path, source, [], expected_status)
 end
 
-def logical_run_qbe_arguments(qbe_path: String, source: String, arguments: Array<String>): Result<String, String>
+def logical_run_qbe_arguments(qbe_path: String, source: String, arguments: Array<String>, expected_status: Integer = 0): Result<String, String>
 	allocated := case Process.run("/usr/bin/mktemp", ["-d", "/tmp/type-rb-native-logical-layout.XXXXXX"])
 	when Result::Ok(result)
 		result
@@ -17,7 +17,7 @@ def logical_run_qbe_arguments(qbe_path: String, source: String, arguments: Array
 		return Result<String, String>::Err(allocated.stderr)
 	end
 	workspace := allocated.stdout.strip()
-	result := logical_run_qbe_workspace(qbe_path, source, arguments, workspace)
+	result := logical_run_qbe_workspace(qbe_path, source, arguments, workspace, expected_status)
 	mut cleanup_error := ""
 	case Process.run("/bin/rm", ["-r", workspace])
 	when Result::Ok(cleanup)
@@ -40,7 +40,7 @@ end
 
 # The caller always removes generated files. Failed phase/output remains in the
 # returned diagnostic; the owning test keeps the source fixture reproducible.
-def logical_run_qbe_workspace(qbe_path: String, source: String, arguments: Array<String>, workspace: String): Result<String, String>
+def logical_run_qbe_workspace(qbe_path: String, source: String, arguments: Array<String>, workspace: String, expected_status: Integer = 0): Result<String, String>
 	case native_write_text(workspace + "/module.ssa", source)
 	when Result::Ok(_unit)
 	when Result::Err(error)
@@ -71,7 +71,10 @@ def logical_run_qbe_workspace(qbe_path: String, source: String, arguments: Array
 	end
 	case Process.run(workspace + "/program", arguments)
 	when Result::Ok(result)
-		if !result.success || !result.stderr.empty?()
+		if result.status != expected_status
+			return Result<String, String>::Err("program status " + result.status.to_s() + ", expected " + expected_status.to_s() + "\n" + result.stdout + result.stderr)
+		end
+		if !result.stderr.empty?()
 			return Result<String, String>::Err(result.stderr)
 		end
 		return Result<String, String>::Ok(result.stdout)

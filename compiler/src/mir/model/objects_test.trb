@@ -6,7 +6,8 @@ import { mir_declare_types, mir_managed_type, mir_semantic_type_id, mir_types_er
 import { resolve_declarations } from frontend/checking/program/resolution
 import { CompilerState } from state/state
 import { resolve_type_name } from frontend/resolution/type_resolution
-import { store_string } from support/storage
+import { store_integer, store_string } from support/storage
+import { expect_compiler_phase } from testing/pipeline
 import { describe, expect, test } from trb/std/test
 
 def object_mir_types_state(): CompilerState
@@ -18,10 +19,49 @@ def object_mir_types_state(): CompilerState
 end
 
 def object_mir_replace(declaration: Integer, type_id: Integer, name: String, source: Integer, line: Integer, interface_type: Boolean, parent: Integer, interfaces: Array<Integer>, fields: Array<MirObjectField>): MirObject
-	return MirObject.new(resource_kind: 0, initializer: -1, declaration: declaration, type_id: type_id, name: name, source_id: source, line: line, interface_type: interface_type, superclass: parent, interfaces: interfaces, fields: fields)
+	return MirObject.new(resource_kind: 0, initializer: -1, declaration: declaration, type_id: type_id, name: name, arguments: [], source_id: source, line: line, interface_type: interface_type, superclass: parent, interfaces: interfaces, fields: fields)
+end
+
+def object_mir_same_display_state(): CompilerState
+	mut state := object_resolution_state("record Left\nvalue: Integer\nend\nrecord Right\nvalue: Integer\nend\nclass Box<T>\n@value: T\nend\ndef main()\nend\n")
+	expect_compiler_phase(state, "declarations", resolve_declarations(state))
+	resolve_type_name(state, 0, "Box<Left>", false)
+	resolve_type_name(state, 0, "Box<Right>", false)
+	# Model two imported declarations with the same authored name. Their
+	# resolved record IDs remain distinct after diagnostic names are erased.
+	store_string(state.declarations.record_names, 0, "Same")
+	store_string(state.declarations.record_names, 1, "Same")
+	store_integer(state.declarations.record_modules, 1, 1)
+	state.module_graph.module_count[0] = 2
+	store_string(state.module_graph.module_names, 0, "left/model")
+	store_string(state.module_graph.module_names, 1, "right/model")
+	mir_declare_types(state)
+	return state
 end
 
 describe("Object MIR type graph") do
+	test("distinguishes generic arguments with identical diagnostic names") do
+		state := object_mir_same_display_state()
+		native_module := state.scalar_mir
+		expect(mir_types_error(native_module)).to_equal("")
+		expect(native_module.objects[0].name).to_equal("Box<Same>")
+		expect(native_module.objects[1].name).to_equal("Box<Same>")
+		expect(native_module.objects[0].arguments[0]).to_equal(native_module.records[0].type_id)
+		expect(native_module.objects[1].arguments[0]).to_equal(native_module.records[1].type_id)
+	end
+	test("rejects duplicated and invalid generic argument identities") do
+		[0, 999999, -1].each do |damage|
+			state := object_mir_same_display_state()
+			mut native_module := state.scalar_mir
+			row := native_module.objects[1]
+			mut argument := damage
+			if damage == -1
+				argument = native_module.objects[0].arguments[0]
+			end
+			native_module.objects[1] = MirObject.new(resource_kind: row.resource_kind, initializer: row.initializer, declaration: row.declaration, type_id: row.type_id, name: row.name, arguments: [argument], source_id: row.source_id, line: row.line, interface_type: row.interface_type, superclass: row.superclass, interfaces: row.interfaces, fields: row.fields)
+			expect(mir_types_error(native_module).empty?()).to_be_false()
+		end
+	end
 	test("owns class interface inheritance and recursive storage independently") do
 		mut state := object_mir_types_state()
 		mut native_module := state.scalar_mir

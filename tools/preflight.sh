@@ -95,6 +95,9 @@ step "digest and HMAC reference contracts" python3 tools/native-crypto-test.py "
 step "OIDC reference contracts" python3 tools/native-oidc-test.py "$reference" --reference --tls --transport --cli-paths --receipt "$log.json"
 step "filesystem reference contracts" python3 tools/native-filesystem-test.py "$reference" --reference --report "$log.json"
 step "filesystem reference rejection" python3 tools/native-filesystem-check-test.py "$reference" --reference --report "$log.json"
+step "test manifest classification" python3 tools/native-test-runner-harness-test.py
+step "project test reference contracts" python3 tools/native-test-runner-test.py --reference "$reference" --report "$log.json"
+step "test value and origin reference contracts" python3 tools/native-test-values-test.py --reference "$reference" --report "$log.json"
 rm -f "$log.json"
 if [ -f tools/project-scenarios.py ]; then
 	# Scenarios run with an isolated HOME; share the Go build cache as CI does.
@@ -104,7 +107,7 @@ if [ -f tools/project-scenarios.py ]; then
 	fi
 	step "project scenarios against the reference" sh -c '
 		python3 tools/project-scenarios-test.py &&
-		python3 tools/project-scenarios.py --reference "$1" --jobs 4 > /dev/null' preflight "$reference"
+		python3 tools/project-scenarios.py --reference "$1" --current-reference --jobs 4 > /dev/null' preflight "$reference"
 fi
 
 if [ "$full" = --full ]; then

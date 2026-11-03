@@ -14,6 +14,7 @@ import { CompilerState, diagnostic, has_diagnostic, terminal_token } from state/
 import { ControlBranch, ControlSyntax } from state/source_state
 import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from support/storage
 import { binary_operator_id, declaration_start, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary, syntax_transform_suffix } from frontend/syntax/syntax_forms
+import { test_declaration_name, test_syntax_error } from frontend/syntax/test_syntax
 
 def parse_arguments_syntax(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	skip_newlines(state, position)
@@ -493,9 +494,16 @@ def parse_simple_statement(mut state: CompilerState, mut position: Array<Integer
 end
 
 def parse_statement_block(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	return parse_statement_block_with_test_guard(state, position, false)
+end
+
+def parse_statement_block_with_test_guard(mut state: CompilerState, mut position: Array<Integer>, test_body: Boolean): Boolean
 	skip_newlines(state, position)
 	while true
 		statement_origin := position[0]
+		if test_body && test_declaration_name(state, statement_origin) != ""
+			return test_syntax_error(state, statement_origin, "describe() and test() cannot be nested inside test()")
+		end
 		if terminal_token(state, position[0])
 			diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "expected end")
 			break

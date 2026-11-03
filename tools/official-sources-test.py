@@ -39,7 +39,10 @@ class OfficialSourceTests(unittest.TestCase):
         adapter.write_text("module URL\nend\n")
         for name in (name for name in bundle.STDLIB_SOURCES if name != "url"):
             source = self.reference / bundle.STDLIB_SOURCES[name]
-            source.write_text('package stdlib\n\nfunc ' + name + 'Source() string {\n\treturn `module ' + name.upper() + '\nend\n`\n}\n')
+            if name == "test":
+                source.write_text('package stdlib\n\n\t"trb/std/test": {\n\t\tSource: `class Expectation<T>\nend\n`,\n\t\tKind: Portable,\n\t},\n\t"trb/internal/test": {\n\t},\n')
+            else:
+                source.write_text('package stdlib\n\nfunc ' + name + 'Source() string {\n\treturn `module ' + name.upper() + '\nend\n`\n}\n')
         (self.root / bundle.JSON_ADAPTER).write_text("module JSON\nend\n")
         for name in bundle.NATIVE_ADAPTERS:
             (self.root / "compiler/packages/internal" / (name + ".trb")).write_text("module TimeAdapter\nend\n")
@@ -61,6 +64,20 @@ class OfficialSourceTests(unittest.TestCase):
         self.assertEqual(bundle.sync(self.root, self.reference), 3 + len(bundle.STDLIB_SOURCES))
         self.assertEqual(first, bundle.bundle_files(self.root))
         self.assertEqual(self.git("status", "--porcelain"), "")
+
+    def test_registry_wrapper_has_exact_boundary_and_actual_provenance(self):
+        source = (self.reference / bundle.STDLIB_SOURCES["test"]).read_bytes()
+        self.assertEqual(bundle.pinned_standard_source(source, "test"),
+                         "class Expectation<T>\nend\n")
+        self.assertEqual(bundle.pinned_standard_source(b"// Registry documentation.\n" + source, "test"),
+                         "class Expectation<T>\nend\n")
+        for changed in (source + source, source.replace(b"Source: `", b"Source: build(`"),
+                        source.replace(b'"trb/internal/test"', b'"trb/internal/other"')):
+            with self.assertRaisesRegex(bundle.ValidationError, "TEST source boundary"):
+                bundle.pinned_standard_source(changed, "test")
+        provenance = json.loads((self.root / bundle.BUNDLE / "provenance.json").read_text())
+        entry = next(row for row in provenance["files"] if row["path"] == "stdlib/test.go")
+        self.assertEqual(entry["source"], "internal/stdlib/registry.go")
 
     def test_uses_pin_instead_of_head_or_dirty_working_files(self):
         self.source.write_text("replacement\n")
@@ -180,8 +197,9 @@ class OfficialSourceTests(unittest.TestCase):
     def test_standard_sources_and_adapter_keep_exact_provenance(self):
         for name in (name for name in bundle.STDLIB_SOURCES if name != "url"):
             path = self.root / bundle.BUNDLE / ("stdlib/" + name + ".go")
-            self.assertEqual(bundle.pinned_standard_source(path.read_bytes(), name), "module " + name.upper() + "\nend\n")
-            path.write_bytes(path.read_bytes().replace(b"module", b"changed"))
+            expected = "class Expectation<T>\nend\n" if name == "test" else "module " + name.upper() + "\nend\n"
+            self.assertEqual(bundle.pinned_standard_source(path.read_bytes(), name), expected)
+            path.write_bytes(path.read_bytes().replace(b"end", b"changed"))
             with self.assertRaisesRegex(bundle.ValidationError, "differs"):
                 bundle.check(self.root, self.reference)
             bundle.sync(self.root, self.reference)

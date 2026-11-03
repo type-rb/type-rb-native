@@ -1,3 +1,6 @@
+import { mir_type_integer } from mir/model/type_ids
+import { ascii_code, integer_literal_in_range } from support/literals
+import { MirEnumScalar } from mir/model/module
 import { scoped_resource_declaration_name } from frontend/types/resource_types
 import { mir_type_kind_string_builder } from mir/model/type_kinds
 import { mir_type_composite_start, mir_type_float_array, mir_type_integer_array, mir_type_none, mir_type_string } from mir/model/type_ids
@@ -224,6 +227,11 @@ def mir_declare_types(mut state: CompilerState)
 		count = 1
 	end
 	native_module.source_count[0] = count
+	mut source := 0
+	while source < count
+		native_module.source_names.push(load_string(state.module_graph.module_names, source))
+		source += 1
+	end
 	mut declaration := 0
 	while declaration < state.declarations.record_count[0]
 		id := native_module.types.size() + mir_type_composite_start()
@@ -254,13 +262,17 @@ def mir_declare_types(mut state: CompilerState)
 		end
 		name := object_instance_type(state, declaration)
 		native_module.types.push(MirType.new(kind: kind, name: name, element: mir_type_none(), key: mir_type_none(), declaration: declaration))
-		native_module.objects.push(MirObject.new(resource_kind: resource_kind, initializer: object_initializer_function(state, declaration), declaration: declaration, type_id: id, name: type_display(state, name), source_id: definition.source_id, line: definition.line, interface_type: definition.interface_type, superclass: -1, interfaces: [], fields: []))
+		native_module.objects.push(MirObject.new(resource_kind: resource_kind, initializer: object_initializer_function(state, declaration), declaration: declaration, type_id: id, name: type_display(state, name), arguments: [], source_id: definition.source_id, line: definition.line, interface_type: definition.interface_type, superclass: -1, interfaces: [], fields: []))
 		declaration += 1
 	end
 	mir_declare_enums(state)
 	declaration = 0
 	state.nominal.object_instances.each do |instance|
 		row := native_module.objects[declaration]
+		mut arguments: Array<Integer> := []
+		instance.arguments.each do |argument|
+			arguments.push(mir_semantic_type_id(native_module, argument))
+		end
 		mut parent := -1
 		if instance.superclass >= 0
 			parent = native_module.objects[instance.superclass].type_id
@@ -273,7 +285,7 @@ def mir_declare_types(mut state: CompilerState)
 		instance.fields.each do |field|
 			fields.push(MirObjectField.new(name: field.name, type_id: mir_semantic_type_id(native_module, field.type_name), line: field.line, readonly: field.readonly))
 		end
-		native_module.objects[declaration] = MirObject.new(resource_kind: row.resource_kind, initializer: row.initializer, declaration: declaration, type_id: row.type_id, name: row.name, source_id: row.source_id, line: row.line, interface_type: row.interface_type, superclass: parent, interfaces: interfaces, fields: fields)
+		native_module.objects[declaration] = MirObject.new(resource_kind: row.resource_kind, initializer: row.initializer, declaration: declaration, type_id: row.type_id, name: row.name, arguments: arguments, source_id: row.source_id, line: row.line, interface_type: row.interface_type, superclass: parent, interfaces: interfaces, fields: fields)
 		declaration += 1
 	end
 	declaration = 0
@@ -570,6 +582,9 @@ def mir_declare_enums(mut state: CompilerState)
 		native_module.enums.push(definition)
 		owner += 1
 	end
+	state.nominal.raw_enum_values.each do |raw|
+		native_module.enum_scalars.push(MirEnumScalar.new(variant: raw.variant, type_id: mir_type_id(raw.type_name), text: raw.text))
+	end
 	mut variant := 0
 	state.nominal.enum_variants.each do |row|
 		native_module.enum_variants.push(row)
@@ -646,7 +661,7 @@ def mir_enum_types_error(native_module: MirModule): String
 	if variant != native_module.enum_variants.size() || field != native_module.enum_fields.size()
 		return "MIR enum member is unowned"
 	end
-	return ""
+	return mir_enum_scalars_error(native_module)
 end
 
 # Only the verified type catalog owns union alternatives and their order.
@@ -693,4 +708,64 @@ def mir_storage_name(native_module: MirModule, name: String): String
 		index += 1
 	end
 	return name
+end
+
+# These are checked scalar values, independent of source tokens and formatting.
+def mir_enum_scalars_error(native_module: MirModule): String
+	mut index := 0
+	while index < native_module.enum_scalars.size()
+		value := native_module.enum_scalars[index]
+		if value.variant < 0 || value.variant >= native_module.enum_variants.size() || (value.type_id != mir_type_integer() && value.type_id != mir_type_string())
+			return "MIR enum scalar identity or type differs"
+		end
+		variant := native_module.enum_variants[value.variant]
+		if variant.field_count != 0
+			return "MIR enum scalar has payload fields"
+		end
+		mut previous := 0
+		while previous < index
+			other := native_module.enum_scalars[previous]
+			if other.variant == value.variant
+				return "MIR enum scalar is duplicated"
+			end
+			previous += 1
+		end
+		if value.type_id == mir_type_integer()
+			mut digit := 0
+			if value.text.size() > 0 && value.text[0] == "-"
+				digit = 1
+			end
+			if digit == value.text.size()
+				return "MIR enum Integer scalar is empty"
+			end
+			mut digits := ""
+			while digit < value.text.size()
+				code := ascii_code(value.text[digit])
+				if code < 48 || code > 57
+					return "MIR enum Integer scalar is not decimal"
+				end
+				digits += value.text[digit]
+				digit += 1
+			end
+			if !integer_literal_in_range(digits) || (digits.size() > 1 && digits[0] == "0") || value.text == "-0"
+				return "MIR enum Integer scalar is not canonical or portable"
+			end
+		end
+		owner := native_module.enums[variant.owner]
+		mut member := owner.variant_start
+		while member < owner.variant_start + owner.variant_count
+			mut found := false
+			native_module.enum_scalars.each do |other|
+				if other.variant == member && other.type_id == value.type_id
+					found = true
+				end
+			end
+			if !found
+				return "MIR enum scalar members differ"
+			end
+			member += 1
+		end
+		index += 1
+	end
+	return ""
 end

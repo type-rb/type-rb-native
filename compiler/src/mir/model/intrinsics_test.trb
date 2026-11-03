@@ -33,6 +33,7 @@ describe("MIR runtime and host calls") do
 		expect(adapters.include?(19)).to_be_true()
 		expect(adapters.include?(20)).to_be_true()
 		expect(adapters.include?(21)).to_be_true()
+		expect(adapters.include?(23)).to_be_true()
 		caller := state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)]
 		expect(caller.kind).to_equal(3)
 		expect(state.scalar_mir.root_plans[0].capacity >= 3).to_be_true()
@@ -40,7 +41,7 @@ describe("MIR runtime and host calls") do
 
 	test("rejects forged runtime names adapters signatures and effect summaries") do
 		mut mode := 0
-		while mode < 21
+		while mode < 24
 			mut state := intrinsic_mir_state()
 			mut id := find_function_in_module(state, state.module_graph.entry_module[0], "compiler_source_slice")
 			if mode >= 11
@@ -58,6 +59,9 @@ describe("MIR runtime and host calls") do
 			if mode >= 19
 				id = find_function_in_module(state, state.module_graph.entry_module[0], "compiler_set_crypto_link")
 			end
+			if mode >= 21
+				id = find_function_in_module(state, state.module_graph.entry_module[0], "compiler_collect_test_paths")
+			end
 			old := state.scalar_mir.signatures[id]
 			mut name := old.name
 			mut adapter := old.adapter
@@ -65,7 +69,13 @@ describe("MIR runtime and host calls") do
 			mut types := old.parameter_types
 			mut mutable := old.parameter_mutable
 			mut result := old.result_type
-			if mode == 0
+			if mode == 21
+				types = ["String"]
+			elsif mode == 22
+				result = "String"
+			elsif mode == 23
+				mutable = [1, 0]
+			elsif mode == 0
 				adapter = 99
 			elsif mode == 1
 				name = "compiler_read_source"
@@ -140,13 +150,14 @@ describe("MIR runtime and host calls") do
 				if line == "}"
 					caller = false
 				end
-				if caller && (line.include?("call $trbn_literal_byte(") || line.include?("call $trbn_source_slice(") || line.include?("call $trbn_string_bytes(") || line.include?("call $trbn_string_is_utf8(") || line.include?("call $trbn_temp_reset(") || line.include?("call $trbn_file_exists(") || line.include?("call $trbn_read_source(") || line.include?("call $trbn_collect_project_sources(") || line.include?("call $trbn_collect_package_files(") || line.include?("call $trbn_eputs("))
+				if caller && (line.include?("call $trbn_literal_byte(") || line.include?("call $trbn_source_slice(") || line.include?("call $trbn_string_bytes(") || line.include?("call $trbn_string_is_utf8(") || line.include?("call $trbn_temp_reset(") || line.include?("call $trbn_file_exists(") || line.include?("call $trbn_read_source(") || line.include?("call $trbn_collect_project_sources(") || line.include?("call $trbn_collect_package_files(") || line.include?("call $trbn_collect_test_paths(") || line.include?("call $trbn_eputs("))
 					forced += "\tcall $trbn_gc_collect(w 0)\n"
 					hooks += 1
 				end
 				forced += line + "\n"
 			end
-			expect(hooks).to_equal(13)
+			# Metadata collection and its diagnostic read add two call boundaries.
+			expect(hooks).to_equal(15)
 			case logical_run_qbe_arguments(qbe, forced, ["--source-content", "probe", "abc"])
 			when Result::Ok(actual)
 				expect(actual).to_equal("1\n194\nabc-tail\n97\ntrue\n")

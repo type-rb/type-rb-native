@@ -1,10 +1,8 @@
 import { CompilerState } from state/state
-import { load_integer, load_string } from support/storage
+import { load_integer, load_string, sparse_integer_at } from support/storage
 import { integer_string } from support/literals
 
-# Native diagnostics currently carry line origins, not token columns. Match
-# the reference renderer's location/severity/code shape without inventing a
-# column or assigning a reference code to a different frontend diagnosis.
+# Include a column only when the diagnostic owns an authored token origin.
 def cli_diagnostic(state: CompilerState, fallback: String, offset: Integer): String
 	module_index := load_integer(state.diagnostics.modules, 0)
 	mut path := fallback
@@ -21,5 +19,10 @@ def cli_diagnostic(state: CompilerState, fallback: String, offset: Integer): Str
 			end
 		end
 	end
-	return path + ":" + integer_string(line) + ": error[" + load_string(state.diagnostics.codes, 0) + "]: " + load_string(state.diagnostics.messages, 0)
+	mut location := path + ":" + integer_string(line)
+	column := sparse_integer_at(state.diagnostics.columns, 0)
+	if column > 0
+		location += ":" + integer_string(column)
+	end
+	return location + ": error[" + load_string(state.diagnostics.codes, 0) + "]: " + load_string(state.diagnostics.messages, 0)
 end

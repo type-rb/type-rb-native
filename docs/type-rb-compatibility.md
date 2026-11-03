@@ -2,8 +2,8 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`e3cdd5e26a57f2389d8b40dd4eafd32c608d6728` (`0.4.12-dev`, including the approved Float
-contraction contract), recorded
+`d34ff9a21a10167c4ddc13820b73186c4898fa5a` (`0.4.12-dev`, including the approved portable
+assertion value display), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 

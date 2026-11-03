@@ -1,6 +1,7 @@
 import { token_kind_attribute, token_kind_end_of_input, token_kind_end_of_module, token_kind_identifier, token_kind_interpolation, token_kind_newline, token_kind_number, token_kind_string, token_kind_symbol } from state/token_kinds
 import { store_fused_literal } from state/source_state
 import { decode_escape } from frontend/syntax/string_escapes
+import { compiler_string_bytes } from support/compiler_bytes
 import { unicode_identifier_part, unicode_identifier_start, unicode_identifier_upper } from support/unicode_identifiers
 import { CompilerState, add_module, diagnostic, has_diagnostic } from state/state
 import { load_integer, load_string, store_integer, store_string } from support/storage
@@ -65,6 +66,7 @@ def push_token(mut state: CompilerState, kind: Integer, text: String, line: Inte
 	store_integer(state.source_tokens.token_kinds, index, kind)
 	store_string(state.source_tokens.token_texts, index, text)
 	store_integer(state.source_tokens.token_lines, index, line)
+	store_integer(state.source_tokens.token_columns, index, state.source_tokens.lexer_column[0])
 	state.source_tokens.token_count[0] = index + 1
 	return
 end
@@ -327,10 +329,21 @@ def scan_string(
 													end
 												end
 											end
+											outer_column := state.source_tokens.lexer_column[0]
+											mut inner_column := 1
+											mut preceding := position[0] + 1 + first
+											while preceding >= 0 && source[preceding] != "\n"
+												inner_column += compiler_string_bytes(source[preceding]).size()
+												preceding -= 1
+											end
 											lex_source(state, compiler_source_slice(inner, first, last), token_kind_end_of_input())
+											state.source_tokens.lexer_column[0] = outer_column
 											state.source_tokens.token_count[0] = state.source_tokens.token_count[0] - 1
 											mut token := first_token
 											while token < state.source_tokens.token_count[0]
+												if load_integer(state.source_tokens.token_lines, token) == 1
+													store_integer(state.source_tokens.token_columns, token, load_integer(state.source_tokens.token_columns, token) + inner_column - 1)
+												end
 												store_integer(state.source_tokens.token_lines, token, load_integer(state.source_tokens.token_lines, token) + inner_line - 1)
 												token += 1
 											end
@@ -484,8 +497,12 @@ def lex_source(mut state: CompilerState, source: String, terminal_kind: Integer)
 	end
 	mut position := [0]
 	mut line := 1
+	mut column := 1
 	mut character := ""
 	while position[0] < source.size()
+		start := position[0]
+		start_line := line
+		state.source_tokens.lexer_column[0] = column
 		character = source[position[0]]
 		if character == " "
 			position[0] += 1
@@ -527,7 +544,26 @@ def lex_source(mut state: CompilerState, source: String, terminal_kind: Integer)
 				end
 			end
 		end
+		mut remaining := start
+		if line != start_line
+			mut scanned := start
+			while scanned < position[0]
+				if source[scanned] == "\n"
+					remaining = scanned + 1
+					column = 1
+				end
+				scanned += 1
+			end
+		end
+		# The pinned lexer advances identifiers by scalar, but quoted tokens and
+		# comments by byte. Preserve that mixed origin contract until it changes.
+		if character == "\"" || character == "'" || character == "#"
+			column += compiler_string_bytes(compiler_source_slice(source, remaining, position[0])).size()
+		else
+			column += position[0] - remaining
+		end
 	end
+	state.source_tokens.lexer_column[0] = column
 	push_token(state, terminal_kind, "", line)
 	return !has_diagnostic(state)
 end

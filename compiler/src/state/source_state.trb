@@ -4,6 +4,17 @@ import { TransformSyntax } from frontend/types/transform_model
 import frontend/syntax/iteration_syntax
 import { IntegerStorage, StringStorage, integer_storage, integer_storage_copy, sparse_integer_at, store_integer, string_storage, string_storage_copy } from support/storage
 
+# Parsed test declarations are shared with the project runner. Executable
+# cases become ordinary typed functions; backends do not inspect this metadata.
+record TestDeclaration
+	source_id: Integer
+	origin: Integer
+	parent: Integer
+	name: String
+	full_name: String
+	function_id: Integer
+end
+
 # Parsed declaration-scope expression. Function identities are assigned only
 # after all authored declarations and their types have been resolved.
 record DefaultInitializer
@@ -87,6 +98,7 @@ end
 # Parsed statement regions and authored initializer plans remain source facts.
 # A template-checking fork shares syntax indexes but owns mutable default plans.
 record CompilerParsedProgram
+	tests: Array<TestDeclaration>
 	attributes: Array<DeclarationAttribute>
 	catch_syntax: Array<CatchSyntax>
 	catch_origins: IntegerStorage
@@ -115,6 +127,8 @@ record CompilerSourceTokens
 	token_kinds: IntegerStorage
 	token_texts: StringStorage
 	token_lines: IntegerStorage
+	token_columns: IntegerStorage
+	lexer_column: Array<Integer>
 	token_count: Array<Integer>
 	token_fused_literals: IntegerStorage
 	token_namespaces: StringStorage
@@ -127,6 +141,8 @@ def compiler_source_tokens_new(capacity: Integer): CompilerSourceTokens
 		token_kinds: integer_storage(capacity),
 		token_texts: string_storage(capacity),
 		token_lines: integer_storage(capacity),
+		token_columns: integer_storage(capacity),
+		lexer_column: [1],
 		token_count: [0],
 		token_fused_literals: integer_storage(capacity),
 		token_namespaces: string_storage(capacity),
@@ -144,6 +160,7 @@ end
 
 def compiler_parsed_program_new(capacity: Integer): CompilerParsedProgram
 	return CompilerParsedProgram.new(
+		tests: [],
 		attributes: [],
 		catch_syntax: [], catch_origins: integer_storage(capacity),
 		statement_finishes: integer_storage(capacity), loop_finishes: integer_storage(capacity),
@@ -167,6 +184,7 @@ def compiler_parsed_program_fork(parsed: CompilerParsedProgram): CompilerParsedP
 		default_functions.push(value)
 	end
 	return CompilerParsedProgram.new(
+		tests: parsed.tests,
 		attributes: parsed.attributes,
 		catch_syntax: parsed.catch_syntax, catch_origins: parsed.catch_origins,
 		statement_finishes: parsed.statement_finishes, loop_finishes: parsed.loop_finishes,

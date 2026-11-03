@@ -34,17 +34,24 @@ decoded += '\n' + source_slice[0]
 names = ['trbn_string_index', 'trbn_utf8_width', 'trbn_utf8_count', 'trbn_utf8_span',
          'trbn_string_offset', 'trbn_string_from_codepoint', 'trbn_utf8_scalar', 'trbn_source_slice',
          'trbn_string_is_utf8', 'trbn_string_query', 'trbn_string_codepoint_query',
-         'trbn_string_find_bytes']
+         'trbn_string_find_bytes', 'trbn_string_bounds_fail', 'trbn_failure_notice',
+         'trbn_unwind', 'trbn_fail', 'trbn_fatal', 'trbn_resource_unwind', 'trbn_resource_close']
 bodies = []
 for name in names:
-    matches = re.findall(r'^function l \$' + name + r'\([^\n]*\) \{.*?^\}', decoded, re.M | re.S)
+    matches = re.findall(r'^function (?:l |w )?\$' + name + r'\([^\n]*\) \{.*?^\}', decoded, re.M | re.S)
     assert len(matches) == 1, name
     bodies.append('export ' + matches[0])
-data = re.findall(r'^data \$(?:string_byte_values|trbn_bounds_error) = [^\n]+', decoded, re.M)
-assert any(line.startswith('data $trbn_bounds_error ') for line in data)
+data_names = ['string_byte_values', 'trbn_bounds_error', 'trbn_string_caught_bounds',
+              'trbn_recovery_scope', 'trbn_resource_scope', 'trbn_resource_error']
+data = []
+for name in data_names:
+    matches = re.findall(r'^data \$' + name + r' = [^\n]+', decoded, re.M)
+    assert len(matches) == 1, name
+    data.append(matches[0])
 il = '\n'.join(data + bodies) + '\n'
 # The observer supplies inputs and counts allocations; String indexing itself
-# is extracted from the candidate compiler's emitted runtime, including checks.
+# is extracted from the candidate compiler's emitted runtime, including its
+# actual bounds failure, notification and resource cleanup dependencies.
 observer = r'''
 #include <assert.h>
 #include <stdint.h>
@@ -65,10 +72,6 @@ extern int64_t trbn_string_query(struct string *, struct string *, int64_t);
 extern int64_t trbn_string_find_bytes(struct string *, struct string *, int64_t);
 static unsigned allocations;
 void *trbn_string_alloc(int64_t size) { ++allocations; return calloc(1, (size_t)size + 8); }
-void trbn_fail(const void *message, int64_t size) {
-    fwrite(message, 1, (size_t)size, stderr);
-    exit(70);
-}
 static struct string *make(const unsigned char *data, size_t size) {
     struct string *s = calloc(1, 25 + size); assert(s);
     s->length = size; s->points = trbn_utf8_count(data, size);
@@ -302,7 +305,7 @@ with tempfile.TemporaryDirectory(prefix='native String index ') as directory:
     (root / 'index.ssa').write_text(il)
     (root / 'observer.c').write_text(observer)
     subprocess.run([str(args.qbe.resolve()), '-o', str(root / 'index.s'), str(root / 'index.ssa')], check=True, capture_output=True, timeout=30)
-    subprocess.run(['/usr/bin/cc', '-O2', str(root / 'index.s'), str(root / 'observer.c'), '-o', str(root / 'probe')], check=True, capture_output=True, timeout=30)
+    subprocess.run(['/usr/bin/cc', '-O2', str(root / 'index.s'), str(root / 'observer.c'), '-o', str(root / 'probe')], check=True, timeout=30)
     good = subprocess.run([str(root / 'probe')], capture_output=True, timeout=10)
     assert good.returncode == 0 and good.stderr == b'', good
     assert good.stdout == b'String indexing, Unicode lifetime, allocation-free queries and guarded bounds passed\n', good
@@ -316,7 +319,9 @@ with tempfile.TemporaryDirectory(prefix='native String index ') as directory:
                          'boundarySequenceInputs': 1000, 'maximumBytes': 128})
     for length, index in [(0, 0), (0, -1), (128, -129), (128, 128), (128, -9007199254740991), (128, 9007199254740991)]:
         result = subprocess.run([str(root / 'probe'), str(length), str(index)], capture_output=True, timeout=10)
-        assert result.returncode == 70 and result.stdout == b'', result
+        # This is the actual runtime fatal path (exit 2), not an observer's
+        # replacement exit code.
+        assert result.returncode == 2 and result.stdout == b'', result
         assert result.stderr == b'panic: index is out of bounds\n', result
         observations.append({'case': 'required-bounds-failure', 'length': length, 'index': index})
 report = {'compilerSha256': hashlib.sha256(args.compiler.read_bytes()).hexdigest(),
