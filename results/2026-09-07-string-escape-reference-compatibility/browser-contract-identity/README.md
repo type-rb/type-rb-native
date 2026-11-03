@@ -19,8 +19,39 @@ Historical manifests and immutable seeds retain their source-era identities.
 
 ## Local qualification
 
-Exact-reference and ordinary Native qualification is pending for this candidate.
-Record observed results here after the maintained commands complete.
+The candidate source is
+`37c321e478253184bb29b0e739d8180789c6ac61`. Local checks on Darwin arm64 completed
+with the exact reference above. The 742 compiler/recovery source hashes remained
+unchanged throughout qualification.
+
+| Maintained command | Observation |
+| --- | --- |
+| `python3 tools/build-reference.py <reference-checkout> <reference-trb>` | Exact reference executable built successfully |
+| `sh tools/preflight.sh <reference-trb>` | All maintained quick checks passed |
+| `python3 tools/native-web-client-test.py <reference-trb> --reference --browser-check --browser-runtime <node> --report <report>` | 47 generation/output checks; 19 accepted browser projections; one explicit renamed-import gap; 12 synthetic Fetch checks each for `Body` and `Payload` |
+| `sh tools/build-native.sh` | Ordinary Native core and CLI fixed points reproduced |
+| `python3 tools/native-web-client-test.py bin/trbn --report <report>` | 47 generation/output checks passed with the freshly built Native CLI |
+| `python3 tools/check-conformance-sources.py .trb/bootstrap/core/compiler` | 424 sources checked, no mismatches |
+| `python3 tools/native-language-coverage.py --reference <reference-trb> --reference-ast <reference-checkout>/internal/ast/ast.go --jobs 4` | 2,739 reference observations, no failures, exact AST verified |
+
+The final row verifies the reference oracle and registry expectations; it is not
+2,739 passing Native parity cases. The registry's 67 declared parity gaps remain
+visible. Both browser reports have `complete: true` and no generation failures;
+the reference report retains the one known projection gap separately.
+
+The ordinary build used the maintained QBE backend, immutable
+`bootstrap-seed-2026-09-29-module-cycles` Darwin arm64 seed and the configured
+network/crypto/OIDC development libraries. `TYPE_RB_CHECKOUT` identified the exact
+reference checkout for preflight and source provenance. These are local
+development inputs, not newly qualified distribution assets.
+
+| Ordinary artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `bin/trbn` | 7,009,976 | `c91158d7494807c666733eda72abbe2db6c516bfa75dcb571f35ea9a8fbcff9a` |
+| `.trb/bootstrap/core/compiler` | 3,094,136 | `89a810498859d6355264c2e6d8b0b90f2e809fd449309b9647f65e8751a3cdb1` |
+
+Hosted PR acceptance and subsequent Main validation remain separate integration
+authorities; the preceding main workflow above cannot stand in for them.
 
 ## Scope
 
