@@ -75,6 +75,14 @@ def main():
     checks = 0
     observations = []
     failures = []
+    projections = []
+    report = {'cases': observations, 'failures': failures,
+              'browserProjections': projections, 'complete': False}
+
+    def write_report():
+        if options.report:
+            options.report.write_text(json.dumps(report, indent=2) + '\n')
+
     with tempfile.TemporaryDirectory(prefix='native-web-client-') as directory:
         base = Path(directory).resolve()
         forbidden = base / 'forbidden tools'
@@ -108,8 +116,7 @@ def main():
                 failures.append(case['id'])
                 print(case['id'] + ': ' + str(error))
             checks += 1
-        if options.report:
-            options.report.write_text(json.dumps({'cases': observations, 'failures': failures}, indent=2)+'\n')
+        write_report()
         assert not failures, failures
         projected = 0
         known_gaps = 0
@@ -117,18 +124,29 @@ def main():
             for index, case in enumerate(fixtures):
                 if not case['success']:
                     continue
-                output = browser_projection(binary, case, base / f'browser {index}', environment)
-                if output is None:
-                    known_gaps += 1
-                else:
-                    projected += 1
-                if options.browser_runtime and case['id'] == 'web-client-payload-input':
-                    assert output is not None
-                    harness = Path(__file__).with_name('web-client-transport.mjs')
-                    runtime = execute(options.browser_runtime.resolve(), ['--experimental-strip-types', str(harness), str(output)],
-                                      output, dict(os.environ, NODE_NO_WARNINGS='1'))
-                    require(runtime, True, 'synthetic browser Fetch transport')
-                    assert '12 transport checks passed' in runtime.stdout, runtime.stdout
+                projection = {'id': case['id'], 'status': 'pending'}
+                projections.append(projection)
+                try:
+                    output = browser_projection(binary, case, base / f'browser {index}', environment)
+                    if output is None:
+                        known_gaps += 1
+                        projection.update(status='known-gap', diagnostic=case['browserCompileGap'])
+                    else:
+                        projected += 1
+                        projection['status'] = 'accepted'
+                    if options.browser_runtime and case['id'] in {'web-client-complete-input', 'web-client-payload-input'}:
+                        assert output is not None
+                        harness = Path(__file__).with_name('web-client-transport.mjs')
+                        runtime = execute(options.browser_runtime.resolve(), ['--experimental-strip-types', str(harness), str(output)],
+                                          output, dict(os.environ, NODE_NO_WARNINGS='1'))
+                        require(runtime, True, 'synthetic browser Fetch transport ' + case['id'])
+                        assert '12 transport checks passed' in runtime.stdout, runtime.stdout
+                        projection['syntheticFetchChecks'] = 12
+                except Exception as error:
+                    projection.update(status='failed', error=str(error))
+                    raise
+                finally:
+                    write_report()
             print(f'Browser projection: {projected} accepted; {known_gaps} explicit pinned-reference gaps')
         sample = next(case for case in fixtures if case['id'] == 'web-client-complete-input')
         root, config = write_project(base / 'output project', sample, 'go')
@@ -172,6 +190,8 @@ def main():
         checks += 1
         assert not marker.exists(), 'generation invoked an external target tool'
         assert not (base/'escape.trb').exists() and not (base/'absolute.trb').exists()
+    report.update(complete=True, generationChecks=checks)
+    write_report()
     print(f'Web browser client: {checks} checks passed; no external target tools invoked')
 
 

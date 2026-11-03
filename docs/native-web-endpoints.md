@@ -112,11 +112,11 @@ and imports have deterministic ordering.
 Pinned reference limitations remain explicit. A renamed shared type import can
 generate an import that the shared module does not export
 ([canonical imported identity](https://github.com/type-rb/type-rb-native/issues/1183)).
-An application record named `Body` can also make an otherwise generated client
-fail browser compilation because of a transport type identity conflict
-([transport Body identity](https://github.com/type-rb/type-rb-native/issues/1212)).
-Generation success alone does not qualify these consumers. Their failures are
-retained alongside successful shared-type browser projections. Package and
+Shared application records named `Body` retain a different declaration identity
+from the transport body. Both the original `Body` fixture and its `Payload`
+control compile through the reference browser backend and exercise the same
+synthetic Fetch checks. Generation success alone does not qualify consumers;
+the remaining renamed-import failure is retained explicitly. Package and
 generator responsibility boundaries are subject to a separate
 [ownership review](https://github.com/type-rb/type-rb-native/issues/1211).
 
