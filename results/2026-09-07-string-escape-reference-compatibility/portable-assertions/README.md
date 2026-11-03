@@ -38,6 +38,11 @@ The final compiler source is
   continuation.
 - The 72 focused compiler/MIR/runtime checks, including independently verified
   object identities, source erasure, forced collection and scoped recovery.
+- The complete 1472-test compiler suite at `55c2dac2`, with the recovery root,
+  exact reference and QBE environment enabled. The repaired fatal-status and
+  isolated-runtime boundaries also passed 116 focused tests. Thirteen ordinary
+  JSON diagnostic cases now report the authored call line matching the reference;
+  their statuses, messages and remaining unsupported contracts are unchanged.
 
 The reference-language replay used `tools/native-language-coverage.py` with the
 exact reference executable and AST. All 2739 reviewed observations matched;
