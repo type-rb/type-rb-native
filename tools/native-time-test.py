@@ -210,7 +210,7 @@ with tempfile.TemporaryDirectory(prefix='native-time-zones-') as temporary:
     main.write_text('import { decode, offset } from time_zones\ndef main()\n' + '\n'.join(lines) + '\nend\n')
     program = root / 'program'
     if args.reference:
-        config = root / 'trbconfig.jsonc'
+        config = root / 'reference.trbconfig.jsonc'
         config.write_text(json.dumps({'name': 'time-zone-parser', 'mode': 'go',
             'sourceDir': '.', 'go': {'module': 'example.com/time-zone-parser'}}))
         run([reference, 'check', '--config', config])

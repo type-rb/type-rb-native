@@ -7,10 +7,12 @@ zones or decode ZIP/TZif data. No new public API or timezone library is added.
 
 ## Local time and named zones
 
-`TimeZone.get("Local")` uses the process's local zone. The first use of local
-zone data is retained for the process; replacing the source file does not
+`TimeZone.get("Local")` uses the local zone. Compiled programs retain the first
+use of local zone data for the process; replacing the source file does not
 change an already initialized local zone. A fresh process starts independently.
 The retained REPL keeps that module state within the evaluation session.
+Explicit REPL reset/replay behavior is outside these retained-session checks
+and remains part of the separate replay qualification (#1127).
 
 - With `TZ` absent, Native reads `/etc/localtime`.
 - An empty `TZ`, `UTC`, or `:UTC` selects UTC.
@@ -50,7 +52,7 @@ before implementation; they are not generated from Native results.
 
 ```sh
 python3 tools/native-time-service-test.py --native bin/trbn \
-  --reference /path/to/pinned/trb --report /tmp/time-services.json
+  --reference /path/to/pinned/trb --report /tmp/time-services.json --gc-stress
 python3 tools/native-time-host-test.py --qbe bin/qbe \
   --receipt /tmp/time-host.json
 python3 tools/native-time-test.py bin/trbn --reference /path/to/pinned/trb
@@ -64,6 +66,9 @@ Every run retains check/build and ordinary/REPL outcomes, including failures;
 adapter test executes the actual emitted QBE against libc, including binary
 bytes, exact ranges, absent/empty environment values, error statuses, clock ABI,
 root-frame balance and descriptor cleanup under a low descriptor limit.
+The service GC mode additionally collects at actual owned host allocations and
+ordinary managed allocations, checking unchanged values, cached roots and full
+reclamation at process shutdown.
 
 ## Remaining qualification
 

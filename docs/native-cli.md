@@ -20,6 +20,11 @@ The CLI includes it for REPL parity; the core compiler and lockfile checksum
 implementation remain independent. Applications acquire it only when they import
 Digest, HMAC or SecureCompare.
 
+[Time services](native-time-services.md) use system or configured timezone data.
+`TZ` selects the local zone; `ZONEINFO` can provide a directory or stored ZIP
+archive for named zones. Applications do not yet bundle an embedded timezone
+database. Record the chosen data source when distributing an application.
+
 ## Build and run from a checkout
 
 On Darwin arm64, install the Xcode command-line tools. On Linux arm64, install

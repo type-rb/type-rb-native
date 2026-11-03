@@ -13,9 +13,11 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from native_network_link import static_network_flags
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / 'tools/native-time-services.json'
+FROZEN_SHA256 = '78f231332848b8983e5a20d55f697702f51cbc5b65e38e895f6dd3f5d9b04565'
 
 
 def tzif(offset):
@@ -32,14 +34,16 @@ def fixtures(root):
             path.write_bytes(content)
     for name, method in [('stored.zip', zipfile.ZIP_STORED), ('compressed.zip', zipfile.ZIP_DEFLATED)]:
         with zipfile.ZipFile(root / name, 'w', compression=method) as archive:
-            archive.writestr('Example/Native', tzif(20700))
-            archive.writestr('Asia/Tokyo', tzif(20700))
+            for member in ['Example/Native', 'Asia/Tokyo']:
+                entry = zipfile.ZipInfo(member, date_time=(2024, 1, 1, 0, 0, 0))
+                entry.compress_type = method
+                archive.writestr(entry, tzif(20700))
     (root / 'invalid.zip').write_bytes(b'not a zip')
     (root / 'truncated.zip').write_bytes((root / 'stored.zip').read_bytes()[:-12])
     (root / 'local.tzif').write_bytes(tzif(3600))
 
 
-def invoke(binary, arguments, root, environment, source=None):
+def invoke(binary, arguments, root, environment, source=None, normalize=True):
     child = subprocess.Popen([str(binary), *map(str, arguments)], cwd=root, env=environment,
                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              start_new_session=True)
@@ -55,9 +59,12 @@ def invoke(binary, arguments, root, environment, source=None):
             os.killpg(child.pid, signal.SIGKILL)
         child.communicate()
         raise
-    return {'code': code,
-            'stdout': stdout.decode('utf-8', 'backslashreplace').replace(str(root), '<fixture>'),
-            'stderr': stderr.decode('utf-8', 'backslashreplace').replace(str(root), '<fixture>')}
+    result = {'code': code, 'stdout': stdout.decode('utf-8', 'backslashreplace'),
+              'stderr': stderr.decode('utf-8', 'backslashreplace')}
+    if normalize:
+        for stream in ['stdout', 'stderr']:
+            result[stream] = result[stream].replace(str(root), '<fixture>')
+    return result
 
 
 def local_expected(expected, environment):
@@ -76,16 +83,88 @@ def local_expected(expected, environment):
     return result
 
 
+def stress(native, program, expected, root, environment, report, save):
+    target = root / 'gc-stress'
+    target.mkdir()
+    main = target / 'main.trb'
+    main.write_text(program['declarations'] + '\ndef main()\nmut iteration := 0\nwhile iteration < 8\n'
+                    + program['body'] + '\niteration += 1\nend\nend\n')
+    receipt = {'sourceSha256': hashlib.sha256(main.read_bytes()).hexdigest(), 'steps': [], 'complete': False}
+    report['gcStress'] = receipt
+    emitted = invoke(native, ['--internal-driver', 'emit-qbe', main], target, environment, normalize=False)
+    receipt['steps'].append({'phase': 'emit', 'code': emitted['code'], 'stderr': emitted['stderr'],
+                             'qbeSha256': hashlib.sha256(emitted['stdout'].encode()).hexdigest()})
+    save()
+    if emitted['code']:
+        raise ValueError('time service GC program did not compile')
+    forced = []
+    ordinary = host = False
+    hooks = {'ordinary': 0, 'host': 0}
+    for line in emitted['stdout'].splitlines():
+        if line.startswith('function ') or line.startswith('export function '):
+            ordinary = '$trbnf' in line
+            host = any('$' + name + '(' in line for name in ('trbn_time_zone_data', 'trbn_time_zone_environment'))
+        if line == '}':
+            ordinary = host = False
+        allocation = (ordinary and any(marker in line for marker in
+                      ('call $trbn_array_new(', 'call $trbn_array_new_reserved(', 'call $trbn_array_push_',
+                       'call $trbn_array_grow_paced(', 'call $trbn_gc_alloc(', 'call $trbn_string_concat(')))
+        host_allocation = host and any(marker in line for marker in ('call $trbn_string_alloc(', 'call $trbn_string_from_c('))
+        if allocation or host_allocation:
+            forced.append(' call $trbn_gc_collect(w 0)')
+            hooks['host' if host_allocation else 'ordinary'] += 1
+        forced.append(line)
+    receipt['hooks'] = hooks
+    save()
+    if hooks['host'] < 4 or hooks['ordinary'] < 8:
+        raise ValueError('GC qualification missed the actual time/managed boundaries')
+    il, assembly, executable = target / 'time.ssa', target / 'time.s', target / 'time'
+    il.write_text('\n'.join(forced) + '\n')
+    qbe = native.with_name('qbe')
+    commands = [('qbe', qbe, ['-o', assembly, il]),
+                ('link', Path(os.environ.get('CC', '/usr/bin/cc')),
+                 [assembly, *static_network_flags(qbe), '-lm', '-o', executable])]
+    for phase, binary, arguments in commands:
+        result = invoke(binary, arguments, target, environment)
+        receipt['steps'].append({'phase': phase, **result})
+        save()
+        if result['code']:
+            raise ValueError('GC fixture ' + phase + ' failed')
+    executed = invoke(executable, [], root / 'fixtures', dict(environment, TYPE_RB_NATIVE_RUNTIME_STATS='1'))
+    receipt['execute'] = executed
+    save()
+    if executed['code'] != 0 or executed['stdout'] != expected['execute']['stdout'] * 8:
+        raise ValueError('time service values changed under forced collection')
+    statistics = {}
+    for line in executed['stderr'].splitlines():
+        prefix, key, value = line.split(',')
+        if prefix != 'type-rb-native-gc-stat-v1' or key in statistics:
+            raise ValueError('unexpected GC diagnostic')
+        statistics[key] = int(value)
+    receipt['statistics'] = statistics
+    if (statistics.get('collections', 0) < 8 or statistics.get('live-bytes') != 0
+            or statistics.get('allocated-bytes') != statistics.get('reclaimed-bytes')):
+        raise ValueError('time service roots or final reclamation differ')
+    receipt['complete'] = True
+    save()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--native', type=Path)
     parser.add_argument('--reference', type=Path)
     parser.add_argument('--report', required=True, type=Path)
+    parser.add_argument('--gc-stress', action='store_true')
     args = parser.parse_args()
+    if args.gc_stress and not args.native:
+        parser.error('--gc-stress requires --native')
     if not args.native and not args.reference:
         parser.error('at least one compiler is required')
     compilers = {name: path.resolve() for name, path in [('reference', args.reference), ('native', args.native)] if path}
-    manifest = json.loads(MANIFEST.read_text())
+    manifest_bytes = MANIFEST.read_bytes()
+    if hashlib.sha256(manifest_bytes).hexdigest() != FROZEN_SHA256:
+        parser.error('service manifest differs from the reviewed reference observations')
+    manifest = json.loads(manifest_bytes)
     if manifest['referenceRevision'] != (ROOT / 'TYPE_RB_REVISION').read_text().strip():
         parser.error('service expectations require the pinned reference revision')
     spec = importlib.util.spec_from_file_location('language', ROOT / 'tools/native-language-coverage.py')
@@ -172,6 +251,10 @@ def main():
                             failures.append(group['id'] + '/' + role)
                         save()
                 print(group['id'], [v['matches'] for v in row['variants']], flush=True)
+            if args.gc_stress and not failures:
+                env = dict(base_env, ZONEINFO=str(data / 'stored.zip'))
+                expected = next(g for g in manifest['environment'] if g['id'] == 'zone-stored-zip')['variants'][0]['reference']
+                stress(compilers['native'], manifest['programs']['zones'], expected, root, env, report, save)
             report['failures'] = failures
             report['complete'] = not failures
             save()
