@@ -493,6 +493,34 @@ def parse_simple_statement(mut state: CompilerState, mut position: Array<Integer
 	return finish_statement(state, position)
 end
 
+def parse_statement_syntax(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	statement_origin := position[0]
+	if token_is(state, position[0], "if") || token_is(state, position[0], "case")
+		parse_control_syntax(state, position)
+		finish_statement(state, position)
+	elsif token_is(state, position[0], "while")
+		origin := position[0]
+		advance(position)
+		if parse_expression_syntax(state, position, 1)
+			if finish_statement(state, position)
+				parse_statement_block(state, position)
+				if expect(state, position, "end")
+					store_integer(state.parsed.loop_finishes, origin, position[0])
+					finish_statement(state, position)
+				end
+			end
+		end
+	elsif syntax_loop_transfer_kind(state, position[0]) > loop_transfer_none() || token_is(state, position[0], "return")
+		parse_transfer_syntax(state, position)
+	elsif declaration_start(state, position[0])
+		parse_declaration_statement(state, position)
+	else
+		parse_simple_statement(state, position)
+	end
+	store_integer(state.parsed.statement_finishes, statement_origin, position[0])
+	return !has_diagnostic(state)
+end
+
 def parse_statement_block(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	return parse_statement_block_with_test_guard(state, position, false)
 end
@@ -511,29 +539,8 @@ def parse_statement_block_with_test_guard(mut state: CompilerState, mut position
 			break
 		elsif syntax_conditional_tail(state, position[0])
 			break
-		elsif token_is(state, position[0], "if") || token_is(state, position[0], "case")
-			parse_control_syntax(state, position)
-			finish_statement(state, position)
-		elsif token_is(state, position[0], "while")
-			origin := position[0]
-			advance(position)
-			if parse_expression_syntax(state, position, 1)
-				if finish_statement(state, position)
-					parse_statement_block(state, position)
-					if expect(state, position, "end")
-						store_integer(state.parsed.loop_finishes, origin, position[0])
-						finish_statement(state, position)
-					end
-				end
-			end
-		elsif syntax_loop_transfer_kind(state, position[0]) > loop_transfer_none() || token_is(state, position[0], "return")
-			parse_transfer_syntax(state, position)
-		elsif declaration_start(state, position[0])
-			parse_declaration_statement(state, position)
-		else
-			parse_simple_statement(state, position)
 		end
-		store_integer(state.parsed.statement_finishes, statement_origin, position[0])
+		parse_statement_syntax(state, position)
 		if has_diagnostic(state)
 			break
 		end

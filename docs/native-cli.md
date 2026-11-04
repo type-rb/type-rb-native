@@ -250,6 +250,32 @@ There is no special directory exemption in Native configuration discovery.
 The core and benchmark subprojects retain their explicit reference-validation
 configurations; opening one with `trbn` honors its configured mode too.
 
+## Source formatting
+
+`trbn fmt [PATH ...]` formats `.trb` files, including test files. Directory
+selections skip `.git`, `.trb` and `node_modules`; overlapping selections are
+deduplicated. Without paths, the configured source directory is selected,
+falling back to the current directory. `--check` reports changed paths on stderr
+and exits unsuccessfully without writing. `-w=false` lists changed paths without
+writing; `fmt -` formats stdin to stdout. Existing file permissions are preserved.
+
+The formatter and interactive REPL share a TypeRB implementation. It parses
+supported declarations and statements before printing lossless token spellings,
+preserving comments, quoted text and escapes. It verifies the formatted syntax
+and normalized token stream before accepting a result. It does not execute
+input, resolve imported modules, or require expressions to type-check.
+Unsupported or incomplete input is rejected before that file is written; in the
+editor it remains unchanged for normal diagnostics. File indentation uses tabs;
+the REPL uses two spaces.
+
+Full reference formatting remains incomplete: project-aware import
+canonicalization, native-language islands, percent/heredoc/JSX literals and
+spellings not accepted by the Native parser still need qualification. In
+particular, raw multiline quoted strings, exponent/base numeric spellings and
+keyword Hash labels
+remain explicit rejected cases in the formatter comparison. Reference formatting
+success alone is not evidence of Native execution support.
+
 ## REPL
 
 No arguments start a REPL when stdin and stdout are terminals. Noninteractive
@@ -302,9 +328,12 @@ replay earlier side effects; ordinary submissions do not. Ctrl-C cancels input o
 An interactive terminal provides:
 
 - Live syntax colors for keywords, strings, numbers, comments, types and calls,
-  with unfinished strings marked separately. `NO_COLOR=1` disables colors.
+  with unfinished strings marked separately. Prompts, type annotations and
+  diagnostic severity have distinct roles. `NO_COLOR=1` disables colors;
+  `TERM=dumb` uses plain line input without terminal editing sequences.
 - A single editable multiline buffer, two-space indentation on Enter, and
-  dedenting when the complete submission is accepted. Up/Down move between
+  canonical spacing when the complete submission is accepted (for example,
+  `s:=123` becomes `s := 123`). Up/Down move between
   buffer lines and then through history at the first/last line.
 - Bracketed paste, retained as one submission until Enter. Pasted control
   sequences are not interpreted as editing commands.
@@ -329,17 +358,13 @@ The CLI currently implements part of `trb`. Full command and backend parity,
 stable CLI contracts and supported distribution are [project goals](mir-consolidation.md).
 See the [ordinary coverage plan](native-language-coverage.md) for path-specific
 tracking; snapshot/recovery capabilities do not establish ordinary CLI support.
-The ordinary compiler's language and package restrictions still apply,
-including the remaining Unicode-escape and String API gaps. Ordinary UTF-8
-literals, code-point size/indexing and concatenation work in compiled programs
+The ordinary compiler's language and package restrictions still apply.
+Ordinary UTF-8 literals, code-point size/indexing and concatenation work in compiled programs
 and the REPL; invalid source encoding is rejected before token decoding.
-Formatting, tests, language-server commands and host-language dependency
-management are not implemented by `trbn`.
-The editor does not yet provide the reference formatter's full canonical
-spacing, every readline/vi binding, import-repair and argument-aware completion,
+Language-server commands and host-language dependency management remain gaps.
+The editor does not yet provide every readline/vi binding, import-repair and argument-aware completion,
 or full Unicode grapheme-cluster segmentation (for example joined emoji).
-Completion follows the executable Native subset; Unicode identifiers and
-Unicode escapes remain unsupported. Submissions are bounded to
+Completion follows the executable Native subset. Submissions are bounded to
 64 KiB, including paste; overflow is rejected without evaluating a prefix.
 The evaluator has a 256-call depth bound and retains reachable session values.
 It is not a sandbox and is not yet qualified for production use.
@@ -395,7 +420,7 @@ rebuilds: a replaced core, and a CLI rebuild shared by concurrent callers.
 ## Diagnostics
 
 File checking, QBE emission, executable builds and execution report frontend
-errors on stderr as `path:line: error[CODE]: message`, using the actual entry or
+errors on stderr as `path:line[:column]: error[CODE]: message`, using the actual entry or
 imported file. REPL diagnostics use `(trb)` and the cumulative authored line
 number of accepted submissions; generated imports, the entry function and
 stored bindings do not add visible lines. Failed submissions do not advance
@@ -403,8 +428,16 @@ that line count. REPL runtime failures use `error: message` at the invoking
 statement, including division by zero.
 
 This follows the pinned reference CLI's location/severity/code presentation.
-The current frontend retains line origins, so it omits columns
-instead of estimating them. Its `TRBN` diagnostic codes and detailed messages
+Operator failures name the operator and operand types, for example
+`operator + does not support Integer and String`. For directly authored
+operators, the column identifies that operator token, including compact input,
+tabs and Unicode identifiers. Interpolation is currently lowered to String
+concatenation, so its type errors still describe that generated operation;
+generic-template diagnostics may retain only a line origin.
+The reference currently points to the start of the expression instead. Other
+diagnostics include a column only when an actual token origin is available;
+line-only diagnostics do not fabricate one. Structured colored REPL diagnostics emphasize
+the severity word and reset before the code and message. Its `TRBN` diagnostic codes and detailed messages
 remain distinct where its supported subset and diagnosis differ from the
 reference frontend. It reports the first error rather than accumulating the
 reference compiler's complete diagnostic set. Compiled-program runtime

@@ -26,6 +26,15 @@ def numeric_type(type_name: String): Boolean
 	return type_name == "Float"
 end
 
+def operator_diagnostic(mut state: CompilerState, operator: String, left: String, right: String, origin: Integer): CheckedValue
+	mut message := "operator " + operator + " does not support " + type_display(state, left)
+	if right != ""
+		message += " and " + type_display(state, right)
+	end
+	diagnostic_at(state, "TRBN4004", origin, message)
+	return checked_value("Invalid", checked_category_value(), 9007199254740991, 0)
+end
+
 def check_expected(
 		mut state: CompilerState,
 		actual: String,
@@ -102,7 +111,7 @@ def binary_result_type(
 			end
 			plan := mir_logical_plan(operator_id, left, right_type)
 			if plan == checked_operator_invalid()
-				diagnostic(state, "TRBN4004", line, "logical operands must be Boolean")
+				operator_diagnostic(state, operator, left, right, origin)
 				return "Invalid"
 			end
 			store_integer(state.callables.checked[0].checked_operator_plans, origin, plan)
@@ -121,7 +130,7 @@ def binary_result_type(
 	end
 	if left != right
 		if !numeric_pair
-			diagnostic(state, "TRBN4004", line, "binary operands have different types")
+			operator_diagnostic(state, operator, left, right, origin)
 			return "Invalid"
 		end
 	end
@@ -178,10 +187,6 @@ def binary_result_type(
 		store_integer(state.callables.checked[0].checked_operator_plans, origin, plan)
 		return checked_binary_plan_type(plan)
 	end
-	mut display_type := left
-	if right == "Float"
-		display_type = "Float"
-	end
-	diagnostic(state, "TRBN4004", line, "unsupported operator " + operator + " for " + display_type)
+	operator_diagnostic(state, operator, left, right, origin)
 	return "Invalid"
 end
