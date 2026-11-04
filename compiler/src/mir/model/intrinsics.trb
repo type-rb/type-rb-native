@@ -10,7 +10,7 @@ import { mir_adapter_gzip, mir_adapter_set_compression_link, mir_adapter_set_cry
 import { builder_adapter_start, builder_mutates, builder_names, builder_parameters, builder_result, builder_signature_name } from mir/model/string_builder_contract
 import { network_adapter_start, network_names, network_parameters, network_result } from mir/model/network_contract
 import { callable_type } from frontend/types/callable_types
-import { mir_adapter_argv, mir_adapter_collect_package_files, mir_adapter_collect_project_sources, mir_adapter_collect_test_paths, mir_adapter_entropy, mir_adapter_eputs, mir_adapter_file_exists, mir_adapter_host, mir_adapter_literal_byte, mir_adapter_none, mir_adapter_reset_temporary_storage, mir_adapter_runtime_fail, mir_adapter_runtime_recover, mir_adapter_set_network_link, mir_adapter_source_is_utf8, mir_adapter_source_slice, mir_adapter_sqrt, mir_adapter_string_bytes, mir_adapter_time_clock, mir_adapter_time_zone_data, mir_signature_compiler_runtime, mir_signature_host, mir_signature_interface, mir_signature_ordinary, mir_signature_standard } from mir/model/call_kinds
+import { mir_adapter_argv, mir_adapter_collect_package_files, mir_adapter_collect_project_sources, mir_adapter_collect_test_paths, mir_adapter_entropy, mir_adapter_eputs, mir_adapter_file_exists, mir_adapter_host, mir_adapter_literal_byte, mir_adapter_none, mir_adapter_reset_temporary_storage, mir_adapter_runtime_fail, mir_adapter_runtime_recover, mir_adapter_set_network_link, mir_adapter_source_is_utf8, mir_adapter_source_slice, mir_adapter_sqrt, mir_adapter_string_bytes, mir_adapter_time_clock, mir_adapter_time_zone_data, mir_adapter_time_zone_environment, mir_signature_compiler_runtime, mir_signature_host, mir_signature_interface, mir_signature_ordinary, mir_signature_standard } from mir/model/call_kinds
 import { ascii_code, integer_string } from support/literals
 import { MirModule, MirSignature, mir_type_id } from mir/model/module
 import { mir_semantic_type_name, mir_semantic_value_type } from mir/model/types
@@ -115,6 +115,9 @@ def mir_call_symbol(signature: MirSignature): String
 		end
 		if signature.adapter == mir_adapter_time_zone_data()
 			return "trbn_time_zone_data"
+		end
+		if signature.adapter == mir_adapter_time_zone_environment()
+			return "trbn_time_zone_environment"
 		end
 		return "sqrt"
 	end
@@ -271,8 +274,12 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 			result = "Boolean"
 		elsif signature.adapter == mir_adapter_time_zone_data()
 			name = "trb/internal/time_host.zone_data"
-			parameters = ["String"]
-			result = "String"
+			parameters = ["String", "Integer", "Integer", "Array<String>"]
+			result = "Integer"
+		elsif signature.adapter == mir_adapter_time_zone_environment()
+			name = "trb/internal/time_host.zone_environment"
+			parameters = ["Array<String>"]
+			result = "Boolean"
 		elsif signature.adapter >= filesystem_adapter_start() && signature.adapter < filesystem_adapter_start() + filesystem_names().size()
 			filesystem := signature.adapter - filesystem_adapter_start()
 			name = "trb/internal/filesystem_host." + filesystem_names()[filesystem]
@@ -336,7 +343,7 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 			if signature.adapter >= oidc_adapter_start() && signature.adapter < oidc_adapter_start() + oidc_names().size()
 				mutable = oidc_mutable(signature.adapter - oidc_adapter_start(), index)
 			end
-			if signature.adapter == mir_adapter_time_clock() || (index == 0 && signature.adapter >= builder_adapter_start() && signature.adapter < builder_adapter_start() + builder_names().size() && builder_mutates(signature.adapter - builder_adapter_start()))
+			if signature.adapter == mir_adapter_time_clock() || signature.adapter == mir_adapter_time_zone_environment() || (signature.adapter == mir_adapter_time_zone_data() && index == 3) || (index == 0 && signature.adapter >= builder_adapter_start() && signature.adapter < builder_adapter_start() + builder_names().size() && builder_mutates(signature.adapter - builder_adapter_start()))
 				mutable = 1
 			end
 			if signature.parameter_types[index] != parameters[index] || signature.parameter_mutable[index] != mutable

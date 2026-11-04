@@ -11,6 +11,17 @@ record ZoneData
 	error: String
 end
 
+record ZoneFile
+	data: String
+	status: Integer
+	error: String
+end
+
+# These are ordinary module globals with persistent managed roots. Local and
+# ZONEINFO initialize independently on first use, as in the reference runtime.
+mut local_cache: Array<ZoneData> := []
+mut source_cache: Array<String> := []
+
 def invalid(message: String): ZoneData
 	return ZoneData.new(transitions: [], types: [], offsets: [], daylight: [], footer: "", error: message)
 end
@@ -138,9 +149,192 @@ def decode(bytes: Bytes): ZoneData
 	return ZoneData.new(transitions: transitions, types: types, offsets: offsets, daylight: daylight, footer: footer, error: "")
 end
 
+def utc_zone(): ZoneData
+	return ZoneData.new(transitions: [], types: [], offsets: [0], daylight: [0], footer: "", error: "")
+end
+
+def read_zone_file(path: String, start: Integer, length: Integer): ZoneFile
+	mut parts := ["", ""]
+	status := Host.zone_data(path, start, length, parts)
+	mut message := parts[1]
+	if status == -1
+		message = "time: file " + path + " is too large"
+	elsif message != ""
+		# Go's syscall error table uses a lowercase initial on these hosts.
+		message = message[0].downcase() + message.slice(1...message.size())
+	end
+	return ZoneFile.new(data: parts[0], status: status, error: message)
+end
+
+def zip_integer(bytes: Bytes, start: Integer, width: Integer): Integer
+	mut value := 0
+	mut index := start + width
+	while index > start
+		index -= 1
+		value = value * 256 + bytes.at(index)
+	end
+	return value
+end
+
+def zip_name(bytes: Bytes, start: Integer, length: Integer, name: Bytes): Boolean
+	if length != name.size() || start < 0 || start + length > bytes.size()
+		return false
+	end
+	mut index := 0
+	while index < length
+		if bytes.at(start + index) != name.at(index)
+			return false
+		end
+		index += 1
+	end
+	return true
+end
+
+def corrupt_zip(path: String): ZoneFile
+	return ZoneFile.new(data: "", status: -2, error: "corrupt zip file " + path)
+end
+
+# Read only the central directory and selected stored member. Names and every
+# binary extent are checked before indexing; no extraction or path traversal
+# is delegated to the host, and no compression dependency is required.
+def read_zone_zip(path: String, identifier: String): ZoneFile
+	tail_file := read_zone_file(path, -22, 22)
+	if tail_file.status > 0
+		return tail_file
+	end
+	if tail_file.status != 0
+		return corrupt_zip(path)
+	end
+	tail := tail_file.data.to_bytes()
+	if tail.size() != 22 || zip_integer(tail, 0, 4) != 101010256
+		return corrupt_zip(path)
+	end
+	count := zip_integer(tail, 10, 2)
+	length := zip_integer(tail, 12, 4)
+	start := zip_integer(tail, 16, 4)
+	directory_file := read_zone_file(path, start, length)
+	if directory_file.status != 0
+		return corrupt_zip(path)
+	end
+	directory := directory_file.data.to_bytes()
+	name := identifier.to_bytes()
+	mut index := 0
+	mut entry := 0
+	while entry < count
+		if index + 46 > directory.size()
+			return corrupt_zip(path)
+		end
+		if zip_integer(directory, index, 4) != 33639248
+			break
+		end
+		method := zip_integer(directory, index + 10, 2)
+		size := zip_integer(directory, index + 24, 4)
+		name_length := zip_integer(directory, index + 28, 2)
+		extra_length := zip_integer(directory, index + 30, 2)
+		comment_length := zip_integer(directory, index + 32, 2)
+		offset := zip_integer(directory, index + 42, 4)
+		finish := index + 46 + name_length + extra_length + comment_length
+		if finish > directory.size()
+			return corrupt_zip(path)
+		end
+		if zip_name(directory, index + 46, name_length, name)
+			if method != 0
+				return ZoneFile.new(data: "", status: -2, error: "unsupported compression for " + identifier + " in " + path)
+			end
+			local_file := read_zone_file(path, offset, 30 + name_length)
+			if local_file.status != 0
+				return corrupt_zip(path)
+			end
+			local := local_file.data.to_bytes()
+			if local.size() != 30 + name_length || zip_integer(local, 0, 4) != 67324752 || zip_integer(local, 8, 2) != method || zip_integer(local, 26, 2) != name_length || !zip_name(local, 30, name_length, name)
+				return corrupt_zip(path)
+			end
+			data := read_zone_file(path, offset + 30 + name_length + zip_integer(local, 28, 2), size)
+			if data.status != 0
+				return corrupt_zip(path)
+			end
+			return data
+		end
+		index = finish
+		entry += 1
+	end
+	return ZoneFile.new(data: "", status: 2, error: "no such file or directory")
+end
+
+def read_zone_source(source: String, identifier: String): ZoneFile
+	if source.end_with?(".zip")
+		return read_zone_zip(source, identifier)
+	end
+	mut path := source
+	if path != "" && !path.end_with?("/")
+		path += "/"
+	end
+	return read_zone_file(path + identifier, 0, -1)
+end
+
+def system_sources(): Array<String>
+	return ["/usr/share/zoneinfo/", "/usr/share/lib/zoneinfo/", "/usr/lib/locale/TZ/", "/etc/zoneinfo"]
+end
+
+def load_sources(identifier: String, sources: Array<String>): ZoneData
+	mut first_error := ""
+	mut index := 0
+	while index < sources.size()
+		file := read_zone_source(sources[index], identifier)
+		mut error := file.error
+		if file.status == 0
+			zone := decode(file.data.to_bytes())
+			if zone.error == ""
+				return zone
+			end
+			error = zone.error
+		end
+		if first_error == "" && file.status != 2
+			first_error = error
+		end
+		index += 1
+	end
+	if first_error == ""
+		first_error = "unknown time zone " + identifier
+	end
+	return invalid(first_error)
+end
+
+def initialize_local(): ZoneData
+	mut environment := ["", ""]
+	if !Host.zone_environment(environment)
+		zone := load_sources("localtime", ["/etc"])
+		if zone.error == ""
+			return zone
+		end
+		return utc_zone()
+	end
+	mut name := environment[0]
+	if name.start_with?(":")
+		name = name.slice(1...name.size())
+	end
+	if name != "" && name != "UTC"
+		mut sources := system_sources()
+		if name.start_with?("/")
+			sources = [""]
+		end
+		zone := load_sources(name, sources)
+		if zone.error == ""
+			return zone
+		end
+	end
+	return utc_zone()
+end
+
 def load(identifier: String): ZoneData
 	if identifier == "" || identifier == "UTC"
-		return ZoneData.new(transitions: [], types: [], offsets: [0], daylight: [0], footer: "", error: "")
+		return utc_zone()
+	end
+	if identifier == "Local"
+		if local_cache.size() == 0
+			local_cache.push(initialize_local())
+		end
+		return local_cache[0]
 	end
 	if identifier.start_with?("/") || identifier.start_with?("\\") || identifier.include?("..")
 		return invalid("time: invalid location name")
@@ -148,15 +342,30 @@ def load(identifier: String): ZoneData
 	if identifier.include?("\x00")
 		return invalid("invalid argument")
 	end
-	mut path := "/usr/share/zoneinfo/" + identifier
-	if identifier == "Local"
-		path = "/etc/localtime"
+	if source_cache.size() == 0
+		mut environment := ["", ""]
+		Host.zone_environment(environment)
+		source_cache.push(environment[1])
 	end
-	data := Host.zone_data(path)
-	if data.size() == 0
-		return invalid("unknown time zone " + identifier)
+	mut first_error := ""
+	if source_cache[0] != ""
+		file := read_zone_source(source_cache[0], identifier)
+		if file.status == 0
+			zone := decode(file.data.to_bytes())
+			if zone.error == ""
+				return zone
+			end
+			# The pinned reference falls through after a configured TZif parse
+			# failure; only configured read/ZIP errors take error precedence.
+		elsif file.status != 2
+			first_error = file.error
+		end
 	end
-	return decode(data.to_bytes())
+	zone := load_sources(identifier, system_sources())
+	if zone.error == "" || first_error == ""
+		return zone
+	end
+	return invalid(first_error)
 end
 
 def first_type(zone: ZoneData): Integer
