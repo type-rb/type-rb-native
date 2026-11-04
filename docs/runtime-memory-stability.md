@@ -20,6 +20,14 @@ descriptor word immediately preceding the payload carries the mark bit.
 Static String objects use a zero descriptor sentinel and are never linked into
 the heap.
 
+Marking uses an explicit worklist instead of recursive calls, so reference depth
+does not consume the machine call stack. Objects are marked before enqueueing
+to handle cycles and shared references once. Scalar objects need no worklist
+entry. A 64-pointer local buffer covers narrow graphs; wider frontiers grow raw
+storage with checked byte counts and fatal allocation-failure handling. That
+storage cannot trigger collection and is released when the root traversal ends.
+It is temporary collector overhead, separate from managed-heap byte accounting.
+
 The compiler emits:
 
 - one exact managed-reference stack shared by allocation results, managed
