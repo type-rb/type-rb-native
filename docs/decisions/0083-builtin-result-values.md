@@ -25,10 +25,33 @@ syntax and range rules. MIR verifies the scalar conversion and nonthrowing parse
 status independently; existing typed branches construct success or the precise
 `NumberParseErrorKind`. The shared runtime validates the entire byte sequence
 before reporting range errors, rejects whitespace/NUL/hex/NaN/infinity spellings,
-and preserves Float signed zero and subnormal values. System `strtod` converts an
-already validated decimal sequence. It cannot decide authored syntax or the
-Result failure model. The REPL uses the same core parsing operations, removing
-its duplicate Integer parser.
+and preserves Float signed zero and subnormal values. Bounded short decimals
+use an exact significand and power of ten followed by one rounded operation;
+all other validated inputs retain system `strtod`. Neither conversion path
+decides authored syntax or the Result failure model. The REPL uses the same
+core parsing operations, removing its duplicate Integer parser.
+
+After validating the complete grammar, the short-decimal path scans only a
+bounded coefficient. Conversion is eligible only when the complete mantissa
+has at most 16 digits, its magnitude is below 2^52, and the authored exponent
+has at most two digits.
+After subtracting the fraction's digit count, a decimal scale from -22 through
+22 selects an exactly representable power of ten. The integer conversion is
+exact; a single binary64 multiplication or division therefore rounds the exact
+decimal value once. The sign bit is set before that operation to preserve
+negative zero. Nonzero results in this range are normal and finite.
+
+The original validation loops do not accumulate long significands or exponents.
+Only at most 16 digits and one decimal point enter the coefficient loop; its
+integer accumulator cannot overflow. One or two exponent digits are decoded
+only after validation. Syntax validation still examines every byte before
+reporting range, and failure leaves the output slot untouched.
+Long significands, large exponents, subnormals and overflow retain the existing
+fallback. `tools/native-float-parsing-test.py` checks emitted arithmetic against
+an independent rounding oracle, counts fallback calls, and exercises guard-page
+boundaries and failure sentinels. Ordinary CLI/reference and retained-session
+checks qualify the public paths separately. The four artifact targets run the
+small emitted-arithmetic test; host CLI tests also run the ordinary checks.
 
 Unicode identifier classification uses generated tables for the pinned Go
 toolchain's Letter, Decimal_Number and Uppercase_Letter categories. A strict UTF-8
