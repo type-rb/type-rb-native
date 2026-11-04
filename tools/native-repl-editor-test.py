@@ -25,7 +25,7 @@ ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
 
 
 class Terminal:
-    def __init__(self, binary, root, reference=False, color=True):
+    def __init__(self, binary, root, reference=False, color=True, term='xterm-256color', stderr_path=None):
         self.master, slave = os.openpty()
         self.original = termios.tcgetattr(slave)
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 90, 0, 0))
@@ -42,8 +42,11 @@ class Terminal:
             for descriptor in (0, 1, 2):
                 os.dup2(slave, descriptor)
             os.close(slave)
+            if stderr_path is not None:
+                with open(stderr_path, 'wb') as errors:
+                    os.dup2(errors.fileno(), 2)
             os.chdir(root)
-            env = dict(os.environ, TERM='xterm-256color', LC_ALL='en_US.UTF-8' if sys.platform == 'darwin' else 'C.UTF-8',
+            env = dict(os.environ, TERM=term, LC_ALL='en_US.UTF-8' if sys.platform == 'darwin' else 'C.UTF-8',
                        TRBN_HISTORY=str(root / 'history.json'),
                        XDG_CACHE_HOME=str(root / 'cache'))
             env.pop('NO_COLOR', None)
@@ -52,7 +55,11 @@ class Terminal:
             os.execve(binary, [str(binary), 'repl'], env)
         os.close(slave)
         self.prompt = 'trb:go> ' if reference else 'trbn:trb> '
-        self.wait(lambda: self.prompt in self.display, 'initial prompt')
+        try:
+            self.wait(lambda: self.prompt in self.display, 'initial prompt')
+        except BaseException:
+            self.close()
+            raise
 
     @property
     def display(self):
@@ -224,7 +231,8 @@ def native_scenarios(binary):
             os.kill(terminal.pid, signal.SIGINT)
             terminal.pump()
             terminal.evaluate('missing_diagnostic_name', 'error[TRBN4003]: unresolved local missing_diagnostic_name')
-            assert '\x1b[38;2;255;88;116m(trb):' in terminal.raw
+            assert ': \x1b[38;2;255;88;116merror\x1b[0m[TRBN4003]:' in terminal.raw
+            assert '\x1b[38;2;255;88;116m(trb):' not in terminal.raw
             terminal.evaluate('1 + 2', '3 : Integer')
             terminal.send('mut unfinished := "abc')
             terminal.wait(lambda: terminal.screen.buffer[terminal.screen.cursor.y][terminal.screen.cursor.x - 1].underscore,
