@@ -2,7 +2,7 @@
 export const ordinaryLanguage = {
   "schemaVersion": 1,
   "registrySha256": "1eeb0f3a6620bdd2e3c58b7457652ccf2d328280d2005b40fc1473e7e0281cf0",
-  "referenceRevision": "c49b67ec0f9e5941c52b787885f11a33c19f795f",
+  "referenceRevision": "7a6b7405c895f2d7f377956b17e9e569de6fb069",
   "features": [
     {
       "id": "lexical",
