@@ -1,3 +1,5 @@
+import { mir_adapter_argv } from mir/model/call_kinds
+import { math_adapter, math_parameters } from mir/model/math_contract
 import { standard_test_capture, standard_test_equal, standard_test_fail, standard_test_finish, standard_test_inspect, standard_test_scalar_kind } from frontend/resolution/test_intrinsics
 import { test_adapter_capture, test_adapter_equal, test_adapter_fail, test_adapter_finish, test_adapter_inspect, test_adapter_scalar_kind } from mir/model/test_contract
 import { filesystem_adapter_start, filesystem_names } from mir/model/filesystem_contract
@@ -200,15 +202,17 @@ end
 
 # The resolver has already bound the package identity, including import aliases.
 # Standard APIs have their own signature kind, separate from compiler privileges.
-def mir_checked_standard_call(mut state: CompilerState, mut locals: CheckedLocals, category: Integer, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
+def mir_checked_standard_call(mut state: CompilerState, mut locals: CheckedLocals, category: Integer, member: String, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
 	if category == checked_category_math()
 		resource_unknown_call(state, locals)
 	end
 	if locals.mir_state[mir_state_enabled_slot()] == 0
 		return checked_value(result_type, checked_category_value(), 9007199254740991, 0)
 	end
-	# Process/Math categories 4/5 select the argv/sqrt adapters 10/11.
-	adapter := category + 6
+	mut adapter := mir_adapter_argv()
+	if category == checked_category_math()
+		adapter = math_adapter(member)
+	end
 	mut callee := state.declarations.function_count[0]
 	while callee < state.scalar_mir.signatures.size()
 		if state.scalar_mir.signatures[callee].kind == mir_signature_standard() && state.scalar_mir.signatures[callee].adapter == adapter
@@ -221,9 +225,11 @@ def mir_checked_standard_call(mut state: CompilerState, mut locals: CheckedLocal
 		mut parameters: Array<String> := []
 		mut mutable: Array<Integer> := []
 		if category == checked_category_math()
-			name = "trb/std/math.sqrt"
-			parameters = ["Float"]
-			mutable = [0]
+			name = "trb/std/math." + member
+			parameters = math_parameters(adapter)
+			parameters.each do |_parameter|
+				mutable.push(0)
+			end
 		end
 		mir_semantic_type_id(state.scalar_mir, result_type)
 		state.scalar_mir.signatures.push(MirSignature.new(id: callee, kind: mir_signature_standard(), name: name, adapter: adapter, source_id: state.module_graph.active_module[0], line: load_integer(state.source_tokens.token_lines, origin), parameter_types: parameters, parameter_mutable: mutable, result_type: result_type))

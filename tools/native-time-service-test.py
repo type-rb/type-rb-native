@@ -17,7 +17,7 @@ from native_network_link import static_network_flags
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / 'tools/native-time-services.json'
-FROZEN_SHA256 = '78f231332848b8983e5a20d55f697702f51cbc5b65e38e895f6dd3f5d9b04565'
+FROZEN_SHA256 = '96124503c144fcd23fd72bc3e7577b870733629ef4fdad9b1828ca5e19bac578'
 
 
 def tzif(offset):
