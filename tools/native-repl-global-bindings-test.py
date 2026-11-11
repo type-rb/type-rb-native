@@ -134,7 +134,7 @@ puts(value == nil)
 ''')
     assert failed.stdout == '1 : Integer? [mut]\n3 : Integer? [mut]\ntrue\n', failed
     assert len(failed.stderr.splitlines()) == 2, failed
-    assert 'zero' in failed.stderr and 'binary operands' in failed.stderr, failed
+    assert 'zero' in failed.stderr and 'operator + does not support Integer? and Integer' in failed.stderr, failed
 
     (root / 'invalid.trb').write_text('''mut value := 3
 def read(): Integer
