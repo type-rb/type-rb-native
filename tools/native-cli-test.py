@@ -20,6 +20,7 @@ parser.add_argument('binary', type=Path)
 args = parser.parse_args()
 binary = args.binary.resolve()
 repository = Path(__file__).resolve().parent.parent
+subprocess.run([sys.executable, str(repository / "tools/native-format-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-package-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-official-import-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-web-binding-test.py"), str(binary)], check=True)

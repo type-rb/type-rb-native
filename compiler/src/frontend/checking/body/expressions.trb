@@ -33,7 +33,7 @@ import { nullable_apply, nullable_finish, nullable_logical_condition, nullable_n
 import { nullable_element } from frontend/types/nullable_types
 import { argument_binding_slot } from frontend/resolution/argument_binding
 import { mir_checked_range_new } from mir/lowering/ranges
-import { binary_result_type, check_expected, check_expected_argument, numeric_type, type_diagnostic } from frontend/checking/body/types
+import { binary_result_type, check_expected_argument, numeric_type, operator_diagnostic, type_diagnostic } from frontend/checking/body/types
 import { checked_collection_context } from frontend/checking/collections/inference
 import { CheckedValue, checked_condition_value, checked_mir_value, checked_presentation, checked_value, checked_view, scalar_mir_binary, scalar_mir_disable, scalar_mir_literal, scalar_mir_unary } from frontend/checking/body/values
 import { checked_range_require } from frontend/checking/collections/iteration
@@ -132,7 +132,9 @@ def check_primary(
 		if value.type_name == "Never"
 			return value
 		end
-		check_expected(state, value.type_name, "Boolean", line)
+		if value.type_name != "Boolean"
+			return operator_diagnostic(state, "!", value.type_name, "", origin)
+		end
 		return checked_condition_value(scalar_mir_unary(state, locals, "!", value, "Boolean", origin), value.falsity, value.truth)
 	end
 	if token_is(state, position[0], "-")
@@ -143,7 +145,7 @@ def check_primary(
 		end
 		value = mir_literal_scalar(state, locals, value, origin)
 		if !numeric_type(value.type_name)
-			return type_diagnostic(state, line, "unary - requires Integer or Float")
+			return operator_diagnostic(state, "-", value.type_name, "", origin)
 		end
 		return scalar_mir_unary(state, locals, "-", value, value.type_name, origin)
 	end
@@ -155,7 +157,7 @@ def check_primary(
 		end
 		value = mir_literal_scalar(state, locals, value, origin)
 		if !numeric_type(value.type_name)
-			return type_diagnostic(state, line, "unary + requires Integer or Float")
+			return operator_diagnostic(state, "+", value.type_name, "", origin)
 		end
 		return scalar_mir_unary(state, locals, "+", value, value.type_name, origin)
 	end
