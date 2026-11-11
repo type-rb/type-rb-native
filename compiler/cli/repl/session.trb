@@ -1,12 +1,13 @@
+import { terminal_color_enabled, terminal_error_color_enabled, terminal_paint, terminal_style_annotation, terminal_style_error } from terminal
 import { repl_input_accepted, repl_input_cancelled, repl_input_eof, repl_input_terminal_error } from repl/input_status
 import { repl_flow_kind_slot, repl_flow_normal } from repl/flow_kinds
-import { repl_style_callable, repl_style_comment, repl_style_keyword, repl_style_plain, repl_style_string, repl_style_type } from repl/display_kinds
+import { repl_style_callable, repl_style_keyword, repl_style_plain, repl_style_string, repl_style_type } from repl/display_kinds
 import { repl_initialize_globals, repl_link_globals } from repl/globals
 import { repl_binding_witnesses, repl_refine_pending_collections, repl_refines_nullable_collection, repl_loaded_bindings, repl_projected_globals, repl_lines, repl_is_declaration } from repl/projection
 import { skip_newlines } from frontend/syntax/syntax_tokens
 import { repl_checked, repl_checked_input } from repl/check
 import { ReplProject, repl_project, repl_type_name, repl_projected_types } from repl/project
-import { cli_diagnostic } from diagnostics
+import { cli_styled_diagnostic } from diagnostics
 import { ReplCandidates, repl_editor_read, repl_editor_paint } from repl/editor
 import { repl_incomplete, repl_escape } from repl/syntax
 import { repl_history_load, repl_history_save } from repl/history
@@ -165,8 +166,8 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 		if string_starts_with(message, "panic: ")
 			message = compiler_source_slice(message, 7, message.size())
 		end
-		message = "(trb):" + integer_string(repl_session_lines(session) + error_line - line_number + 1) + ": error: " + message
-		native_cli_write(repl_error_text(message) + "\n", 2)
+		message = "(trb):" + integer_string(repl_session_lines(session) + error_line - line_number + 1) + ": " + terminal_paint("error", terminal_style_error(), terminal_error_color_enabled()) + ": " + message
+		native_cli_write(message + "\n", 2)
 		return false
 	end
 	if !display
@@ -182,9 +183,9 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 		if presentation == ""
 			presentation = repl_type_name(state, display_type)
 		end
-		mut rendered := repl_editor_paint(repl_render(state, session.store, value, 0), repl_style_string(), repl_use_color()) + repl_editor_paint(" : ", repl_style_comment(), repl_use_color()) + repl_editor_paint(presentation, repl_style_type(), repl_use_color())
+		mut rendered := repl_editor_paint(repl_render(state, session.store, value, 0), repl_style_string(), repl_use_color()) + repl_editor_paint(" : ", terminal_style_annotation(), repl_use_color()) + repl_editor_paint(presentation, repl_style_type(), repl_use_color())
 		if display_mutable
-			rendered += repl_editor_paint(" [mut]", repl_style_comment(), repl_use_color())
+			rendered += repl_editor_paint(" [mut]", repl_style_keyword(), repl_use_color())
 		end
 		puts(rendered)
 	end
@@ -302,7 +303,7 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 					if presentation == ""
 						presentation = repl_type_name(state, state.global_bindings.global_types[identity])
 					end
-					puts(repl_editor_paint(repl_render(state, session.store, value, 0), repl_style_string(), repl_use_color()) + repl_editor_paint(" : ", repl_style_comment(), repl_use_color()) + repl_editor_paint(presentation, repl_style_type(), repl_use_color()))
+					puts(repl_editor_paint(repl_render(state, session.store, value, 0), repl_style_string(), repl_use_color()) + repl_editor_paint(" : ", terminal_style_annotation(), repl_use_color()) + repl_editor_paint(presentation, repl_style_type(), repl_use_color()))
 				end
 				identity += 1
 			end
@@ -333,7 +334,8 @@ record ReplReplay
 	success: Boolean
 end
 
-def repl_command(mut session: ReplSession, input: String, config: String): ReplCommand
+def repl_command(mut session: ReplSession, authored: String, config: String): ReplCommand
+	input := repl_trim(authored)
 	if input == ":quit" || input == ":exit" || input == ":q"
 		return ReplCommand.new(session: session, running: false)
 	end
@@ -366,8 +368,8 @@ def repl_command(mut session: ReplSession, input: String, config: String): ReplC
 		return ReplCommand.new(session: session, running: true)
 	end
 	if input != ""
-		if repl_submit(session, input, false, true)
-			session.submissions.push(input)
+		if repl_submit(session, authored, false, true)
+			session.submissions.push(authored)
 		end
 	end
 	return ReplCommand.new(session: session, running: true)
@@ -392,6 +394,7 @@ def repl_run(config: String): Integer
 	end
 	mut pending := ""
 	interactive := native_cli_tty() != 0
+	editing := interactive && native_cli_env("TERM") != "dumb"
 	mut history := native_cli_env("TRBN_HISTORY")
 	if history == ""
 		if config != ""
@@ -422,11 +425,19 @@ def repl_run(config: String): Integer
 		native_cli_interrupt(1)
 		mut line := ""
 		mut editor_status := repl_input_accepted()
-		if interactive
+		if editing
 			input := repl_editor_read(history_entries, repl_complete(session))
 			line = input.text
 			editor_status = input.status
 		else
+			mut prompt := ""
+			if interactive
+				prompt = "trbn:trb> "
+				if pending != ""
+					prompt = "...> "
+				end
+			end
+			native_cli_write(prompt, 1)
 			line = native_cli_line("")
 		end
 		if editor_status == repl_input_terminal_error()
@@ -438,7 +449,7 @@ def repl_run(config: String): Integer
 			pending = ""
 			native_cli_write("\n", 1)
 		else
-			if repl_ended(editor_status, interactive)
+			if repl_ended(editor_status, editing)
 				running = false
 				if pending != ""
 					native_cli_write("trbn: incomplete input at end of session\n", 2)
@@ -446,7 +457,7 @@ def repl_run(config: String): Integer
 			else
 				pending += line + "\n"
 				if !repl_incomplete(pending)
-					input := repl_trim(pending)
+					input := pending.rstrip()
 					pending = ""
 					command := repl_command(session, input, config)
 					running = command.running
@@ -743,8 +754,8 @@ def repl_split_source(source: String): Array<String>
 		pending += character
 		if character == "\n"
 			if !repl_incomplete(pending)
-				input := repl_trim(pending)
-				if input != ""
+				input := pending.rstrip()
+				if repl_trim(input) != ""
 					submissions.push(input)
 				end
 				pending = ""
@@ -821,21 +832,18 @@ def repl_function_detail(state: CompilerState, index: Integer): String
 end
 
 def repl_use_color(): Boolean
-	if native_cli_tty() == 0
-		return false
-	end
-	return native_cli_env("NO_COLOR") == ""
+	return terminal_color_enabled()
 end
 
 def repl_error_text(message: String): String
-	if repl_use_color()
+	if terminal_error_color_enabled()
 		return repl_escape() + "38;2;255;88;116m" + message + repl_escape() + "0m"
 	end
 	return message
 end
 
 def repl_diagnostic(state: CompilerState, offset: Integer)
-	native_cli_write(repl_error_text(cli_diagnostic(state, "(trb)", offset)) + "\n", 2)
+	native_cli_write(cli_styled_diagnostic(state, "(trb)", offset, terminal_error_color_enabled()) + "\n", 2)
 	return
 end
 

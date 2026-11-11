@@ -25,8 +25,7 @@ def run(tool, root, command, source=None):
 
 
 def origin(text):
-    # Native retains its own diagnoses and line-only source origins. Compare
-    # actual paths, line numbers, severity and channel with the reference.
+    # Compare shared locations without erasing each diagnostic's own span.
     match = re.fullmatch(r'(.+?):(\d+)(?::\d+)?: (error)(?:\[[A-Z0-9]+\])?: .+\n', text)
     assert match, text
     return match.groups()
@@ -64,6 +63,31 @@ with tempfile.TemporaryDirectory(prefix='native-diagnostics-') as temporary:
     entry.unlink()
     result = run(binary, root, ('repl',), 'import { answer } from helper\n:quit\n')
     assert origin(result.stderr) == (str(library), '2', 'error'), result
+    library.unlink()
+
+    # Binary and unary errors own the actual operator token. The reference
+    # currently uses the expression start; do not invent matching columns.
+    for expression, column, message in (
+            ('s+"aaa"', 2, 'operator + does not support Integer and String'),
+            ('s + "aaa"', 3, 'operator + does not support Integer and String'),
+            ('\ts + "aaa"', 4, 'operator + does not support Integer and String'),
+            ('!s', 1, 'operator ! does not support Integer')):
+        entry.write_text('def main()\ns := 123\n' + expression + '\nend\n')
+        for command in [('check', entry), ('build', entry, '--stdout')]:
+            result = run(binary, root, command)
+            assert (result.returncode, result.stdout, result.stderr) == (
+                1, '', f'{entry}:3:{column}: error[TRBN4004]: {message}\n'), result
+        result = run(binary, root, ('repl',), 's := 123\n' + expression + '\nputs(s + 1)\n:quit\n')
+        assert result.stderr == f'(trb):2:{column}: error[TRBN4004]: {message}\n', (expression, result)
+        assert result.returncode == 0 and result.stdout.endswith('124\n'), result
+    entry.unlink()
+
+    library.write_text('def answer(): Integer\n\t名前 := 1\n\treturn 名前 + "x"\nend\n')
+    entry.write_text('import { answer } from helper\ndef main()\nputs(answer())\nend\n')
+    imported = run(binary, root, ('check', entry))
+    assert imported.stderr == (f'{library}:3:12: error[TRBN4004]: '
+                               'operator + does not support Integer and String\n'), imported
+    entry.unlink()
     library.unlink()
 
     cases = [

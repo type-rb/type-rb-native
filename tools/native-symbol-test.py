@@ -63,7 +63,7 @@ puts(:name + 1)
 end
 ''')
     failed = run([binary, 'check', source], code=1)
-    assert b':5: error[TRBN4004]:' in failed.stderr, failed
+    assert b':5:12: error[TRBN4004]: operator + does not support String and Integer' in failed.stderr, failed
     assert len(failed.stderr.splitlines()) == 1, failed
 
     # The ordinary parser owns colon disambiguation for submission framing too.
