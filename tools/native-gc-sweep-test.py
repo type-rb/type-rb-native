@@ -23,14 +23,14 @@ with tempfile.TemporaryDirectory(prefix='native-storage-emission-') as temporary
 bodies = []
 for name in ['trbn_storage_alloc', 'trbn_storage_free', 'trbn_storage_insert',
              'trbn_storage_unlink', 'trbn_array_backing_new', 'trbn_array_backing_release', 'trbn_array_backing_flush',
-             'trbn_gc_sweep', 'trbn_gc_mark', 'trbn_gc_scan_fixed', 'trbn_gc_scan_array']:
+             'trbn_gc_sweep', 'trbn_gc_mark', 'trbn_gc_enqueue', 'trbn_gc_mark_grow', 'trbn_gc_scan_fixed', 'trbn_gc_scan_array']:
     matches = re.findall(r'^function (?:l )?\$' + name + r'\([^\n]*\) \{.*?^\}', decoded, re.M | re.S)
     assert len(matches) == 1, name
     body = matches[0]
     if name == 'trbn_gc_sweep':
         body = body.replace('call $trbn_array_backing_release(', 'call $observe_backing_release(')
         body = body.replace('call $trbn_storage_free(', 'call $observe_object_free(')
-    elif not name.startswith('trbn_array_backing_'):
+    elif not name.startswith('trbn_array_backing_') and name != 'trbn_gc_mark_grow' and name != 'trbn_gc_mark':
         body = body.replace('call $malloc(', 'call $observe_malloc(')
         body = body.replace('call $free(', 'call $observe_storage_free(')
     bodies.append('export ' + body)
@@ -40,6 +40,9 @@ bodies.append(storage[0])
 cache = re.findall(r'^data \$trbn_array_backing_cache = [^\n]+', decoded, re.M)
 assert len(cache) == 1
 bodies.append('export ' + cache[0])
+allocation_error = re.findall(r'^data \$trbn_allocation_error = [^\n]+', decoded, re.M)
+assert len(allocation_error) == 1
+bodies.append(allocation_error[0])
 observer = r'''
 #include <assert.h>
 #include <stdint.h>
@@ -54,6 +57,7 @@ extern void *trbn_array_backing_new(void);
 extern void trbn_array_backing_release(void *, int64_t);
 extern void trbn_array_backing_flush(void);
 extern uintptr_t trbn_array_backing_cache[2];
+void trbn_fatal(const void *message, int64_t bytes) { (void)message; (void)bytes; abort(); }
 void *trbn_gc_heap;
 int64_t trbn_gc_heap_bytes, trbn_gc_reclaimed_bytes;
 static uintptr_t string_descriptor[] = {0};
