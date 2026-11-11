@@ -130,10 +130,16 @@ jobs:
           python3 .native-target-candidate/tools/build-reference.py .type-rb "$RUNNER_TEMP/trb"
           test "$("$RUNNER_TEMP/trb" version)" = "$TYPE_RB_VERSION"
 
-      - name: Install Linux evidence tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y binutils file jq lld strace time
+      - name: Verify Linux evidence tools
+        run: python3 .native-target-candidate/tools/ci-linux-prerequisites.py targets --bin-dir "$RUNNER_TEMP/native-ci-bin" --receipt "$RUNNER_TEMP/linux-prerequisites.json"
+      - name: Retain Linux prerequisite evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-prerequisites-target-amd64
+          path: ${{ runner.temp }}/linux-prerequisites.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Build the pinned Native QBE variant
         id: qbe
@@ -386,7 +392,7 @@ jobs:
           git -C .native-target-candidate status --porcelain=v1 \
             > "$evidence/workflow/candidate-status.txt" 2>&1 || true
           dpkg-query -W -f='${binary:Package}\t${Version}\n' \
-            binutils file jq lld strace time \
+            binutils file jq lld 'lld-*' strace time \
             > "$evidence/workflow/packages.tsv" 2>&1 || true
           if test -f "$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz"; then
             sha256sum "$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz" \
@@ -450,10 +456,16 @@ jobs:
             printf 'runner_image=ubuntu-24.04-arm\n'
           } > "$RUNNER_TEMP/native-target-linux-arm64-evidence/workflow/invocation.txt"
 
-      - name: Install Linux regression evidence tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y binutils file jq lld strace time
+      - name: Verify Linux regression evidence tools
+        run: python3 .native-target-arm64-candidate/tools/ci-linux-prerequisites.py targets --bin-dir "$RUNNER_TEMP/native-ci-bin" --receipt "$RUNNER_TEMP/linux-prerequisites.json"
+      - name: Retain Linux prerequisite evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-prerequisites-target-arm64
+          path: ${{ runner.temp }}/linux-prerequisites.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Build the pinned Native QBE variant for arm64
         id: arm64_qbe
@@ -778,7 +790,7 @@ jobs:
           git -C "$candidate" status --porcelain=v1 \
             > "$evidence/candidate-status.txt" 2>&1 || true
           dpkg-query -W -f='${binary:Package}\t${Version}\n' \
-            binutils file jq lld strace time \
+            binutils file jq lld 'lld-*' strace time \
             > "$evidence/packages.tsv" 2>&1 || true
           cp "$RUNNER_TEMP/qbe-$QBE_VERSION/build-info.json" "$evidence/qbe-build-info.json" 2>/dev/null || true
           archive="$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz"

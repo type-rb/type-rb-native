@@ -41,7 +41,16 @@ jobs:
       - name: Qualify platform filesystem layouts and header-selected symbols
         run: |
           mkdir -p dist
+          python3 tools/native-filesystem-abi-harness-test.py
           python3 tools/native-filesystem-abi-test.py --receipt dist/filesystem-abi.json
+      - name: Retain filesystem ABI qualification
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: filesystem-abi-${{ matrix.platform }}
+          path: dist/filesystem-abi.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Qualify portable Float decimal arithmetic
         run: |
           python3 tools/qbe_toolchain.py "$RUNNER_TEMP/qbe-1.3"
@@ -127,9 +136,17 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
-      - name: Install Linux linker and measurement utility
+      - name: Verify Linux linker and measurement utility
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y lld time
+        run: python3 tools/ci-linux-prerequisites.py cli --bin-dir "$RUNNER_TEMP/native-ci-bin" --receipt "$RUNNER_TEMP/linux-prerequisites.json"
+      - name: Retain Linux prerequisite evidence
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-prerequisites-cli
+          path: ${{ runner.temp }}/linux-prerequisites.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Build from the pinned native seed and verify fixed points
         run: |
           python3 tools/build-crypto-dependencies.py --archives "$RUNNER_TEMP/crypto-sources" --output bin/crypto
@@ -365,9 +382,17 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
-      - name: Install Linux linker
+      - name: Verify Linux linker
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y lld
+        run: python3 tools/ci-linux-prerequisites.py linker --bin-dir "$RUNNER_TEMP/native-ci-bin" --receipt "$RUNNER_TEMP/linux-prerequisites.json"
+      - name: Retain Linux prerequisite evidence
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-prerequisites-cache
+          path: ${{ runner.temp }}/linux-prerequisites.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Build from the pinned native seed and verify fixed points
         run: |
           python3 tools/build-crypto-dependencies.py --archives "$RUNNER_TEMP/crypto-sources" --output bin/crypto
