@@ -6,8 +6,51 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
+import signal
 import subprocess
 import tempfile
+import time
+
+
+# Host-tool startup is not an application performance measurement. Keep its
+# watchdog aligned with compilation; the compiled ABI probe still has ten seconds.
+HOST_TOOL_TIMEOUT = 60
+
+
+def run_command(command, root, checks, timeout=HOST_TOOL_TIMEOUT):
+    record = {'command': [str(part).replace(str(root), '<work>') for part in command],
+              'timeout_seconds': timeout, 'complete': False}
+    checks.append(record)
+    started = time.monotonic()
+    process = None
+    try:
+        process = subprocess.Popen(command, cwd=root, text=True, errors='replace',
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   start_new_session=True)
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except BaseException:
+            # A tool or wrapper can leave children holding the output pipes.
+            # Terminate the owned group before collecting the final diagnostics.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            stdout, stderr = process.communicate()
+            record.update(code=process.returncode, stdout=stdout, stderr=stderr)
+            raise
+        record.update(code=process.returncode, stdout=stdout, stderr=stderr)
+        if process.returncode:
+            raise subprocess.CalledProcessError(process.returncode, command, stdout, stderr)
+        record['complete'] = True
+        return stdout
+    except BaseException as error:
+        record['error'] = type(error).__name__ + ': ' + str(error).replace(str(root), '<work>')
+        record['timed_out'] = isinstance(error, subprocess.TimeoutExpired)
+        raise
+    finally:
+        record['elapsed_seconds'] = time.monotonic() - started
 
 
 def abi_profile(target):
@@ -36,16 +79,7 @@ def abi_profile(target):
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--receipt', type=Path)
-    args = parser.parse_args()
-    system = platform.system().lower()
-    machine = {'aarch64': 'arm64', 'x86_64': 'amd64'}.get(platform.machine(), platform.machine())
-    target = system + '-' + machine
-    profile = abi_profile(target)
-    suffix = '$INODE64' if target == 'darwin-amd64' else ''
-    selected_symbols = {name: name + suffix for name in ('fstat', 'stat', 'lstat', 'readdir')}
+def probe_source(profile, selected_symbols):
     source = ('#define _GNU_SOURCE\n#define _DARWIN_C_SOURCE\n'
               '#include <stddef.h>\n#include <sys/stat.h>\n#include <fcntl.h>\n'
               '#include <ftw.h>\n#include <unistd.h>\n#include <dirent.h>\n#include <errno.h>\n#include <sys/utsname.h>\n#include <dlfcn.h>\n')
@@ -74,25 +108,51 @@ void *(*volatile dynamic_symbol)(void *, const char *) = &dlsym;
     for number, (name, symbol) in enumerate(selected_symbols.items(), 1):
         source += f'  if (dlsym(RTLD_DEFAULT, "{symbol}") != (void *)&{name}) return {number};\n'
     source += '  return 0;\n}\n'
-    compiler = os.environ.get('CC', 'cc')
-    with tempfile.TemporaryDirectory(prefix='native-filesystem-abi-') as temporary:
-        root = Path(temporary)
-        probe = root / 'probe.c'
-        executable = root / 'probe'
-        probe.write_text(source)
-        flags = ['-ldl'] if system == 'linux' else []
-        subprocess.run([compiler, '-std=c11', '-Werror', str(probe), '-o', str(executable)] + flags,
-                       check=True, timeout=60)
-        subprocess.run([str(executable)], check=True, timeout=10)
-        symbols = subprocess.check_output(['nm', '-u', str(executable)], text=True, timeout=10).splitlines()
-    receipt = {'target': target, 'scope': 'libc ABI only; Native filesystem semantics require separate execution',
-               'assertions': profile, 'source_sha256': hashlib.sha256(source.encode()).hexdigest(),
-               'header_verified_symbols': selected_symbols,
-               'compiler': subprocess.check_output([compiler, '--version'], text=True).splitlines()[0],
-               'undefined_symbols': [line.strip() for line in symbols]}
-    if args.receipt:
-        args.receipt.write_text(json.dumps(receipt, indent=2) + '\n')
-    print(json.dumps(receipt, indent=2))
+    return source
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--receipt', type=Path)
+    args = parser.parse_args()
+    system = platform.system().lower()
+    machine = {'aarch64': 'arm64', 'x86_64': 'amd64'}.get(platform.machine(), platform.machine())
+    target = system + '-' + machine
+    receipt = {'schemaVersion': 1, 'target': target, 'complete': False, 'checks': [],
+               'scope': 'libc ABI only; Native filesystem semantics require separate execution'}
+    try:
+        profile = abi_profile(target)
+        suffix = '$INODE64' if target == 'darwin-amd64' else ''
+        selected_symbols = {name: name + suffix for name in ('fstat', 'stat', 'lstat', 'readdir')}
+        source = probe_source(profile, selected_symbols)
+        receipt.update(assertions=profile, source_sha256=hashlib.sha256(source.encode()).hexdigest(),
+                       header_verified_symbols=selected_symbols)
+        compiler = shutil.which(os.environ.get('CC', 'cc'))
+        inspector = shutil.which('nm')
+        receipt['tools'] = {'compiler': compiler, 'symbols': inspector}
+        if not compiler or not inspector:
+            raise ValueError('filesystem ABI qualification requires both a C compiler and nm')
+        with tempfile.TemporaryDirectory(prefix='native-filesystem-abi-') as temporary:
+            root = Path(temporary)
+            probe = root / 'probe.c'
+            executable = root / 'probe'
+            probe.write_text(source)
+            flags = ['-ldl'] if system == 'linux' else []
+            run_command([compiler, '-std=c11', '-Werror', str(probe), '-o', str(executable)] + flags,
+                        root, receipt['checks'])
+            run_command([str(executable)], root, receipt['checks'], timeout=10)
+            symbols = run_command([inspector, '-u', str(executable)], root, receipt['checks']).splitlines()
+            receipt['undefined_symbols'] = [line.strip() for line in symbols]
+            receipt['compiler'] = run_command([compiler, '--version'], root, receipt['checks']).splitlines()[0]
+            receipt['complete'] = True
+    except BaseException as error:
+        receipt['error'] = type(error).__name__ + ': ' + str(error)
+        raise
+    finally:
+        if args.receipt:
+            args.receipt.parent.mkdir(parents=True, exist_ok=True)
+            args.receipt.write_text(json.dumps(receipt, indent=2) + '\n')
+        print(json.dumps(receipt, indent=2))
 
 
 if __name__ == '__main__':
