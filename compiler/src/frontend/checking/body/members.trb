@@ -1,3 +1,4 @@
+import { concurrent_mutation, concurrent_value } from frontend/checking/body/concurrency
 import { check_file_acquisition } from frontend/checking/body/file_acquisition
 import { scoped_resource_name } from frontend/types/resource_types
 import { nominal_application_end } from frontend/syntax/generic_syntax
@@ -88,6 +89,10 @@ def check_never_postfix(mut state: CompilerState, mut position: Array<Integer>, 
 end
 
 def check_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
+	return concurrent_value(state, check_member_value(state, position, locals, receiver, member), receiver.concurrent_borrowed)
+end
+
+def check_member_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
 	mut value := mir_literal_scalar(state, locals, checked_view(receiver, receiver.type_name, receiver.category), position[0])
 	if find_object_type(state, value.type_name) >= 0
 		return check_object_member(state, position, locals, value, member)
@@ -195,7 +200,7 @@ def check_postfix(
 		mut locals: CheckedLocals,
 		initial: CheckedValue,
 	): CheckedValue
-	mut value := CheckedValue.new(presentation: initial.presentation, type_name: initial.type_name, category: initial.category, origin: initial.origin, mutable: initial.mutable, binding: initial.binding, readonly: initial.readonly, immutable_reference: initial.immutable_reference, nullable_binding: initial.nullable_binding, nullable_field: initial.nullable_field, truth: initial.truth, falsity: initial.falsity, flow_type: initial.flow_type)
+	mut value := CheckedValue.new(concurrent_borrowed: initial.concurrent_borrowed, presentation: initial.presentation, type_name: initial.type_name, category: initial.category, origin: initial.origin, mutable: initial.mutable, binding: initial.binding, readonly: initial.readonly, immutable_reference: initial.immutable_reference, nullable_binding: initial.nullable_binding, nullable_field: initial.nullable_field, truth: initial.truth, falsity: initial.falsity, flow_type: initial.flow_type)
 	mut scanning := true
 	while scanning
 		if value.type_name == "Never"
@@ -272,6 +277,7 @@ def check_postfix(
 					index_origin := position[0]
 					line := load_integer(state.source_tokens.token_lines, position[0])
 					receiver_id := checked_mir_value(value)
+					concurrent_borrowed := value.concurrent_borrowed
 					advance(position)
 					index := check_expression(state, position, locals, 1, "Integer")
 					if index.type_name == "Never"
@@ -280,6 +286,9 @@ def check_postfix(
 						next
 					end
 					index_id := checked_mir_value(index)
+					if token_is(state, position[0] + 1, "=") || binary_operator_id(load_string(state.source_tokens.token_texts, position[0] + 1)) >= binary_add_assign()
+						concurrent_mutation(state, locals, value, index_origin)
+					end
 					mut lowered := false
 					if locals.mir_state[mir_state_enabled_slot()] == 1 && array_element_type(value.type_name) != ""
 						mut assignment := token_is(state, position[0] + 1, "=")
@@ -314,6 +323,7 @@ def check_postfix(
 							end
 						end
 					end
+					value = concurrent_value(state, value, concurrent_borrowed)
 				else
 					scanning = false
 				end
@@ -384,7 +394,7 @@ def check_safe_member(mut state: CompilerState, mut position: Array<Integer>, mu
 	end
 	store_integer(state.callables.checked[0].safe_finishes, origin, position[0])
 	store_string(state.callables.checked[0].safe_types, origin, result_type)
-	return result
+	return concurrent_value(state, result, value.concurrent_borrowed)
 end
 
 def check_newtype_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
@@ -424,7 +434,7 @@ def check_newtype_member(mut state: CompilerState, mut position: Array<Integer>,
 		if value.type_name == "Never"
 			return value
 		end
-		return mir_newtype_operation(state, locals, mir_op_newtype_construct(), value, owner, newtype_type(owner), origin)
+		return concurrent_value(state, mir_newtype_operation(state, locals, mir_op_newtype_construct(), value, owner, newtype_type(owner), origin), value.concurrent_borrowed)
 	end
 	if !class_method && member == "value"
 		advance(position)

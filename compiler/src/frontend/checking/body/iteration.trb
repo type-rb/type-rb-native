@@ -1,8 +1,10 @@
+import { checked_concurrent_limit } from frontend/checking/collections/concurrent_limit
+import { concurrent_value } from frontend/checking/body/concurrency
 import { checked_category_value } from frontend/types/value_categories
 import { binding_use_parameter } from state/binding_kinds
 import { mir_state_enabled_slot, nullable_state_head_slot } from state/local_slots
 import { checking_lowering } from state/checking_phases
-import { transform_any, transform_find, transform_find_index, transform_map, transform_none, transform_reduce, transform_select, transform_sort_by, transform_sort_by_descending } from frontend/types/transform_kinds
+import { transform_any, transform_concurrent_map, transform_find, transform_find_index, transform_mapping, transform_none, transform_reduce, transform_select, transform_sort_by_descending, transform_sorting } from frontend/types/transform_kinds
 import { iteration_source_array, iteration_source_hash, iteration_source_range } from frontend/types/iteration_kinds
 import { mir_op_array_load, mir_op_array_new, mir_op_array_push, mir_op_nullable_extract, mir_op_nullable_none } from mir/model/instructions
 import { mir_checked_nullable, mir_literal_scalar, mir_nullable_coerce } from mir/lowering/nullable
@@ -122,6 +124,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 		end
 		element = mir_checked_iteration_begin(state, locals, plan, receiver, saved)
 	end
+	element = concurrent_value(state, element, receiver.concurrent_borrowed)
 	element_name := load_string(state.source_tokens.token_texts, plan.syntax.element_origin)
 	local_bind(locals, element_name, block_type, 1)
 	local_require_use(locals, locals.count[0] - 1, element_name, plan.syntax.element_origin, binding_use_parameter())
@@ -194,16 +197,26 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	if element_type == "" || hash_key_type(receiver.type_name) != ""
 		return type_diagnostic(state, line, "collection transform requires a supported Array or Range receiver")
 	end
-	if syntax.kind >= transform_sort_by() && array_element_type(receiver.type_name) == ""
+	if syntax.kind == transform_concurrent_map()
+		if array_element_type(receiver.type_name) == ""
+			return type_diagnostic(state, line, "concurrent_map is available only on Array")
+		end
+		limit := checked_concurrent_limit(state, locals, syntax)
+		if limit.type_name == "Never"
+			position[0] = shape.finish
+			return limit
+		end
+	end
+	if transform_sorting(syntax.kind) && array_element_type(receiver.type_name) == ""
 		return type_diagnostic(state, line, "key-based sorting requires an Array receiver")
 	end
 	mut initial := checked_value("Void", checked_category_value(), origin, 0)
 	mut output := array_type(element_type)
 	mut key_type := ""
-	if syntax.kind >= transform_sort_by()
+	if transform_sorting(syntax.kind)
 		key_type = sparse_string_at(state.callables.checked[0].transform_key_types, origin)
 	end
-	if syntax.kind == transform_map()
+	if transform_mapping(syntax.kind)
 		output = sparse_string_at(state.callables.checked[0].transform_types, origin)
 	elsif syntax.kind == transform_find()
 		output = nullable_type(element_type)
@@ -245,7 +258,7 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 		# hint preserves live traversal and growth when callbacks change the input.
 		mut capacity_owner := -1
 		mut capacity_limit := 0
-		if (syntax.kind == transform_map() || syntax.kind == transform_select()) && source_kind == iteration_source_array()
+		if (transform_mapping(syntax.kind) || syntax.kind == transform_select()) && source_kind == iteration_source_array()
 			capacity_owner = checked_mir_value(receiver)
 			if syntax.kind == transform_select()
 				# Selection can be sparse. Bound speculative backing to 2 KiB;
@@ -256,7 +269,7 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 		initial = mir_checked_array_operation(state, locals, mir_op_array_new(), capacity_owner, -1, capacity_limit, output, origin)
 	end
 	mir_binding_initialize(state, locals, outer, initial, origin)
-	if syntax.kind >= transform_sort_by()
+	if transform_sorting(syntax.kind)
 		local_bind(locals, "$transform.keys", array_type(key_type), 1)
 		keys := mir_checked_array_operation(state, locals, mir_op_array_new(), -1, -1, 0, array_type(key_type), origin)
 		mir_binding_initialize(state, locals, outer + 1, keys, origin)
@@ -267,7 +280,14 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	if source_kind == iteration_source_range() && shape.second_origin >= 0
 		local_bind(locals, "$iteration.ordinal", "Integer", 1)
 	end
-	element := mir_checked_iteration_begin(state, locals, plan, receiver, saved)
+	previous_concurrent := locals.concurrent_scope[0]
+	mut element := mir_checked_iteration_begin(state, locals, plan, receiver, saved)
+	if syntax.kind == transform_concurrent_map()
+		locals.concurrent_scope[0] = outer
+		element = concurrent_value(state, element, true)
+	else
+		element = concurrent_value(state, element, receiver.concurrent_borrowed)
+	end
 	if syntax.kind == transform_reduce()
 		accumulator := mir_binding_read(state, locals, outer, syntax.accumulator_origin)
 		accumulator_name := load_string(state.source_tokens.token_texts, syntax.accumulator_origin)
@@ -302,20 +322,23 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	locals.value_block[0] = true
 	mut yielded := check_block_value(state, position, locals, "Void", -1, true, "", outer)
 	locals.value_block[0] = previous_block
+	if syntax.kind == transform_concurrent_map()
+		locals.concurrent_scope[0] = previous_concurrent
+	end
 	if has_diagnostic(state)
 		return yielded
 	end
 	if position[0] != shape.body_finish || yielded.type_name == "Void" || yielded.type_name == "Never"
 		return type_diagnostic(state, line, "collection block must end with a result expression")
 	end
-	if syntax.kind == transform_map()
+	if transform_mapping(syntax.kind)
 		output = array_type(yielded.type_name)
 		analyzed := sparse_string_at(state.callables.checked[0].transform_types, origin)
 		if state.callables.lambda_phase[0] == checking_lowering() && analyzed != output
 			return type_diagnostic(state, line, "collection result differs from analyzed type")
 		end
 		store_string(locals.types, outer, output)
-	elsif syntax.kind >= transform_sort_by()
+	elsif transform_sorting(syntax.kind)
 		yielded = mir_literal_scalar(state, locals, yielded, origin)
 		key_type = yielded.type_name
 		if key_type != "Integer" && key_type != "Float" && key_type != "String"
@@ -339,19 +362,19 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	store_integer(state.callables.checked[0].transform_origins, origin, state.callables.checked[0].transforms.size())
 	checked_transform_require(state, origin)
 	binding_scope_check(state, locals, saved)
-	if syntax.kind >= transform_sort_by()
+	if transform_sorting(syntax.kind)
 		values := mir_binding_read(state, locals, outer, origin)
 		mir_checked_array_operation(state, locals, mir_op_array_push(), checked_mir_value(values), checked_mir_value(element), 0, "Void", origin)
 		keys := mir_binding_read(state, locals, outer + 1, origin)
 		mir_checked_array_operation(state, locals, mir_op_array_push(), checked_mir_value(keys), checked_mir_value(yielded), 0, "Void", origin)
-	elsif syntax.kind >= transform_find()
+	elsif syntax.kind == transform_find() || syntax.kind == transform_find_index()
 		mir_transform_search_yield(state, locals, transformation, outer, element, yielded)
 	else
 		mir_transform_yield(state, locals, syntax.kind, outer, element, yielded, origin)
 	end
 	mir_checked_iteration_end(state, locals, plan, saved)
 	mut result := mir_binding_read(state, locals, outer, origin)
-	if syntax.kind >= transform_sort_by()
+	if transform_sorting(syntax.kind)
 		keys := mir_binding_read(state, locals, outer + 1, origin)
 		result = mir_array_sort_keys(state, locals, result, keys, syntax.kind == transform_sort_by_descending(), origin)
 	end
@@ -359,7 +382,11 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	nullable_finish(locals, flow_parent, flow_first, outer)
 	position[0] = shape.finish
 	# A transform result is an expression, not an assignable source binding.
-	return checked_value(output, result.category, origin, 1)
+	mut borrowed := false
+	if receiver.concurrent_borrowed || yielded.concurrent_borrowed || initial.concurrent_borrowed
+		borrowed = true
+	end
+	return concurrent_value(state, checked_value(output, result.category, origin, 1), borrowed)
 end
 
 # Preserve source order and lexical transfers before lowering a receiver method.

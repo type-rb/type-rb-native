@@ -114,6 +114,9 @@ def valid_case_file(name, project_check=False):
         return False
     if re.fullmatch(r"[a-z][a-z0-9_/-]*\.trb", name):
         return True
+    # Bounded text inputs for filesystem scenarios, separate from source.
+    if re.fullmatch(r"fixtures/[a-z][a-z0-9_-]*\.txt", name):
+        return True
     # File routes include Unicode, bracket parameters and punctuation. They
     # remain relative ordinary files below routes/, never traversal or escapes.
     return (project_check and name.startswith("routes/") and name.endswith(".trb")

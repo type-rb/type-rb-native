@@ -295,6 +295,8 @@ def main():
     parser.add_argument('--runtime-reference', type=Path, default=os.environ.get('TYPE_RB_NATIVE_REFERENCE_TRB'))
     parser.add_argument('--qbe', type=Path, default=os.environ.get('TYPE_RB_NATIVE_QBE'))
     parser.add_argument('--case', action='append', default=[])
+    parser.add_argument('--scope', choices=('complete', 'applications'), default='complete',
+                        help='applications excludes only the separate Native runtime-unit authority')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if args.reference and not args.runtime_reference:
@@ -304,18 +306,23 @@ def main():
     manifest = json.loads(raw)
     known = {case['id'] for case in manifest['cases']}
     assert len(known) == 20 and not set(args.case) - known, 'invalid scenario selection'
+    selected = [case for case in manifest['cases']
+                if (not args.case or case['id'] in args.case)
+                and (args.scope == 'complete' or case['kind'] != 'runtime')]
+    assert selected, 'empty scenario selection'
     args.output.mkdir(parents=True, exist_ok=False)
     receipt = {'schemaVersion': 1, 'manifestSha256': MANIFEST_SHA256,
                'binarySha256': hashlib.sha256(args.binary.resolve().read_bytes()).hexdigest(),
                'controllerSha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-               'reference': args.reference, 'complete': False, 'cases': []}
+               'reference': args.reference, 'scope': args.scope,
+               'selectedCaseIds': [case['id'] for case in selected],
+               'omittedCaseIds': [case['id'] for case in manifest['cases'] if case not in selected],
+               'complete': False, 'cases': []}
     environment = dict(os.environ, NO_COLOR='1', TERM='dumb')
     if args.libraries:
         environment['TRBN_NETWORK_LIB_DIR'] = str(args.libraries.resolve())
     try:
-        for case in manifest['cases']:
-            if args.case and case['id'] not in args.case:
-                continue
+        for case in selected:
             authority = 'native-runtime' if case['kind'] == 'runtime' else (
                 'reference-application' if args.reference else 'native-application')
             row = {'id': case['id'], 'authority': authority, 'complete': False}

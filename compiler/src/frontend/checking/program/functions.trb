@@ -1,3 +1,4 @@
+import { concurrent_borrowed_type } from frontend/types/concurrent_types
 import { mir_deadlines_enabled } from mir/model/deadlines
 import { mir_lower_deadline_checkpoints } from mir/lowering/deadlines
 import { standard_runtime_deadline } from frontend/resolution/standard_intrinsics
@@ -58,6 +59,7 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 	state.module_graph.active_module[0] = load_integer(state.declarations.function_modules, function_index)
 	state.global_bindings.declaration_owner[0] = sparse_string_at(state.source_tokens.token_namespaces, load_integer(state.declarations.function_body_starts, function_index))
 	mut locals := locals_new(state.source_tokens.token_count[0] + 1)
+	locals.concurrent_function[0] = state.callables.concurrent_audit[0]
 	if state.type_resolution.generic_template_mode[0] || state.callables.lambda_phase[0] == checking_discovery()
 		locals.mir_state[mir_state_function_slot()] = function_index
 	else
@@ -83,6 +85,9 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 			load_integer(state.declarations.parameter_lines, parameter_index),
 		)
 		if added
+			if locals.concurrent_function[0] > 0 && concurrent_borrowed_type(state, load_string(state.declarations.parameter_types, parameter_index))
+				store_integer(locals.concurrent_borrowed, local_identity(locals, locals.count[0] - 1), 1)
+			end
 			store_integer(locals.mir_values, locals.count[0] - 1, 0)
 			mir_add_parameter(state, locals, parameter_index)
 		end
@@ -234,6 +239,26 @@ def analyze_callable_bodies(mut state: CompilerState): Boolean
 	end
 	if !declare_object_witnesses(state)
 		return false
+	end
+	if has_diagnostic(state)
+		return false
+	end
+	mut pending := true
+	while pending && !has_diagnostic(state)
+		pending = false
+		function = 0
+		while function < state.callables.concurrent_functions.size() && !has_diagnostic(state)
+			mode := state.callables.concurrent_functions[function]
+			if mode > state.callables.concurrent_checked[function]
+				pending = true
+				state.callables.concurrent_checked[function] = mode
+				state.callables.concurrent_audit[0] = mode
+				mut locals := checked_function_locals(state, function)
+				check_function_body(state, function, locals)
+				state.callables.concurrent_audit[0] = 0
+			end
+			function += 1
+		end
 	end
 	if has_diagnostic(state)
 		return false

@@ -3255,7 +3255,7 @@
         "web-browser-cors-factory"
       ],
       "pending": [
-        "HTTP serving and whole-buffer gzip have dedicated runtime acceptance; logger, timeout and authentication providers remain incomplete"
+        "HTTP serving, whole-buffer gzip, OIDC and ordinary Web deadlines have dedicated runtime acceptance; logger and full deadline execution in the retained REPL remain incomplete."
       ],
       "note": "Pinned Request, Response, cookies and ContextKey values support ordinary imports and retained REPL ownership. Portable middleware composes ordered handlers with once-only Next calls. Browser middleware covers actual/preflight CORS negotiation, origin and credential rules, header reflection and retention, security-header configuration, and composition short circuits. A file-route integration combines RequestID, security headers and CORS across GET, HEAD, OPTIONS, missing and malformed paths under forced collection. These checks do not establish networking or the remaining host-backed providers."
     },
@@ -4047,7 +4047,7 @@
       ],
       "pending": [
         "Opened directory capabilities and cooperative lock scopes remain separate coverage work",
-        "Concurrent-map resource effects remain unqualified because Native rejects the concurrent_map syntax before effect checking",
+        "Serial concurrent_map File bodies, helper calls and borrowed-write rejection have focused controls; broader package-resource combinations remain unqualified.",
         "Pinned reference REPL implicit-import replay remains visible in the directory case under #1127; directory multi-error ordering review is #1287",
         "Complete four-host release qualification and source-backend execution remain outstanding"
       ],
@@ -4083,6 +4083,30 @@
         "Complete transport edge compatibility and release artifact qualification."
       ],
       "note": "Shared ordinary cases record pre-network configuration and missing-credential behavior. HTTPS discovery/JWKS, RS256, claims, proxy/trust/redirect policy, middleware context and cache/GC/failure behavior use the dedicated synthetic provider corpus in tools/native-oidc-test.py. The retained REPL follows the reference unavailable-adapter diagnostic; these examples do not establish complete package or release parity."
+    },
+    {
+      "id": "concurrent-map",
+      "title": "Structured serial concurrent mapping",
+      "scope": "basic",
+      "syntax": [],
+      "cases": [
+        "concurrent-map-values",
+        "concurrent-map-owned",
+        "concurrent-map-file-safe",
+        "concurrent-map-file-borrow-write",
+        "concurrent-map-oidc-scope",
+        "concurrent-limit-dynamic-empty",
+        "concurrent-result-borrow",
+        "concurrent-unsafe-capture",
+        "concurrent-outer-assignment",
+        "concurrent-map-file-prefix-try",
+        "concurrent-imported-call",
+        "concurrent-file-helper"
+      ],
+      "pending": [
+        "Broader combinations of package-owned native values and execution-scope adapters remain unqualified; #626 tracks the remaining scope coverage. Imported authored-call safety is a specification proposal in #1333, not an adopted change."
+      ],
+      "note": "Array concurrent_map evaluates a positive limit once, preserves input order, and joins serially admitted nested blocks. Capture and borrowed-alias rules, same-module helper/default audits, task-owned storage, File bodies and dynamic empty-input limit failures are checked across ordinary paths. Dedicated Web deadline acceptance covers cancellation during admission. Imported authored implementations retain the pinned module boundary; these examples do not establish overlapping I/O or parallel scheduling. OIDC keeps its existing unsupported REPL adapter diagnosis."
     }
   ],
   "cases": [
@@ -137840,6 +137864,588 @@
           "code": 0,
           "stdout": "",
           "stderr": "(trb):8: error[TRBN4004]: return is unavailable inside a scoped File block\n"
+        }
+      }
+    },
+    {
+      "id": "concurrent-map-values",
+      "title": "Structured mapping: concurrent-map-values",
+      "declarations": "def capacity(): Integer\n\tputs(\"limit\")\n\treturn 2\nend\n\ndef length(items: Array<Integer>): Integer\n\treturn items.size()\nend\n\ndef owned(value: Integer): Integer\n\tmut values := [value]\n\tvalues.push(value + 1)\n\treturn values[1]\nend\n\ndef probe()\n\toffset := 10\n\tmapped := [3, 1, 2].concurrent_map(limit: capacity()) { |value| value + offset }\n\tmapped.each { |value| puts(value) }\n\tnested := [10, 20].concurrent_map(limit: 2) do |outer|\n\t\t[1, 2].concurrent_map(limit: 1) { |inner| outer + inner }\n\tend\n\tputs(nested[0][0])\n\tputs(nested[1][1])\n\tvalues := [[1], [2, 3]].concurrent_map { |items| length(items) }\n\tputs(values[0])\n\tputs(values[1])\n\tfresh := [1, 2].concurrent_map() { |value| owned(value) }\n\tputs(fresh[0])\n\tputs(fresh[1])\n\tempty: Array<Integer> := []\n\tunused := empty.concurrent_map(limit: capacity()) { |value| value.to_s() }\n\tputs(unused.size())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "limit\n13\n11\n12\n11\n22\n1\n2\n2\n3\nlimit\n0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "limit\n13\n11\n12\n11\n22\n1\n2\n2\n3\nlimit\n0\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "limit\n13\n11\n12\n11\n22\n1\n2\n2\n3\nlimit\n0\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "limit\n13\n11\n12\n11\n22\n1\n2\n2\n3\nlimit\n0\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "concurrent-map-owned",
+      "title": "Structured mapping: concurrent-map-owned",
+      "declarations": "record Label\n\tname: String\n\tamount: Integer\nend\n\nclass Counter\n\t@value: Integer\n\tdef initialize(value: Integer)\n\t\t@value = value\n\tend\nend\n\ndef initial(): Integer\n\treturn 4\nend\n\nclass DefaultCounter\n\t@value: Integer := initial()\nend\n\ndef build(value: Integer): Counter\n\treturn Counter.new(value)\nend\n\ndef probe()\n\tlabel := Label.new(name: \"item\", amount: 2)\n\tvalues := [1, 2].concurrent_map do |value|\n\t\tlabel.name + (label.amount + value).to_s()\n\tend\n\tputs(values[0])\n\tputs(values[1])\n\tobjects := [5, 6].concurrent_map { |value| build(value) }\n\tputs(objects[0].value)\n\tputs(objects[1].value)\n\tdefaults := [1, 2].concurrent_map { |_value| DefaultCounter.new() }\n\tputs(defaults[1].value)\n\tmutated := [1, 2].concurrent_map do |value|\n\t\tmut rows := [[value]]\n\t\trows.each do |items|\n\t\t\titems[0] = items[0] + 1\n\t\tend\n\t\tmut selected := if value > 0\n\t\t\t[value]\n\t\telse\n\t\t\t[0]\n\t\tend\n\t\tselected[0] = selected[0] + 2\n\t\trows[0][0] + selected[0]\n\tend\n\tputs(mutated[0])\n\tputs(mutated[1])\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "item3\nitem4\n5\n6\n4\n5\n7\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "item3\nitem4\n5\n6\n4\n5\n7\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "item3\nitem4\n5\n6\n4\n5\n7\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "item3\nitem4\n5\n6\n4\n5\n7\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "concurrent-map-file-safe",
+      "title": "Structured mapping: file-safe",
+      "declarations": "import trb/std/file\nimport trb/std/path\ndef probe()\nvalues := [1].concurrent_map do |value|\nresult := File.open(Path.new(\"fixtures/resource.txt\")) do |file|\ntext := file.read_text(max_bytes: 8) catch |_error|\n\"\"\nend\nvalue + text.size()\nend\nresult catch |_error|\n0\nend\nend\nputs(values[0])\nend\n",
+      "body": "probe()",
+      "files": {
+        "fixtures/resource.txt": "abc"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "4\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "4\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "4\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "4\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "concurrent-map-file-borrow-write",
+      "title": "Structured mapping: file-borrow-write",
+      "declarations": "import trb/std/file\nimport trb/std/path\ndef probe()\nvalues := [[1]].concurrent_map do |items|\nresult := File.open(Path.new(\"fixtures/resource.txt\")) do |file|\n_text := file.read_text(max_bytes: 8) catch |_error|\n\"\"\nend\nitems[0] = 3\nitems[0]\nend\nresult catch |_error|\n0\nend\nend\nputs(values[0])\nend\n",
+      "body": "probe()",
+      "files": {
+        "fixtures/resource.txt": "abc"
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:9:1: error[TRB3000]: concurrent_map cannot mutate borrowed binding items because Array<Integer> is not uniquely owned\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:9:1: error[TRB3000]: concurrent_map cannot mutate borrowed binding items because Array<Integer> is not uniquely owned\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:9:1: error[TRB3000]: concurrent_map cannot mutate borrowed binding items because Array<Integer> is not uniquely owned\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:9:6: error[TRBN4004]: concurrent_map cannot mutate a borrowed value because it is not uniquely owned\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:9:6: error[TRBN4004]: concurrent_map cannot mutate a borrowed value because it is not uniquely owned\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/./main.trb:9:6: error[TRBN4004]: concurrent_map cannot mutate a borrowed value because it is not uniquely owned\n"
+        }
+      }
+    },
+    {
+      "id": "concurrent-map-oidc-scope",
+      "title": "Structured mapping: oidc-scope",
+      "declarations": "import { OidcBearerOptions } from trb/auth/oidc\nimport { Body, Headers, HttpMethod } from trb/http\nimport { Context, Next, Request, Response } from trb/web\nimport trb/web/auth/bearer\nclass Reply implements Next\ndef call(_context: Context): Response\nreturn Response.text(\"ok\")\nend\nend\ndef probe()\nvalues := [1].concurrent_map do |_value|\noptions := OidcBearerOptions.new(issuer: \"https://issuer.example\", audience: \"api\", jwks_uri: nil, roles_claim: \"roles\", clock_skew_seconds: 0)\nrequest := Request.new(method: HttpMethod.get(), path: \"/\", query_string: \"\", headers: Headers.new([]), body: Body.empty())\ncontext := Context.new(request: request, path_parameters: {})\nBearer.authenticate(context, Reply.new(), options).status\nend\nputs(values[0])\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "401\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ".trb/packages/trb/web/auth/bearer/index.trb:11:10: error: intrinsic trb.internal.auth.oidc.verify_bearer is type-checked for mode go but has no REPL runtime adapter\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "401\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):19: error: intrinsic trb.internal.auth.oidc.verify_bearer has no REPL runtime adapter\n"
+        }
+      }
+    },
+    {
+      "id": "concurrent-limit-dynamic-empty",
+      "title": "Structured mapping: concurrent-limit-dynamic-empty",
+      "declarations": "def bound(): Integer\nputs(\"limit\")\nreturn 0\nend\ndef probe()\nvalues: Array<Integer> := []\nresult := values.concurrent_map(limit: bound()) { |value| value }\nputs(result.size())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "limit\n",
+          "stderrFirstLine": "panic: concurrent_map limit must be greater than zero"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "limit\n",
+          "stderr": "(trb):7:1: error: concurrent_map limit must be greater than zero\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "limit\n",
+          "stderrFirstLine": "panic: concurrent_map limit must be greater than zero"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "limit\n",
+          "stderr": "(trb):10: error: concurrent_map limit must be greater than zero\n"
+        }
+      }
+    },
+    {
+      "id": "concurrent-result-borrow",
+      "title": "Structured mapping: concurrent-result-borrow",
+      "declarations": "import trb/std/result\ndef probe()\nvalues := [[1]].concurrent_map do |items|\nwrapped := Result<Array<Integer>, String>::Ok(items)\nmut chosen := wrapped catch |_error|\n[0]\nend\nchosen[0] = 2\nchosen[0]\nend\nputs(values[0])\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:8:1: error[TRB3000]: concurrent_map cannot mutate borrowed binding chosen because Array<Integer> is not uniquely owned\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:8:1: error[TRB3000]: concurrent_map cannot mutate borrowed binding chosen because Array<Integer> is not uniquely owned\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):8:1: error[TRB3000]: concurrent_map cannot mutate borrowed binding chosen because Array<Integer> is not uniquely owned\n(trb):2:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:8:7: error[TRBN4004]: concurrent_map cannot mutate a borrowed value because it is not uniquely owned\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:8:7: error[TRBN4004]: concurrent_map cannot mutate a borrowed value because it is not uniquely owned\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):8:7: error[TRBN4004]: concurrent_map cannot mutate a borrowed value because it is not uniquely owned\n(trb):2: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "concurrent-unsafe-capture",
+      "title": "Structured mapping: concurrent-unsafe-capture",
+      "declarations": "def probe()\nitems := [1]\nvalues := [2].concurrent_map { |v| v + items[0] }\nputs(values[0])\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:40: error[TRB3000]: concurrent_map cannot capture items because Array<Integer> is not concurrency-safe\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:40: error[TRB3000]: concurrent_map cannot capture items because Array<Integer> is not concurrency-safe\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:40: error[TRB3000]: concurrent_map cannot capture items because Array<Integer> is not concurrency-safe\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:40: error[TRBN4004]: concurrent_map cannot capture items because Array<Integer> is not concurrency-safe\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:40: error[TRBN4004]: concurrent_map cannot capture items because Array<Integer> is not concurrency-safe\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:40: error[TRBN4004]: concurrent_map cannot capture items because Array<Integer> is not concurrency-safe\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "concurrent-outer-assignment",
+      "title": "Structured mapping: concurrent-outer-assignment",
+      "declarations": "def probe()\nmut total := 0\nvalues := [2].concurrent_map do |v|\ntotal += v\ntotal\nend\nputs(values[0])\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: concurrent_map cannot assign to outer binding total\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: concurrent_map cannot assign to outer binding total\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4:1: error[TRB3000]: concurrent_map cannot assign to outer binding total\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRBN4004]: concurrent_map cannot assign to outer binding total\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRBN4004]: concurrent_map cannot assign to outer binding total\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4:1: error[TRBN4004]: concurrent_map cannot assign to outer binding total\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "concurrent-map-file-prefix-try",
+      "title": "Structured mapping: File block preserves transform try restriction",
+      "declarations": "import trb/std/file\nimport trb/std/path\ndef probe()\nvalues := [1].concurrent_map do |value|\nresult := File.open(Path.new(\"fixtures/resource.txt\")) do |file|\ntext := try file.read_text(max_bytes: 8)\nvalue + text.size()\nend\nresult catch |_error|\n0\nend\nend\nputs(values[0])\nend\n",
+      "body": "probe()",
+      "files": {
+        "fixtures/resource.txt": "abc"
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6:9: error[TRB3000]: try is not supported inside value-producing collection transformations; use each or handle the Result explicitly\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6:9: error[TRB3000]: try is not supported inside value-producing collection transformations; use each or handle the Result explicitly\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6:9: error[TRB3000]: try is not supported inside value-producing collection transformations; use each or handle the Result explicitly\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6: error[TRBN4004]: try is unavailable inside a value-producing collection block\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6: error[TRBN4004]: try is unavailable inside a value-producing collection block\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/./main.trb:6: error[TRBN4004]: try is unavailable inside a value-producing collection block\n"
+        }
+      }
+    },
+    {
+      "id": "concurrent-imported-call",
+      "title": "Structured mapping: Imported authored-call contract boundary",
+      "declarations": "import { read } from ./helper\ndef probe()\nvalues := [1].concurrent_map { |value| read(value) }\nputs(values[0])\nend\n",
+      "body": "probe()",
+      "files": {
+        "helper.trb": "mut shared := 0\ndef read(value: Integer): Integer\nshared += value\nreturn shared\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "concurrent-file-helper",
+      "title": "Structured mapping: File lifetime in transitive authored helper",
+      "declarations": "import trb/std/file\nimport trb/std/path\ndef read_one(value: Integer): Integer\nresult := File.open(Path.new(\"fixtures/resource.txt\")) do |file|\ntext := file.read_text(max_bytes: 8) catch |_error|\n\"\"\nend\nvalue + text.size()\nend\nreturn result catch |_error|\n0\nend\nend\ndef probe()\nvalues := [1].concurrent_map { |value| read_one(value) }\nputs(values[0])\nend\n",
+      "body": "probe()",
+      "files": {
+        "fixtures/resource.txt": "abc"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "4\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "4\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "4\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "4\n",
+          "stderr": ""
         }
       }
     }

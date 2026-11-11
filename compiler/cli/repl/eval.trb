@@ -22,7 +22,7 @@ import { control_syntax_case, control_syntax_guarded_transfer, control_syntax_if
 import { repl_flow_break, repl_flow_continue, repl_flow_kind_slot, repl_flow_loop_owner_slot, repl_flow_normal, repl_flow_return, repl_flow_value_slot, repl_loop_flow_offset } from repl/flow_kinds
 import { checked_logical_operator_offset } from frontend/types/operator_plans
 import { declaration_object } from frontend/types/declaration_kinds
-import { transform_all, transform_any, transform_find, transform_find_index, transform_map, transform_none, transform_reduce, transform_select, transform_sort_by, transform_sort_by_descending } from frontend/types/transform_kinds
+import { transform_concurrent_map, transform_mapping, transform_sorting, transform_all, transform_any, transform_find, transform_find_index, transform_none, transform_reduce, transform_select, transform_sort_by_descending } from frontend/types/transform_kinds
 import { iteration_source_array, iteration_source_hash, iteration_source_range } from frontend/types/iteration_kinds
 import { hash_action_copy, hash_action_delete, hash_action_empty, hash_action_fetch, hash_action_has_key, hash_action_index_write, hash_action_keys, hash_action_merge, hash_action_none, hash_action_size, hash_action_update } from mir/model/hash_actions
 import { array_method_concat, array_method_include, array_method_index, array_method_join, array_method_none, array_method_unshift, bytes_method_none, float_method_none, integer_method_none, result_method_float, result_method_integer, result_method_key, result_method_slice, string_method_none, string_method_split } from frontend/types/method_kinds
@@ -1891,6 +1891,17 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 		store.error[0] = "invalid checked collection transform"
 		return 0
 	end
+	if syntax.kind == transform_concurrent_map() && syntax.initial_start >= 0
+		position[0] = syntax.initial_start
+		limit := repl_expression(state, position, store, environment, 1, "Integer").value
+		if repl_failed(store) || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
+			return limit
+		end
+		if store.integers[limit] <= 0
+			store.error[0] = "panic: concurrent_map limit must be greater than zero"
+			return 0
+		end
+	end
 	mut result := 0
 	mut keys: Array<Integer> := []
 	if syntax.kind == transform_find() || syntax.kind == transform_find_index()
@@ -1944,16 +1955,16 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 		if repl_failed(store) || flow[repl_flow_kind_slot()] != repl_flow_normal() || environment.flow[repl_flow_kind_slot()] != repl_flow_normal()
 			break
 		end
-		if syntax.kind >= transform_sort_by()
+		if transform_sorting(syntax.kind)
 			store.children[result].push(element)
 			keys.push(repl_coerce(store, yielded, plan.key_type))
-		elsif syntax.kind == transform_map()
+		elsif transform_mapping(syntax.kind)
 			store.children[result].push(repl_coerce(store, yielded, array_element_type(plan.type_name)))
 		elsif syntax.kind == transform_select()
 			if store.integers[yielded] != 0
 				store.children[result].push(element)
 			end
-		elsif syntax.kind >= transform_find()
+		elsif syntax.kind == transform_find() || syntax.kind == transform_find_index()
 			if store.integers[yielded] != 0
 				mut selected := element
 				if syntax.kind == transform_find_index()
@@ -1992,7 +2003,7 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 	end
 	environment.count[0] = saved
 	position[0] = shape.finish
-	if syntax.kind >= transform_sort_by() && !repl_failed(store) && flow[repl_flow_kind_slot()] == repl_flow_normal() && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
+	if transform_sorting(syntax.kind) && !repl_failed(store) && flow[repl_flow_kind_slot()] == repl_flow_normal() && environment.flow[repl_flow_kind_slot()] == repl_flow_normal()
 		return repl_array_sort_keys(store, result, keys, syntax.kind == transform_sort_by_descending())
 	end
 	return result
