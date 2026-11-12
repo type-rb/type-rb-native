@@ -2,8 +2,9 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`3c92543fe5d3ac984d35d65f62b1ab85fc82cafd` (`0.4.12-dev`, including the shared
-Unicode 17 OIDC hostname policy, joined Jobs shutdown and portable Math APIs), recorded
+`e3aed7648e86912fb52d123b69c1f2b76f64dd98` (`0.4.12-dev`, including the shared
+Unicode 17 OIDC hostname policy, declared standalone Go dependencies, literal
+Process command names, joined Jobs shutdown and portable Math APIs), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
