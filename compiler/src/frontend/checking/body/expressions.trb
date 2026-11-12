@@ -1,3 +1,4 @@
+import { concurrent_read_binding, concurrent_value } from frontend/checking/body/concurrency
 import { test_dsl_function, test_provider_kind } from frontend/providers/test_declarations
 import { check_inferred_test_expectation } from frontend/checking/builtins/test_expectations
 import { checked_resource_use } from frontend/checking/body/resources
@@ -221,6 +222,7 @@ def check_primary(
 		end
 		local_index := local_find(locals, name)
 		if local_index >= 0
+			concurrent_read_binding(state, locals, local_index, origin)
 			if !locals.file_body[0] && local_index < locals.capture_parents.size() && scoped_resource_name(state, load_string(locals.types, local_index)) != ""
 				return type_diagnostic(state, line, "scoped resource cannot be captured by a callback")
 			end
@@ -457,6 +459,7 @@ def check_expression_argument(mut state: CompilerState, mut position: Array<Inte
 	if !checked_resource_use(state, locals, value, expected, borrowed, line)
 		return checked_value("Invalid", checked_category_value(), expression_origin, 0)
 	end
+	concurrent_borrowed := value.concurrent_borrowed
 	if expected != ""
 		value = checked_collection_context(state, locals, value, expected)
 	end
@@ -473,7 +476,7 @@ def check_expression_argument(mut state: CompilerState, mut position: Array<Inte
 		value = checked_presentation(value, "")
 	end
 	checked_submission_result(state, expression_origin, value.type_name, displayed_mutable, value.presentation)
-	return value
+	return concurrent_value(state, value, concurrent_borrowed)
 end
 
 def check_enum_constructor(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals): CheckedValue
@@ -508,6 +511,7 @@ def check_enum_constructor(mut state: CompilerState, mut position: Array<Integer
 	end
 	saved := locals.mir_state[mir_state_enabled_slot()]
 	mut diverged := false
+	mut concurrent_borrowed := false
 	skip_newlines(state, position)
 	while !token_is(state, position[0], ")") && !has_diagnostic(state)
 		label := parse_argument_label(state, position)
@@ -519,6 +523,9 @@ def check_enum_constructor(mut state: CompilerState, mut position: Array<Integer
 		if value.type_name == "Never"
 			diverged = true
 			scalar_mir_disable(locals)
+		end
+		if value.concurrent_borrowed
+			concurrent_borrowed = true
 		end
 		bindings.values[slot] = checked_mir_value(value)
 		skip_newlines(state, position)
@@ -542,7 +549,7 @@ def check_enum_constructor(mut state: CompilerState, mut position: Array<Integer
 		locals.mir_state[mir_state_enabled_slot()] = saved
 		return checked_value("Never", checked_category_value(), origin, 0)
 	end
-	return checked_presentation(mir_enum_construct(state, locals, variant, bindings.values, origin), checked_enum_presentation(state, origin))
+	return concurrent_value(state, checked_presentation(mir_enum_construct(state, locals, variant, bindings.values, origin), checked_enum_presentation(state, origin)), concurrent_borrowed)
 end
 
 # Check one Result and lower both outcomes with the existing enum/CFG machinery.

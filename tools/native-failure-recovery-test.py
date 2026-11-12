@@ -14,8 +14,10 @@ root = Path(__file__).resolve().parent.parent
 runtime = root / 'compiler/src/backend/qbe/runtime'
 def decoded(path):
     return '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', path.read_text()))
-# Include the same cleanup dependency as the production recovery emitter.
-il = decoded(runtime / 'resource_cleanup.trb') + '\n' + decoded(runtime / 'failure_recovery.trb')
+# Qualify the deadline-enabled recovery variant and its actual dependencies.
+# The ordinary CLI and no-timeout application controls cover the smaller variant.
+il = '\n'.join(decoded(runtime / name) for name in (
+    'resource_cleanup.trb', 'deadlines.trb', 'failure_recovery.trb'))
 system = decoded(runtime / 'system.trb')
 fatal = re.findall(r'^function \$trbn_fatal\([^\n]*\) \{.*?^\}', system, re.M | re.S)
 bounds = re.findall(r'^data \$trbn_bounds_error = [^\n]+$', system, re.M)
@@ -38,6 +40,10 @@ _Static_assert(sizeof(void *) == 8, "recovery pointer ABI");
 int64_t trbn_gc_temp_count = 7;
 extern uintptr_t trbn_recovery_scope;
 extern uintptr_t trbn_resource_scope;
+extern uintptr_t trbn_deadline_scope;
+extern int64_t trbn_runtime_deadline_l(void *, int64_t, int64_t);
+extern double trbn_runtime_deadline_d(void *, int64_t, double);
+extern void trbn_deadline_checkpoint(void);
 extern void trbn_resource_push(void *, int);
 extern int trbn_resource_close(void *);
 extern int64_t trbn_runtime_recover_l(void *, int64_t);
@@ -67,6 +73,20 @@ _Static_assert(offsetof(struct recovery_frame, environment) == 32, "jump environ
 _Static_assert(offsetof(struct recovery_frame, resources) == 1056, "recovery cleanup offset");
 _Static_assert(offsetof(struct recovery_frame, notice) == 1064, "optional notice offset");
 _Static_assert(sizeof(struct recovery_frame) == 1072, "recovery frame size");
+struct deadline_frame {
+    uintptr_t previous;
+    uintptr_t owner;
+    int64_t deadline;
+    int64_t roots;
+    uintptr_t recovery;
+    uintptr_t resources;
+    uintptr_t action;
+    uint64_t fallback;
+    unsigned char environment[1024];
+};
+_Static_assert(offsetof(struct deadline_frame, environment) == 64, "deadline jump offset");
+_Static_assert(offsetof(struct deadline_frame, resources) == 40, "deadline cleanup offset");
+_Static_assert(sizeof(struct deadline_frame) == 1088, "deadline frame size");
 static int side_effects;
 static int failed_descriptor;
 static int notices;
@@ -165,6 +185,28 @@ static int64_t bounds_failure(void *value) {
     }
     assert(0); return -1;
 }
+static int64_t cancelled(void *value) {
+    (void)value;
+    struct resource_scope scope;
+    failed_descriptor = push_pipe(&scope);
+    trbn_gc_temp_count = 500;
+    /* Expire only after admission and resource acquisition, independently of scheduling. */
+    ((struct deadline_frame *)trbn_deadline_scope)->deadline = 0;
+    trbn_deadline_checkpoint();
+    assert(0); return -1;
+}
+static int64_t recovering_inside_deadline(void *value) {
+    (void)value;
+    struct closure child = {0, cancelled, 0};
+    trbn_runtime_recover_l(&child, 41);
+    assert(0); return -1; /* An inner recovery must not consume cancellation. */
+}
+static int64_t deadline_inside_recovery(void *value) {
+    struct closure *closure = value;
+    struct closure child = {0, failed, closure->captured};
+    trbn_runtime_deadline_l(&child, 10000, 99);
+    assert(0); return -1; /* An ordinary failure is not a timeout response. */
+}
 int main(int argc, char **argv) {
     if (argc > 1) {
         if (!strcmp(argv[1], "outside")) {
@@ -206,6 +248,19 @@ int main(int argc, char **argv) {
         assert(trbn_gc_temp_count == 7 && trbn_recovery_scope == 0);
         assert(trbn_resource_scope == 0);
     }
+    struct closure cancellation = {0, recovering_inside_deadline, 0};
+    assert(trbn_runtime_deadline_l(&cancellation, 10000, 73) == 73);
+    expect_closed(failed_descriptor);
+    assert(trbn_gc_temp_count == 7 && trbn_resource_scope == 0);
+    assert(trbn_recovery_scope == 0 && trbn_deadline_scope == 0);
+    struct closure ordinary = {0, deadline_inside_recovery, 0};
+    assert(trbn_runtime_recover_l(&ordinary, 61) == 61);
+    expect_closed(failed_descriptor);
+    assert(trbn_gc_temp_count == 7 && trbn_resource_scope == 0);
+    assert(trbn_recovery_scope == 0 && trbn_deadline_scope == 0);
+    assert(trbn_runtime_deadline_d(&good, 10000, 9.5) == 2.5);
+    assert(trbn_runtime_deadline_d(&good, 0, 9.5) == 9.5);
+    assert(trbn_gc_temp_count == 7 && trbn_deadline_scope == 0);
     printf("recovery ABI: jmp_buf=%zu alignment=%zu; 10000 nested/Float/resource/notice cycles\n",
         sizeof(jmp_buf), _Alignof(jmp_buf));
 }
@@ -226,5 +281,6 @@ with tempfile.TemporaryDirectory(prefix='native-recovery-abi-') as temporary:
             print(result.stdout, end='')
         else:
             assert not result.stdout, result
+print('Deadline cancellation bypasses inner recovery; ordinary failure leaves deadline scopes')
 print('Array/String caught bounds retain their category and clean resources')
 print('Out-of-scope, collection bounds and process-fatal failures remain terminal')

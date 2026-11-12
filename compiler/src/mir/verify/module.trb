@@ -1,3 +1,5 @@
+import { mir_deadline_checkpoints_error } from mir/verify/deadlines
+import { mir_op_deadline_checkpoint } from mir/model/instructions
 import { mir_resource_calls_error } from mir/verify/resource_calls
 import { mir_resource_values_error } from mir/verify/resource_values
 import { mir_op_direct_call, mir_op_file_scope, mir_op_integer_to_float, mir_op_scalar_literal } from mir/model/instructions
@@ -247,7 +249,7 @@ def mir_adapter_error(flow: MirFlow, native_module: MirModule, function: MirFunc
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			kind := native_module.instructions[index].kind
-			if (kind < mir_op_scalar_literal() || kind > mir_op_integer_to_float()) && (function.kind != mir_function_control() || kind < mir_op_direct_call() || kind > mir_op_file_scope())
+			if kind != mir_op_deadline_checkpoint() && ((kind < mir_op_scalar_literal() || kind > mir_op_integer_to_float()) && (function.kind != mir_function_control() || kind < mir_op_direct_call() || kind > mir_op_file_scope()))
 				return "MIR scalar control operation is unsupported"
 			end
 			index += 1
@@ -647,6 +649,10 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 	error := verify_mir_structure(native_module, optimized)
 	if error != ""
 		return error
+	end
+	deadline_error := mir_deadline_checkpoints_error(native_module)
+	if deadline_error != ""
+		return deadline_error
 	end
 	resource_error := mir_resource_calls_error(native_module)
 	if resource_error != ""

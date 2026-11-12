@@ -1,3 +1,4 @@
+import { concurrent_assignment, concurrent_bind, concurrent_values } from frontend/checking/body/concurrency
 import { contained_scoped_resource, scoped_resource_name } from frontend/types/resource_types
 import { checked_category_value } from frontend/types/value_categories
 import { block_collection_escape, fresh_pending_collection_literal, inferred_collection_context, pending_collection_declaration } from frontend/checking/collections/context_analysis
@@ -207,6 +208,7 @@ def check_simple_statement(
 		assignment = true
 	end
 	if assignment
+		concurrent_assignment(state, locals, left, origin)
 		if left.readonly
 			diagnostic(state, "TRBN4004", line, "field is readonly")
 		elsif left.mutable != 0 && !left.binding
@@ -601,6 +603,7 @@ def check_statement_value_use(mut state: CompilerState, mut position: Array<Inte
 	local_bind(locals, catch_name, operation.error_type, 0)
 	local_require_use(locals, locals.count[0] - 1, catch_name, handler.binding, binding_use_catch())
 	store_integer(locals.mir_values, locals.count[0] - 1, checked_mir_value(error) + 1)
+	concurrent_bind(state, locals, locals.count[0] - 1, error)
 	position[0] = handler.body
 	boundary := checked_return_type(state, locals)
 	recovered := check_block_value(state, position, locals, boundary, locals.lexical_loop[0], true, operation.success_type, saved_count)
@@ -613,7 +616,7 @@ def check_statement_value_use(mut state: CompilerState, mut position: Array<Inte
 	end
 	nullable_finish(locals, saved_flow, flow_first, saved_count)
 	position[0] = handler.finish
-	result := mir_value_complete(state, locals, join, operation.success_type, origin)
+	result := concurrent_values(state, mir_value_complete(state, locals, join, operation.success_type, origin), [value, recovered])
 	check_expected(state, result.type_name, expected, line)
 	return mir_nullable_coerce(state, locals, result, expected, origin)
 end

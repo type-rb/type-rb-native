@@ -1,3 +1,6 @@
+import { concurrent_source_call } from frontend/checking/body/concurrency
+import { standard_runtime_deadline } from frontend/resolution/standard_intrinsics
+import { mir_adapter_runtime_deadline } from mir/model/call_kinds
 import { standard_test_capture, standard_test_equal, standard_test_fail, standard_test_finish, standard_test_inspect, standard_test_scalar_kind } from frontend/resolution/test_intrinsics
 import { test_adapter_capture, test_adapter_equal, test_adapter_fail, test_adapter_finish, test_adapter_inspect, test_adapter_scalar_kind } from mir/model/test_contract
 import { filesystem_adapter_start, filesystem_names } from mir/model/filesystem_contract
@@ -79,6 +82,11 @@ def mir_declare_signatures(mut state: CompilerState)
 			kind = mir_signature_standard()
 			adapter = mir_adapter_runtime_fail()
 			name = "trb/internal/runtime.fail"
+		end
+		if standard_runtime_deadline(state, index)
+			kind = mir_signature_standard()
+			adapter = mir_adapter_runtime_deadline()
+			name = "trb/internal/runtime.deadline"
 		end
 		if standard_runtime_recover(state, index)
 			kind = mir_signature_standard()
@@ -232,6 +240,15 @@ def mir_checked_standard_call(mut state: CompilerState, mut locals: CheckedLocal
 end
 
 def mir_checked_call(mut state: CompilerState, mut locals: CheckedLocals, callee: Integer, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
+	return mir_checked_source_call(state, locals, callee, arguments, result_type, origin, false)
+end
+
+def mir_checked_constructor_call(mut state: CompilerState, mut locals: CheckedLocals, callee: Integer, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
+	return mir_checked_source_call(state, locals, callee, arguments, result_type, origin, true)
+end
+
+def mir_checked_source_call(mut state: CompilerState, mut locals: CheckedLocals, callee: Integer, arguments: Array<Integer>, result_type: String, origin: Integer, constructor: Boolean): CheckedValue
+	concurrent_source_call(state, locals, callee, origin, constructor)
 	resource_source_call(state, locals, callee)
 	nullable_capture_call(state, locals)
 	if callee < 0 || callee >= state.scalar_mir.signatures.size()
