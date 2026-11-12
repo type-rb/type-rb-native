@@ -20,8 +20,13 @@ The current transport batch adds HTTP/2 negotiation with HTTP/1.1 fallback and
 qualifies the adopted hostname policy against this exact reference. Local
 ordinary core/CLI fixed points, snapshot-v4, five boundary tests, all 6,391
 provider corpus cases and 52 real hostname cases per reference/Native/stressed
-Native passed. HTTP/2 has seven cases in each of those execution paths. Broader
-local acceptance and hosted target qualification are still pending. The source update keeps the reference
-REPL's explicit unavailable OIDC adapter diagnostic and preserves exact issuer
-identity. No stable release, fourth compiler host or immutable dependency
-publication is claimed.
+Native passed. HTTP/2 has seven cases in each of those execution paths. The full
+Native CLI suite, 426 conformance sources, eleven recovery source tests and the
+frozen Web deadline application cases passed. The original twenty-group time
+service manifest retains its source-era reference and frozen bytes; both the
+new reference and Native match its unchanged outcomes, including forced GC.
+Final preflight and the current-pin project-test replay passed without changing
+historical commands or outcomes. Hosted target qualification is recorded in the implementing PR. The source
+update keeps the reference REPL's explicit unavailable OIDC adapter diagnostic
+and preserves exact issuer identity. No stable release, fourth compiler host or
+immutable dependency publication is claimed.

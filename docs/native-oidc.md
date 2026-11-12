@@ -171,3 +171,7 @@ Artifact smoke tests run all 6,391 fixed official Unicode 17 ToASCII cases,
 verify relocated data/TLS operation, embedded inventories and absence of dynamic
 TLS/ICU dependencies. Local checks, hosted target validation and immutable
 release qualification remain separate evidence.
+
+The [2026-11-12 transport observation](../results/2026-11-12-oidc-transport/README.md)
+records the bounded application/compiler size and build/startup costs, all timing
+samples and the separate local/hosted/release evidence boundaries.
