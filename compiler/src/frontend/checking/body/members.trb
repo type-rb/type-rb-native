@@ -1,3 +1,5 @@
+import { math_adapter } from mir/model/math_contract
+import { mir_adapter_none } from mir/model/call_kinds
 import { check_file_acquisition } from frontend/checking/body/file_acquisition
 import { scoped_resource_name } from frontend/types/resource_types
 import { nominal_application_end } from frontend/syntax/generic_syntax
@@ -126,16 +128,18 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 		# Checked dispatch owns receiver admission and diagnostics. Concrete
 		# bodies still require independently verified MIR before emission.
 		if value.category >= checked_category_system()
-			mut expected_member := "sqrt"
+			mut supported := math_adapter(member) != mir_adapter_none()
 			if value.category == checked_category_system()
-				expected_member = "argv"
+				supported = member == "argv"
 			end
-			if member != expected_member
+			if !supported
 				value = type_diagnostic(
 					state,
 					load_integer(state.source_tokens.token_lines, position[0]),
 					"unsupported standard package member",
 				)
+			elsif value.category != checked_category_system()
+				return check_call(state, position, locals, value.category, member, -1, -1, false)
 			end
 		else
 			if value.category == checked_category_record()

@@ -1,3 +1,5 @@
+import { array_backing_offset, array_payload_bytes } from backend/qbe/runtime/array_layout
+import { integer_string } from support/literals
 import { QbeOutput, qbe_output_line } from backend/qbe/output
 
 # Shared sized allocation protocol for ordinary Array copies and verified static
@@ -5,13 +7,13 @@ import { QbeOutput, qbe_output_line } from backend/qbe/output
 # GC admits the header plus backing before allocation and owns the real backing.
 # Small cached backing is used only by the ordinary-growth materializer.
 def emit_sized_array_allocation(descriptor: String, cached: Boolean, mut output: QbeOutput)
-	qbe_output_line(output, " %array =l call $trbn_gc_alloc(l " + descriptor + ", l 24, l %bytes)")
+	qbe_output_line(output, " %array =l call $trbn_gc_alloc(l " + descriptor + ", l " + integer_string(array_payload_bytes()) + ", l %bytes)")
 	if cached
 		qbe_output_line(output, " %cacheable =w ceql %capacity, 4\n jnz %cacheable, @cached_backing, @direct_backing\n@cached_backing\n %cached_data =l call $trbn_array_backing_new()\n jmp @backing\n@direct_backing\n %direct_data =l call $calloc(l %capacity, l 8)\n jmp @backing\n@backing\n %data =l phi @cached_backing %cached_data, @direct_backing %direct_data")
 	else
 		qbe_output_line(output, " %data =l call $calloc(l %capacity, l 8)")
 	end
-	qbe_output_line(output, " %failed =w ceql %data, 0\n jnz %failed, @allocation_failure, @initialize\n@allocation_failure\n call $trbn_fatal(l $trbn_allocation_error, l 26)\n hlt\n@initialize\n %heap =l loadl $trbn_gc_heap_bytes\n %heap_after =l add %heap, %bytes\n storel %heap_after, $trbn_gc_heap_bytes\n %allocated =l loadl $trbn_gc_allocated_bytes\n %allocated_after =l add %allocated, %bytes\n storel %allocated_after, $trbn_gc_allocated_bytes\n call $trbn_gc_update_peak(l %heap_after)\n %result_length =l add %array, 8\n %result_capacity =l add %array, 16\n %result_data =l add %array, 24\n storel %count, %result_length\n storel %capacity, %result_capacity\n storel %data, %result_data")
+	qbe_output_line(output, " %failed =w ceql %data, 0\n jnz %failed, @allocation_failure, @initialize\n@allocation_failure\n call $trbn_fatal(l $trbn_allocation_error, l 26)\n hlt\n@initialize\n %heap =l loadl $trbn_gc_heap_bytes\n %heap_after =l add %heap, %bytes\n storel %heap_after, $trbn_gc_heap_bytes\n %allocated =l loadl $trbn_gc_allocated_bytes\n %allocated_after =l add %allocated, %bytes\n storel %allocated_after, $trbn_gc_allocated_bytes\n call $trbn_gc_update_peak(l %heap_after)\n %result_length =l add %array, 8\n %result_capacity =l add %array, 16\n %result_data =l add %array, 24\n storel %count, %result_length\n storel %capacity, %result_capacity\n storel %data, %result_data\n %result_backing =l add %array, " + integer_string(array_backing_offset()) + "\n storel %data, %result_backing")
 end
 
 # Copy raw element slots into a fresh outer Array; descriptor identity retains

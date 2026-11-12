@@ -1,0 +1,103 @@
+import { check, emit_qbe } from compiler
+import { mir_effect_conservative, mir_effect_none } from mir/model/effects
+import { mir_signature_standard } from mir/model/call_kinds
+import { math_adapter, math_member } from mir/model/math_contract
+import { MirCall, MirSignature } from mir/model/module
+import { verify_mir } from mir/verify/module
+import { CompilerState } from state/state
+import { load_string } from support/storage
+import { intrinsic_mir_erase } from testing/mir/intrinsics
+import { logical_checked_source } from testing/pipeline
+import { control_test_output } from testing/mir/control
+import { describe, expect, test } from trb/std/test
+
+def math_test_state(): CompilerState
+	source := "import trb/std/math as Numeric\ndef main()\nputs(Numeric.sin(0))\nputs(Numeric.cos(0.0))\nputs(Numeric.pow(-2, 3))\nputs(Numeric.sqrt(9))\nend\n"
+	mut state := logical_checked_source(source)
+	checked := check(state)
+	if !checked
+		puts(load_string(state.diagnostics.messages, 0))
+	end
+	expect(checked).to_be_true()
+	return state
+end
+
+describe("Verified standard math contracts") do
+	test("rejects incorrect types, arity and labels") do
+		["Numeric.sin(true)", "Numeric.cos()", "Numeric.pow(2)", "Numeric.pow(2, 3, 4)", "Numeric.sin(value: 0)", "Numeric.pow(base: 2, exponent: 3)"].each do |call|
+			mut state := logical_checked_source("import trb/std/math as Numeric\ndef main()\n" + call + "\nend\n")
+			expect(check(state)).to_be_false()
+		end
+	end
+
+	test("binds aliases and arguments before erasing the frontend") do
+		mut state := math_test_state()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		mut members: Array<String> := []
+		state.scalar_mir.calls.each do |call|
+			signature := state.scalar_mir.signatures[call.callee]
+			if signature.kind == mir_signature_standard()
+				members.push(math_member(signature.adapter))
+				expect(call.effects).to_equal(mir_effect_none())
+			end
+		end
+		expect(members).to_equal(["sin", "cos", "pow", "sqrt"])
+		intrinsic_mir_erase(state)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		output := control_test_output(emit_qbe(state))
+		expect(output.include?("call $sin(")).to_be_true()
+		expect(output.include?("call $cos(")).to_be_true()
+		expect(output.include?("call $pow(")).to_be_true()
+		expect(output.include?("=d sqrt ")).to_be_true()
+	end
+
+	test("rejects a forged math adapter or signature") do
+		["sin", "cos", "pow"].each do |member|
+			mut mode := 0
+			while mode < 4
+				mut state := math_test_state()
+				mut index := 0
+				while index < state.scalar_mir.signatures.size()
+					old := state.scalar_mir.signatures[index]
+					if old.kind == mir_signature_standard() && old.adapter == math_adapter(member)
+						mut adapter := old.adapter
+						mut parameters := old.parameter_types
+						mut mutable := old.parameter_mutable
+						mut name := old.name
+						if mode == 0
+							adapter = math_adapter("sqrt")
+						elsif mode == 1
+							parameters = []
+							mutable = []
+						elsif mode == 2
+							mutable[0] = 1
+						else
+							name = member
+						end
+						state.scalar_mir.signatures[index] = MirSignature.new(id: old.id, kind: old.kind, name: name, adapter: adapter, source_id: old.source_id, line: old.line, parameter_types: parameters, parameter_mutable: mutable, result_type: old.result_type)
+						break
+					end
+					index += 1
+				end
+				expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
+				mode += 1
+			end
+		end
+	end
+
+	test("rejects forged math call effects") do
+		["sin", "cos", "pow"].each do |member|
+			mut state := math_test_state()
+			mut index := 0
+			while index < state.scalar_mir.calls.size()
+				call := state.scalar_mir.calls[index]
+				if state.scalar_mir.signatures[call.callee].adapter == math_adapter(member)
+					state.scalar_mir.calls[index] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: mir_effect_conservative())
+					break
+				end
+				index += 1
+			end
+			expect(verify_mir(state.scalar_mir, true)).to_equal("MIR call effects or adapter differ")
+		end
+	end
+end

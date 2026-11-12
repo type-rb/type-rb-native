@@ -93,7 +93,7 @@ static void snapshot(struct allocation *a) {
     assert(a->bytes - 16 <= sizeof a->payload);
     memcpy(a->payload, a->base + 2, a->bytes - 16);
 }
-static size_t prepare(int reverse, int references) {
+static size_t prepare(int reverse, int references, unsigned skipped) {
     size_t total = 0;
     trbn_gc_heap = NULL;
     for (unsigned i = 0; i < 8; ++i) {
@@ -112,15 +112,17 @@ static size_t prepare(int reverse, int references) {
         } else {
             size_t capacity = i == 5 ? 0 : 4;
             a->descriptor = i == 7 ? managed_array_descriptor : scalar_array_descriptor;
-            a->bytes = 40; a->backing_bytes = capacity * sizeof(uintptr_t);
+            a->bytes = 48; a->backing_bytes = capacity * sizeof(uintptr_t);
             a->base = zero_object(a->bytes);
             if (capacity) {
                 a->backing = capacity == 4 ? trbn_array_backing_new() : calloc(capacity, sizeof(uintptr_t));
                 assert(a->backing);
                 for (size_t j = 0; j < capacity; ++j) assert(a->backing[j] == 0);
             }
-            a->base[2] = capacity; a->base[3] = capacity;
-            a->base[4] = (uintptr_t)a->backing;
+            size_t head = capacity ? skipped : 0;
+            a->base[2] = capacity - head; a->base[3] = capacity - head;
+            a->base[4] = (uintptr_t)(capacity ? a->backing + head : NULL);
+            a->base[5] = (uintptr_t)a->backing;
         }
         a->base[1] = (uintptr_t)a->descriptor;
         total += a->bytes + a->backing_bytes;
@@ -130,8 +132,8 @@ static size_t prepare(int reverse, int references) {
            and each other through a cycle. Scalar elements must not be traced. */
         objects[3].base[2] = (uintptr_t)(objects[0].base + 1);
         objects[3].base[3] = (uintptr_t)(objects[7].base + 1);
-        objects[7].backing[0] = (uintptr_t)(objects[3].base + 1);
-        objects[7].backing[1] = (uintptr_t)literal;
+        objects[7].backing[skipped] = (uintptr_t)(objects[3].base + 1);
+        objects[7].backing[skipped + 1] = (uintptr_t)literal;
         objects[6].backing[0] = (uintptr_t)(objects[1].base + 1);
     }
     for (unsigned i = 0; i < 8; ++i) {
@@ -178,9 +180,10 @@ static size_t sweep(unsigned present, unsigned keep, int reverse) {
 int main(void) {
     trbn_gc_reclaimed_bytes = 8192;
     sweep(0, 0, 0);
-    for (int reverse = 0; reverse < 2; ++reverse) {
+    for (unsigned skipped = 0; skipped <= 1; ++skipped) {
+      for (int reverse = 0; reverse < 2; ++reverse) {
         for (unsigned keep = 0; keep < 256; ++keep) {
-            size_t total = prepare(reverse, 0);
+            size_t total = prepare(reverse, 0, skipped);
             trbn_gc_mark(NULL); trbn_gc_mark(literal);
             assert(literal[0] == 0);
             for (unsigned i = 0; i < 8; ++i)
@@ -194,7 +197,7 @@ int main(void) {
             assert(trbn_gc_reclaimed_bytes == 8192 + (int64_t)total);
             sweep(0, 0, reverse);
         }
-        size_t total = prepare(reverse, 1);
+        size_t total = prepare(reverse, 1, skipped);
         trbn_gc_mark(objects[3].base + 1);
         trbn_gc_mark(objects[6].base + 1);
         unsigned keep = (1u << 0) | (1u << 3) | (1u << 6) | (1u << 7);
@@ -202,6 +205,7 @@ int main(void) {
         sweep(keep, 0, reverse);
         assert(trbn_gc_heap_bytes == 0 && trbn_gc_reclaimed_bytes == 8192 + (int64_t)total);
         assert(literal[0] == 0 && storage_blocks == 0);
+      }
     }
     assert(trbn_array_backing_cache[1] == 2);
     trbn_array_backing_flush();
