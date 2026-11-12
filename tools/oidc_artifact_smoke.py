@@ -11,6 +11,7 @@ import tempfile
 
 from network_artifact_smoke import imports
 from network_artifacts import inspect, install, pack, target_name, verify
+from oidc_http2_fixture import Http2Provider
 
 PROBE = r'''
 #include <assert.h>
@@ -44,6 +45,7 @@ int main(int argc, char **argv) {
     assert(!curl_easy_setopt(h, 155, 5000L));
     assert(!curl_easy_setopt(h, 99, 1L));
     assert(!curl_easy_setopt(h, 10318, "http,https"));
+    assert(!curl_easy_setopt(h, 84, 4L));
     int result = curl_easy_perform(h);
     if (result) fprintf(stderr, "%s\n", curl_easy_strerror(result));
     long status = 0; assert(!curl_easy_getinfo(h, 2097154, &status));
@@ -79,7 +81,7 @@ def main():
         source = root / 'probe.c'
         source.write_text(PROBE)
         executable = root / 'probe'
-        libraries = [directories['oidc'] / name for name in ('libcurl.a', 'libssl.a', 'libz.a', 'oidc-identity.o')]
+        libraries = [directories['oidc'] / name for name in ('libcurl.a', 'libssl.a', 'libz.a', 'libnghttp2.a', 'oidc-identity.o')]
         libraries += [directories['crypto'] / name for name in ('libcrypto.a', 'crypto-identity.o')]
         flags = (['-framework', 'Security', '-framework', 'CoreFoundation', '-framework', 'SystemConfiguration']
                  if target.startswith('darwin-') else ['-pthread', '-ldl'])
@@ -95,12 +97,22 @@ def main():
                                     env={'PATH': '', 'OPENSSL_CONF': str(configuration),
                                          'OPENSSL_MODULES': str(root / 'absent'), 'OPENSSL_ENGINES': str(root / 'absent')})
             assert result.returncode == 0 and json.loads(result.stdout) == {'keys': [provider.jwk]}, result
+            with Http2Provider(root / 'http2', {'keys': [provider.jwk]}) as http2:
+                for protocol, path in [('h1', '/keys'), ('h2', '/required/keys')]:
+                    result = subprocess.run([str(executable), http2.endpoints[protocol] + path,
+                                             http2.endpoints['certificate']], capture_output=True, text=True,
+                                            timeout=10, env={'PATH': '', 'OPENSSL_CONF': str(configuration)})
+                    assert result.returncode == 0 and json.loads(result.stdout) == {'keys': [provider.jwk]}, result
+                records = http2.requests()
+                assert [(r['protocol'], r['alpn']) for r in records] == [('HTTP/1.1', 'http/1.1'), ('HTTP/2.0', 'h2')], records
+                transport = {'provider': http2.identity, 'requests': records}
         linked = imports(executable)
-        assert not any(part in name for name in linked for part in ('libcurl', 'libssl', 'libcrypto', 'libz.')), linked
+        assert not any(part in name for name in linked for part in ('libcurl', 'libssl', 'libcrypto', 'libz.', 'libnghttp2')), linked
         args.receipt.write_text(json.dumps({'target': target, 'executable_bytes': executable.stat().st_size,
                                            'imports': linked, 'identity': inspect(executable, 'oidc'),
                                            'crypto_identity': inspect(executable, 'crypto'),
-                                           'https_relocated': True, 'configuration_isolation': True}, indent=2) + '\n')
+                                           'https_relocated': True, 'configuration_isolation': True,
+                                           'http2': transport}, indent=2) + '\n')
     print('static OIDC HTTPS, relocation and single OpenSSL configuration passed')
 
 

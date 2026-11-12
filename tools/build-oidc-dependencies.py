@@ -62,6 +62,7 @@ ABI_CONSTANTS = {
     'OPENSSL_INIT_NO_LOAD_CONFIG': 128, 'EVP_PKEY_PUBLIC_KEY': 134,
     'RSA_PKCS1_PADDING': 1, 'CURL_GLOBAL_DEFAULT': 3, 'CURL_ERROR_SIZE': 256,
     'CURLOPT_URL': 10002, 'CURLOPT_WRITEFUNCTION': 20011, 'CURLOPT_WRITEDATA': 10001,
+    'CURLOPT_HTTP_VERSION': 84, 'CURL_HTTP_VERSION_2TLS': 4,
     'CURLOPT_HEADERFUNCTION': 20079, 'CURLOPT_HEADERDATA': 10029, 'CURLOPT_ERRORBUFFER': 10010,
     'CURLOPT_FOLLOWLOCATION': 52, 'CURLOPT_MAXREDIRS': 68, 'CURLOPT_TIMEOUT_MS': 155,
     'CURLOPT_NOSIGNAL': 99, 'CURLOPT_PROTOCOLS_STR': 10318, 'CURLOPT_REDIR_PROTOCOLS_STR': 10319,
@@ -160,6 +161,7 @@ def main():
         openssl = extract(crypto_pins['openssl'], root, args.crypto_archives)
         curl = extract(pins['curl'], root, args.archives)
         zlib = extract(pins['zlib'], root, args.archives)
+        nghttp2 = extract(pins['nghttp2'], root, args.archives)
         flags = '-O2 -fPIC -ffunction-sections -fdata-sections -ffile-prefix-map=' + str(root) + '=.'
         environment = dict(os.environ, CC=cc, CFLAGS=flags, ZERO_AR_DATE='1',
                            SOURCE_DATE_EPOCH=str(crypto_pins['openssl']['source_date_epoch']))
@@ -185,6 +187,13 @@ def main():
         run('./configure', '--static', '--prefix=' + str(zprefix), cwd=zlib)
         run('make', '-j2', cwd=zlib)
         run('make', 'install', cwd=zlib)
+        h2prefix = root / 'nghttp2-install'
+        run('cmake', '-S', nghttp2, '-B', root / 'nghttp2-build',
+            '-DENABLE_LIB_ONLY=ON', '-DBUILD_SHARED_LIBS=OFF', '-DBUILD_STATIC_LIBS=ON',
+            '-DBUILD_TESTING=OFF', '-DCMAKE_INSTALL_PREFIX=' + str(h2prefix),
+            '-DCMAKE_INSTALL_LIBDIR=lib', '-DCMAKE_C_FLAGS=' + flags, '-DCMAKE_BUILD_TYPE=Release')
+        run('cmake', '--build', root / 'nghttp2-build', '--target', 'install', '--parallel', '2')
+        h2library = h2prefix / 'lib/libnghttp2.a'
         cmake_options = ['-DBUILD_CURL_EXE=OFF', '-DBUILD_SHARED_LIBS=OFF', '-DBUILD_STATIC_LIBS=ON',
                          '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON', '-DCMAKE_NO_SYSTEM_FROM_IMPORTED=ON',
                          '-DBUILD_TESTING=OFF', '-DBUILD_LIBCURL_DOCS=OFF', '-DBUILD_MISC_DOCS=OFF',
@@ -196,7 +205,10 @@ def main():
                          '-DZLIB_LIBRARY=' + str(zprefix / 'lib/libz.a'),
                          '-DCURL_BROTLI=OFF', '-DCURL_ZSTD=OFF', '-DCURL_USE_LIBPSL=OFF',
                          '-DCURL_USE_LIBSSH2=OFF', '-DCURL_USE_GSSAPI=OFF', '-DUSE_LIBIDN2=OFF',
-                         '-DUSE_NGHTTP2=OFF', '-DUSE_NGTCP2=OFF', '-DENABLE_THREADED_RESOLVER=ON',
+                         '-DUSE_NGHTTP2=ON', '-DNGHTTP2_USE_STATIC_LIBS=ON',
+                         '-DNGHTTP2_INCLUDE_DIR=' + str(h2prefix / 'include'),
+                         '-DNGHTTP2_LIBRARY=' + str(h2library),
+                         '-DUSE_NGTCP2=OFF', '-DENABLE_THREADED_RESOLVER=ON',
                          '-DCURL_CA_BUNDLE=none', '-DCURL_CA_PATH=none', '-DCURL_CA_FALLBACK=OFF',
                          '-DCMAKE_C_FLAGS=' + flags, '-DCMAKE_BUILD_TYPE=Release',
                          *['-DCURL_DISABLE_' + name + '=ON' for name in DISABLED]]
@@ -209,9 +221,10 @@ def main():
                  for line in (root / 'curl-build/CMakeCache.txt').read_text().splitlines()
                  if not line.startswith(('#', '//')) and ':' in line and '=' in line}
         for name, expected in [('OPENSSL_INCLUDE_DIR', prefix / 'include'),
-                               ('OPENSSL_SSL_LIBRARY', ssl_library), ('OPENSSL_CRYPTO_LIBRARY', crypto_library)]:
+                               ('OPENSSL_SSL_LIBRARY', ssl_library), ('OPENSSL_CRYPTO_LIBRARY', crypto_library),
+                               ('NGHTTP2_INCLUDE_DIR', h2prefix / 'include'), ('NGHTTP2_LIBRARY', h2library)]:
             if name not in cache or Path(cache[name]).resolve() != expected.resolve():
-                raise ValueError('CMake selected an unqualified OpenSSL input: ' + name)
+                raise ValueError('CMake selected an unqualified dependency input: ' + name)
         header_count = verify_openssl_headers(root / 'curl-build', prefix, environment)
         run('cmake', '--build', root / 'curl-build', '--target', 'libcurl_static', '--parallel', '2')
         probe = root / 'abi.c'
@@ -236,6 +249,8 @@ def main():
                          'if (curl_global_init(CURL_GLOBAL_DEFAULT)) return 2;\n'
                          'const curl_version_info_data *v = curl_version_info(CURLVERSION_NOW);\n'
                          'if (!v || !v->ssl_version || strncmp(v->ssl_version,"OpenSSL/",8)) return 3;\n'
+                         'if (!(v->features & CURL_VERSION_HTTP2) || !v->nghttp2_version || '
+                         'strcmp(v->nghttp2_version,"' + pins['nghttp2']['version'] + '")) return 6;\n'
                          'if (!v->protocols[0] || strcmp(v->protocols[0],"http") || '
                          '!v->protocols[1] || strcmp(v->protocols[1],"https") || v->protocols[2]) return 4;\n'
                          'CURL *h = curl_easy_init(); if (!h) return 5;\n'
@@ -245,16 +260,18 @@ def main():
         run(cc, '-std=c11', '-D_POSIX_C_SOURCE=200809L', '-Werror', '-I', curl / 'include',
             '-I', prefix / 'include', '-I', zprefix / 'include', probe,
             root / 'curl-build/lib/libcurl.a', openssl / 'libssl.a', args.crypto / 'libcrypto.a',
-            zprefix / 'lib/libz.a', *system_flags, '-o', root / 'abi')
+            zprefix / 'lib/libz.a', h2library, *system_flags, '-o', root / 'abi')
         run(root / 'abi')
         publication = root / 'publication'
         publication.mkdir()
         for source, name in [(root / 'curl-build/lib/libcurl.a', 'libcurl.a'), (openssl / 'libssl.a', 'libssl.a'),
-                             (zprefix / 'lib/libz.a', 'libz.a'), (curl / 'COPYING', 'curl-LICENSE'),
+                             (zprefix / 'lib/libz.a', 'libz.a'), (h2library, 'libnghttp2.a'),
+                             (nghttp2 / 'COPYING', 'nghttp2-LICENSE'), (curl / 'COPYING', 'curl-LICENSE'),
                              (zlib / 'LICENSE', 'zlib-LICENSE'), (args.crypto / 'openssl-LICENSE', 'openssl-LICENSE')]:
             shutil.copy2(source, publication / name)
         receipt = {'schema': 2, 'linkage': 'static', 'target': target, 'pins': pins,
                    'configuration': {'protocols': ['http', 'https'], 'resolver': 'threaded',
+                                     'http_versions': ['1.1', '2'], 'http2': 'nghttp2',
                                      'openssl': crypto_pins, 'crypto_libraries': crypto_receipt['libraries'],
                                      'crypto_configuration': crypto_receipt['configuration'],
                                      'apple_sectrust': target.startswith('darwin-'),
@@ -268,7 +285,7 @@ def main():
                    'artifact_tool_sha256': hashlib.sha256(Path(__file__).with_name('network_artifacts.py').read_bytes()).hexdigest(),
                    'abi_constants': ABI_CONSTANTS, 'abi_probe_sha256': hashlib.sha256(probe.read_bytes()).hexdigest(),
                    'libraries': {name: hashlib.sha256((publication / (name + '.a')).read_bytes()).hexdigest()
-                                 for name in ('libcurl', 'libssl', 'libz')}}
+                                 for name in ('libcurl', 'libssl', 'libz', 'libnghttp2')}}
         embed_identity(receipt, root / 'identity.s', 'oidc')
         run(cc, '-c', root / 'identity.s', '-o', publication / 'oidc-identity.o')
         receipt['files'] = {p.name: {'bytes': p.stat().st_size, 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()}

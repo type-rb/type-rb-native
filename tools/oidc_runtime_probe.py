@@ -181,7 +181,7 @@ def build(binary, source, core, root, environment):
     subprocess.run([str(qbe), '-t', profile, '-o', str(assembly), str(il)], check=True, timeout=180)
     libraries = []
     for family, names in [('NETWORK', ['libuv.a', 'libllhttp.a', 'network-identity.o']),
-                          ('OIDC', ['libcurl.a', 'libssl.a', 'libz.a', 'oidc-identity.o']),
+                          ('OIDC', ['libcurl.a', 'libssl.a', 'libz.a', 'libnghttp2.a', 'oidc-identity.o']),
                           ('CRYPTO', ['libcrypto.a', 'crypto-identity.o'])]:
         directory = Path(environment.get('TRBN_' + family + '_LIB_DIR', str(qbe.parent / family.lower())))
         libraries.extend(str(directory / name) for name in names)

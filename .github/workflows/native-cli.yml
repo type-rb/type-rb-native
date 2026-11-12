@@ -38,6 +38,11 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
+      - name: Set up Go for the independent HTTP/2 test server
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.3'
+          cache: false
       - name: Qualify platform filesystem layouts and header-selected symbols
         run: |
           mkdir -p dist
@@ -215,6 +220,17 @@ jobs:
           python3 tools/native-oidc-test.py bin/trbn --tls --trust directory --receipt "$RUNNER_TEMP/oidc-directory.json"
           python3 tools/native-oidc-test.py bin/trbn --tls --trust untrusted --receipt "$RUNNER_TEMP/oidc-untrusted.json"
           python3 tools/native-oidc-test.py bin/trbn --tls --transport --stress --receipt "$RUNNER_TEMP/oidc-stress.json"
+      - name: Set up Go for the independent HTTP/2 test server
+        # This runs after the ordinary Native chain. Application compilation
+        # blocks go/trb, and application execution has an empty PATH.
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: Exercise OIDC HTTP/2 and HTTP/1.1 fallback
+        run: |
+          python3 tools/native-oidc-http2-test.py bin/trbn --receipt "$RUNNER_TEMP/oidc-http2.json"
+          python3 tools/native-oidc-http2-test.py bin/trbn --stress --receipt "$RUNNER_TEMP/oidc-http2-stress.json"
       - name: Exercise Web deadlines and deterministic cancellation cleanup
         # Runtime unwind controls run in Complete compiler units with the
         # reference test driver and QBE; this lane uses only the Native CLI.

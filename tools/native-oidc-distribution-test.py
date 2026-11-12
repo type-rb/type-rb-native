@@ -86,7 +86,7 @@ def main():
         receipt['crypto_identity'] = inspect(output, 'crypto')
         receipt['executable_bytes'] = output.stat().st_size
         receipt['imports'] = imports(output)
-        assert not any(part in name for name in receipt['imports'] for part in ('libcurl', 'libssl', 'libcrypto', 'libz.'))
+        assert not any(part in name for name in receipt['imports'] for part in ('libcurl', 'libssl', 'libcrypto', 'libz.', 'libnghttp2'))
         run('OIDC bearer configuration is invalid\n')
         if args.measure:
             costs = {role: {'build_seconds': [], 'startup_seconds': []} for role in ('web', 'oidc')}
