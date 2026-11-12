@@ -172,6 +172,6 @@ verify relocated data/TLS operation, embedded inventories and absence of dynamic
 TLS/ICU dependencies. Local checks, hosted target validation and immutable
 release qualification remain separate evidence.
 
-The [2026-11-12 transport observation](../results/2026-11-12-oidc-transport/README.md)
+The [2026-11-12 transport observation](../results/2026-09-07-string-escape-reference-compatibility/oidc-transport/observations/README.md)
 records the bounded application/compiler size and build/startup costs, all timing
 samples and the separate local/hosted/release evidence boundaries.
