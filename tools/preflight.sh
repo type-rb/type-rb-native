@@ -99,6 +99,7 @@ step "application time service reference contracts" python3 tools/native-time-se
 step "filesystem reference contracts" python3 tools/native-filesystem-test.py "$reference" --reference --report "$log.json"
 step "filesystem reference rejection" python3 tools/native-filesystem-check-test.py "$reference" --reference --report "$log.json"
 step "test manifest classification" python3 tools/native-test-runner-harness-test.py
+step "release scenario evidence controls" python3 tools/release-scenarios-test.py
 step "project test reference contracts" python3 tools/native-test-runner-test.py --reference "$reference" --report "$log.json"
 step "test value and origin reference contracts" python3 tools/native-test-values-test.py --reference "$reference" --report "$log.json"
 rm -f "$log.json"

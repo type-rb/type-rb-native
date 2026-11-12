@@ -159,6 +159,15 @@ jobs:
           python3 tools/project-scenarios-test.py
           GOCACHE="$(go env GOCACHE)" python3 tools/project-scenarios.py --current-reference \
             --reference "$RUNNER_TEMP/trb" --jobs 2 > "$RUNNER_TEMP/reference-projects.json"
+      - name: Observe mapped release scenarios with the exact reference candidate
+        if: (needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true') && needs.plan.outputs.registry_only != 'true'
+        run: |
+          python3 tools/release-scenarios-test.py
+          python3 tools/release-scenarios.py --contract-root .type-rb \
+            --compiler "$RUNNER_TEMP/trb" \
+            --compiler-sha256 "$(sha256sum "$RUNNER_TEMP/trb" | cut -d ' ' -f 1)" \
+            --source-revision "$(cat TYPE_RB_REVISION)" --implementation go --mode go \
+            --report "$RUNNER_TEMP/reference-release-scenarios.json"
       - name: Retain reference language observations
         if: always() && (needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true')
         uses: actions/upload-artifact@v6
@@ -167,6 +176,7 @@ jobs:
           path: |
             ${{ runner.temp }}/reference-language.json
             ${{ runner.temp }}/reference-projects.json
+            ${{ runner.temp }}/reference-release-scenarios.json
             ${{ runner.temp }}/reference-browser-client.json
             ${{ runner.temp }}/reference-oidc-*.json
             ${{ runner.temp }}/reference-test*.json
