@@ -14,7 +14,7 @@ FAMILIES = {
     'network': ('libuv.a', 'libllhttp.a', 'network-identity.o'),
     'compression': ('libdeflate.a', 'compression-identity.o'),
     'crypto': ('libcrypto.a', 'crypto-identity.o'),
-    'oidc': ('libcurl.a', 'libssl.a', 'libz.a', 'libnghttp2.a', 'oidc-identity.o'),
+    'oidc': ('libcurl.a', 'libssl.a', 'libz.a', 'libnghttp2.a', 'libicuuc.a', 'libicu-uts46.a', 'oidc-identity.o'),
 }
 
 

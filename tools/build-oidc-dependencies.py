@@ -59,6 +59,8 @@ def download_source(url):
 
 # Compile-time ABI observations, not a repository-owned C runtime.
 ABI_CONSTANTS = {
+    'UIDNA_USE_STD3_RULES': 2, 'UIDNA_CHECK_BIDI': 4, 'UIDNA_CHECK_CONTEXTJ': 8,
+    'UIDNA_NONTRANSITIONAL_TO_ASCII': 16, 'UDATA_NO_FILES': 3,
     'OPENSSL_INIT_NO_LOAD_CONFIG': 128, 'EVP_PKEY_PUBLIC_KEY': 134,
     'RSA_PKCS1_PADDING': 1, 'CURL_GLOBAL_DEFAULT': 3, 'CURL_ERROR_SIZE': 256,
     'CURLOPT_URL': 10002, 'CURLOPT_WRITEFUNCTION': 20011, 'CURLOPT_WRITEDATA': 10001,
@@ -162,12 +164,13 @@ def main():
         curl = extract(pins['curl'], root, args.archives)
         zlib = extract(pins['zlib'], root, args.archives)
         nghttp2 = extract(pins['nghttp2'], root, args.archives)
+        icu = extract(pins['icu'], root, args.archives)
         flags = '-O2 -fPIC -ffunction-sections -fdata-sections -ffile-prefix-map=' + str(root) + '=.'
-        environment = dict(os.environ, CC=cc, CFLAGS=flags, ZERO_AR_DATE='1',
+        environment = dict(os.environ, CC=cc, CXX=os.environ.get('CXX', 'c++'), CFLAGS=flags, CXXFLAGS=flags, ZERO_AR_DATE='1',
                            SOURCE_DATE_EPOCH=str(crypto_pins['openssl']['source_date_epoch']))
         for name in ('OPENSSL_CONF', 'OPENSSL_MODULES', 'OPENSSL_ENGINES',
                      'CPATH', 'C_INCLUDE_PATH', 'CPLUS_INCLUDE_PATH', 'OBJC_INCLUDE_PATH',
-                     'LIBRARY_PATH', 'CPPFLAGS', 'LDFLAGS'):
+                     'LIBRARY_PATH', 'CPPFLAGS', 'LDFLAGS', 'LIBS', 'ICU_DATA'):
             environment.pop(name, None)
 
         def run(*argv, cwd=root):
@@ -194,6 +197,28 @@ def main():
             '-DCMAKE_INSTALL_LIBDIR=lib', '-DCMAKE_C_FLAGS=' + flags, '-DCMAKE_BUILD_TYPE=Release')
         run('cmake', '--build', root / 'nghttp2-build', '--target', 'install', '--parallel', '2')
         h2library = h2prefix / 'lib/libnghttp2.a'
+        # ICU's existing C ABI owns Unicode conversion. Only the common library
+        # and one normalization data image enter applications. The i18n library
+        # is needed solely to link ICU's upstream data-packaging tools.
+        icubuild = root / 'icu-build'
+        for directory in (icubuild, icubuild / 'lib', icubuild / 'bin'):
+            directory.mkdir()
+        run(icu / 'source/runConfigureICU', 'MacOSX' if target.startswith('darwin-') else 'Linux/gcc',
+            '--enable-static', '--disable-shared', '--disable-tests', '--disable-samples',
+            '--disable-extras', '--disable-icuio', '--disable-dyload', '--disable-plugins', cwd=icubuild)
+        for component in ('stubdata', 'common', 'i18n', 'tools/toolutil', 'tools/icupkg', 'tools/genccode'):
+            run('make', '-C', icubuild / component, '-j2')
+        run(icubuild / 'bin/icupkg', '--auto_toc_prefix', '-x', 'uts46.nrm', '-d', root,
+            icu / 'source/data/in/icudt78l.dat')
+        run(icubuild / 'bin/icupkg', '-tl', '-a', 'uts46.nrm', '-s', root, 'new', root / 'icudt78l.dat')
+        run(icubuild / 'bin/genccode', '-a', 'gcc-darwin' if target.startswith('darwin-') else 'gcc',
+            '-e', 'icudt78', '-d', root, root / 'icudt78l.dat')
+        data_sources = list(root.glob('icudt78l_dat.[sS]'))
+        if len(data_sources) != 1:
+            raise ValueError('expected one upstream ICU data assembly')
+        run(cc, '-c', data_sources[0], '-o', root / 'icu-data.o')
+        run('ar', 'rcs', root / 'libicu-uts46.a', root / 'icu-data.o')
+        icu_libraries = [icubuild / 'lib/libicuuc.a', root / 'libicu-uts46.a']
         cmake_options = ['-DBUILD_CURL_EXE=OFF', '-DBUILD_SHARED_LIBS=OFF', '-DBUILD_STATIC_LIBS=ON',
                          '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON', '-DCMAKE_NO_SYSTEM_FROM_IMPORTED=ON',
                          '-DBUILD_TESTING=OFF', '-DBUILD_LIBCURL_DOCS=OFF', '-DBUILD_MISC_DOCS=OFF',
@@ -231,8 +256,11 @@ def main():
         probe.write_text('#include <stddef.h>\n#include <string.h>\n#include <dirent.h>\n#include <curl/curl.h>\n'
                          '#include <time.h>\n#include <netinet/in.h>\n#include <zlib.h>\n'
                          '#include <openssl/ssl.h>\n#include <openssl/rsa.h>\n'
+                         '#include <unicode/uidna.h>\n#include <unicode/udata.h>\n#include <unicode/uchar.h>\n'
                          '_Static_assert(sizeof(void*) == 8 && sizeof(size_t) == 8 && sizeof(long) == 8, "LP64");\n'
                          '_Static_assert(sizeof(int) == 4, "C int");\n' +
+                         '_Static_assert(CURLH_HEADER == 1 && offsetof(struct curl_header,value) == 8, "raw Location header");\n' +
+                         '_Static_assert(sizeof(UIDNAInfo) == 16 && offsetof(UIDNAInfo,errors) == 4, "UIDNAInfo");\n' +
                          '_Static_assert(offsetof(struct dirent,d_name) == ' + ('21' if target.startswith('darwin-') else '19') + ', "dirent name");\n' +
                          '_Static_assert(AF_INET6 == ' + ('30' if target.startswith('darwin-') else '10') + ', "IPv6 family");\n' +
                          '_Static_assert(CLOCK_MONOTONIC == ' + ('6' if target.startswith('darwin-') else '1') + ', "monotonic clock");\n' +
@@ -245,6 +273,14 @@ def main():
                          ''.join('_Static_assert(' + name + ' == ' + str(value) + ', "' + name + '");\n'
                                  for name, value in ABI_CONSTANTS.items()) +
                          'int main(void) {\n'
+                         'UErrorCode error = U_ZERO_ERROR; UVersionInfo unicode; u_getUnicodeVersion(unicode);\n'
+                         'if (unicode[0] != 17 || unicode[1] || unicode[2] || unicode[3]) return 7;\n'
+                         'udata_setFileAccess(UDATA_NO_FILES, &error);\n'
+                         'UIDNA *idna = uidna_openUTS46(30, &error); if (!idna || U_FAILURE(error)) return 8;\n'
+                         'UIDNAInfo info = UIDNA_INFO_INITIALIZER; char ascii[256];\n'
+                         'int32_t length = uidna_nameToASCII_UTF8(idna,"BÜCHER.example.invalid",-1,ascii,256,&info,&error);\n'
+                         'uidna_close(idna); if (U_FAILURE(error) || info.errors || length != 29 || '
+                         'strcmp(ascii,"xn--bcher-kva.example.invalid")) return 9;\n'
                          'if (!OPENSSL_init_ssl(OPENSSL_INIT_NO_LOAD_CONFIG, NULL)) return 1;\n'
                          'if (curl_global_init(CURL_GLOBAL_DEFAULT)) return 2;\n'
                          'const curl_version_info_data *v = curl_version_info(CURLVERSION_NOW);\n'
@@ -255,23 +291,29 @@ def main():
                          '!v->protocols[1] || strcmp(v->protocols[1],"https") || v->protocols[2]) return 4;\n'
                          'CURL *h = curl_easy_init(); if (!h) return 5;\n'
                          'curl_easy_cleanup(h); curl_global_cleanup(); return 0; }\n')
-        system_flags = (['-framework', 'Security', '-framework', 'CoreFoundation', '-framework', 'SystemConfiguration']
-                        if target.startswith('darwin-') else ['-pthread', '-ldl'])
+        system_flags = (['-lc++', '-framework', 'Security', '-framework', 'CoreFoundation', '-framework', 'SystemConfiguration']
+                        if target.startswith('darwin-') else ['-lstdc++', '-pthread', '-ldl'])
         run(cc, '-std=c11', '-D_POSIX_C_SOURCE=200809L', '-Werror', '-I', curl / 'include',
-            '-I', prefix / 'include', '-I', zprefix / 'include', probe,
+            '-I', prefix / 'include', '-I', zprefix / 'include', '-I', icu / 'source/common', probe,
             root / 'curl-build/lib/libcurl.a', openssl / 'libssl.a', args.crypto / 'libcrypto.a',
-            zprefix / 'lib/libz.a', h2library, *system_flags, '-o', root / 'abi')
+            zprefix / 'lib/libz.a', h2library, *icu_libraries, *system_flags, '-o', root / 'abi')
         run(root / 'abi')
         publication = root / 'publication'
         publication.mkdir()
         for source, name in [(root / 'curl-build/lib/libcurl.a', 'libcurl.a'), (openssl / 'libssl.a', 'libssl.a'),
                              (zprefix / 'lib/libz.a', 'libz.a'), (h2library, 'libnghttp2.a'),
+                             (icu_libraries[0], 'libicuuc.a'), (icu_libraries[1], 'libicu-uts46.a'),
+                             (icu / 'LICENSE', 'icu-LICENSE'),
                              (nghttp2 / 'COPYING', 'nghttp2-LICENSE'), (curl / 'COPYING', 'curl-LICENSE'),
                              (zlib / 'LICENSE', 'zlib-LICENSE'), (args.crypto / 'openssl-LICENSE', 'openssl-LICENSE')]:
             shutil.copy2(source, publication / name)
         receipt = {'schema': 2, 'linkage': 'static', 'target': target, 'pins': pins,
                    'configuration': {'protocols': ['http', 'https'], 'resolver': 'threaded',
                                      'http_versions': ['1.1', '2'], 'http2': 'nghttp2',
+                                     'idna': {'provider': 'ICU', 'unicode': '17.0.0', 'options': 30,
+                                              'data': ['uts46.nrm'], 'data_bytes': (root / 'icudt78l.dat').stat().st_size,
+                                              'file_access': 'UDATA_NO_FILES', 'dynamic_plugins': False,
+                                              'cxx_runtime': 'libc++' if target.startswith('darwin-') else 'libstdc++'},
                                      'openssl': crypto_pins, 'crypto_libraries': crypto_receipt['libraries'],
                                      'crypto_configuration': crypto_receipt['configuration'],
                                      'apple_sectrust': target.startswith('darwin-'),
@@ -285,7 +327,7 @@ def main():
                    'artifact_tool_sha256': hashlib.sha256(Path(__file__).with_name('network_artifacts.py').read_bytes()).hexdigest(),
                    'abi_constants': ABI_CONSTANTS, 'abi_probe_sha256': hashlib.sha256(probe.read_bytes()).hexdigest(),
                    'libraries': {name: hashlib.sha256((publication / (name + '.a')).read_bytes()).hexdigest()
-                                 for name in ('libcurl', 'libssl', 'libz', 'libnghttp2')}}
+                                 for name in ('libcurl', 'libssl', 'libz', 'libnghttp2', 'libicuuc', 'libicu-uts46')}}
         embed_identity(receipt, root / 'identity.s', 'oidc')
         run(cc, '-c', root / 'identity.s', '-o', publication / 'oidc-identity.o')
         receipt['files'] = {p.name: {'bytes': p.stat().st_size, 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()}

@@ -9,7 +9,8 @@ diagnostic before validation or network access. It does not invoke a Go process.
 The TypeRB provider owns configuration, header/token parsing, typed JSON
 compatibility, key selection, claims, cache transitions and Web context values.
 Verified MIR selects narrow host adapters for synchronous HTTP retrieval, RS256
-verification, URI/IP parsing, environment access and clock/integer conversion.
+verification, strict UTS46 conversion, URI/IP parsing, environment access and
+clock/integer conversion.
 Authored paths or lookalike declarations cannot authorize those adapters.
 
 ## Authentication behavior
@@ -61,10 +62,26 @@ OpenSSL's compiled default paths are not used. Comparisons record the Go
 toolchain, generated module version and environment; the current baseline is
 Go 1.27 with its default platform-override behavior.
 
-The client profile currently uses HTTP/1 and the threaded DNS resolver. Optional
-HTTP/2 and IDN libraries are not linked. This is not a general HTTP client or a
-server TLS API. Complete transport edge compatibility, shared database TLS and
-release qualification remain explicit work in the owning tasks.
+HTTPS negotiates HTTP/2 through ALPN with HTTP/1.1 fallback; cleartext stays
+HTTP/1.1. libcurl uses the pinned nghttp2 implementation and threaded DNS resolver.
+This profile does not expose a general HTTP client or server TLS API. Shared
+database TLS and immutable release qualification remain separate work.
+
+Before URL parsing, TypeRB normalizes endpoint and redirect authorities using
+Unicode 17 non-transitional UTS46, with STD3, bidi, joiner, hyphen and DNS-length
+checks. ICU supplies that conversion through a narrow C ABI; TypeRB retains
+root-dot handling, strict numeric IPv4, IPv6 serialization and URL policy.
+Hostnames used in HTTP authority, CONNECT, SNI and certificate verification agree.
+Unicode NO_PROXY domains undergo the same conversion. Path/query escapes remain
+unchanged; percent-encoded UTF-8 hosts are accepted but encoded ASCII hosts,
+ambiguous numeric hosts and scoped IPv6 addresses are rejected. The configured
+issuer, discovery issuer and JWT issuer still require exact string equality.
+
+Only ICU common code and the 60,960-byte `uts46.nrm` data package are linked.
+`UDATA_NO_FILES` disables data-file lookup, including `ICU_DATA`; no ICU shared
+library or external data bundle is needed. ICU uses the platform C++ runtime.
+The ordinary compiler, lockfile hashing and non-OIDC applications do not select
+these libraries.
 
 ## Dependencies and installation
 
@@ -72,10 +89,10 @@ release qualification remain explicit work in the owning tasks.
 | --- | --- |
 | Core compiler and lockfile checksum | No OIDC/crypto libraries |
 | Full CLI and retained REPL | Existing static libcrypto; no OIDC client |
-| Compiled Bearer application | libcurl, libssl, libcrypto and zlib; existing Web transport dependencies also apply |
+| Compiled Bearer application | libcurl, libssl, libcrypto, zlib, nghttp2, ICU common/UTS46 data and platform C++ runtime; existing Web transport dependencies also apply |
 | Web response compression | Existing libdeflate, independently of OIDC gzip decoding |
 
-[oidc-dependencies.json](../tools/oidc-dependencies.json) pins curl and zlib by
+[oidc-dependencies.json](../tools/oidc-dependencies.json) pins curl, zlib, nghttp2 and ICU by
 release archive SHA-256 and upstream revision. OpenSSL comes from the existing
 [crypto pins](../tools/crypto-dependencies.json), with the same configuration and
 accepted `libcrypto.a` used by all TLS/crypto consumers. zlib supplies bounded
@@ -96,7 +113,10 @@ partial download never replaces the cache, and an invalid existing cache is
 preserved and rejected. These retries do not change the dependency pins or
 artifact qualification checks.
 
-Contributor builds require a C toolchain, Perl, make and CMake:
+Contributor builds require C/C++ toolchains, Perl, make and CMake. ICU build
+tools use additional source components temporarily; the installed application
+archives contain only common code and the selected UTS46 data:
+
 
 ```sh
 python3 tools/build-crypto-dependencies.py --archives /path/to/shared-crypto-sources --output bin/crypto
@@ -112,9 +132,10 @@ runtime. Applications statically contain both `TRBN-OIDC-V1` and
 and configuration against which libssl/libcurl were built. Inspect and package
 them with `tools/oidc_artifacts.py` and `tools/crypto_artifacts.py`.
 
-Each OIDC artifact retains curl, zlib and OpenSSL notices. The crypto bundle
+Each OIDC artifact retains curl, zlib, nghttp2, ICU and OpenSSL notices. The crypto bundle
 also retains its OpenSSL notice. Darwin links Security, CoreFoundation and
-SystemConfiguration frameworks. Linux links the platform thread/dynamic-loader support. The artifact
+SystemConfiguration frameworks and platform libc++. Linux links platform
+libstdc++ and thread/dynamic-loader support. The artifact
 CI matrix covers Darwin/Linux arm64/amd64; it is separate from ordinary compiler
 host support and does not fill the darwin-amd64 compiler gap. Immutable release
 publication and advisory/update ownership remain in [#1257](https://github.com/type-rb/type-rb-native/issues/1257).
@@ -138,7 +159,15 @@ instrumentation, not repository-owned C runtime implementation.
 
 Declaration/MIR tests reject changed ownership, parameters, mutation, bodies,
 results and effects, including after source erasure. Pinned-header ABI assertions
-cover libcurl/OpenSSL/zlib constants, native structs and platform interfaces.
-Artifact smoke tests verify relocation, embedded inventories, HTTPS and absence
-of dynamic TLS dependencies. Local checks, hosted target validation and immutable
+cover libcurl/OpenSSL/zlib/nghttp2/ICU constants, native structs and platform interfaces.
+`tools/native-oidc-http2-test.py` uses an independent local Go HTTP/2 server
+(test-only) to require negotiated HTTP/2, fallback, gzip, redirect, size, stream
+reset and deadline behavior. `tools/native-oidc-hostname-test.py` verifies actual
+HTTP authorities, redirects, proxy bypass, CONNECT/SNI/certificate checks and
+unchanged issuer identities against the pinned reference. Both offer forced-GC
+ownership probes; Native application compilation blocks Go/reference fallback.
+
+Artifact smoke tests run all 6,391 fixed official Unicode 17 ToASCII cases,
+verify relocated data/TLS operation, embedded inventories and absence of dynamic
+TLS/ICU dependencies. Local checks, hosted target validation and immutable
 release qualification remain separate evidence.
