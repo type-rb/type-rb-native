@@ -19,8 +19,9 @@ MAX_BYTES = 128 * 1024 * 1024
 def artifact_spec(family):
     if family == "oidc":
         return (Path(__file__).with_name("oidc-dependencies.json"),
-                {"libcurl.a", "libssl.a", "libz.a", "oidc-identity.o", "curl-LICENSE", "zlib-LICENSE", "openssl-LICENSE"},
-                b"TRBN-OIDC-V1\0", ("libcurl", "libssl", "libz"))
+                {"libcurl.a", "libssl.a", "libz.a", "libnghttp2.a", "libicuuc.a", "libicu-uts46.a",
+                 "oidc-identity.o", "curl-LICENSE", "zlib-LICENSE", "openssl-LICENSE", "nghttp2-LICENSE", "icu-LICENSE"},
+                b"TRBN-OIDC-V1\0", ("libcurl", "libssl", "libz", "libnghttp2", "libicuuc", "libicu-uts46"))
     if family == "crypto":
         return (Path(__file__).with_name("crypto-dependencies.json"),
                 {"libcrypto.a", "crypto-identity.o", "openssl-LICENSE"},

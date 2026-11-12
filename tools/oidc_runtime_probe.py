@@ -42,6 +42,7 @@ __attribute__((destructor)) static void report(void) {
 # These declarations describe the pinned C ABI for instrumentation only.
 # Production adapters and ownership policy remain in TypeRB.
 ALLOCATORS = {
+    'uidna_openUTS46_78': ('uint32_t options, void *status', 'options,status'),
     'malloc': ('size_t n', 'n'),
     'strdup': ('const char *s', 's'),
     'BN_bin2bn': ('const unsigned char *p, int n, void *out', 'p,n,out'),
@@ -56,6 +57,7 @@ ALLOCATORS = {
     'opendir': ('const char *name', 'name'),
 }
 RELEASES = {
+    'uidna_close_78': ('void', ''),
     'free': ('void', ''), 'BN_free': ('void', ''),
     'OSSL_PARAM_BLD_free': ('void', ''), 'OSSL_PARAM_free': ('void', ''),
     'EVP_PKEY_CTX_free': ('void', ''), 'EVP_MD_CTX_free': ('void', ''),
@@ -181,12 +183,12 @@ def build(binary, source, core, root, environment):
     subprocess.run([str(qbe), '-t', profile, '-o', str(assembly), str(il)], check=True, timeout=180)
     libraries = []
     for family, names in [('NETWORK', ['libuv.a', 'libllhttp.a', 'network-identity.o']),
-                          ('OIDC', ['libcurl.a', 'libssl.a', 'libz.a', 'oidc-identity.o']),
+                          ('OIDC', ['libcurl.a', 'libssl.a', 'libz.a', 'libnghttp2.a', 'libicuuc.a', 'libicu-uts46.a', 'oidc-identity.o']),
                           ('CRYPTO', ['libcrypto.a', 'crypto-identity.o'])]:
         directory = Path(environment.get('TRBN_' + family + '_LIB_DIR', str(qbe.parent / family.lower())))
         libraries.extend(str(directory / name) for name in names)
-    flags = (['-framework', 'Security', '-framework', 'CoreFoundation', '-framework', 'SystemConfiguration']
-             if target.startswith('darwin-') else ['-fuse-ld=lld', '-pthread', '-ldl', '-lrt'])
+    flags = (['-lc++', '-framework', 'Security', '-framework', 'CoreFoundation', '-framework', 'SystemConfiguration']
+             if target.startswith('darwin-') else ['-fuse-ld=lld', '-lstdc++', '-pthread', '-ldl', '-lrt'])
     executable = root / 'stressed'
     subprocess.run(['/usr/bin/cc', '-std=c11', '-D_POSIX_C_SOURCE=200809L', '-Werror', str(assembly),
                     str(probe), *libraries, *flags, '-lm', '-o', str(executable)], check=True, timeout=180)
