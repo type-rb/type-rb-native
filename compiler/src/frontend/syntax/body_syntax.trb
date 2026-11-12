@@ -1,5 +1,5 @@
 import { control_syntax_case, control_syntax_guarded_transfer, control_syntax_if, control_syntax_ternary, loop_transfer_none } from state/control_kinds
-import { transform_reduce, transform_select } from frontend/types/transform_kinds
+import { transform_concurrent_map, transform_reduce, transform_select } from frontend/types/transform_kinds
 import { binary_add_assign } from frontend/types/operators
 import { token_kind_attribute, token_kind_end_of_input, token_kind_end_of_module, token_kind_identifier, token_kind_newline, token_kind_number, token_kind_string } from state/token_kinds
 import { TransformSyntax, transform_kind } from frontend/types/transform_model
@@ -709,6 +709,30 @@ def parse_transform_syntax(mut state: CompilerState, mut position: Array<Integer
 		end
 		initial_finish = position[0]
 		skip_newlines(state, position)
+		if !expect(state, position, ")")
+			return false
+		end
+	elsif kind == transform_concurrent_map() && token_is(state, position[0], "(")
+		advance(position)
+		skip_newlines(state, position)
+		if !token_is(state, position[0], ")")
+			if !token_is(state, position[0], "limit") || !token_is(state, position[0] + 1, ":")
+				diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, position[0]), "concurrent_map accepts only the named argument limit")
+				return false
+			end
+			position[0] += 2
+			skip_newlines(state, position)
+			initial_start = position[0]
+			if !parse_expression_syntax(state, position, 1)
+				return false
+			end
+			initial_finish = position[0]
+			skip_newlines(state, position)
+			if token_is(state, position[0], ",")
+				advance(position)
+				skip_newlines(state, position)
+			end
+		end
 		if !expect(state, position, ")")
 			return false
 		end

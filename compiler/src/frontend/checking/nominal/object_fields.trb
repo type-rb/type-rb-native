@@ -1,3 +1,4 @@
+import { concurrent_active, concurrent_capture, concurrent_mutation, concurrent_value } from frontend/checking/body/concurrency
 import { checked_category_value } from frontend/types/value_categories
 import { mir_state_function_slot } from state/local_slots
 import { binary_add_assign } from frontend/types/operators
@@ -32,6 +33,17 @@ def checked_object_field(mut state: CompilerState, mut locals: CheckedLocals, re
 	end
 	assignment := token_is(state, next_token, "=")
 	compound := binary_operator_id(load_string(state.source_tokens.token_texts, next_token)) >= binary_add_assign()
+	if concurrent_active(locals)
+		if assignment || compound
+			if internal && (locals.concurrent_function[0] != 1 || locals.concurrent_scope[0] >= 0)
+				diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "concurrent_map cannot assign to outer binding " + row.name)
+			elsif !internal
+				concurrent_mutation(state, locals, receiver, origin)
+			end
+		elsif internal
+			concurrent_capture(state, locals, row.name, row.type_name, origin)
+		end
+	end
 	mir_control_prepare(state, locals)
 	operand := checked_mir_value(receiver)
 	mut category := checked_category_value()
@@ -43,7 +55,7 @@ def checked_object_field(mut state: CompilerState, mut locals: CheckedLocals, re
 			category = mir_checked_object_field(state, locals, receiver, field, origin).category
 		end
 	end
-	return CheckedValue.new(presentation: "", type_name: row.type_name, category: category, origin: origin, mutable: mutable, binding: binding, readonly: readonly, immutable_reference: false, nullable_binding: -1, nullable_field: -1, truth: -1, falsity: -1, flow_type: row.type_name)
+	return CheckedValue.new(concurrent_borrowed: receiver.concurrent_borrowed, presentation: "", type_name: row.type_name, category: category, origin: origin, mutable: mutable, binding: binding, readonly: readonly, immutable_reference: false, nullable_binding: -1, nullable_field: -1, truth: -1, falsity: -1, flow_type: row.type_name)
 end
 
 # Common union members use the same typed field read after their payload has
@@ -59,7 +71,7 @@ def mir_checked_object_field(mut state: CompilerState, mut locals: CheckedLocals
 		scalar_mir_instruction(state, locals, mir_op_object_field(), result, operand, -1, field, -1, load_integer(state.source_tokens.token_lines, origin))
 		category = -result - 1
 	end
-	return checked_bound_value(row.type_name, category, origin, receiver.mutable, receiver.binding)
+	return concurrent_value(state, checked_bound_value(row.type_name, category, origin, receiver.mutable, receiver.binding), receiver.concurrent_borrowed)
 end
 
 def checked_instance_field(mut state: CompilerState, mut locals: CheckedLocals, origin: Integer, next_token: Integer): CheckedValue

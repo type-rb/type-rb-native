@@ -117,9 +117,14 @@ or a claim of concurrent TypeRB handler execution.
 
 SIGINT and SIGTERM stop accepting connections, close idle connections, and allow
 pending responses to drain until `shutdown_timeout_milliseconds`. Close callbacks
-run before the loop is released. Signals and deadlines are serviced by the event
-loop: interrupting an indefinitely running synchronous TypeRB handler requires
+run before the loop is released. Shutdown signals and drain deadlines are
+serviced by the event loop: interrupting an indefinitely running synchronous TypeRB handler requires
 execution cancellation and is not established by transport shutdown tests.
+
+
+Per-request [Web deadlines](native-deadlines.md) use managed checkpoints,
+independently of the transport shutdown drain deadline. Their application
+acceptance includes repeated requests after expiration and ordinary failure.
 
 ## HTTP behavior
 

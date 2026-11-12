@@ -23,6 +23,14 @@ import { check_block_value } from frontend/checking/body/statements
 # mutable/field proofs, Result obligations, loops or reusable slot identities.
 def captured_body_locals(mut state: CompilerState, parent: CheckedLocals): CheckedLocals
 	mut locals := locals_new(state.source_tokens.token_count[0] + 1)
+	if parent.concurrent_function[0] > 0
+		locals.concurrent_function[0] = 2
+	end
+	mut concurrent_boundary := -1
+	mut concurrent_inherited := 0
+	if parent.concurrent_scope[0] >= 0
+		concurrent_boundary = parent.concurrent_scope[0]
+	end
 	mut slot := 0
 	while slot < parent.count[0]
 		name := load_string(parent.names, slot)
@@ -30,6 +38,12 @@ def captured_body_locals(mut state: CompilerState, parent: CheckedLocals): Check
 			declared := load_string(parent.types, slot)
 			mutable := load_integer(parent.mutable, slot)
 			inherited := local_bind(locals, name, declared, mutable)
+			if slot < concurrent_boundary
+				concurrent_inherited += 1
+			end
+			if sparse_integer_at(parent.concurrent_borrowed, local_identity(parent, slot)) > 0
+				store_integer(locals.concurrent_borrowed, local_identity(locals, inherited), 1)
+			end
 			store_string(locals.presentations, inherited, load_string(parent.presentations, slot))
 			if state.callables.collection_inference_only[0]
 				store_integer(locals.array_literal_origins, inherited, load_integer(parent.array_literal_origins, slot))
@@ -53,6 +67,9 @@ def captured_body_locals(mut state: CompilerState, parent: CheckedLocals): Check
 			end
 		end
 		slot += 1
+	end
+	if concurrent_boundary >= 0
+		locals.concurrent_scope[0] = concurrent_inherited
 	end
 	if state.callables.collection_inference_only[0]
 		mut region := 0

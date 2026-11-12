@@ -1,3 +1,4 @@
+import { concurrent_mutation, concurrent_value, concurrent_values } from frontend/checking/body/concurrency
 import { union_type } from frontend/types/union_types
 import { checked_category_value } from frontend/types/value_categories
 import { collection_inference_region, pending_collection_declaration, record_collection_capture, record_collection_witness } from frontend/checking/collections/context_analysis
@@ -100,7 +101,7 @@ def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>,
 	if context == "" && element_presentation != ""
 		presentation = "Hash<" + type_display(state, key_type) + ", " + element_presentation + ">"
 	end
-	return checked_presentation(mir_checked_hash_literal(state, locals, type_name, value_type, origin, keys, values), presentation)
+	return concurrent_values(state, checked_presentation(mir_checked_hash_literal(state, locals, type_name, value_type, origin, keys, values), presentation), values)
 end
 
 def checked_hash_index(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue): CheckedValue
@@ -136,11 +137,14 @@ def checked_hash_index(mut state: CompilerState, mut position: Array<Integer>, m
 		end
 		type_name = hash_type(key.type_name, "")
 	end
+	if kind == hash_action_index_write()
+		concurrent_mutation(state, locals, receiver, origin)
+	end
 	if kind == hash_action_index_write() && !checked_hash_binding_target(state, receiver.origin)
 		return type_diagnostic(state, line, "assignment requires a mutable binding")
 	end
 	checked_hash_publish(state, mir_hash_operation(kind, origin, finish, receiver.origin, type_name, receiver.mutable != 0, 0))
-	return mir_checked_hash_index(state, locals, receiver, key, hash_value_type(type_name), origin, kind == hash_action_index_write())
+	return concurrent_value(state, mir_checked_hash_index(state, locals, receiver, key, hash_value_type(type_name), origin, kind == hash_action_index_write()), receiver.concurrent_borrowed)
 end
 
 def checked_hash_call(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, method: String): CheckedValue
@@ -158,16 +162,21 @@ def checked_hash_call(mut state: CompilerState, mut position: Array<Integer>, mu
 		return type_diagnostic(state, line, "Hash method requires a concrete Hash<K, V> type")
 	end
 	if kind == hash_action_delete() || kind == hash_action_update()
+		concurrent_mutation(state, locals, receiver, origin)
 		if receiver.mutable == 0 || !receiver.binding || !checked_hash_binding_target(state, receiver.origin)
 			return type_diagnostic(state, line, "Hash mutation requires a mutable binding")
 		end
 	end
 	advance(position)
 	mut result_type := receiver.type_name
+	mut concurrent_borrowed := receiver.concurrent_borrowed
 	mut argument := -1
 	mut diverged := false
 	if kind == hash_action_has_key() || kind == hash_action_delete() || kind == hash_action_fetch()
 		value := check_expression(state, position, locals, 1, hash_key_type(receiver.type_name))
+		if value.concurrent_borrowed
+			concurrent_borrowed = true
+		end
 		argument = checked_mir_value(value)
 		diverged = value.type_name == "Never"
 		result_type = hash_value_type(receiver.type_name)
@@ -178,6 +187,9 @@ def checked_hash_call(mut state: CompilerState, mut position: Array<Integer>, mu
 			expected = ""
 		end
 		value := check_expression(state, position, locals, 1, expected)
+		if value.concurrent_borrowed
+			concurrent_borrowed = true
+		end
 		argument = checked_mir_value(value)
 		diverged = value.type_name == "Never"
 		if inference_update && hash_key_type(value.type_name) != ""
@@ -209,7 +221,7 @@ def checked_hash_call(mut state: CompilerState, mut position: Array<Integer>, mu
 		return checked_value("Never", checked_category_value(), 9007199254740991, 0)
 	end
 	value := mir_checked_hash_method(state, locals, receiver, argument, kind, result_type, origin)
-	return checked_value(result_type, value.category, 9007199254740991, 0)
+	return concurrent_value(state, checked_value(result_type, value.category, 9007199254740991, 0), concurrent_borrowed)
 end
 
 def check_array_literal(
@@ -287,7 +299,7 @@ def check_array_literal(
 	if context == "" && element_presentation != ""
 		presentation = "Array<" + element_presentation + ">"
 	end
-	return checked_presentation(mir_checked_array_literal(state, locals, result_type, element_type, origin, values), presentation)
+	return concurrent_values(state, checked_presentation(mir_checked_array_literal(state, locals, result_type, element_type, origin, values), presentation), values)
 end
 
 def checked_collection_presentation(state: CompilerState, values: Array<CheckedValue>): String
