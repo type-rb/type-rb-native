@@ -51,6 +51,10 @@ implementations retain the pinned reference boundary; this audit does not prove
 that arbitrary imported code is safe for parallel execution. Fresh constructor field
 initialization and independently created task-owned storage remain usable.
 Interface and function-value calls require a future explicit safety contract.
+Scoped File borrows cannot reach `concurrent_map`, directly or through helpers,
+parameter defaults or constructors. Serial admission preserves this language
+suspension boundary, including empty input; ordinary synchronous `map` remains
+available while a File is borrowed.
 This implementation follows [the structured mapping decision](https://github.com/type-rb/type-rb/blob/c49b67ec0f9e5941c52b787885f11a33c19f795f/docs/decisions/0004-bounded-structured-concurrent-map.md)
 and [the Native runtime decision](decisions/0086-production-web-application-path.md).
 
