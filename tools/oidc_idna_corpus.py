@@ -48,7 +48,7 @@ def qualify(libraries, root):
     source = Path(__file__).with_name('fixtures') / 'oidc_idna.c'
     executable = root / 'probe'
     target = target_name()
-    system = ['-lc++'] if target.startswith('darwin-') else ['-lstdc++', '-pthread', '-ldl']
+    system = ['-lc++'] if target.startswith('darwin-') else ['-lstdc++', '-pthread', '-ldl', '-lm']
     subprocess.run(['/usr/bin/cc', '-std=c11', '-D_POSIX_C_SOURCE=200809L', '-Werror', str(source),
                     str(libraries / 'libicuuc.a'), str(libraries / 'libicu-uts46.a'), *system,
                     '-o', str(executable)], check=True, timeout=60)

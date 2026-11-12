@@ -100,7 +100,7 @@ def main():
         libraries = [directories['oidc'] / name for name in ('libcurl.a', 'libssl.a', 'libz.a', 'libnghttp2.a', 'libicuuc.a', 'libicu-uts46.a', 'oidc-identity.o')]
         libraries += [directories['crypto'] / name for name in ('libcrypto.a', 'crypto-identity.o')]
         flags = (['-lc++', '-framework', 'Security', '-framework', 'CoreFoundation', '-framework', 'SystemConfiguration']
-                 if target.startswith('darwin-') else ['-lstdc++', '-pthread', '-ldl'])
+                 if target.startswith('darwin-') else ['-lstdc++', '-pthread', '-ldl', '-lm'])
         subprocess.run(['/usr/bin/cc', '-std=c11', '-Werror', str(source), *map(str, libraries),
                         *flags, '-o', str(executable)], check=True, timeout=180)
         for directory in directories.values():

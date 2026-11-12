@@ -292,7 +292,7 @@ def main():
                          'CURL *h = curl_easy_init(); if (!h) return 5;\n'
                          'curl_easy_cleanup(h); curl_global_cleanup(); return 0; }\n')
         system_flags = (['-lc++', '-framework', 'Security', '-framework', 'CoreFoundation', '-framework', 'SystemConfiguration']
-                        if target.startswith('darwin-') else ['-lstdc++', '-pthread', '-ldl'])
+                        if target.startswith('darwin-') else ['-lstdc++', '-pthread', '-ldl', '-lm'])
         run(cc, '-std=c11', '-D_POSIX_C_SOURCE=200809L', '-Werror', '-I', curl / 'include',
             '-I', prefix / 'include', '-I', zprefix / 'include', '-I', icu / 'source/common', probe,
             root / 'curl-build/lib/libcurl.a', openssl / 'libssl.a', args.crypto / 'libcrypto.a',

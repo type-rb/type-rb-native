@@ -34,8 +34,8 @@ statistical performance claim is made.
 | Median build seconds, 3 samples | 2.220450 | 4.072928 | +1.852478 |
 | Median startup seconds, 3 samples | 0.059110 | 0.118650 | +0.059540 |
 
-The full CLI is 7,125,816 bytes (+16 versus the retained qualified baseline);
-the core compiler is 3,160,264 bytes (+16,528). These are same-host artifact size
+In this source-bound cohort, the full CLI was 7,125,816 bytes (+16 versus the retained qualified baseline);
+the core compiler was 3,160,264 bytes (+16,528). These are same-host artifact size
 observations, not timing comparisons against the preceding compiler. The core
 and CLI do not acquire OIDC/ICU linkage. OIDC applications import system libc++,
 libSystem and the documented Apple frameworks; crypto/TLS, curl, nghttp2 and ICU
@@ -67,3 +67,10 @@ comparison passed without changing the frozen hash or expectations. A subsequent
 preflight found the separate current-pin project-test replay still naming the
 old reference; its pin was updated with every scenario and historical manifest
 preserved. No failure was counted as a passing application or bootstrap result.
+
+Initial Linux hosted qualification reached the final ICU ABI link but failed
+because the standalone probes omitted libm. The Linux builder and probes now
+link it explicitly; the application adapter also lists libm after the ICU
+archives so it does not depend on an earlier, incidental math reference. The
+original job failures remain retained. This link correction does not reopen the
+closed Darwin cost cohort or change its source-bound observations.
