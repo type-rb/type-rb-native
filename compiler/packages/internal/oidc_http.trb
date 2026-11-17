@@ -2,7 +2,208 @@ module OidcHttp
 end
 
 import trb/std/result
+import trb/std/url
 import trb/internal/auth/oidc_host as Host
+
+def invalid(): Result<String, String>
+	return Result<String, String>::Err("invalid OIDC hostname")
+end
+
+def digits(value: String, alphabet: String): Boolean
+	mut index := 0
+	while index < value.size()
+		if !alphabet.include?(value[index])
+			return false
+		end
+		index += 1
+	end
+	return true
+end
+
+def ipv6(bytes: Array<Integer>): String
+	mut mapped := true
+	mut index := 0
+	while index < 10
+		if bytes[index] != 0
+			mapped = false
+		end
+		index += 1
+	end
+	if mapped && bytes[10] == 255 && bytes[11] == 255
+		return "::ffff:" + bytes[12].to_s() + "." + bytes[13].to_s() + "." + bytes[14].to_s() + "." + bytes[15].to_s()
+	end
+	mut groups: Array<Integer> := []
+	index = 0
+	while index < 16
+		groups.push(bytes[index] * 256 + bytes[index + 1])
+		index += 2
+	end
+	mut best := -1
+	mut count := 1
+	index = 0
+	while index < 8
+		mut end_index := index
+		while end_index < 8 && groups[end_index] == 0
+			end_index += 1
+		end
+		if end_index - index > count
+			best = index
+			count = end_index - index
+		end
+		index = end_index + 1
+	end
+	mut result := ""
+	index = 0
+	while index < 8
+		if index == best
+			result += "::"
+			index += count
+		else
+			if result != "" && !result.end_with?(":")
+				result += ":"
+			end
+			mut value := groups[index]
+			mut text := "0123456789abcdef"[value % 16]
+			value /= 16
+			while value > 0
+				text = "0123456789abcdef"[value % 16] + text
+				value /= 16
+			end
+			result += text
+			index += 1
+		end
+	end
+	return result
+end
+
+def hostname(value: String): Result<String, String>
+	mut host := value
+	mut root := false
+	[".", "\xe3\x80\x82", "\xef\xbc\x8e", "\xef\xbd\xa1"].each do |dot|
+		if !root && host.end_with?(dot)
+			host = host.slice(0...host.size() - 1)
+			root = true
+		end
+	end
+	ascii := Host.ascii_hostname(host)
+	if ascii == ""
+		return invalid()
+	end
+	labels := ascii.split(".")
+	last := labels[labels.size() - 1]
+	numeric := digits(last, "0123456789") || (last.start_with?("0x") && digits(last.slice(2...last.size()), "0123456789abcdef"))
+	if numeric
+		if labels.size() != 4
+			return invalid()
+		end
+		mut index := 0
+		while index < labels.size()
+			label := labels[index]
+			if label == "" || label.size() > 3 || !digits(label, "0123456789") || (label.size() > 1 && label.start_with?("0"))
+				return invalid()
+			end
+			if label.to_i() > 255
+				return invalid()
+			end
+			index += 1
+		end
+	end
+	if root
+		return Result<String, String>::Ok(ascii + ".")
+	end
+	return Result<String, String>::Ok(ascii)
+end
+
+# Normalize only the authority before mechanical URL parsing can rewrite it.
+# Path/query text and the configured issuer's identity are preserved.
+def normalize(uri: String): Result<String, String>
+	mut start := 0
+	mut scheme := ""
+	if uri.size() >= 7 && uri.slice(0...7).downcase() == "http://"
+		start = 7
+		scheme = "http://"
+	elsif uri.size() >= 8 && uri.slice(0...8).downcase() == "https://"
+		start = 8
+		scheme = "https://"
+	else
+		return Result<String, String>::Err("OIDC endpoint must use HTTP or HTTPS")
+	end
+	mut stop := start
+	while stop < uri.size() && uri[stop] != "/" && uri[stop] != "?" && uri[stop] != "#"
+		stop += 1
+	end
+	authority := uri.slice(start...stop)
+	mut host_start := 0
+	mut index := 0
+	while index < authority.size()
+		if authority[index] == "@"
+			host_start = index + 1
+		end
+		index += 1
+	end
+	address := authority.slice(host_start...authority.size())
+	mut host := ""
+	mut suffix := ""
+	if address.start_with?("[")
+		mut close := 1
+		while close < address.size() && address[close] != "]"
+			close += 1
+		end
+		if close == address.size()
+			return invalid()
+		end
+		host = address.slice(1...close)
+		characters := address.to_bytes()
+		index = 0
+		while index < characters.size()
+			character := characters.at(index)
+			if character < 33 || character > 126 || character == 92
+				return invalid()
+			end
+			index += 1
+		end
+		if host.include?("%")
+			return invalid()
+		end
+		mut bytes := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+		if Host.ip_address(host, bytes) != 16
+			return invalid()
+		end
+		host = "[" + ipv6(bytes) + "]"
+		suffix = address.slice(close + 1...address.size())
+	else
+		mut colon := address.size()
+		index = 0
+		while index < address.size()
+			if address[index] == ":"
+				if colon != address.size()
+					return invalid()
+				end
+				colon = index
+			end
+			index += 1
+		end
+		raw := address.slice(0...colon)
+		index = 0
+		while index < raw.size()
+			if raw[index] == "%" && index + 1 < raw.size() && "01234567".include?(raw[index + 1])
+				return invalid()
+			end
+			index += 1
+		end
+		decoded := URL.decode_component(raw) catch |_error|
+			return invalid()
+		end
+		host = try hostname(decoded)
+		suffix = address.slice(colon...address.size())
+	end
+	if suffix != ""
+		if !suffix.start_with?(":") || !digits(suffix.slice(1...suffix.size()), "0123456789")
+			return invalid()
+		end
+	end
+	return Result<String, String>::Ok(scheme + authority.slice(0...host_start) + host + suffix + uri.slice(stop...uri.size()))
+end
 
 record Address
 	bytes: Array<Integer>
@@ -171,6 +372,20 @@ def bypass(host: String, port: String, rules: String): Boolean
 		if rule.start_with?("*.")
 			rule = rule.slice(1...rule.size())
 		end
+		mut prefix := ""
+		if rule.start_with?(".")
+			prefix = "."
+			rule = rule.slice(1...rule.size())
+		end
+		if rule != ""
+			case hostname(rule)
+			when Result::Ok(value)
+				rule = value
+			else
+				next
+			end
+		end
+		rule = prefix + rule
 		if !rule.start_with?(".")
 			if name == rule
 				return true
@@ -216,6 +431,10 @@ def fetch(uri: String, mut output: Array<Bytes>): Integer
 	mut current := uri
 	mut redirects := 0
 	while true
+		current = normalize(current) catch |error|
+			output[1] = error.to_bytes()
+			return -1
+		end
 		mut parts := ["", "", ""]
 		if !Host.describe_uri(current, parts) || (parts[0] != "http" && parts[0] != "https")
 			output[1] = "unsupported or invalid HTTP provider URL".to_bytes()
@@ -239,7 +458,10 @@ def fetch(uri: String, mut output: Array<Bytes>): Integer
 		if status != 301 && status != 302 && status != 303 && status != 307 && status != 308
 			return status
 		end
-		location := output[2].to_s()
+		mut location := output[2].to_s()
+		if location.start_with?("//")
+			location = parts[0] + ":" + location
+		end
 		if location == ""
 			return status
 		end

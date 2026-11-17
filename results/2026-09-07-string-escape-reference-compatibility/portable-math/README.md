@@ -1,10 +1,10 @@
 # Portable Math reference compatibility
 
-The selected development reference is TypeRB `0.4.12-dev` at
+The initial Math qualification used TypeRB `0.4.12-dev` at
 `7a6b7405c895f2d7f377956b17e9e569de6fb069`, merged through
 [type-rb/type-rb#852](https://github.com/type-rb/type-rb/pull/852).
 It adds portable `Math.sin`, `Math.cos` and `Math.pow` and selects Ruby 4.0.9.
-This is an exact development pin, not a release or supported version range.
+The integration retains the current exact development pin from `TYPE_RB_REVISION`, which descends from that revision. The observations below retain their original reference and source identities.
 
 Native `cbd507fc3564da442fc8cc91024ea945d66aec1b` previously passed
 https://github.com/type-rb/type-rb-native/actions/runs/41935948994.

@@ -64,6 +64,13 @@ class LanguageCoverageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             coverage.validate(document)
 
+    def test_text_inputs_stay_under_the_fixture_directory(self):
+        self.assertTrue(coverage.valid_case_file("fixtures/resource.txt"))
+        for name in ("resource.txt", "/fixtures/resource.txt", "fixtures/../resource.txt",
+                     "fixtures//resource.txt", "fixtures/./resource.txt", "fixtures/a/b.txt",
+                     "fixtures/resource.py", "fixtures/resource\\escape.txt"):
+            self.assertFalse(coverage.valid_case_file(name), name)
+
     def test_project_check_explicitly_checks_the_same_route_graph_as_build(self):
         case = copy.deepcopy(self.document["cases"][0])
         case.update(projectCheck=True, files={"routes/[id].trb": "def get()\nend\n"})

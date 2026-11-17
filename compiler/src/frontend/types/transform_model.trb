@@ -1,4 +1,4 @@
-import { transform_absent, transform_all, transform_any, transform_find, transform_find_index, transform_map, transform_none, transform_reduce, transform_select, transform_sort_by, transform_sort_by_descending } from frontend/types/transform_kinds
+import { transform_absent, transform_all, transform_any, transform_concurrent_map, transform_find, transform_find_index, transform_map, transform_none, transform_reduce, transform_select, transform_sort_by, transform_sort_by_descending, transform_sorting } from frontend/types/transform_kinds
 import { iteration_source_array, iteration_source_range } from frontend/types/iteration_kinds
 import { IterationSyntax, iteration_syntax_valid } from frontend/syntax/iteration_syntax
 import { MirIteration, mir_iteration_valid } from mir/model/iteration
@@ -22,7 +22,9 @@ record MirTransform
 end
 
 def transform_kind(name: String): Integer
-	if name == "map"
+	if name == "concurrent_map"
+		return transform_concurrent_map()
+	elsif name == "map"
 		return transform_map()
 	elsif name == "select"
 		return transform_select()
@@ -57,6 +59,18 @@ def transform_syntax_valid(plan: TransformSyntax, origin: Integer, token_count: 
 		end
 		return shape.second_origin == -1
 	end
+	if plan.kind == transform_concurrent_map()
+		if plan.accumulator_origin != -1 || shape.second_origin != -1
+			return false
+		end
+		if plan.initial_start == -1
+			return plan.initial_finish == -1
+		end
+		if plan.initial_start <= origin || plan.initial_finish <= plan.initial_start || plan.initial_finish >= shape.element_origin
+			return false
+		end
+		return true
+	end
 	if plan.kind < transform_map() || plan.kind > transform_sort_by_descending() || plan.initial_start != -1 || plan.initial_finish != -1
 		return false
 	end
@@ -84,10 +98,13 @@ def mir_transform_valid(plan: MirTransform, origin: Integer, token_count: Intege
 	if loop.origin != shape.origin || loop.receiver_finish != shape.receiver_finish || loop.element_origin != shape.element_origin || loop.second_origin != shape.second_origin || loop.body_start != shape.body_start || loop.body_finish != shape.body_finish || loop.finish != shape.finish
 		return false
 	end
+	if plan.syntax.kind == transform_concurrent_map() && plan.iteration.source_kind != iteration_source_array()
+		return false
+	end
 	if plan.type_name == "" || plan.type_name == "Void"
 		return false
 	end
-	if plan.syntax.kind >= transform_sort_by()
+	if transform_sorting(plan.syntax.kind)
 		if plan.iteration.source_kind != iteration_source_array() || plan.type_name != plan.iteration.type_name
 			return false
 		end
