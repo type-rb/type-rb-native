@@ -24,7 +24,7 @@ extern void trbn_gc_mark(void *);
 extern void trbn_gc_mark_grow(void *);
 struct work { void *data; int64_t count, capacity; };
 struct node { uintptr_t descriptor; void *next; int64_t value; };
-struct array { uintptr_t descriptor; int64_t length, capacity; void *data; };
+struct array { uintptr_t descriptor; int64_t length, capacity; void *data, *base; };
 static uintptr_t fixed[] = {1, 1, 16, 8};
 static uintptr_t scalar[] = {1, 0, 16};
 static uintptr_t managed_array[] = {2, 1};
@@ -97,7 +97,7 @@ static void depth(int mixed) {
         void *next = i + 1 < count ? &nodes[i + 1] : &nodes[0];
         if (mixed) {
             edges[i] = next;
-            arrays[i] = (struct array){(uintptr_t)managed_array, 1, 1, &edges[i]};
+            arrays[i] = (struct array){(uintptr_t)managed_array, 1, 1, &edges[i], &edges[i]};
             next = &arrays[i];
         }
         nodes[i].next = next;
@@ -117,7 +117,7 @@ static void breadth(void) {
     const size_t count = 8192;
     struct node *nodes = calloc(count, sizeof *nodes); assert(nodes);
     void **edges = calloc(count * 2 + 2, sizeof *edges); assert(edges);
-    struct array root = {(uintptr_t)managed_array, count * 2 + 2, count * 2 + 2, edges};
+    struct array root = {(uintptr_t)managed_array, count * 2 + 2, count * 2 + 2, edges, edges};
     for (size_t i = 0; i < count; ++i) {
         nodes[i] = (struct node){(uintptr_t)fixed, &root, (int64_t)i};
         edges[2*i] = edges[2*i+1] = &nodes[i];
@@ -143,7 +143,7 @@ static void grow_failure(struct work *work) {
 }
 int main(void) {
     struct node leaf = {(uintptr_t)scalar, (void *)1, 123};
-    struct array numbers = {(uintptr_t)scalar_array, 10, 10, (void *)1};
+    struct array numbers = {(uintptr_t)scalar_array, 10, 10, (void *)1, (void *)1};
     uintptr_t text[] = {(uintptr_t)string_descriptor, 5, 5};
     trbn_gc_mark(NULL); trbn_gc_mark(literal); trbn_gc_mark(&leaf);
     trbn_gc_mark(&numbers); trbn_gc_mark(text);

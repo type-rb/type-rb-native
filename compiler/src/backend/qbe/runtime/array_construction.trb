@@ -1,3 +1,5 @@
+import { array_backing_offset, array_payload_bytes } from backend/qbe/runtime/array_layout
+import { integer_string } from support/literals
 # Both constructors share object initialization and backing-byte accounting.
 # The hint is a valid Array length, not a promised final length or stable bound.
 def array_construction_qbe(reserved: Boolean): String
@@ -12,5 +14,5 @@ def array_construction_qbe(reserved: Boolean): String
 		capacity = "%reserved_capacity"
 		backing = "call $calloc(l %reserved_capacity, l 8)"
 	end
-	return prefix + "\t%array =l call $trbn_gc_alloc(l %descriptor, l 24, l " + bytes + ")\n\t%data =l " + backing + "\n\t%failed =w ceql %data, 0\n\tjnz %failed, @fail, @initialize\n@fail\n\tcall $trbn_fatal(l $trbn_allocation_error, l 26)\n\thlt\n@initialize\n\t%heap =l loadl $trbn_gc_heap_bytes\n\t%heap_with_data =l add %heap, " + bytes + "\n\tstorel %heap_with_data, $trbn_gc_heap_bytes\n\t%allocated =l loadl $trbn_gc_allocated_bytes\n\t%allocated_with_data =l add %allocated, " + bytes + "\n\tstorel %allocated_with_data, $trbn_gc_allocated_bytes\n\tcall $trbn_gc_update_peak(l %heap_with_data)\n\t%length =l add %array, 8\n\tstorel 0, %length\n\t%capacity =l add %array, 16\n\tstorel " + capacity + ", %capacity\n\t%data_slot =l add %array, 24\n\tstorel %data, %data_slot\n\tret %array\n}\n"
+	return prefix + "\t%array =l call $trbn_gc_alloc(l %descriptor, l " + integer_string(array_payload_bytes()) + ", l " + bytes + ")\n\t%data =l " + backing + "\n\t%failed =w ceql %data, 0\n\tjnz %failed, @fail, @initialize\n@fail\n\tcall $trbn_fatal(l $trbn_allocation_error, l 26)\n\thlt\n@initialize\n\t%heap =l loadl $trbn_gc_heap_bytes\n\t%heap_with_data =l add %heap, " + bytes + "\n\tstorel %heap_with_data, $trbn_gc_heap_bytes\n\t%allocated =l loadl $trbn_gc_allocated_bytes\n\t%allocated_with_data =l add %allocated, " + bytes + "\n\tstorel %allocated_with_data, $trbn_gc_allocated_bytes\n\tcall $trbn_gc_update_peak(l %heap_with_data)\n\t%length =l add %array, 8\n\tstorel 0, %length\n\t%capacity =l add %array, 16\n\tstorel " + capacity + ", %capacity\n\t%data_slot =l add %array, 24\n\tstorel %data, %data_slot\n\t%backing_slot =l add %array, " + integer_string(array_backing_offset()) + "\n\tstorel %data, %backing_slot\n\tret %array\n}\n"
 end

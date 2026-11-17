@@ -101,7 +101,7 @@ with tempfile.TemporaryDirectory(prefix='native-array-copy-') as temporary:
     assert emitted.stderr == '', emitted
     # Collect inside the copy runtime immediately before its managed header
     # allocation. This checks that MIR retained the source and optional Range.
-    marker = ' %array =l call $trbn_gc_alloc(l %descriptor, l 24, l %bytes)'
+    marker = ' %array =l call $trbn_gc_alloc(l %descriptor, l 32, l %bytes)'
     assert emitted.stdout.count(marker) == 1
     forced = emitted.stdout.replace(marker, ' call $trbn_gc_collect(w 0)\n' + marker)
     for name, il in [('ordinary', emitted.stdout), ('forced', forced)]:
