@@ -177,7 +177,9 @@ against the system headers and exercise nested failures and normal returns.
 Language failures use this scope when present and retain their diagnostics and
 exit behavior otherwise. Allocation failure and invalid internal object state
 remain process-fatal. This internal mechanism does not introduce a public catch
-syntax or imply networking cancellation and deadline support.
+syntax. Managed deadlines use a separate owned scope with MIR checkpoints and
+resource-stack unwinding; see [Native deadlines](native-deadlines.md) for the
+foreign-call and ordinary-application qualification boundary.
 
 Scoped File acquisition uses a parser-owned trailing block and checked lexical
 captures. It does not create an authored callback value. The frontend checks

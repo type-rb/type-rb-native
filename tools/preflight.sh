@@ -71,6 +71,7 @@ step "authored QBE branch widths" python3 tools/native-runtime-branch-test.py --
 step "compiler source staging" python3 tools/compiler_sources_test.py
 step "bootstrap snapshot input and catalog bounds" python3 tools/bootstrap_snapshot_size_test.py
 step "compiler ownership and migration" sh -c 'python3 tools/compiler_layout_test.py && python3 tools/migrate_compiler_layout_test.py && python3 tools/compiler_layout.py'
+step "Linux prerequisite controls" python3 tools/ci-linux-prerequisites-test.py
 step "CI planner" node --test tools/ci-plan-test.mjs tools/ci-run-suites-test.mjs tools/recovery-workspace-test.mjs
 step "recovery import boundaries" sh -c '
 	python3 tools/recovery_layout_sync_test.py &&
@@ -98,6 +99,7 @@ step "application time service reference contracts" python3 tools/native-time-se
 step "filesystem reference contracts" python3 tools/native-filesystem-test.py "$reference" --reference --report "$log.json"
 step "filesystem reference rejection" python3 tools/native-filesystem-check-test.py "$reference" --reference --report "$log.json"
 step "test manifest classification" python3 tools/native-test-runner-harness-test.py
+step "release scenario evidence controls" python3 tools/release-scenarios-test.py
 step "project test reference contracts" python3 tools/native-test-runner-test.py --reference "$reference" --report "$log.json"
 step "test value and origin reference contracts" python3 tools/native-test-values-test.py --reference "$reference" --report "$log.json"
 rm -f "$log.json"

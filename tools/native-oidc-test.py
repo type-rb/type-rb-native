@@ -581,7 +581,7 @@ def main():
                                          'headers': tokens, 'expected': '\n'.join(expected), 'requests': requests,
                                          'environment': {'OIDC_TEST_CLOCK_AFTER': str(after),
                                                          'OIDC_TEST_CLOCK_SECONDS': str(seconds)}})
-                    for fault in ['malloc', 'curl_url', 'url-get', 'curl_easy_init', 'ssl-init', 'perform',
+                    for fault in ['uidna_openUTS46_78', 'malloc', 'curl_url', 'url-get', 'curl_easy_init', 'ssl-init', 'perform',
                                   'BN_bin2bn', 'OSSL_PARAM_BLD_new', 'OSSL_PARAM_BLD_to_param',
                                   'EVP_PKEY_CTX_new_from_name', 'EVP_MD_CTX_new', 'fromdata', 'verify', 'crypto-init',
                                   'inflate-init']:

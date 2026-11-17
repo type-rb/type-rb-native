@@ -1,4 +1,4 @@
-import { transform_absent, transform_reduce, transform_select } from frontend/types/transform_kinds
+import { transform_absent, transform_concurrent_map, transform_reduce, transform_select } from frontend/types/transform_kinds
 import { iteration_source_array, iteration_source_hash, iteration_source_invalid } from frontend/types/iteration_kinds
 import { token_kind_identifier, token_kind_newline, token_kind_number } from state/token_kinds
 import { hash_key_type } from frontend/types/hash_types
@@ -228,6 +228,37 @@ def checked_transform_shape(state: CompilerState, plan: TransformSyntax, origin:
 		cursor = plan.initial_finish
 		while load_integer(state.source_tokens.token_kinds, cursor) == token_kind_newline()
 			cursor += 1
+		end
+		if !token_is(state, cursor, ")")
+			return false
+		end
+		cursor += 1
+	elsif plan.kind == transform_concurrent_map() && token_is(state, cursor, "(")
+		cursor += 1
+		while load_integer(state.source_tokens.token_kinds, cursor) == token_kind_newline()
+			cursor += 1
+		end
+		if plan.initial_start >= 0
+			if !token_is(state, cursor, "limit") || !token_is(state, cursor + 1, ":")
+				return false
+			end
+			cursor += 2
+			while load_integer(state.source_tokens.token_kinds, cursor) == token_kind_newline()
+				cursor += 1
+			end
+			if cursor != plan.initial_start
+				return false
+			end
+			cursor = plan.initial_finish
+			while load_integer(state.source_tokens.token_kinds, cursor) == token_kind_newline()
+				cursor += 1
+			end
+			if token_is(state, cursor, ",")
+				cursor += 1
+				while load_integer(state.source_tokens.token_kinds, cursor) == token_kind_newline()
+					cursor += 1
+				end
+			end
 		end
 		if !token_is(state, cursor, ")")
 			return false

@@ -55,6 +55,24 @@ day selects every module and all complete lanes, so unchanged modules retain a
 daily mutation check. PRs that require complete recovery also select every
 module. The selected module names are recorded in the main plan output.
 
+## Linux prerequisites
+
+Main and PR CLI, target and memory jobs verify their required host tools before
+building. An installed unversioned LLD remains selected; when it is absent, the
+Ubuntu 24.04 LLD 18 executable can supply a job-local `ld.lld` alias. This uses
+the same major version selected by Ubuntu's `lld` metapackage. No system alias
+is overwritten. Only missing tools or sanitizer archives require package
+acquisition through the existing OS repositories. Failed index downloads stop
+preparation instead of accepting stale indexes or silently retrying.
+Privileged acquisition runs under its own watchdog inside `sudo`, before the
+outer controller's timeout, so root-owned package workers are also bounded.
+
+The prerequisite receipt retains resolved tool paths, versions, commands and
+failures even when a later build cannot start. A real C link/run verifies LLD,
+and memory jobs also compile and execute an AddressSanitizer probe. Existing
+Native, process-trace, memory and sanitizer checks still run independently;
+prerequisite success is not Native qualification.
+
 ## Required authorities
 
 | Changed surface | Required PR validation |

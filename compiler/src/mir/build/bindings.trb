@@ -1,3 +1,4 @@
+import { concurrent_bind, concurrent_value } from frontend/checking/body/concurrency
 import { checked_category_value } from frontend/types/value_categories
 import { mir_state_enabled_slot } from state/local_slots
 import { mir_op_array_load, mir_op_array_store } from mir/model/instructions
@@ -13,6 +14,7 @@ import { array_type } from frontend/resolution/type_resolution
 # Storage is chosen before entering the body, using analyzed declaration IDs.
 # Creating a cell at the later capture expression would be path-dependent.
 def mir_binding_initialize(mut state: CompilerState, mut locals: CheckedLocals, slot: Integer, value: CheckedValue, origin: Integer)
+	concurrent_bind(state, locals, slot, value)
 	if locals.mir_state[mir_state_enabled_slot()] != 1
 		return
 	end
@@ -50,11 +52,17 @@ def mir_binding_read(mut state: CompilerState, mut locals: CheckedLocals, slot: 
 	else
 		scalar_mir_disable(locals)
 	end
-	return checked_bound_value(type_name, category, origin, load_integer(locals.mutable, slot), true)
+	return concurrent_value(state, checked_bound_value(type_name, category, origin, load_integer(locals.mutable, slot), true), sparse_integer_at(locals.concurrent_borrowed, local_identity(locals, slot)) > 0)
 end
 
 # Direct bindings advance SSA values; shared bindings replace cell contents.
 def mir_binding_assign(mut state: CompilerState, mut locals: CheckedLocals, target: CheckedValue, value: CheckedValue)
+	if target.origin >= 0 && target.origin < state.source_tokens.token_count[0]
+		binding_slot := local_find(locals, load_string(state.source_tokens.token_texts, target.origin))
+		if binding_slot >= 0
+			concurrent_bind(state, locals, binding_slot, value)
+		end
+	end
 	if locals.mir_state[mir_state_enabled_slot()] != 1
 		return
 	end

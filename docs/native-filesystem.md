@@ -85,6 +85,7 @@ on Darwin arm64 and Linux arm64; this does not establish an ordinary Darwin amd6
 bootstrap or complete four-host release qualification.
 
 `tools/native-filesystem-check-test.py` checks escaping-resource and unverified
-call rejection. Its report distinguishes resource-checker diagnostics from cases
-rejected earlier because `concurrent_map` is not implemented. Those cases do not
-establish concurrent resource-effect coverage.
+call rejection. It requires scoped-resource diagnostics for direct and transitive
+calls, including `concurrent_map` reached through ordinary helpers, parameter
+defaults and record initialization. Rejection of unsupported syntax cannot
+substitute for the resource-effect check.

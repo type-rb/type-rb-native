@@ -18,7 +18,7 @@ permissions:
 
 env:
   NATIVE_MIR_COST_MODE: ${{ inputs.cost_mode || 'strict' }}
-  TYPE_RB_REVISION: 7a6b7405c895f2d7f377956b17e9e569de6fb069
+  TYPE_RB_REVISION: e3aed7648e86912fb52d123b69c1f2b76f64dd98
   TYPE_RB_VERSION: 0.4.12-dev
   QBE_VERSION: "1.3"
   QBE_ARCHIVE_SHA256: d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320
@@ -130,10 +130,16 @@ jobs:
           python3 .native-target-candidate/tools/build-reference.py .type-rb "$RUNNER_TEMP/trb"
           test "$("$RUNNER_TEMP/trb" version)" = "$TYPE_RB_VERSION"
 
-      - name: Install Linux evidence tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y binutils file jq lld strace time
+      - name: Verify Linux evidence tools
+        run: python3 .native-target-candidate/tools/ci-linux-prerequisites.py targets --bin-dir "$RUNNER_TEMP/native-ci-bin" --receipt "$RUNNER_TEMP/linux-prerequisites.json"
+      - name: Retain Linux prerequisite evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-prerequisites-target-amd64
+          path: ${{ runner.temp }}/linux-prerequisites.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Build the pinned Native QBE variant
         id: qbe
@@ -291,6 +297,14 @@ jobs:
           python3 .native-target-candidate/tools/native-oidc-test.py \
             "$RUNNER_TEMP/linux-amd64-targets-compiler" --core --tls --transport --stress \
             --receipt "$RUNNER_TEMP/oidc-stress.json"
+          python3 .native-target-candidate/tools/native-oidc-http2-test.py \
+            "$RUNNER_TEMP/linux-amd64-targets-compiler" --core --receipt "$RUNNER_TEMP/oidc-http2.json"
+          python3 .native-target-candidate/tools/native-oidc-http2-test.py \
+            "$RUNNER_TEMP/linux-amd64-targets-compiler" --core --stress --receipt "$RUNNER_TEMP/oidc-http2-stress.json"
+          python3 .native-target-candidate/tools/native-oidc-hostname-test.py \
+            "$RUNNER_TEMP/linux-amd64-targets-compiler" --core --receipt "$RUNNER_TEMP/oidc-hostnames.json"
+          python3 .native-target-candidate/tools/native-oidc-hostname-test.py \
+            "$RUNNER_TEMP/linux-amd64-targets-compiler" --core --stress --receipt "$RUNNER_TEMP/oidc-hostnames-stress.json"
 
       - name: Export amd64 target-neutral identities
         id: target_neutral
@@ -348,7 +362,7 @@ jobs:
             mkdir -p "$evidence/oidc"
             cp "$RUNNER_TEMP/oidc-libraries/oidc-build.json" \
               "$RUNNER_TEMP/oidc-libraries/"*-LICENSE "$evidence/oidc/"
-            for receipt in "$RUNNER_TEMP/oidc-https.json" "$RUNNER_TEMP/oidc-stress.json"; do
+            for receipt in "$RUNNER_TEMP/oidc-"*.json; do
               if test -f "$receipt"; then cp "$receipt" "$evidence/oidc/"; fi
             done
           fi
@@ -386,7 +400,7 @@ jobs:
           git -C .native-target-candidate status --porcelain=v1 \
             > "$evidence/workflow/candidate-status.txt" 2>&1 || true
           dpkg-query -W -f='${binary:Package}\t${Version}\n' \
-            binutils file jq lld strace time \
+            binutils file jq lld 'lld-*' strace time \
             > "$evidence/workflow/packages.tsv" 2>&1 || true
           if test -f "$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz"; then
             sha256sum "$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz" \
@@ -450,10 +464,16 @@ jobs:
             printf 'runner_image=ubuntu-24.04-arm\n'
           } > "$RUNNER_TEMP/native-target-linux-arm64-evidence/workflow/invocation.txt"
 
-      - name: Install Linux regression evidence tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y binutils file jq lld strace time
+      - name: Verify Linux regression evidence tools
+        run: python3 .native-target-arm64-candidate/tools/ci-linux-prerequisites.py targets --bin-dir "$RUNNER_TEMP/native-ci-bin" --receipt "$RUNNER_TEMP/linux-prerequisites.json"
+      - name: Retain Linux prerequisite evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-prerequisites-target-arm64
+          path: ${{ runner.temp }}/linux-prerequisites.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Build the pinned Native QBE variant for arm64
         id: arm64_qbe
@@ -778,7 +798,7 @@ jobs:
           git -C "$candidate" status --porcelain=v1 \
             > "$evidence/candidate-status.txt" 2>&1 || true
           dpkg-query -W -f='${binary:Package}\t${Version}\n' \
-            binutils file jq lld strace time \
+            binutils file jq lld 'lld-*' strace time \
             > "$evidence/packages.tsv" 2>&1 || true
           cp "$RUNNER_TEMP/qbe-$QBE_VERSION/build-info.json" "$evidence/qbe-build-info.json" 2>/dev/null || true
           archive="$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz"

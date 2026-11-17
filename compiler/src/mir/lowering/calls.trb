@@ -1,3 +1,6 @@
+import { concurrent_source_call } from frontend/checking/body/concurrency
+import { standard_runtime_deadline } from frontend/resolution/standard_intrinsics
+import { mir_adapter_runtime_deadline } from mir/model/call_kinds
 import { mir_adapter_argv } from mir/model/call_kinds
 import { math_adapter, math_parameters } from mir/model/math_contract
 import { standard_test_capture, standard_test_equal, standard_test_fail, standard_test_finish, standard_test_inspect, standard_test_scalar_kind } from frontend/resolution/test_intrinsics
@@ -5,7 +8,7 @@ import { test_adapter_capture, test_adapter_equal, test_adapter_fail, test_adapt
 import { filesystem_adapter_start, filesystem_names } from mir/model/filesystem_contract
 import { standard_filesystem_host } from frontend/resolution/filesystem_intrinsics
 import { resource_source_call, resource_unknown_call } from frontend/checking/body/resource_calls
-import { oidc_adapter_start, oidc_names } from mir/model/oidc_contract
+import { oidc_adapter, oidc_names } from mir/model/oidc_contract
 import { standard_oidc_host } from frontend/resolution/oidc_intrinsics
 import { crypto_adapter_start, crypto_signature_name } from mir/model/crypto_contract
 import { standard_crypto } from frontend/resolution/crypto_intrinsics
@@ -82,6 +85,11 @@ def mir_declare_signatures(mut state: CompilerState)
 			adapter = mir_adapter_runtime_fail()
 			name = "trb/internal/runtime.fail"
 		end
+		if standard_runtime_deadline(state, index)
+			kind = mir_signature_standard()
+			adapter = mir_adapter_runtime_deadline()
+			name = "trb/internal/runtime.deadline"
+		end
 		if standard_runtime_recover(state, index)
 			kind = mir_signature_standard()
 			adapter = mir_adapter_runtime_recover()
@@ -126,7 +134,7 @@ def mir_declare_signatures(mut state: CompilerState)
 		oidc := standard_oidc_host(state, index)
 		if oidc >= 0
 			kind = mir_signature_standard()
-			adapter = oidc_adapter_start() + oidc
+			adapter = oidc_adapter(oidc)
 			name = "trb/internal/auth/oidc_host." + oidc_names()[oidc]
 		end
 		crypto := standard_crypto(state, index)
@@ -238,6 +246,15 @@ def mir_checked_standard_call(mut state: CompilerState, mut locals: CheckedLocal
 end
 
 def mir_checked_call(mut state: CompilerState, mut locals: CheckedLocals, callee: Integer, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
+	return mir_checked_source_call(state, locals, callee, arguments, result_type, origin, false)
+end
+
+def mir_checked_constructor_call(mut state: CompilerState, mut locals: CheckedLocals, callee: Integer, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
+	return mir_checked_source_call(state, locals, callee, arguments, result_type, origin, true)
+end
+
+def mir_checked_source_call(mut state: CompilerState, mut locals: CheckedLocals, callee: Integer, arguments: Array<Integer>, result_type: String, origin: Integer, constructor: Boolean): CheckedValue
+	concurrent_source_call(state, locals, callee, origin, constructor)
 	resource_source_call(state, locals, callee)
 	nullable_capture_call(state, locals)
 	if callee < 0 || callee >= state.scalar_mir.signatures.size()

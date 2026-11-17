@@ -15,10 +15,12 @@ DRIVER = r'''
 #include <assert.h>
 #include <errno.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/resource.h>
+#include <sys/utsname.h>
 #include <time.h>
 #include <unistd.h>
 struct string { int64_t kind, length, points; unsigned char data[]; };
@@ -40,6 +42,10 @@ void *trbn_string_from_c(const char *value) {
 extern int64_t trbn_time_zone_data(struct string *,int64_t,int64_t,struct array *);
 extern int64_t trbn_time_zone_environment(struct array *);
 extern int64_t trbn_time_clock(struct array *);
+extern int64_t trbn_deadline_now(void);
+void trbn_fail(const char *message,int64_t size) {
+ fwrite(message,1,(size_t)size,stderr); abort();
+}
 static void check_string(struct string *value,const void *expected,size_t length) {
  assert(value && value->length==(int64_t)length);
  assert(!memcmp(value->data,expected,length)); assert(value->data[length]==0);
@@ -54,6 +60,16 @@ static void environment(const char *value,int present) {
 int main(void) {
  _Static_assert(sizeof(void *)==8 && sizeof(long)==8 && sizeof(off_t)==8,"LP64");
  _Static_assert(sizeof(struct timespec)==16,"timespec layout");
+ _Static_assert(offsetof(struct timespec,tv_sec)==0 && offsetof(struct timespec,tv_nsec)==8,"timespec offsets");
+ _Static_assert(sizeof(struct utsname)<=2048 && offsetof(struct utsname,sysname)==0,"bounded uname layout");
+ _Static_assert(sizeof(((struct utsname *)0)->sysname)>=7,"uname system name");
+#ifdef __APPLE__
+ _Static_assert(CLOCK_MONOTONIC==6,"Darwin monotonic clock");
+#elif defined(__linux__)
+ _Static_assert(CLOCK_MONOTONIC==1,"Linux monotonic clock");
+#else
+#error unsupported monotonic clock profile
+#endif
  _Static_assert(SEEK_SET==0 && SEEK_END==2 && CLOCK_REALTIME==0,"host constants");
  _Static_assert(ENOENT==2 && EINVAL==22,"host errors");
  assert(!setenv("ZONEINFO","archive.zip",1));
@@ -61,6 +77,12 @@ int main(void) {
  int64_t clock_values[2]={0,0}; struct array clock_parts={0,2,2,clock_values};
  assert(trbn_time_clock(&clock_parts)==1);
  assert(clock_values[0]>1000000000 && clock_values[1]>=0 && clock_values[1]<1000000000);
+ struct timespec before,after;
+ assert(!clock_gettime(CLOCK_MONOTONIC,&before));
+ int64_t monotonic=trbn_deadline_now();
+ assert(!clock_gettime(CLOCK_MONOTONIC,&after));
+ assert(monotonic>=before.tv_sec*INT64_C(1000000000)+before.tv_nsec);
+ assert(monotonic<=after.tv_sec*INT64_C(1000000000)+after.tv_nsec);
  char filename[]="time-host-XXXXXX"; int fd=mkstemp(filename); assert(fd>=0);
  const unsigned char bytes[]={65,0,66,255,67}; assert(write(fd,bytes,sizeof(bytes))==5); assert(!close(fd));
  struct string *path=trbn_string_from_c(filename);
@@ -105,19 +127,26 @@ def main():
     parser.add_argument('--receipt', required=True, type=Path)
     args = parser.parse_args()
     source = Path(__file__).resolve().parent.parent / 'compiler/src/backend/qbe/runtime/time_host.trb'
+    deadline_source = source.with_name('deadlines.trb')
     pieces = []
     for line in source.read_text().splitlines():
         match = re.fullmatch(r'\s*qbe_output_line\(output, ("(?:[^"\\]|\\.)*")\)', line)
         if match:
             pieces.append(json.loads(match[1]))
+    clock_body = deadline_source.read_text().split('def emit_deadline_clock_runtime(', 1)[1].split('\nend', 1)[0]
+    for line in clock_body.splitlines():
+        match = re.fullmatch(r'\s*qbe_output_line\(output, ("(?:[^"\\]|\\.)*")\)', line)
+        if match:
+            pieces.append(json.loads(match[1]))
     il = '\n'.join(pieces)
-    for name in ['trbn_time_clock', 'trbn_time_zone_data', 'trbn_time_zone_environment']:
+    for name in ['trbn_time_clock', 'trbn_time_zone_data', 'trbn_time_zone_environment', 'trbn_deadline_now']:
         marker = 'function l $' + name + '('
         if il.count(marker) != 1:
             raise ValueError('missing or duplicate actual adapter: ' + name)
         il = il.replace(marker, 'export ' + marker)
     receipt = {'schemaVersion': 1, 'platform': platform.platform(),
                'sourceSha256': hashlib.sha256(source.read_bytes()).hexdigest(),
+               'deadlineSourceSha256': hashlib.sha256(deadline_source.read_bytes()).hexdigest(),
                'qbeSha256': hashlib.sha256(args.qbe.read_bytes()).hexdigest(),
                'checks': [], 'complete': False}
 
