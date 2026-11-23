@@ -2,11 +2,10 @@
 
 `trbn` is TypeRB Native's command-line executable. Its default mode is
 `trb`, including a standalone file, a configuration without `mode`, and the
-REPL. An explicit configuration mode is authoritative. `go`, `ruby`, and
-`typescript` report an unsupported-mode error for execution; they never silently
-run as native code. Checking, portable package installation and Web contract
-generation accept every declared mode. The reference `trb` command and its
-defaults are unchanged.
+REPL. An explicit configuration mode is authoritative. Go mode supports
+scalar project builds and execution. Ruby and TypeScript execution report an
+unsupported-mode error. Checking, portable package installation and Web contract
+generation accept every declared mode.
 
 Compiled Web projects can call `Web.serve` using the pinned
 [HTTP network libraries](native-network.md). Install those libraries once and
@@ -97,12 +96,27 @@ build may leave a lock that must be inspected before removing it.
 ./trbn web client --name PublicClient --output generated/api_client.trb
 ```
 
-`build` writes QBE source to the configured `outDir` (default `build`), named
+In mode `trb`, `build` writes QBE source to the configured `outDir` (default `build`), named
 `<project-name>.ssa`. `build --compile` writes `bin/<project-name>` by default.
 For standalone files, paths are relative to the entry file's directory and
 its basename supplies the project name. `--outfile` is for executable builds.
 `run` builds in a temporary directory, forwards arguments after `--`, and
-returns the program's exit status. Failed builds preserve an existing output.
+returns the program's exit status. Failed executable builds preserve an
+existing output.
+
+In mode `go`, a configured project or a standalone file can build a Go module
+with `go.mod` and `main.go` under `<outDir>/trb`. Use `build --stdout` to print
+the generated Go program. Run `go run .` from the generated module, or use
+`trbn run` to build and run it in a temporary module. `build --compile` uses
+the project's normal executable destination. Install Go on `PATH` for
+execution and executable builds.
+
+Go mode currently supports modules with ordinary functions, imported scalar
+functions, scalar control flow and output, and selected Integer, Boolean and
+String operations. Unsupported operations report a source diagnostic before
+the Go tool is launched. Project assets and external package integrations
+are outside this subset. Source-mode test runners and Go debugging remain
+unavailable.
 
 Compiled programs and the retained REPL support `trb/std/process`. `argv`
 returns a fresh array, `environment` distinguishes empty and absent values,
@@ -291,9 +305,9 @@ SQLite Jobs links the pinned static bundle beside QBE in `sqlite/` or from
 
 Configurations follow the reference schema and validation, including `lint`,
 `packageOptions`, `jobs`, `db` and the mode-specific sections. `check` accepts
-every declared mode (`go`, `ruby`, `typescript` and `trb`). Commands that build,
-run or evaluate a program need mode `trb` and report that other modes are not
-available. `install` resolves portable TypeRB local-path and Git packages in
+every declared mode (`go`, `ruby`, `typescript` and `trb`). Build and run
+support mode `trb` and the Go subset described above. The REPL uses mode `trb`.
+`install` resolves portable TypeRB local-path and Git packages in
 every declared mode. It writes reference-compatible `trb.lock` metadata and
 uses a content-addressed `.trb/packages` cache. Git must be installed and on
 `PATH`; TypeRB passes argument vectors to it without a shell. Git handles normal
