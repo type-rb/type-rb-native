@@ -1,9 +1,11 @@
+import { emit_go_source } from go_source
 import { cli_lsp_command } from lsp/server
 import { cli_test_command } from test_command
 import { cli_jobs_command } from jobs_command
 import { cli_format_command } from format_command
-import { cli_package_command, cli_package_install, cli_package_save } from packages
+import { cli_package_command, cli_package_install, cli_package_remove_tree, cli_package_save } from packages
 import { project_packages_lock } from project/packages
+import { package_json_quote } from project/package_json
 import { cli_diagnostic } from diagnostics
 import { CompilerState, has_diagnostic } from state/state
 import { resolve } from frontend/checking/program/resolution
@@ -15,7 +17,7 @@ import { compiler_main as core_main, compiler_file_exists, compiler_read_source,
 import { compiler_source_slice } from frontend/syntax/lexer
 import { parse_project_config, project_config_declared_mode } from project/config
 import { path_directory, path_basename, path_join, path_normalize, string_ends_with, string_starts_with, string_without_suffix } from support/path
-import { native_cli_env, native_cli_cwd, native_cli_program, native_cli_tty, native_cli_write, native_cli_mkdir, native_cli_remove, native_cli_temp, native_cli_execute, native_cli_signals, native_cli_package_signals, native_cli_interrupt, native_cli_target, native_cli_emit, native_cli_tempfile, native_cli_rename, native_cli_save, native_cli_chmod } from host
+import { native_cli_env, native_cli_cwd, native_cli_program, native_cli_tty, native_cli_write, native_cli_mkdir, native_cli_remove, native_cli_temp, native_cli_tempdir, native_cli_execute, native_cli_signals, native_cli_package_signals, native_cli_interrupt, native_cli_target, native_cli_emit, native_cli_tempfile, native_cli_rename, native_cli_save, native_cli_chmod } from host
 import { repl_run } from repl/session
 
 # The entry adapters preserve the internal bootstrap protocol without exposing
@@ -45,7 +47,13 @@ def cli_compile_state(mut state: CompilerState, path: String, mode: String, file
 			puts("ok")
 			return 0
 		end
-		if mode == "emit-qbe"
+		if mode == "emit-go"
+			output := emit_go_source(state)
+			if !has_diagnostic(state)
+				native_cli_write(output, 1)
+				return 0
+			end
+		elsif mode == "emit-qbe"
 			output := emit_qbe(state)
 			if !has_diagnostic(state)
 				mut index := 0
@@ -109,8 +117,8 @@ def cli_usage(): Integer
 	puts("  trbn repl                   Start a stateful REPL")
 	puts("  trbn web client             Generate a typed browser client from endpoint contracts")
 	puts("  trbn web openapi            Generate OpenAPI 3.1 from endpoint contracts")
-	puts("Options: --mode trb, --config PATH, --outfile PATH, --stdout")
-	puts("TypeRB Native is under development. Execution and QBE emission currently require mode trb.")
+	puts("Options: --mode trb|go, --config PATH, --outfile PATH, --stdout")
+	puts("Mode go supports scalar projects. Mode trb builds native executables.")
 	return 0
 end
 
@@ -266,11 +274,7 @@ def cli_find_config(start: String): String
 	return ""
 end
 
-def cli_program_path(cwd: String): String
-	program := native_cli_program()
-	if program != path_basename(program)
-		return cli_absolute(program, cwd)
-	end
+def cli_find_program(cwd: String, program: String): String
 	paths := native_cli_env("PATH")
 	mut start := 0
 	mut index := 0
@@ -288,6 +292,17 @@ def cli_program_path(cwd: String): String
 			start = index + 1
 		end
 		index += 1
+	end
+	return ""
+end
+
+def cli_program_path(cwd: String): String
+	program := native_cli_program()
+	if program == path_basename(program)
+		selected := cli_find_program(cwd, program)
+		if selected != ""
+			return selected
+		end
 	end
 	return cli_absolute(program, cwd)
 end
@@ -403,6 +418,8 @@ def native_cli_main(): Integer
 	mut project_name := string_without_suffix(path_basename(source), ".trb")
 	mut output_root := path_directory(source)
 	mut source_output := "build"
+	mut go_module := "example.invalid/trb-program"
+	mut go_version := "1.27"
 	if config != ""
 		project := parse_project_config(compiler_read_source(config))
 		if project.error != ""
@@ -412,6 +429,10 @@ def native_cli_main(): Integer
 			mode = project.mode
 		end
 		project_name = project.name
+		if project.mode == "go"
+			go_module = project.go_config.module_name
+			go_version = project.go_config.version
+		end
 		source_output = project.out_dir
 		output_root = path_directory(config)
 		source = config
@@ -453,7 +474,15 @@ def native_cli_main(): Integer
 		puts("resolved " + packages.packages.size().to_s() + " TypeRB package(s) -> " + lock_path)
 		return 0
 	end
-	# Every declared mode is analyzed; only mode trb has a backend here.
+	if mode == "go"
+		if command == "build" && options.stdout[0] == 1
+			return compiler_file_main(compiler_read_source(source), source, "emit-go", true)
+		end
+		if command == "run" || command == "build"
+			return cli_go_command(source, command, options, output_root, source_output, project_name, go_module, go_version)
+		end
+	end
+	# Every declared mode can use the shared frontend.
 	if cli_both(mode != "trb", command != "check")
 		return cli_error(command + " is not available for mode " + mode + " in this compiler")
 	end
@@ -547,6 +576,125 @@ def native_cli_main(): Integer
 		native_cli_remove(temporary, 1)
 	end
 	return result
+end
+
+def cli_load_compile_source(path: String): CompilerState
+	source := compiler_read_source(path)
+	if string_ends_with(path, ".trb")
+		return load_file_root(source, path)
+	end
+	return load_configured_project(source, path)
+end
+
+# Publish into the generated Go subtree and leave other build outputs in place.
+# Stage beside the target so a first build can publish the whole module at once.
+def cli_publish_go_sources(directory: String, module_text: String, contents: String): Integer
+	if !cli_create_directory(directory)
+		return cli_error("cannot create output directory")
+	end
+	stage := native_cli_tempdir(path_join(directory, ".go-source"))
+	if stage == ""
+		return cli_error("cannot stage Go output")
+	end
+	module_path := path_join(stage, "go.mod")
+	main_path := path_join(stage, "main.go")
+	if native_cli_save(module_path, module_text, 0) != 0 || native_cli_save(main_path, contents, 0) != 0
+		cli_package_remove_tree(stage)
+		return cli_error("cannot stage Go output")
+	end
+	output := path_join(directory, "trb")
+	if native_cli_rename(stage, output) == 0
+		return 0
+	end
+	# Go source in this module has no imports from its own package path. Each
+	# file therefore stays usable during replacement on a repeated build.
+	status := native_cli_rename(module_path, path_join(output, "go.mod"))
+	mut result := status
+	if status == 0
+		result = native_cli_rename(main_path, path_join(output, "main.go"))
+	end
+	cli_package_remove_tree(stage)
+	if result != 0
+		return cli_error("cannot publish Go output")
+	end
+	return 0
+end
+
+# Compile the checked Go output before starting the application. Running the
+# executable directly retains its exit status and keeps diagnostics separate
+# from the Go tool. Every invocation owns its temporary module.
+def cli_go_command(source: String, command: String, options: CliOptions, output_root: String, source_output: String, project_name: String, go_module: String, go_version: String): Integer
+	mut state := cli_load_compile_source(source)
+	if !has_diagnostic(state)
+		resolve(state)
+	end
+	if !has_diagnostic(state)
+		check(state)
+	end
+	mut contents := ""
+	if !has_diagnostic(state)
+		contents = emit_go_source(state)
+	end
+	if has_diagnostic(state)
+		native_cli_write(cli_diagnostic(state, source, 0) + "\n", 2)
+		return 1
+	end
+	module_text := "module " + package_json_quote(go_module) + "\n\ngo " + go_version + "\n"
+	if command == "build" && options.compile[0] == 0
+		if options.output[0] != ""
+			return cli_error("--outfile requires --compile")
+		end
+		return cli_publish_go_sources(cli_absolute(source_output, output_root), module_text, contents)
+	end
+	go := cli_find_program(native_cli_cwd(), "go")
+	if go == ""
+		return cli_error("Go executable was not found on PATH")
+	end
+	native_cli_signals()
+	workspace := native_cli_temp()
+	if workspace == ""
+		return cli_error("cannot create a temporary Go module")
+	end
+	module_path := path_join(workspace, "go.mod")
+	code_path := path_join(workspace, "main.go")
+	if native_cli_save(module_path, module_text, 0) != 0 || native_cli_save(code_path, contents, 0) != 0
+		cli_package_remove_tree(workspace)
+		return cli_error("cannot write the temporary Go module")
+	end
+	mut binary := path_join(workspace, "program")
+	mut output := options.output[0]
+	if command == "build"
+		if output == ""
+			output = "bin/" + project_name
+		end
+		output = cli_absolute(output, output_root)
+		if !cli_create_directory(path_directory(output))
+			cli_package_remove_tree(workspace)
+			return cli_error("cannot create output directory")
+		end
+		binary = native_cli_tempfile(output)
+		if binary == ""
+			cli_package_remove_tree(workspace)
+			return cli_error("cannot create temporary executable")
+		end
+	end
+	mut status := native_cli_execute([go, "-C", workspace, "build", "-o", binary, "."], 0)
+	if status == 0
+		if command == "run"
+			mut arguments := [binary]
+			options.arguments.each do |argument|
+				arguments.push(argument)
+			end
+			status = native_cli_execute(arguments, 0)
+		elsif native_cli_rename(binary, output) != 0
+			status = cli_error("cannot publish executable")
+		end
+	end
+	if command == "build" && status != 0
+		native_cli_remove(binary, 0)
+	end
+	cli_package_remove_tree(workspace)
+	return status
 end
 
 def main()

@@ -1,0 +1,274 @@
+import { mir_function_value_groups } from mir/analysis/flow
+import { mir_signature_ordinary } from mir/model/call_kinds
+import { mir_terminator_branch, mir_terminator_jump, mir_terminator_return } from mir/model/control
+import { mir_op_direct_call, mir_op_literal_widen, mir_op_puts, mir_op_scalar_binary, mir_op_scalar_conversion, mir_op_scalar_literal, mir_op_scalar_unary, mir_op_singleton_literal, mir_op_string_concat, mir_op_string_literal, mir_op_value_copy } from mir/model/instructions
+import { MirBlock, MirFunction, MirInstruction, MirModule, MirValue, mir_block_index, mir_function_index } from mir/model/module
+import { mir_convert_boolean_to_string, mir_convert_integer_to_string } from mir/model/operation_modes
+import { mir_scalar_boolean_and, mir_scalar_boolean_or, mir_scalar_inline_add, mir_scalar_inline_multiply } from mir/model/scalar_operators
+import { mir_type_string } from mir/model/type_ids
+import { mir_storage_type_name } from mir/model/types
+import { mir_program_error } from mir/verify/program
+import { compiler_source_slice } from frontend/syntax/lexer
+import { binary_add, binary_divide, binary_equal, binary_greater, binary_greater_equal, binary_less, binary_less_equal, binary_multiply, binary_not_equal, binary_remainder, binary_subtract, unary_negate, unary_not, unary_positive } from frontend/types/operators
+import { CompilerState, diagnostic, has_diagnostic } from state/state
+import { integer_string, number_without_underscores } from support/literals
+
+def go_source_type(name: String): String
+	if name == "Integer"
+		return "int64"
+	end
+	if name == "Boolean"
+		return "bool"
+	end
+	if name == "String"
+		return "string"
+	end
+	return ""
+end
+
+def go_source_value(id: Integer): String
+	return "v" + integer_string(id)
+end
+
+def go_source_string(bytes: Array<Integer>): String
+	digits := "0123456789abcdef"
+	mut text := "\""
+	bytes.each do |byte|
+		text += "\\x" + digits[byte / 16] + digits[byte % 16]
+	end
+	return text + "\""
+end
+
+def go_source_scalar(text: String): String
+	normalized := number_without_underscores(text)
+	mut prefix := 0
+	while prefix + 1 < normalized.size() && normalized[prefix] == "0"
+		prefix += 1
+	end
+	return compiler_source_slice(normalized, prefix, normalized.size())
+end
+
+def go_source_operation(operator: Integer): String
+	if operator == binary_add() || operator == mir_scalar_inline_add()
+		return "+"
+	elsif operator == binary_subtract()
+		return "-"
+	elsif operator == binary_multiply() || operator == mir_scalar_inline_multiply()
+		return "*"
+	elsif operator == binary_divide()
+		return "/"
+	elsif operator == binary_remainder()
+		return "%"
+	elsif operator == binary_equal()
+		return "=="
+	elsif operator == binary_not_equal()
+		return "!="
+	elsif operator == binary_less()
+		return "<"
+	elsif operator == binary_less_equal()
+		return "<="
+	elsif operator == binary_greater()
+		return ">"
+	elsif operator == binary_greater_equal()
+		return ">="
+	elsif operator == mir_scalar_boolean_and()
+		return "&&"
+	elsif operator == mir_scalar_boolean_or()
+		return "||"
+	end
+	return ""
+end
+
+def go_source_instruction(native_module: MirModule, instruction: MirInstruction): String
+	kind := instruction.kind
+	first := go_source_value(instruction.first)
+	second := go_source_value(instruction.second)
+	mut expression := ""
+	if kind == mir_op_string_literal() || (kind == mir_op_singleton_literal() && instruction.first == mir_type_string())
+		expression = go_source_string(native_module.literal_data[instruction.payload].bytes)
+	elsif kind == mir_op_scalar_literal() || kind == mir_op_singleton_literal()
+		expression = go_source_scalar(native_module.literal_texts[instruction.payload])
+	elsif kind == mir_op_value_copy() || kind == mir_op_literal_widen()
+		expression = first
+	elsif kind == mir_op_string_concat()
+		expression = first + " + " + second
+	elsif kind == mir_op_scalar_conversion()
+		if instruction.payload == mir_convert_integer_to_string() || instruction.payload == mir_convert_boolean_to_string()
+			expression = "fmt.Sprint(" + first + ")"
+		end
+	elsif kind == mir_op_puts()
+		return "fmt.Println(" + first + ")"
+	elsif kind == mir_op_direct_call()
+		call := native_module.calls[instruction.payload]
+		if native_module.signatures[call.callee].kind != mir_signature_ordinary()
+			return ""
+		end
+		mut values: Array<String> := []
+		mut index := 0
+		while index < call.argument_count
+			values.push(go_source_value(native_module.arguments[call.argument_start + index]))
+			index += 1
+		end
+		expression = "function" + integer_string(call.callee) + "(" + values.join(", ") + ")"
+	elsif kind == mir_op_scalar_binary()
+		operator := go_source_operation(instruction.payload)
+		if operator == ""
+			return ""
+		end
+		expression = first + " " + operator + " " + second
+		if operator == "+" || operator == "-"
+			expression = "typeRBInteger(" + expression + ")"
+		elsif operator == "*"
+			expression = "typeRBMultiply(" + first + ", " + second + ")"
+		end
+	elsif kind == mir_op_scalar_unary()
+		if instruction.payload == unary_not()
+			expression = "!" + first
+		elsif instruction.payload == unary_negate()
+			expression = "-" + first
+		elsif instruction.payload == unary_positive()
+			expression = first
+		end
+	end
+	if expression == "" || instruction.result < 0
+		return expression
+	end
+	return go_source_value(instruction.result) + " = " + expression
+end
+
+# Go multiple assignment preserves the edge's parallel block-parameter copies.
+def go_source_edge(native_module: MirModule, function: MirFunction, target: Integer, start: Integer, count: Integer): String
+	destination := native_module.blocks[mir_block_index(native_module, function, target)]
+	mut values: Array<String> := []
+	mut parameters: Array<String> := []
+	mut index := 0
+	while index < count
+		values.push(go_source_value(native_module.arguments[start + index]))
+		parameters.push(go_source_value(native_module.arguments[destination.parameter_start + index]))
+		index += 1
+	end
+	mut output := ""
+	if count > 0
+		output = parameters.join(", ") + " = " + values.join(", ") + "\n"
+	end
+	return output + "goto block" + integer_string(target) + "\n"
+end
+
+def go_source_terminator(native_module: MirModule, function: MirFunction, block: MirBlock): String
+	if block.terminator == mir_terminator_jump()
+		return go_source_edge(native_module, function, block.first_target, block.first_argument_start, block.first_argument_count)
+	elsif block.terminator == mir_terminator_branch()
+		first := go_source_edge(native_module, function, block.first_target, block.first_argument_start, block.first_argument_count)
+		second := go_source_edge(native_module, function, block.second_target, block.second_argument_start, block.second_argument_count)
+		return "if " + go_source_value(block.condition) + " {\n" + first + "} else {\n" + second + "}\n"
+	elsif block.terminator == mir_terminator_return()
+		if block.return_value < 0
+			return "return\n"
+		end
+		return "return " + go_source_value(block.return_value) + "\n"
+	end
+	return "panic(\"Integer is outside the portable range\")\n"
+end
+
+def go_source_diagnostic(mut state: CompilerState, source: Integer, line: Integer, message: String)
+	state.module_graph.active_module[0] = source
+	diagnostic(state, "TRBN4004", line, message)
+end
+
+def go_source_function(mut state: CompilerState, function: MirFunction, values: Array<MirValue>): String
+	native_module := state.scalar_mir
+	signature := native_module.signatures[function.id]
+	mut parameters: Array<String> := []
+	mut parameter_values: Array<Integer> := []
+	mut index := 0
+	signature.parameter_types.each do |name|
+		go_type := go_source_type(name)
+		if go_type == ""
+			go_source_diagnostic(state, function.source_id, function.line, "Go source output does not support parameter type " + name)
+		else
+			value := native_module.arguments[function.parameter_start + index]
+			parameters.push(go_source_value(value) + " " + go_type)
+			parameter_values.push(value)
+		end
+		index += 1
+	end
+	result := go_source_type(signature.result_type)
+	if signature.result_type != "Void" && result == ""
+		go_source_diagnostic(state, function.source_id, function.line, "Go source output does not support return type " + signature.result_type)
+	end
+	mut lines := ["func function" + integer_string(function.id) + "(" + parameters.join(", ") + ") " + result + " {"]
+	values.each do |value|
+		if !parameter_values.include?(value.id)
+			name := mir_storage_type_name(native_module, value.type_id)
+			go_type := go_source_type(name)
+			if go_type == ""
+				go_source_diagnostic(state, value.source_id, value.line, "Go source output does not support " + name)
+			else
+				operand := go_source_value(value.id)
+				lines.push("var " + operand + " " + go_type + "; _ = " + operand)
+			end
+		end
+	end
+	lines.push("goto block" + integer_string(function.entry_block))
+	index = function.block_start
+	while index < function.block_start + function.block_count && !has_diagnostic(state)
+		block := native_module.blocks[index]
+		# The verifier includes an unreferenced trap block on scalar functions.
+		# Checked Go arithmetic handles those traps directly.
+		mut position := block.instruction_start
+		if block.terminator == mir_terminator_jump() || block.terminator == mir_terminator_branch() || block.terminator == mir_terminator_return()
+			lines.push("block" + integer_string(block.id) + ":")
+			while position < block.instruction_start + block.instruction_count && !has_diagnostic(state)
+				instruction := native_module.instructions[position]
+				text := go_source_instruction(native_module, instruction)
+				if text == ""
+					go_source_diagnostic(state, instruction.source_id, instruction.line, "Go source output does not support operation " + integer_string(instruction.kind))
+				else
+					lines.push(text)
+				end
+				position += 1
+			end
+			lines.push(go_source_terminator(native_module, function, block))
+		end
+		index += 1
+	end
+	lines.push("}")
+	return lines.join("\n")
+end
+
+def emit_go_source(mut state: CompilerState): String
+	native_module := state.scalar_mir
+	error := mir_program_error(native_module)
+	if error != ""
+		diagnostic(state, "TRBN4004", 1, error)
+		return ""
+	end
+	entry := native_module.program[0].main_function
+	if entry < 0 || mir_function_index(native_module, entry) < 0
+		diagnostic(state, "TRBN4004", 1, "Go source output requires a main function")
+		return ""
+	end
+	if native_module.globals.size() > 0
+		diagnostic(state, "TRBN4004", 1, "Go source output does not support global declarations")
+		return ""
+	end
+	mut output := [
+		"package main",
+		"import \"fmt\"",
+		"var _ = fmt.Println",
+		"const typeRBIntegerLimit int64 = 9007199254740991",
+		"func typeRBInteger(v int64) int64 { if v < -typeRBIntegerLimit || v > typeRBIntegerLimit { panic(\"Integer is outside the portable range\") }; return v }",
+		"func typeRBMultiply(a, b int64) int64 { x, y := a, b; if x < 0 { x = -x }; if y < 0 { y = -y }; if y != 0 && x > typeRBIntegerLimit / y { panic(\"Integer is outside the portable range\") }; return a*b }",
+		"func main() { function" + integer_string(entry) + "() }",
+	]
+	grouped := mir_function_value_groups(native_module)
+	mut index := 0
+	while index < native_module.functions.size() && !has_diagnostic(state)
+		function := native_module.functions[index]
+		if native_module.signatures[function.id].kind == mir_signature_ordinary()
+			output.push(go_source_function(state, function, grouped[index]))
+		end
+		index += 1
+	end
+	return output.join("\n") + "\n"
+end
